@@ -296,6 +296,7 @@
     }
 
     /* ---------- Bottom tab bar ---------- */
+    /* Just 4 items now, so they all fit — no more sideways scrolling. */
     .tab-bar {
       display: none; /* shown once signed in */
       position: fixed;
@@ -307,19 +308,16 @@
       background: white;
       box-shadow: 0 -1px 6px rgba(0, 0, 0, 0.1);
       padding: 6px 0;
-      /* More tabs than fit on one screen — scroll sideways instead of squishing */
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
+      justify-content: space-around;
     }
 
     .tab-btn {
-      flex: 0 0 auto;
-      min-width: 64px;
+      flex: 1;
       background: none;
       border: none;
       color: #888;
-      font-size: 0.7rem;
-      padding: 6px 4px;
+      font-size: 0.75rem;
+      padding: 6px 0;
       cursor: pointer;
       width: auto;
     }
@@ -343,6 +341,52 @@
     /* Room at the bottom so content isn't hidden behind the fixed tab bar */
     #appContent {
       padding-bottom: 70px;
+    }
+
+    /* ---------- "More" menu grid ---------- */
+    .more-menu {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .more-menu-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      background: white;
+      border: none;
+      border-radius: 12px;
+      padding: 20px 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      color: #222;
+      font-size: 0.9rem;
+      font-weight: bold;
+      cursor: pointer;
+      width: auto;
+      text-align: center;
+    }
+
+    .more-menu-item:hover {
+      background: #f4f5f7;
+    }
+
+    .more-menu-icon {
+      font-size: 1.8rem;
+    }
+
+    /* ---------- "Back" button on More's sub-screens ---------- */
+    .back-to-more {
+      width: auto;
+      background: none;
+      border: none;
+      color: #2f6fed;
+      font-size: 0.9rem;
+      font-weight: bold;
+      padding: 0;
+      margin-bottom: 12px;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -423,8 +467,36 @@
         </div>
       </section>
 
-      <!-- ===== TAB: CC Advisor ===== -->
-      <section id="view-cc" class="tab-view" style="display:none">
+      <!-- ===== TAB: More — menu + less-frequent screens live inside here ===== -->
+      <section id="view-more" class="tab-view" style="display:none">
+
+        <!-- Grid of buttons; tapping one hides this and shows that screen below -->
+        <div id="moreMenu" class="more-menu">
+          <button type="button" class="more-menu-item" data-target="cc">
+            <span class="more-menu-icon">💳</span>
+            <span>CC Advisor</span>
+          </button>
+          <button type="button" class="more-menu-item" data-target="debts">
+            <span class="more-menu-icon">💰</span>
+            <span>Debts</span>
+          </button>
+          <button type="button" class="more-menu-item" data-target="savings">
+            <span class="more-menu-icon">🎯</span>
+            <span>Savings &amp; Wish List</span>
+          </button>
+          <button type="button" class="more-menu-item" data-target="investments">
+            <span class="more-menu-icon">💹</span>
+            <span>Investments</span>
+          </button>
+          <button type="button" class="more-menu-item" data-target="cash">
+            <span class="more-menu-icon">💵</span>
+            <span>Cash</span>
+          </button>
+        </div>
+
+      <!-- ===== SUB-SCREEN: CC Advisor ===== -->
+      <div id="view-cc" style="display:none">
+        <button type="button" class="back-to-more">← Back</button>
         <h2 class="section-title">Credit Card Advisor</h2>
         <div id="ccStatus">Loading...</div>
         <div id="ccContent" style="display:none">
@@ -455,10 +527,11 @@
           <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Top Categories</h3>
           <div id="ccTopCategories"></div>
         </div>
-      </section>
+      </div>
 
-      <!-- ===== TAB: Debts ===== -->
-      <section id="view-debts" class="tab-view" style="display:none">
+      <!-- ===== SUB-SCREEN: Debts ===== -->
+      <div id="view-debts" style="display:none">
+        <button type="button" class="back-to-more">← Back</button>
         <h2 class="section-title">Debts</h2>
         <div id="debtsStatus">Loading...</div>
         <div id="debtsContent" style="display:none">
@@ -504,10 +577,11 @@
             <div id="addDebtResult" class="pending-result"></div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <!-- ===== TAB: Savings & Wish List ===== -->
-      <section id="view-savings" class="tab-view" style="display:none">
+      <!-- ===== SUB-SCREEN: Savings & Wish List ===== -->
+      <div id="view-savings" style="display:none">
+        <button type="button" class="back-to-more">← Back</button>
         <h2 class="section-title">Savings &amp; Wish List</h2>
         <div id="savingsStatus">Loading...</div>
         <div id="savingsContent" style="display:none">
@@ -582,12 +656,13 @@
           <button type="button" id="saveSavingButton">Save</button>
           <div id="logSavingResult" class="pending-result"></div>
         </div>
-      </section>
+      </div>
 
-      <!-- ===== TAB: Investments ===== -->
+      <!-- ===== SUB-SCREEN: Investments ===== -->
       <!-- Separate from the Savings pots on purpose — not counted toward
            the emergency fund, same as in Telegram. -->
-      <section id="view-investments" class="tab-view" style="display:none">
+      <div id="view-investments" style="display:none">
+        <button type="button" class="back-to-more">← Back</button>
         <h2 class="section-title">Investments</h2>
         <div id="investmentsStatus">Loading...</div>
         <div id="investmentsContent" style="display:none">
@@ -616,10 +691,11 @@
           <button type="button" id="saveInvestmentButton">Save</button>
           <div id="logInvestmentResult" class="pending-result"></div>
         </div>
-      </section>
+      </div>
 
-      <!-- ===== TAB: Cash ===== -->
-      <section id="view-cash" class="tab-view" style="display:none">
+      <!-- ===== SUB-SCREEN: Cash ===== -->
+      <div id="view-cash" style="display:none">
+        <button type="button" class="back-to-more">← Back</button>
         <h2 class="section-title">Cash</h2>
         <div id="cashStatus">Loading...</div>
         <div id="cashContent" style="display:none">
@@ -656,27 +732,16 @@
           <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Recent</h3>
           <div id="cashRecent"></div>
         </div>
-      </section>
+      </div>
 
-      <!-- ===== TAB: shared placeholder for anything not built yet ===== -->
-      <!-- Every "coming soon" tab reuses this one screen, so we're not
-           writing near-identical placeholder markup four times over. -->
-      <section id="view-comingsoon" class="tab-view" style="display:none">
-        <h2 class="section-title" id="comingSoonTitle">Coming Soon</h2>
-        <div class="signin-box" style="flex-direction:column; gap:6px;">
-          <span style="font-size:2rem;">🚧</span>
-          <p style="margin:0; color:#666; text-align:center;">
-            Not built yet — this is on the roadmap, coming in a future step.
-          </p>
-        </div>
       </section>
+      <!-- (end of #view-more — CC/Debts/Savings/Investments/Cash all live above) -->
 
     </div>
 
     <!-- ===== Bottom tab bar — only visible once signed in =====
-         Scrolls sideways since there are more tabs than fit on one
-         phone screen at once. Every roadmap feature gets a button here,
-         even before it's built, so it's clear what's left to do. -->
+         4 primary destinations. CC/Debts/Savings/Investments/Cash live
+         inside the "More" tab instead, since they're used less often. -->
     <nav class="tab-bar" id="tabBar">
       <button class="tab-btn active" data-tab="pending" type="button">
         <span class="tab-icon">📋</span>Pending
@@ -687,20 +752,8 @@
       <button class="tab-btn" data-tab="analysis" type="button">
         <span class="tab-icon">📈</span>Analysis
       </button>
-      <button class="tab-btn" data-tab="cc" type="button">
-        <span class="tab-icon">💳</span>CC
-      </button>
-      <button class="tab-btn" data-tab="debts" type="button">
-        <span class="tab-icon">💰</span>Debts
-      </button>
-      <button class="tab-btn" data-tab="savings" type="button">
-        <span class="tab-icon">🎯</span>Savings
-      </button>
-      <button class="tab-btn" data-tab="investments" type="button">
-        <span class="tab-icon">💹</span>Invest
-      </button>
-      <button class="tab-btn" data-tab="cash" type="button">
-        <span class="tab-icon">💵</span>Cash
+      <button class="tab-btn" data-tab="more" type="button">
+        <span class="tab-icon">⋯</span>More
       </button>
     </nav>
 
@@ -1142,11 +1195,17 @@
     // ---------------------------------------------------------
     const tabButtons = document.querySelectorAll(".tab-btn");
 
-    // Tabs that are actually built, each with their own screen
+    // The 4 primary destinations in the bottom bar
     const tabViews = {
-      pending:     document.getElementById("view-pending"),
-      today:       document.getElementById("view-today"),
-      analysis:    document.getElementById("view-analysis"),
+      pending:  document.getElementById("view-pending"),
+      today:    document.getElementById("view-today"),
+      analysis: document.getElementById("view-analysis"),
+      more:     document.getElementById("view-more")
+    };
+
+    // The less-frequent screens that live INSIDE the "More" tab
+    const moreMenuEl = document.getElementById("moreMenu");
+    const subViews = {
       cc:          document.getElementById("view-cc"),
       debts:       document.getElementById("view-debts"),
       savings:     document.getElementById("view-savings"),
@@ -1154,28 +1213,15 @@
       cash:        document.getElementById("view-cash")
     };
 
-    // Tabs not built yet — all share the one "coming soon" screen,
-    // just with a different title depending on which was tapped.
-    // (Empty now — every roadmap tab is built!)
-    const comingSoonView  = document.getElementById("view-comingsoon");
-    const comingSoonTitle = document.getElementById("comingSoonTitle");
-    const COMING_SOON_LABELS = {};
-
-    // Only load a tab's data the first time it's opened, not every time
+    // Only load a screen's data the first time it's opened, not every time
     const tabLoaded = { pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false }; // pending loads on sign-in already
 
+    // Switches between the 4 primary tabs
     function switchTab(tabName) {
       Object.keys(tabViews).forEach(function (key) {
         tabViews[key].style.display = "none";
       });
-      comingSoonView.style.display = "none";
-
-      if (tabViews[tabName]) {
-        tabViews[tabName].style.display = "block";
-      } else if (COMING_SOON_LABELS[tabName]) {
-        comingSoonTitle.textContent = COMING_SOON_LABELS[tabName];
-        comingSoonView.style.display = "block";
-      }
+      tabViews[tabName].style.display = "block";
 
       tabButtons.forEach(function (btn) {
         btn.classList.toggle("active", btn.dataset.tab === tabName);
@@ -1191,34 +1237,58 @@
         loadMonthlyAnalysis();
       }
 
-      if (tabName === "cc" && !tabLoaded.cc) {
-        tabLoaded.cc = true;
-        loadCCAdvisor();
-      }
-
-      if (tabName === "debts" && !tabLoaded.debts) {
-        tabLoaded.debts = true;
-        loadDebts();
-      }
-
-      if (tabName === "savings" && !tabLoaded.savings) {
-        tabLoaded.savings = true;
-        loadSavings();
-      }
-
-      if (tabName === "investments" && !tabLoaded.investments) {
-        tabLoaded.investments = true;
-        loadInvestments();
-      }
-
-      if (tabName === "cash" && !tabLoaded.cash) {
-        tabLoaded.cash = true;
-        loadCash();
+      if (tabName === "more") {
+        showMoreMenu(); // always reset to the menu grid when tapping "More" itself
       }
     }
 
     tabButtons.forEach(function (btn) {
       btn.addEventListener("click", function () { switchTab(btn.dataset.tab); });
+    });
+
+    // Shows the "More" menu grid, hiding whichever sub-screen was open
+    function showMoreMenu() {
+      Object.keys(subViews).forEach(function (key) {
+        subViews[key].style.display = "none";
+      });
+      moreMenuEl.style.display = "grid";
+    }
+
+    // Shows one of the 5 sub-screens, hiding the menu grid
+    function showMoreSubView(name) {
+      moreMenuEl.style.display = "none";
+      Object.keys(subViews).forEach(function (key) {
+        subViews[key].style.display = (key === name) ? "block" : "none";
+      });
+
+      if (name === "cc" && !tabLoaded.cc) {
+        tabLoaded.cc = true;
+        loadCCAdvisor();
+      }
+      if (name === "debts" && !tabLoaded.debts) {
+        tabLoaded.debts = true;
+        loadDebts();
+      }
+      if (name === "savings" && !tabLoaded.savings) {
+        tabLoaded.savings = true;
+        loadSavings();
+      }
+      if (name === "investments" && !tabLoaded.investments) {
+        tabLoaded.investments = true;
+        loadInvestments();
+      }
+      if (name === "cash" && !tabLoaded.cash) {
+        tabLoaded.cash = true;
+        loadCash();
+      }
+    }
+
+    document.querySelectorAll(".more-menu-item").forEach(function (btn) {
+      btn.addEventListener("click", function () { showMoreSubView(btn.dataset.target); });
+    });
+
+    document.querySelectorAll(".back-to-more").forEach(function (btn) {
+      btn.addEventListener("click", showMoreMenu);
     });
 
     // ---------------------------------------------------------
