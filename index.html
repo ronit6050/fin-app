@@ -309,24 +309,24 @@
         idToken: response.credential // sent to Apps Script with every request
       };
 
-      // Remember this browser is signed in, so next visit skips the button
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        email: currentUser.email,
-        name: currentUser.name
-      }));
+      // Remember this browser is signed in — including the actual proof —
+      // so refreshing the page doesn't need to ask Google again at all.
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
 
       showSignedInUI(currentUser);
 
       // Now that we have a fresh, valid sign-in proof, load real data
       loadPendingTransactions();
+
+      // Ask (once) if we're allowed to show notifications for new transactions
+      requestNotificationPermission();
     }
 
     // Set up Google's sign-in button once the page has loaded
     window.addEventListener("load", function () {
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse,
-        auto_select: true // if Google already knows you, sign in silently
+        callback: handleCredentialResponse
       });
 
       google.accounts.id.renderButton(signInBox, {
@@ -335,28 +335,23 @@
         text: "signin_with"
       });
 
-      // If we remember you from before, show the app right away
-      // instead of making you look at the sign-in button again...
+      // If we remember a real, previously-saved sign-in proof, use it
+      // directly — no popup, no waiting on Google to re-confirm anything.
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const savedUser = JSON.parse(saved);
-        if (savedUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
-          showSignedInUI(savedUser);
+        if (savedUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase() && savedUser.idToken) {
+          currentUser = savedUser;
+          showSignedInUI(currentUser);
+          loadPendingTransactions();
+          requestNotificationPermission();
         } else {
           localStorage.removeItem(STORAGE_KEY); // stale/wrong data — ignore it
+          showSignedOutUI();
         }
+      } else {
+        showSignedOutUI();
       }
-
-      // ...and quietly ask Google to re-confirm you in the background.
-      // If your Google session is still valid, handleCredentialResponse
-      // runs again with a fresh proof. If not, we sign you out below.
-      google.accounts.id.prompt(function (notification) {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          if (!saved) {
-            showSignedOutUI(); // nothing remembered, and no auto sign-in — show the button
-          }
-        }
-      });
     });
 
     // "Sign out" clears what we remembered and shows the button again.
@@ -396,6 +391,11 @@
     let allPending = [];
     let shownCount = 0;
 
+    // Every transaction "row" we already know about — including the whole
+    // backlog from the very first load. Notifications only fire for rows
+    // NOT in this set, so your existing backlog never spams you.
+    let knownRows = new Set();
+
     // Small helper: sends a request to Apps Script and hands back the parsed reply.
     function callAppsScript(payload) {
       return fetch(APPS_SCRIPT_URL, {
@@ -405,6 +405,19 @@
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify(payload)
       }).then(function (response) { return response.json(); });
+    }
+
+    // A sign-in proof lasts about an hour. When it finally expires, Apps
+    // Script will say so — this cleanly asks you to sign in again, once,
+    // instead of showing a confusing error forever.
+    function isAuthError(errorMessage) {
+      return errorMessage === "Not signed in properly." || errorMessage === "This account is not allowed.";
+    }
+
+    function handleSessionExpired() {
+      currentUser = null;
+      localStorage.removeItem(STORAGE_KEY);
+      showSignedOutUI();
     }
 
     // Asks Apps Script for your pending transactions and draws the first batch.
@@ -418,11 +431,19 @@
       callAppsScript({ action: "getPending", idToken: currentUser.idToken })
         .then(function (data) {
           if (!data.ok) {
-            pendingStatusEl.textContent = "❌ " + data.error;
+            if (isAuthError(data.error)) {
+              handleSessionExpired();
+            } else {
+              pendingStatusEl.textContent = "❌ " + data.error;
+            }
             return;
           }
 
           allPending = data.transactions;
+
+          // Remember the ENTIRE backlog as "already known" right away,
+          // before any notification checking starts.
+          knownRows = new Set(allPending.map(function (t) { return t.row; }));
 
           if (allPending.length === 0) {
             pendingStatusEl.textContent = "✅ All caught up — nothing pending!";
@@ -523,6 +544,61 @@
 
       return card;
     }
+
+    // ---------------------------------------------------------
+    // IN-APP NOTIFICATIONS — checks for new transactions every minute
+    // while this tab is open, and pops a browser notification for them.
+    // ---------------------------------------------------------
+
+    // Ask permission once, right after signing in (browsers require this —
+    // a website can't show notifications without you explicitly allowing it).
+    function requestNotificationPermission() {
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+
+    // Shows a real browser notification for one new transaction.
+    function showNewTransactionNotification(txn) {
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+      const counterpartyText = txn.counterparty ? " at " + txn.counterparty : " · " + txn.mode;
+      const notification = new Notification("💳 New transaction", {
+        body: "₹" + txn.amount.toLocaleString("en-IN") + counterpartyText
+      });
+      notification.onclick = function () { window.focus(); };
+    }
+
+    // Runs every minute: quietly checks for anything not already in knownRows.
+    // Existing cards (and anything you're mid-typing) are left completely alone.
+    function checkForNewTransactions() {
+      if (!currentUser) return; // not signed in — nothing to check
+
+      callAppsScript({ action: "getPending", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (!data.ok) return; // stay quiet on errors during background checks
+
+          const newOnes = data.transactions.filter(function (t) {
+            return !knownRows.has(t.row);
+          });
+
+          newOnes.forEach(function (txn) {
+            knownRows.add(txn.row);
+            allPending.unshift(txn); // newest first, same order as the rest
+            shownCount++;
+            pendingListEl.insertBefore(buildPendingItem(txn), pendingListEl.firstChild);
+            showNewTransactionNotification(txn);
+          });
+
+          if (newOnes.length > 0) {
+            updatePendingStatusText();
+          }
+        })
+        .catch(function () { /* stay quiet — we'll just try again next minute */ });
+    }
+
+    // Check once a minute, for as long as the page stays open.
+    setInterval(checkForNewTransactions, 60000);
 
   </script>
 
