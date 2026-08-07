@@ -573,6 +573,40 @@
         </div>
       </section>
 
+      <!-- ===== TAB: Investments ===== -->
+      <!-- Separate from the Savings pots on purpose — not counted toward
+           the emergency fund, same as in Telegram. -->
+      <section id="view-investments" class="tab-view" style="display:none">
+        <h2 class="section-title">Investments</h2>
+        <div id="investmentsStatus">Loading...</div>
+        <div id="investmentsContent" style="display:none">
+
+          <div class="today-total-box">
+            <div class="today-total-label">Total Invested</div>
+            <div class="today-total-amount" id="investmentsTotalAmount">₹0</div>
+            <div class="today-split">⚠️ Separate from savings — not counted toward your emergency fund</div>
+          </div>
+
+          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Breakdown</h3>
+          <div id="investmentsBreakdown"></div>
+
+          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Recent</h3>
+          <div id="investmentsRecent"></div>
+
+          <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Log an Investment</h3>
+          <div class="field">
+            <label>Amount (₹)</label>
+            <input type="number" id="investAmountInput" min="0" step="1" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Type</label>
+            <input type="text" id="investTypeInput" placeholder="e.g. Mutual Fund, Gold, Stocks">
+          </div>
+          <button type="button" id="saveInvestmentButton">Save</button>
+          <div id="logInvestmentResult" class="pending-result"></div>
+        </div>
+      </section>
+
       <!-- ===== TAB: shared placeholder for anything not built yet ===== -->
       <!-- Every "coming soon" tab reuses this one screen, so we're not
            writing near-identical placeholder markup four times over. -->
@@ -610,6 +644,9 @@
       </button>
       <button class="tab-btn" data-tab="savings" type="button">
         <span class="tab-icon">🎯</span>Savings
+      </button>
+      <button class="tab-btn" data-tab="investments" type="button">
+        <span class="tab-icon">💹</span>Invest
       </button>
       <button class="tab-btn" data-tab="cash" type="button">
         <span class="tab-icon">💵</span>Cash
@@ -1013,12 +1050,13 @@
 
     // Tabs that are actually built, each with their own screen
     const tabViews = {
-      pending:  document.getElementById("view-pending"),
-      today:    document.getElementById("view-today"),
-      analysis: document.getElementById("view-analysis"),
-      cc:       document.getElementById("view-cc"),
-      debts:    document.getElementById("view-debts"),
-      savings:  document.getElementById("view-savings")
+      pending:     document.getElementById("view-pending"),
+      today:       document.getElementById("view-today"),
+      analysis:    document.getElementById("view-analysis"),
+      cc:          document.getElementById("view-cc"),
+      debts:       document.getElementById("view-debts"),
+      savings:     document.getElementById("view-savings"),
+      investments: document.getElementById("view-investments")
     };
 
     // Tabs not built yet — all share the one "coming soon" screen,
@@ -1030,7 +1068,7 @@
     };
 
     // Only load a tab's data the first time it's opened, not every time
-    const tabLoaded = { pending: true, today: false, analysis: false, cc: false, debts: false, savings: false }; // pending loads on sign-in already
+    const tabLoaded = { pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false }; // pending loads on sign-in already
 
     function switchTab(tabName) {
       Object.keys(tabViews).forEach(function (key) {
@@ -1072,6 +1110,11 @@
       if (tabName === "savings" && !tabLoaded.savings) {
         tabLoaded.savings = true;
         loadSavings();
+      }
+
+      if (tabName === "investments" && !tabLoaded.investments) {
+        tabLoaded.investments = true;
+        loadInvestments();
       }
     }
 
@@ -1757,6 +1800,120 @@
         })
         .catch(function (err) {
           logSavingResultEl.textContent = "❌ " + err.message;
+        });
+    });
+
+    // ---------------------------------------------------------
+    // INVESTMENTS
+    // ---------------------------------------------------------
+    const investmentsStatusEl      = document.getElementById("investmentsStatus");
+    const investmentsContentEl     = document.getElementById("investmentsContent");
+    const investmentsTotalAmountEl = document.getElementById("investmentsTotalAmount");
+    const investmentsBreakdownEl   = document.getElementById("investmentsBreakdown");
+    const investmentsRecentEl      = document.getElementById("investmentsRecent");
+
+    const investAmountInputEl   = document.getElementById("investAmountInput");
+    const investTypeInputEl     = document.getElementById("investTypeInput");
+    const saveInvestmentButtonEl = document.getElementById("saveInvestmentButton");
+    const logInvestmentResultEl = document.getElementById("logInvestmentResult");
+
+    function loadInvestments() {
+      investmentsStatusEl.textContent = "Loading...";
+      investmentsContentEl.style.display = "none";
+
+      callAppsScript({ action: "getInvestments", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (!data.ok) {
+            if (isAuthError(data.error)) {
+              handleSessionExpired();
+            } else {
+              investmentsStatusEl.textContent = "❌ " + data.error;
+            }
+            return;
+          }
+
+          renderInvestments(data.investments);
+        })
+        .catch(function (err) {
+          investmentsStatusEl.textContent = "❌ Couldn't load: " + err.message;
+        });
+    }
+
+    function renderInvestments(inv) {
+      investmentsStatusEl.textContent = "";
+      investmentsContentEl.style.display = "block";
+
+      investmentsTotalAmountEl.textContent = "₹" + inv.total.toLocaleString("en-IN");
+
+      investmentsBreakdownEl.innerHTML = "";
+      if (inv.breakdown.length === 0) {
+        investmentsBreakdownEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">No investments logged yet.</p>";
+      } else {
+        const maxAmount = inv.breakdown[0].amount;
+        inv.breakdown.forEach(function (entry) {
+          const percentOfMax = maxAmount > 0 ? Math.round((entry.amount / maxAmount) * 100) : 0;
+          const row = document.createElement("div");
+          row.className = "category-row";
+          row.innerHTML = `
+            <div class="category-top">
+              <span>${entry.type}</span>
+              <span>₹${entry.amount.toLocaleString("en-IN")}</span>
+            </div>
+            <div class="category-bar-track">
+              <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
+            </div>
+          `;
+          investmentsBreakdownEl.appendChild(row);
+        });
+      }
+
+      investmentsRecentEl.innerHTML = "";
+      if (inv.recent.length === 0) {
+        investmentsRecentEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">None yet.</p>";
+      } else {
+        inv.recent.forEach(function (entry) {
+          const row = document.createElement("div");
+          row.className = "category-row";
+          row.innerHTML = `
+            <div class="category-top">
+              <span>${entry.date} — ${entry.type}</span>
+              <span>₹${entry.amount.toLocaleString("en-IN")}</span>
+            </div>
+          `;
+          investmentsRecentEl.appendChild(row);
+        });
+      }
+    }
+
+    saveInvestmentButtonEl.addEventListener("click", function () {
+      const amount = parseFloat(investAmountInputEl.value);
+      const type   = investTypeInputEl.value.trim();
+
+      if (!amount || amount <= 0 || !type) {
+        logInvestmentResultEl.textContent = "❌ Enter a type and a valid amount.";
+        return;
+      }
+
+      logInvestmentResultEl.textContent = "Saving...";
+
+      callAppsScript({
+        action:  "logInvestment",
+        idToken: currentUser.idToken,
+        amount:  amount,
+        type:    type
+      })
+        .then(function (data) {
+          if (data.ok) {
+            investAmountInputEl.value = "";
+            investTypeInputEl.value = "";
+            logInvestmentResultEl.textContent = "✅ Saved!";
+            loadInvestments(); // refresh totals
+          } else {
+            logInvestmentResultEl.textContent = "❌ " + data.error;
+          }
+        })
+        .catch(function (err) {
+          logInvestmentResultEl.textContent = "❌ " + err.message;
         });
     });
 
