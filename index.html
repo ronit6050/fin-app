@@ -228,6 +228,46 @@
       border-radius: 6px;
     }
 
+    /* ---------- Debts ---------- */
+    .debt-item {
+      background: white;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .debt-item .debt-top {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .debt-item .debt-amount {
+      font-weight: bold;
+      color: #2f6fed;
+    }
+
+    .debt-item .debt-meta {
+      font-size: 0.8rem;
+      color: #777;
+      margin-bottom: 8px;
+    }
+
+    .debt-overdue {
+      color: #d93025;
+      font-weight: bold;
+    }
+
+    .debt-due-soon {
+      color: #f29900;
+      font-weight: bold;
+    }
+
+    .debt-item .settle-btn {
+      margin-top: 4px;
+    }
+
     /* ---------- Monthly Analysis month picker ---------- */
     .month-nav {
       display: flex;
@@ -403,6 +443,55 @@
 
           <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Top Categories</h3>
           <div id="ccTopCategories"></div>
+        </div>
+      </section>
+
+      <!-- ===== TAB: Debts ===== -->
+      <section id="view-debts" class="tab-view" style="display:none">
+        <h2 class="section-title">Debts</h2>
+        <div id="debtsStatus">Loading...</div>
+        <div id="debtsContent" style="display:none">
+          <div class="today-total-box">
+            <div class="today-total-label" id="debtsNetLabel">Net Position</div>
+            <div class="today-total-amount" id="debtsNetAmount">₹0</div>
+            <div class="today-split" id="debtsTotalsLine"></div>
+          </div>
+
+          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">🔴 You Owe</h3>
+          <div id="debtsYouOwe"></div>
+
+          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">🟢 They Owe You</h3>
+          <div id="debtsTheyOwe"></div>
+
+          <button type="button" id="addDebtToggleButton" style="margin-top:16px;">+ Add Debt</button>
+
+          <div id="addDebtForm" style="display:none; margin-top:12px;">
+            <div class="field">
+              <label>Person</label>
+              <input type="text" id="debtPersonInput" placeholder="Name">
+            </div>
+            <div class="field">
+              <label>Amount (₹)</label>
+              <input type="number" id="debtAmountInput" min="0" step="1" placeholder="0">
+            </div>
+            <div class="field">
+              <label>Type</label>
+              <select id="debtTypeInput">
+                <option value="LENT">I lent money</option>
+                <option value="BORROWED">I borrowed money</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Note (optional)</label>
+              <input type="text" id="debtNoteInput" placeholder="e.g. dinner, rent">
+            </div>
+            <div class="field">
+              <label>Due Date (optional)</label>
+              <input type="date" id="debtDueDateInput">
+            </div>
+            <button type="button" id="saveDebtButton">Save</button>
+            <div id="addDebtResult" class="pending-result"></div>
+          </div>
         </div>
       </section>
 
@@ -849,7 +938,8 @@
       pending:  document.getElementById("view-pending"),
       today:    document.getElementById("view-today"),
       analysis: document.getElementById("view-analysis"),
-      cc:       document.getElementById("view-cc")
+      cc:       document.getElementById("view-cc"),
+      debts:    document.getElementById("view-debts")
     };
 
     // Tabs not built yet — all share the one "coming soon" screen,
@@ -857,13 +947,12 @@
     const comingSoonView  = document.getElementById("view-comingsoon");
     const comingSoonTitle = document.getElementById("comingSoonTitle");
     const COMING_SOON_LABELS = {
-      debts:   "💰 Debts",
       savings: "🎯 Savings & Wish List",
       cash:    "💵 Cash Entry"
     };
 
     // Only load a tab's data the first time it's opened, not every time
-    const tabLoaded = { pending: true, today: false, analysis: false, cc: false }; // pending loads on sign-in already
+    const tabLoaded = { pending: true, today: false, analysis: false, cc: false, debts: false }; // pending loads on sign-in already
 
     function switchTab(tabName) {
       Object.keys(tabViews).forEach(function (key) {
@@ -895,6 +984,11 @@
       if (tabName === "cc" && !tabLoaded.cc) {
         tabLoaded.cc = true;
         loadCCAdvisor();
+      }
+
+      if (tabName === "debts" && !tabLoaded.debts) {
+        tabLoaded.debts = true;
+        loadDebts();
       }
     }
 
@@ -1204,6 +1298,175 @@
         });
       }
     }
+
+    // ---------------------------------------------------------
+    // DEBTS
+    // ---------------------------------------------------------
+    const debtsStatusEl     = document.getElementById("debtsStatus");
+    const debtsContentEl    = document.getElementById("debtsContent");
+    const debtsNetLabelEl   = document.getElementById("debtsNetLabel");
+    const debtsNetAmountEl  = document.getElementById("debtsNetAmount");
+    const debtsTotalsLineEl = document.getElementById("debtsTotalsLine");
+    const debtsYouOweEl     = document.getElementById("debtsYouOwe");
+    const debtsTheyOweEl    = document.getElementById("debtsTheyOwe");
+
+    const addDebtToggleButtonEl = document.getElementById("addDebtToggleButton");
+    const addDebtFormEl     = document.getElementById("addDebtForm");
+    const debtPersonInputEl = document.getElementById("debtPersonInput");
+    const debtAmountInputEl = document.getElementById("debtAmountInput");
+    const debtTypeInputEl   = document.getElementById("debtTypeInput");
+    const debtNoteInputEl   = document.getElementById("debtNoteInput");
+    const debtDueDateInputEl = document.getElementById("debtDueDateInput");
+    const saveDebtButtonEl  = document.getElementById("saveDebtButton");
+    const addDebtResultEl   = document.getElementById("addDebtResult");
+
+    function loadDebts() {
+      debtsStatusEl.textContent = "Loading...";
+      debtsContentEl.style.display = "none";
+
+      callAppsScript({ action: "getDebts", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (!data.ok) {
+            if (isAuthError(data.error)) {
+              handleSessionExpired();
+            } else {
+              debtsStatusEl.textContent = "❌ " + data.error;
+            }
+            return;
+          }
+
+          renderDebts(data.debts);
+        })
+        .catch(function (err) {
+          debtsStatusEl.textContent = "❌ Couldn't load: " + err.message;
+        });
+    }
+
+    // Turns a debt entry's due-date info into a short status line
+    function formatDebtDueText(entry) {
+      if (entry.isOverdue) {
+        return `<span class="debt-overdue">🚨 Overdue by ${Math.abs(entry.daysUntilDue)}d</span>`;
+      }
+      if (entry.dueSoon) {
+        return `<span class="debt-due-soon">⚠️ Due in ${entry.daysUntilDue}d</span>`;
+      }
+      if (entry.dueDate) {
+        return "Due " + entry.dueDate;
+      }
+      return "No due date";
+    }
+
+    function buildDebtItem(entry) {
+      const card = document.createElement("div");
+      card.className = "debt-item";
+
+      const noteText = entry.note ? " · " + entry.note : "";
+
+      card.innerHTML = `
+        <div class="debt-top">
+          <span>${entry.person}</span>
+          <span class="debt-amount">₹${entry.amount.toLocaleString("en-IN")}</span>
+        </div>
+        <div class="debt-meta">${formatDebtDueText(entry)}${noteText}</div>
+        <button type="button" class="settle-btn">Mark as Settled</button>
+        <div class="pending-result"></div>
+      `;
+
+      const settleButton = card.querySelector(".settle-btn");
+      const resultEl      = card.querySelector(".pending-result");
+
+      settleButton.addEventListener("click", function () {
+        resultEl.textContent = "Saving...";
+
+        callAppsScript({ action: "settleDebt", idToken: currentUser.idToken, row: entry.row })
+          .then(function (data) {
+            if (data.ok) {
+              card.remove();
+            } else {
+              resultEl.textContent = "❌ " + data.error;
+            }
+          })
+          .catch(function (err) {
+            resultEl.textContent = "❌ " + err.message;
+          });
+      });
+
+      return card;
+    }
+
+    function renderDebts(d) {
+      debtsStatusEl.textContent = "";
+      debtsContentEl.style.display = "block";
+
+      const net = d.netPosition;
+      debtsNetLabelEl.textContent = net >= 0 ? "You're Ahead" : "You're Behind";
+      debtsNetAmountEl.textContent = "₹" + Math.abs(net).toLocaleString("en-IN");
+      debtsTotalsLineEl.textContent =
+        "You owe: ₹" + d.totalYouOwe.toLocaleString("en-IN") +
+        "  ·  Owed to you: ₹" + d.totalTheyOwe.toLocaleString("en-IN");
+
+      debtsYouOweEl.innerHTML = "";
+      debtsTheyOweEl.innerHTML = "";
+
+      const youOwe  = d.debts.filter(function (e) { return e.type === "BORROWED"; });
+      const theyOwe = d.debts.filter(function (e) { return e.type === "LENT" || e.type === "SPLIT"; });
+
+      if (youOwe.length === 0) {
+        debtsYouOweEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">None — you're clean!</p>";
+      } else {
+        youOwe.forEach(function (entry) { debtsYouOweEl.appendChild(buildDebtItem(entry)); });
+      }
+
+      if (theyOwe.length === 0) {
+        debtsTheyOweEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">None pending.</p>";
+      } else {
+        theyOwe.forEach(function (entry) { debtsTheyOweEl.appendChild(buildDebtItem(entry)); });
+      }
+    }
+
+    // Shows/hides the "add a debt" form
+    addDebtToggleButtonEl.addEventListener("click", function () {
+      const isHidden = addDebtFormEl.style.display === "none";
+      addDebtFormEl.style.display = isHidden ? "block" : "none";
+    });
+
+    saveDebtButtonEl.addEventListener("click", function () {
+      const person = debtPersonInputEl.value.trim();
+      const amount = parseFloat(debtAmountInputEl.value);
+
+      if (!person || !amount || amount <= 0) {
+        addDebtResultEl.textContent = "❌ Enter a person and a valid amount.";
+        return;
+      }
+
+      addDebtResultEl.textContent = "Saving...";
+
+      callAppsScript({
+        action:   "addDebt",
+        idToken:  currentUser.idToken,
+        person:   person,
+        type:     debtTypeInputEl.value,
+        amount:   amount,
+        note:     debtNoteInputEl.value.trim(),
+        dueDate:  debtDueDateInputEl.value
+      })
+        .then(function (data) {
+          if (data.ok) {
+            debtPersonInputEl.value = "";
+            debtAmountInputEl.value = "";
+            debtNoteInputEl.value = "";
+            debtDueDateInputEl.value = "";
+            addDebtResultEl.textContent = "";
+            addDebtFormEl.style.display = "none";
+            loadDebts(); // refresh the list with the new entry included
+          } else {
+            addDebtResultEl.textContent = "❌ " + data.error;
+          }
+        })
+        .catch(function (err) {
+          addDebtResultEl.textContent = "❌ " + err.message;
+        });
+    });
 
   </script>
 
