@@ -228,6 +228,22 @@
       border-radius: 6px;
     }
 
+    /* ---------- Monthly Analysis month picker ---------- */
+    .month-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 12px;
+      font-weight: bold;
+    }
+
+    .month-nav-btn {
+      width: auto;
+      padding: 6px 14px;
+      font-size: 1rem;
+    }
+
     /* ---------- Bottom tab bar ---------- */
     .tab-bar {
       display: none; /* shown once signed in */
@@ -239,17 +255,20 @@
       max-width: 420px;
       background: white;
       box-shadow: 0 -1px 6px rgba(0, 0, 0, 0.1);
-      justify-content: space-around;
       padding: 6px 0;
+      /* More tabs than fit on one screen — scroll sideways instead of squishing */
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .tab-btn {
-      flex: 1;
+      flex: 0 0 auto;
+      min-width: 64px;
       background: none;
       border: none;
       color: #888;
-      font-size: 0.75rem;
-      padding: 6px 0;
+      font-size: 0.7rem;
+      padding: 6px 4px;
       cursor: pointer;
       width: auto;
     }
@@ -334,19 +353,65 @@
         </div>
       </section>
 
-      <!-- More tabs (Analysis, CC Advisor, Debts, Savings...) will be added
-           here as their own <section class="tab-view"> blocks, plus a
-           matching button below, as we work through the roadmap. -->
+      <!-- ===== TAB: Monthly Analysis ===== -->
+      <section id="view-analysis" class="tab-view" style="display:none">
+        <h2 class="section-title">Monthly Analysis</h2>
+        <div class="month-nav">
+          <button type="button" id="prevMonthButton" class="month-nav-btn">◀</button>
+          <span id="monthLabel">—</span>
+          <button type="button" id="nextMonthButton" class="month-nav-btn">▶</button>
+        </div>
+        <div id="analysisStatus">Loading...</div>
+        <div id="analysisContent" style="display:none">
+          <div class="today-total-box">
+            <div class="today-total-label">Total Spent</div>
+            <div class="today-total-amount" id="analysisTotalAmount">₹0</div>
+            <div class="today-split" id="analysisSplit"></div>
+          </div>
+          <div id="analysisCategories"></div>
+        </div>
+      </section>
+
+      <!-- ===== TAB: shared placeholder for anything not built yet ===== -->
+      <!-- Every "coming soon" tab reuses this one screen, so we're not
+           writing near-identical placeholder markup four times over. -->
+      <section id="view-comingsoon" class="tab-view" style="display:none">
+        <h2 class="section-title" id="comingSoonTitle">Coming Soon</h2>
+        <div class="signin-box" style="flex-direction:column; gap:6px;">
+          <span style="font-size:2rem;">🚧</span>
+          <p style="margin:0; color:#666; text-align:center;">
+            Not built yet — this is on the roadmap, coming in a future step.
+          </p>
+        </div>
+      </section>
 
     </div>
 
-    <!-- ===== Bottom tab bar — only visible once signed in ===== -->
+    <!-- ===== Bottom tab bar — only visible once signed in =====
+         Scrolls sideways since there are more tabs than fit on one
+         phone screen at once. Every roadmap feature gets a button here,
+         even before it's built, so it's clear what's left to do. -->
     <nav class="tab-bar" id="tabBar">
       <button class="tab-btn active" data-tab="pending" type="button">
         <span class="tab-icon">📋</span>Pending
       </button>
       <button class="tab-btn" data-tab="today" type="button">
         <span class="tab-icon">📊</span>Today
+      </button>
+      <button class="tab-btn" data-tab="analysis" type="button">
+        <span class="tab-icon">📈</span>Analysis
+      </button>
+      <button class="tab-btn" data-tab="cc" type="button">
+        <span class="tab-icon">💳</span>CC
+      </button>
+      <button class="tab-btn" data-tab="debts" type="button">
+        <span class="tab-icon">💰</span>Debts
+      </button>
+      <button class="tab-btn" data-tab="savings" type="button">
+        <span class="tab-icon">🎯</span>Savings
+      </button>
+      <button class="tab-btn" data-tab="cash" type="button">
+        <span class="tab-icon">💵</span>Cash
       </button>
     </nav>
 
@@ -744,18 +809,40 @@
     // TAB BAR — switches which screen is showing
     // ---------------------------------------------------------
     const tabButtons = document.querySelectorAll(".tab-btn");
+
+    // Tabs that are actually built, each with their own screen
     const tabViews = {
-      pending: document.getElementById("view-pending"),
-      today:   document.getElementById("view-today")
+      pending:  document.getElementById("view-pending"),
+      today:    document.getElementById("view-today"),
+      analysis: document.getElementById("view-analysis")
+    };
+
+    // Tabs not built yet — all share the one "coming soon" screen,
+    // just with a different title depending on which was tapped
+    const comingSoonView  = document.getElementById("view-comingsoon");
+    const comingSoonTitle = document.getElementById("comingSoonTitle");
+    const COMING_SOON_LABELS = {
+      cc:      "💳 CC Advisor",
+      debts:   "💰 Debts",
+      savings: "🎯 Savings & Wish List",
+      cash:    "💵 Cash Entry"
     };
 
     // Only load a tab's data the first time it's opened, not every time
-    const tabLoaded = { pending: true, today: false }; // pending loads on sign-in already
+    const tabLoaded = { pending: true, today: false, analysis: false }; // pending loads on sign-in already
 
     function switchTab(tabName) {
       Object.keys(tabViews).forEach(function (key) {
-        tabViews[key].style.display = (key === tabName) ? "block" : "none";
+        tabViews[key].style.display = "none";
       });
+      comingSoonView.style.display = "none";
+
+      if (tabViews[tabName]) {
+        tabViews[tabName].style.display = "block";
+      } else if (COMING_SOON_LABELS[tabName]) {
+        comingSoonTitle.textContent = COMING_SOON_LABELS[tabName];
+        comingSoonView.style.display = "block";
+      }
 
       tabButtons.forEach(function (btn) {
         btn.classList.toggle("active", btn.dataset.tab === tabName);
@@ -764,6 +851,11 @@
       if (tabName === "today" && !tabLoaded.today) {
         tabLoaded.today = true;
         loadTodaySummary();
+      }
+
+      if (tabName === "analysis" && !tabLoaded.analysis) {
+        tabLoaded.analysis = true;
+        loadMonthlyAnalysis();
       }
     }
 
@@ -839,6 +931,117 @@
         todayCategoriesEl.appendChild(row);
       });
     }
+
+    // ---------------------------------------------------------
+    // MONTHLY ANALYSIS
+    // ---------------------------------------------------------
+    const MONTH_NAMES = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+
+    // Which month is currently showing — starts on the current month
+    const now = new Date();
+    let analysisYear  = now.getFullYear();
+    let analysisMonth = now.getMonth() + 1; // JS months are 0-11, ours are 1-12
+
+    const monthLabelEl        = document.getElementById("monthLabel");
+    const prevMonthButtonEl   = document.getElementById("prevMonthButton");
+    const nextMonthButtonEl   = document.getElementById("nextMonthButton");
+    const analysisStatusEl    = document.getElementById("analysisStatus");
+    const analysisContentEl   = document.getElementById("analysisContent");
+    const analysisTotalAmountEl = document.getElementById("analysisTotalAmount");
+    const analysisSplitEl     = document.getElementById("analysisSplit");
+    const analysisCategoriesEl = document.getElementById("analysisCategories");
+
+    function loadMonthlyAnalysis() {
+      monthLabelEl.textContent = MONTH_NAMES[analysisMonth - 1] + " " + analysisYear;
+      analysisStatusEl.textContent = "Loading...";
+      analysisContentEl.style.display = "none";
+
+      callAppsScript({
+        action:  "getMonthlyAnalysis",
+        idToken: currentUser.idToken,
+        year:    analysisYear,
+        month:   analysisMonth
+      })
+        .then(function (data) {
+          if (!data.ok) {
+            if (isAuthError(data.error)) {
+              handleSessionExpired();
+            } else {
+              analysisStatusEl.textContent = "❌ " + data.error;
+            }
+            return;
+          }
+
+          renderMonthlyAnalysis(data.analysis);
+        })
+        .catch(function (err) {
+          analysisStatusEl.textContent = "❌ Couldn't load: " + err.message;
+        });
+    }
+
+    function renderMonthlyAnalysis(a) {
+      analysisStatusEl.textContent = "";
+      analysisContentEl.style.display = "block";
+
+      analysisTotalAmountEl.textContent = "₹" + a.totalDebit.toLocaleString("en-IN");
+
+      const savingsText = a.savings >= 0
+        ? "Savings: ₹" + a.savings.toLocaleString("en-IN")
+        : "Over by ₹" + Math.abs(a.savings).toLocaleString("en-IN");
+
+      analysisSplitEl.textContent =
+        "Income: ₹" + a.totalCredit.toLocaleString("en-IN") +
+        "  ·  " + savingsText +
+        "  ·  Avg/day: ₹" + a.avgDaily.toLocaleString("en-IN");
+
+      analysisCategoriesEl.innerHTML = "";
+
+      if (a.categories.length === 0) {
+        analysisCategoriesEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">No spending recorded this month.</p>";
+        return;
+      }
+
+      const maxAmount = a.categories[0].amount;
+
+      a.categories.forEach(function (entry) {
+        const percentOfMax = maxAmount > 0 ? Math.round((entry.amount / maxAmount) * 100) : 0;
+
+        const row = document.createElement("div");
+        row.className = "category-row";
+        row.innerHTML = `
+          <div class="category-top">
+            <span>${entry.category}</span>
+            <span>₹${entry.amount.toLocaleString("en-IN")}</span>
+          </div>
+          <div class="category-bar-track">
+            <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
+          </div>
+        `;
+        analysisCategoriesEl.appendChild(row);
+      });
+
+      if (a.topAmount > 0) {
+        const topLine = document.createElement("p");
+        topLine.style.cssText = "font-size:0.85rem; color:#666; margin-top:10px;";
+        topLine.textContent = "🏆 Top expense: ₹" + a.topAmount.toLocaleString("en-IN") +
+          (a.topNote ? " (" + a.topNote + ")" : "");
+        analysisCategoriesEl.appendChild(topLine);
+      }
+    }
+
+    // Moves to the previous/next month and reloads
+    function changeAnalysisMonth(delta) {
+      analysisMonth += delta;
+      if (analysisMonth < 1)  { analysisMonth = 12; analysisYear--; }
+      if (analysisMonth > 12) { analysisMonth = 1;  analysisYear++; }
+      loadMonthlyAnalysis();
+    }
+
+    prevMonthButtonEl.addEventListener("click", function () { changeAnalysisMonth(-1); });
+    nextMonthButtonEl.addEventListener("click", function () { changeAnalysisMonth(1); });
 
   </script>
 
