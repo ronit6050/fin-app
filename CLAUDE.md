@@ -58,9 +58,9 @@ exist in the PWA — order/timing can flex, but nothing gets dropped.
 | 3 | Dashboard: today's summary, monthly analysis + charts | Dashboard, Today's Summary, Analysis buttons | done |
 | 4 | CC Advisor view | CC usage/limit tracking | done |
 | 5 | Debts view (lend/borrow/settle) | Debt Manager | done |
-| 6 | Savings & Wish List view | Savings Advisor | in progress |
-| 6.5 | Investments dashboard (log + view, separate from Savings pots) | Investment logs, Investment Dashboard | not started |
-| 7 | Cash entry (lower priority) | Cash spend/receive | not started |
+| 6 | Savings & Wish List view | Savings Advisor | done |
+| 6.5 | Investments dashboard (log + view, separate from Savings pots) | Investment logs, Investment Dashboard | done |
+| 7 | Cash entry (lower priority) | Cash spend/receive | in progress |
 | 8 | Real background push via Firebase (separate later phase) | Alerts arriving even when app is closed | not started |
 | 9 | Daily check-ins, nudges, threshold alerts as push | Remaining proactive messages | not started |
 | 10 | Turn off the Telegram bot | Full cutover | not started |

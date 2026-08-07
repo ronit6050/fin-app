@@ -607,6 +607,46 @@
         </div>
       </section>
 
+      <!-- ===== TAB: Cash ===== -->
+      <section id="view-cash" class="tab-view" style="display:none">
+        <h2 class="section-title">Cash</h2>
+        <div id="cashStatus">Loading...</div>
+        <div id="cashContent" style="display:none">
+
+          <div class="today-total-box">
+            <div class="today-total-label">Cash Balance</div>
+            <div class="today-total-amount" id="cashBalanceAmount">₹0</div>
+            <div class="today-split" id="cashTodaySpend"></div>
+          </div>
+
+          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Log Cash</h3>
+          <div class="field">
+            <label>Type</label>
+            <select id="cashTypeInput">
+              <option value="debit">Spent</option>
+              <option value="credit">Received</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Amount (₹)</label>
+            <input type="number" id="cashAmountInput" min="0" step="1" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Note</label>
+            <input type="text" id="cashNoteInput" placeholder="e.g. tea, auto, Rahul returned">
+          </div>
+          <div class="field">
+            <label>Category (for spend)</label>
+            <select id="cashCategoryInput"></select>
+          </div>
+          <button type="button" id="saveCashButton">Save</button>
+          <div id="cashResult" class="pending-result"></div>
+
+          <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Recent</h3>
+          <div id="cashRecent"></div>
+        </div>
+      </section>
+
       <!-- ===== TAB: shared placeholder for anything not built yet ===== -->
       <!-- Every "coming soon" tab reuses this one screen, so we're not
            writing near-identical placeholder markup four times over. -->
@@ -1056,19 +1096,19 @@
       cc:          document.getElementById("view-cc"),
       debts:       document.getElementById("view-debts"),
       savings:     document.getElementById("view-savings"),
-      investments: document.getElementById("view-investments")
+      investments: document.getElementById("view-investments"),
+      cash:        document.getElementById("view-cash")
     };
 
     // Tabs not built yet — all share the one "coming soon" screen,
-    // just with a different title depending on which was tapped
+    // just with a different title depending on which was tapped.
+    // (Empty now — every roadmap tab is built!)
     const comingSoonView  = document.getElementById("view-comingsoon");
     const comingSoonTitle = document.getElementById("comingSoonTitle");
-    const COMING_SOON_LABELS = {
-      cash: "💵 Cash Entry"
-    };
+    const COMING_SOON_LABELS = {};
 
     // Only load a tab's data the first time it's opened, not every time
-    const tabLoaded = { pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false }; // pending loads on sign-in already
+    const tabLoaded = { pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false }; // pending loads on sign-in already
 
     function switchTab(tabName) {
       Object.keys(tabViews).forEach(function (key) {
@@ -1115,6 +1155,11 @@
       if (tabName === "investments" && !tabLoaded.investments) {
         tabLoaded.investments = true;
         loadInvestments();
+      }
+
+      if (tabName === "cash" && !tabLoaded.cash) {
+        tabLoaded.cash = true;
+        loadCash();
       }
     }
 
@@ -1914,6 +1959,109 @@
         })
         .catch(function (err) {
           logInvestmentResultEl.textContent = "❌ " + err.message;
+        });
+    });
+
+    // ---------------------------------------------------------
+    // CASH
+    // ---------------------------------------------------------
+    const cashStatusEl        = document.getElementById("cashStatus");
+    const cashContentEl       = document.getElementById("cashContent");
+    const cashBalanceAmountEl = document.getElementById("cashBalanceAmount");
+    const cashTodaySpendEl    = document.getElementById("cashTodaySpend");
+    const cashTypeInputEl     = document.getElementById("cashTypeInput");
+    const cashAmountInputEl   = document.getElementById("cashAmountInput");
+    const cashNoteInputEl     = document.getElementById("cashNoteInput");
+    const cashCategoryInputEl = document.getElementById("cashCategoryInput");
+    const saveCashButtonEl    = document.getElementById("saveCashButton");
+    const cashResultEl        = document.getElementById("cashResult");
+    const cashRecentEl        = document.getElementById("cashRecent");
+
+    // Reuse the same category list used for Pending Transactions —
+    // one source of truth instead of writing the list out twice.
+    cashCategoryInputEl.innerHTML = CATEGORY_OPTIONS
+      .map(function (cat) { return `<option value="${cat}">${cat}</option>`; })
+      .join("");
+
+    function loadCash() {
+      cashStatusEl.textContent = "Loading...";
+      cashContentEl.style.display = "none";
+
+      callAppsScript({ action: "getCash", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (!data.ok) {
+            if (isAuthError(data.error)) {
+              handleSessionExpired();
+            } else {
+              cashStatusEl.textContent = "❌ " + data.error;
+            }
+            return;
+          }
+
+          renderCash(data.cash);
+        })
+        .catch(function (err) {
+          cashStatusEl.textContent = "❌ Couldn't load: " + err.message;
+        });
+    }
+
+    function renderCash(c) {
+      cashStatusEl.textContent = "";
+      cashContentEl.style.display = "block";
+
+      cashBalanceAmountEl.textContent = "₹" + c.balance.toLocaleString("en-IN");
+      cashTodaySpendEl.textContent = "Spent today: ₹" + c.todaySpend.toLocaleString("en-IN");
+
+      cashRecentEl.innerHTML = "";
+      if (c.recent.length === 0) {
+        cashRecentEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">No cash entries yet.</p>";
+      } else {
+        c.recent.forEach(function (entry) {
+          const row = document.createElement("div");
+          row.className = "category-row";
+          const sign = entry.type === "credit" ? "+" : "-";
+          const noteText = entry.note ? " · " + entry.note : "";
+          row.innerHTML = `
+            <div class="category-top">
+              <span>${entry.date}${noteText}</span>
+              <span>${sign}₹${entry.amount.toLocaleString("en-IN")}</span>
+            </div>
+          `;
+          cashRecentEl.appendChild(row);
+        });
+      }
+    }
+
+    saveCashButtonEl.addEventListener("click", function () {
+      const amount = parseFloat(cashAmountInputEl.value);
+
+      if (!amount || amount <= 0) {
+        cashResultEl.textContent = "❌ Enter a valid amount.";
+        return;
+      }
+
+      cashResultEl.textContent = "Saving...";
+
+      callAppsScript({
+        action:   "addCashEntry",
+        idToken:  currentUser.idToken,
+        type:     cashTypeInputEl.value,
+        amount:   amount,
+        note:     cashNoteInputEl.value.trim(),
+        category: cashCategoryInputEl.value
+      })
+        .then(function (data) {
+          if (data.ok) {
+            cashAmountInputEl.value = "";
+            cashNoteInputEl.value = "";
+            cashResultEl.textContent = "✅ Saved!";
+            loadCash(); // refresh balance + recent list
+          } else {
+            cashResultEl.textContent = "❌ " + data.error;
+          }
+        })
+        .catch(function (err) {
+          cashResultEl.textContent = "❌ " + err.message;
         });
     });
 
