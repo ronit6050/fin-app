@@ -31,8 +31,8 @@ const messaging = firebase.messaging();
 // Fires when a push arrives while the app is closed/in the background.
 // This is what makes the notification actually appear on your phone.
 messaging.onBackgroundMessage(function (payload) {
-  const title = (payload.notification && payload.notification.title) || "Fin App";
-  const body  = (payload.notification && payload.notification.body) || "";
+  const title = (payload.data && payload.data.title) || "Fin App";
+  const body  = (payload.data && payload.data.body) || "";
   self.registration.showNotification(title, { body: body });
 });
 
