@@ -16,6 +16,11 @@
        loaded straight from Google — not a 3rd-party company. -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
+  <!-- Firebase's official scripts (also Google) — used only for real
+       background push notifications, arriving even when the app is closed. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+
   <style>
     /* ---------- Basic page setup ---------- */
     * {
@@ -721,6 +726,27 @@
     // The web address of your Apps Script backend (the "/exec" link).
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v/exec";
 
+    // ---------------------------------------------------------
+    // FIREBASE (for real background push notifications, Stage 8)
+    // ---------------------------------------------------------
+    // None of these values are secret — Firebase's own docs confirm they're
+    // safe to be visible in public code, same reasoning as the Client ID above.
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyA6hs87aWKZrPdaUe1mG9rEUUfVOAnQpCg",
+      authDomain: "fin-app-76c40.firebaseapp.com",
+      projectId: "fin-app-76c40",
+      storageBucket: "fin-app-76c40.firebasestorage.app",
+      messagingSenderId: "921605499750",
+      appId: "1:921605499750:web:2598d9d58206f95580b6a7"
+    };
+
+    // The "public" half of a key pair used to prove push messages are
+    // meant for this specific app — safe to be public, same as the name says.
+    const FIREBASE_VAPID_KEY = "BPHz1i7hx0q0v99OntAeMGhLhEnPtKb4Rk4AM_VEHOv4VQQUjyCrfMUcgILGRormD6G5lHxOOYBe-XG60YVsg7Q";
+
+    firebase.initializeApp(FIREBASE_CONFIG);
+    const messaging = firebase.messaging();
+
     // We'll keep the signed-in person's info here once they sign in.
     // Later steps (talking to the Google Sheet) will use this.
     let currentUser = null;
@@ -799,7 +825,7 @@
       loadPendingTransactions();
 
       // Ask (once) if we're allowed to show notifications for new transactions
-      requestNotificationPermission();
+      setupPushNotifications();
     }
 
     // Set up Google's sign-in button once the page has loaded
@@ -824,7 +850,7 @@
           currentUser = savedUser;
           showSignedInUI(currentUser);
           loadPendingTransactions();
-          requestNotificationPermission();
+          setupPushNotifications();
         } else {
           localStorage.removeItem(STORAGE_KEY); // stale/wrong data — ignore it
           showSignedOutUI();
@@ -1037,12 +1063,34 @@
       navigator.serviceWorker.register("sw.js");
     }
 
-    // Ask permission once, right after signing in (browsers require this —
-    // a website can't show notifications without you explicitly allowing it).
-    function requestNotificationPermission() {
-      if ("Notification" in window && Notification.permission === "default") {
-        Notification.requestPermission();
-      }
+    // Asks permission (once), then registers this phone/browser with
+    // Firebase so Apps Script can later send it real push notifications —
+    // ones that arrive even if the app is fully closed.
+    function setupPushNotifications() {
+      if (!("Notification" in window) || !("serviceWorker" in navigator)) return;
+
+      Notification.requestPermission().then(function (permission) {
+        if (permission !== "granted") return;
+
+        navigator.serviceWorker.ready.then(function (registration) {
+          messaging.getToken({
+            vapidKey: FIREBASE_VAPID_KEY,
+            serviceWorkerRegistration: registration
+          })
+            .then(function (token) {
+              if (!token || !currentUser) return;
+              // Tell Apps Script where to send this phone's push notifications
+              callAppsScript({
+                action:  "registerPushToken",
+                idToken: currentUser.idToken,
+                token:   token
+              });
+            })
+            .catch(function (err) {
+              console.log("Push registration failed:", err);
+            });
+        });
+      });
     }
 
     // Shows a real browser notification for one new transaction.
