@@ -35,30 +35,36 @@
 
 ## The plan (in order)
 1. Build the look: add-expense form + expense list (using pretend data). <- done, may revisit once real data flows in
-2. Connect to the Google Sheet via the existing "finance-bot" Apps Script, with real Google Sign-In for privacy.
-3. Make it installable on my phone as a PWA (needs real HTTPS hosting).
-4. Work through the roadmap below to reach full Telegram parity.
+2. Connect to the Google Sheet via the existing "finance-bot" Apps Script, with real Google Sign-In for privacy. <- done
+3. Make it installable on my phone as a PWA (needs real HTTPS hosting). <- hosting done (step 0); installability (manifest/icons) still open
+4. Work through the roadmap below to reach full Telegram parity. <- in progress, see table
 5. (Later, optional) Support friends using their own sheets.
+6. Once full Telegram parity is reached: a dedicated pass to properly structure/
+   polish the whole app (UI, UX, possibly new features) — explicitly deferred
+   until everything below is working, not before. Confirmed 2026-08-07.
 
 ## Roadmap: replacing Telegram entirely
 Staged — each phase replaces one piece of Telegram functionality. Bank/UPI
 flow is prioritized over cash since that's the user's real daily habit.
-Work through in order; don't skip ahead.
+Work through in order; don't skip ahead. Every item below must eventually
+exist in the PWA — order/timing can flex, but nothing gets dropped.
 
-| Step | What | Replaces (Telegram feature) |
-|---|---|---|
-| 0 | Host the PWA on free HTTPS (GitHub Pages) | — prerequisite for installability + Google Sign-In |
-| 0.5 | Add Google Sign-In to the PWA | — real privacy, no secret-in-code |
-| 1 | View new bank transactions + add note/category | "Reply to alert" flow — main daily habit |
-| 2 | In-app notifications for pending transactions | Telegram's instant alerts (in-app only for now) |
-| 3 | Dashboard: today's summary, monthly analysis + charts | Dashboard, Today's Summary, Analysis buttons |
-| 4 | CC Advisor view | CC usage/limit tracking |
-| 5 | Debts view (lend/borrow/settle) | Debt Manager |
-| 6 | Savings & Wish List view | Savings Advisor |
-| 7 | Cash entry (lower priority) | Cash spend/receive |
-| 8 | Real background push via Firebase (separate later phase) | Alerts arriving even when app is closed |
-| 9 | Daily check-ins, nudges, threshold alerts as push | Remaining proactive messages |
-| 10 | Turn off the Telegram bot | Full cutover |
+| Step | What | Replaces (Telegram feature) | Status |
+|---|---|---|---|
+| 0 | Host the PWA on free HTTPS (GitHub Pages) | — prerequisite for installability + Google Sign-In | done |
+| 0.5 | Add Google Sign-In to the PWA | — real privacy, no secret-in-code | done |
+| 1 | View new bank transactions + add note/category | "Reply to alert" flow — main daily habit | done |
+| 2 | In-app notifications for pending transactions | Telegram's instant alerts (in-app only for now) | done |
+| 3 | Dashboard: today's summary, monthly analysis + charts | Dashboard, Today's Summary, Analysis buttons | done |
+| 4 | CC Advisor view | CC usage/limit tracking | done |
+| 5 | Debts view (lend/borrow/settle) | Debt Manager | done |
+| 6 | Savings & Wish List view | Savings Advisor | in progress |
+| 6.5 | Investments dashboard (log + view, separate from Savings pots) | Investment logs, Investment Dashboard | not started |
+| 7 | Cash entry (lower priority) | Cash spend/receive | not started |
+| 8 | Real background push via Firebase (separate later phase) | Alerts arriving even when app is closed | not started |
+| 9 | Daily check-ins, nudges, threshold alerts as push | Remaining proactive messages | not started |
+| 10 | Turn off the Telegram bot | Full cutover | not started |
+| 11 | Full UI/UX structuring pass (after everything above works) | — new phase, not a Telegram replacement | not started |
 
 ## Tech choices
 - Plain HTML, CSS, and JavaScript. No frameworks. Keep it simple.

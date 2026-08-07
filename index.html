@@ -495,6 +495,84 @@
         </div>
       </section>
 
+      <!-- ===== TAB: Savings & Wish List ===== -->
+      <section id="view-savings" class="tab-view" style="display:none">
+        <h2 class="section-title">Savings &amp; Wish List</h2>
+        <div id="savingsStatus">Loading...</div>
+        <div id="savingsContent" style="display:none">
+
+          <div class="today-total-box">
+            <div class="today-total-label">🛡️ Emergency Fund</div>
+            <div class="today-total-amount" id="savingsEmergencyAmount">₹0</div>
+            <div class="today-split" id="savingsEmergencyTarget"></div>
+          </div>
+          <div class="category-row">
+            <div class="category-top">
+              <span id="savingsStageLabel"></span>
+            </div>
+            <div class="category-bar-track">
+              <div class="category-bar-fill" id="savingsEmergencyBar" style="width:0%"></div>
+            </div>
+          </div>
+
+          <div class="category-row" style="margin-top:14px;">
+            <div class="category-top">
+              <span>🎯 Wish List Pot</span>
+              <span id="savingsWishlistAmount">₹0</span>
+            </div>
+          </div>
+          <div class="category-row">
+            <div class="category-top">
+              <span>💰 Free Savings</span>
+              <span id="savingsFreeAmount">₹0</span>
+            </div>
+          </div>
+
+          <p id="savingsSplitLine" style="font-size:0.85rem; color:#666; margin:10px 0 16px 0;"></p>
+
+          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Wish List Items</h3>
+          <div id="wishlistItems"></div>
+
+          <button type="button" id="addWishlistToggleButton" style="margin-top:12px;">+ Add Wish List Item</button>
+          <div id="addWishlistForm" style="display:none; margin-top:12px;">
+            <div class="field">
+              <label>Item</label>
+              <input type="text" id="wishItemInput" placeholder="e.g. New phone">
+            </div>
+            <div class="field">
+              <label>Price (₹)</label>
+              <input type="number" id="wishPriceInput" min="0" step="1" placeholder="0">
+            </div>
+            <div class="field">
+              <label>Priority</label>
+              <select id="wishPriorityInput">
+                <option value="High">High</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+            <button type="button" id="saveWishlistButton">Save</button>
+            <div id="addWishlistResult" class="pending-result"></div>
+          </div>
+
+          <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Log a Saving</h3>
+          <div class="field">
+            <label>Amount (₹)</label>
+            <input type="number" id="savingAmountInput" min="0" step="1" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Type</label>
+            <input type="text" id="savingTypeInput" placeholder="e.g. bank, cash, jupiter" value="bank">
+          </div>
+          <div class="field">
+            <label>Note (optional)</label>
+            <input type="text" id="savingNoteInput" placeholder="e.g. monthly saving">
+          </div>
+          <button type="button" id="saveSavingButton">Save</button>
+          <div id="logSavingResult" class="pending-result"></div>
+        </div>
+      </section>
+
       <!-- ===== TAB: shared placeholder for anything not built yet ===== -->
       <!-- Every "coming soon" tab reuses this one screen, so we're not
            writing near-identical placeholder markup four times over. -->
@@ -939,7 +1017,8 @@
       today:    document.getElementById("view-today"),
       analysis: document.getElementById("view-analysis"),
       cc:       document.getElementById("view-cc"),
-      debts:    document.getElementById("view-debts")
+      debts:    document.getElementById("view-debts"),
+      savings:  document.getElementById("view-savings")
     };
 
     // Tabs not built yet — all share the one "coming soon" screen,
@@ -947,12 +1026,11 @@
     const comingSoonView  = document.getElementById("view-comingsoon");
     const comingSoonTitle = document.getElementById("comingSoonTitle");
     const COMING_SOON_LABELS = {
-      savings: "🎯 Savings & Wish List",
-      cash:    "💵 Cash Entry"
+      cash: "💵 Cash Entry"
     };
 
     // Only load a tab's data the first time it's opened, not every time
-    const tabLoaded = { pending: true, today: false, analysis: false, cc: false, debts: false }; // pending loads on sign-in already
+    const tabLoaded = { pending: true, today: false, analysis: false, cc: false, debts: false, savings: false }; // pending loads on sign-in already
 
     function switchTab(tabName) {
       Object.keys(tabViews).forEach(function (key) {
@@ -989,6 +1067,11 @@
       if (tabName === "debts" && !tabLoaded.debts) {
         tabLoaded.debts = true;
         loadDebts();
+      }
+
+      if (tabName === "savings" && !tabLoaded.savings) {
+        tabLoaded.savings = true;
+        loadSavings();
       }
     }
 
@@ -1465,6 +1548,215 @@
         })
         .catch(function (err) {
           addDebtResultEl.textContent = "❌ " + err.message;
+        });
+    });
+
+    // ---------------------------------------------------------
+    // SAVINGS & WISH LIST
+    // ---------------------------------------------------------
+    const savingsStatusEl         = document.getElementById("savingsStatus");
+    const savingsContentEl        = document.getElementById("savingsContent");
+    const savingsEmergencyAmountEl = document.getElementById("savingsEmergencyAmount");
+    const savingsEmergencyTargetEl = document.getElementById("savingsEmergencyTarget");
+    const savingsEmergencyBarEl   = document.getElementById("savingsEmergencyBar");
+    const savingsStageLabelEl     = document.getElementById("savingsStageLabel");
+    const savingsWishlistAmountEl = document.getElementById("savingsWishlistAmount");
+    const savingsFreeAmountEl     = document.getElementById("savingsFreeAmount");
+    const savingsSplitLineEl      = document.getElementById("savingsSplitLine");
+    const wishlistItemsEl         = document.getElementById("wishlistItems");
+
+    const addWishlistToggleButtonEl = document.getElementById("addWishlistToggleButton");
+    const addWishlistFormEl   = document.getElementById("addWishlistForm");
+    const wishItemInputEl     = document.getElementById("wishItemInput");
+    const wishPriceInputEl    = document.getElementById("wishPriceInput");
+    const wishPriorityInputEl = document.getElementById("wishPriorityInput");
+    const saveWishlistButtonEl = document.getElementById("saveWishlistButton");
+    const addWishlistResultEl = document.getElementById("addWishlistResult");
+
+    const savingAmountInputEl = document.getElementById("savingAmountInput");
+    const savingTypeInputEl   = document.getElementById("savingTypeInput");
+    const savingNoteInputEl   = document.getElementById("savingNoteInput");
+    const saveSavingButtonEl  = document.getElementById("saveSavingButton");
+    const logSavingResultEl   = document.getElementById("logSavingResult");
+
+    function loadSavings() {
+      savingsStatusEl.textContent = "Loading...";
+      savingsContentEl.style.display = "none";
+
+      callAppsScript({ action: "getSavings", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (!data.ok) {
+            if (isAuthError(data.error)) {
+              handleSessionExpired();
+            } else {
+              savingsStatusEl.textContent = "❌ " + data.error;
+            }
+            return;
+          }
+
+          renderSavings(data.savings);
+        })
+        .catch(function (err) {
+          savingsStatusEl.textContent = "❌ Couldn't load: " + err.message;
+        });
+    }
+
+    function renderSavings(s) {
+      savingsStatusEl.textContent = "";
+      savingsContentEl.style.display = "block";
+
+      savingsEmergencyAmountEl.textContent = "₹" + s.emergency.toLocaleString("en-IN");
+      savingsEmergencyTargetEl.textContent = "of ₹" + s.emergencyTarget.toLocaleString("en-IN") + " target";
+
+      const emergencyPct = s.emergencyTarget > 0
+        ? Math.min(Math.round((s.emergency / s.emergencyTarget) * 100), 100)
+        : 0;
+      savingsEmergencyBarEl.style.width = emergencyPct + "%";
+      savingsStageLabelEl.textContent = s.stageLabel + " · " + emergencyPct + "%";
+
+      savingsWishlistAmountEl.textContent = "₹" + s.wishlist.toLocaleString("en-IN");
+      savingsFreeAmountEl.textContent = "₹" + s.free.toLocaleString("en-IN");
+
+      savingsSplitLineEl.textContent =
+        "This month's ₹" + s.monthlyGoal.toLocaleString("en-IN") + " split: " +
+        s.splitPct.emergency + "% Emergency · " + s.splitPct.wishlist + "% Wish List · " + s.splitPct.free + "% Free";
+
+      wishlistItemsEl.innerHTML = "";
+      if (s.wishItems.length === 0) {
+        wishlistItemsEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">No active wish list items yet.</p>";
+      } else {
+        s.wishItems.forEach(function (entry) {
+          wishlistItemsEl.appendChild(buildWishlistItem(entry, s.wishlist));
+        });
+      }
+    }
+
+    function buildWishlistItem(entry, wishlistTotal) {
+      const card = document.createElement("div");
+      card.className = "category-row";
+
+      const percentOfPrice = entry.price > 0
+        ? Math.min(Math.round((wishlistTotal / entry.price) * 100), 100)
+        : 0;
+
+      const actionHtml = entry.canAfford
+        ? '<button type="button" class="settle-btn purchase-btn" style="margin-top:8px;">✅ Mark Purchased</button><div class="pending-result"></div>'
+        : `<div style="font-size:0.8rem; color:#777; margin-top:6px;">Need ₹${entry.remaining.toLocaleString("en-IN")} more</div>`;
+
+      card.innerHTML = `
+        <div class="category-top">
+          <span>${entry.item} <span style="color:#999; font-size:0.8rem;">[${entry.priority}]</span></span>
+          <span>₹${entry.price.toLocaleString("en-IN")}</span>
+        </div>
+        <div class="category-bar-track">
+          <div class="category-bar-fill" style="width:${percentOfPrice}%"></div>
+        </div>
+        ${actionHtml}
+      `;
+
+      const purchaseButton = card.querySelector(".purchase-btn");
+      if (purchaseButton) {
+        const resultEl = card.querySelector(".pending-result");
+        purchaseButton.addEventListener("click", function () {
+          resultEl.textContent = "Saving...";
+
+          callAppsScript({
+            action:  "markWishlistPurchased",
+            idToken: currentUser.idToken,
+            row:     entry.row,
+            item:    entry.item,
+            price:   entry.price
+          })
+            .then(function (data) {
+              if (data.ok) {
+                loadSavings(); // refresh everything — purchase changes pot totals too
+              } else {
+                resultEl.textContent = "❌ " + data.error;
+              }
+            })
+            .catch(function (err) {
+              resultEl.textContent = "❌ " + err.message;
+            });
+        });
+      }
+
+      return card;
+    }
+
+    // Shows/hides the "add a wish list item" form
+    addWishlistToggleButtonEl.addEventListener("click", function () {
+      const isHidden = addWishlistFormEl.style.display === "none";
+      addWishlistFormEl.style.display = isHidden ? "block" : "none";
+    });
+
+    saveWishlistButtonEl.addEventListener("click", function () {
+      const item  = wishItemInputEl.value.trim();
+      const price = parseFloat(wishPriceInputEl.value);
+
+      if (!item || !price || price <= 0) {
+        addWishlistResultEl.textContent = "❌ Enter an item name and a valid price.";
+        return;
+      }
+
+      addWishlistResultEl.textContent = "Saving...";
+
+      callAppsScript({
+        action:   "addWishlistItem",
+        idToken:  currentUser.idToken,
+        item:     item,
+        price:    price,
+        priority: wishPriorityInputEl.value
+      })
+        .then(function (data) {
+          if (data.ok) {
+            wishItemInputEl.value = "";
+            wishPriceInputEl.value = "";
+            addWishlistResultEl.textContent = "";
+            addWishlistFormEl.style.display = "none";
+            loadSavings();
+          } else {
+            addWishlistResultEl.textContent = "❌ " + data.error;
+          }
+        })
+        .catch(function (err) {
+          addWishlistResultEl.textContent = "❌ " + err.message;
+        });
+    });
+
+    saveSavingButtonEl.addEventListener("click", function () {
+      const amount = parseFloat(savingAmountInputEl.value);
+      const type   = savingTypeInputEl.value.trim() || "bank";
+      const note   = savingNoteInputEl.value.trim();
+
+      if (!amount || amount <= 0) {
+        logSavingResultEl.textContent = "❌ Enter a valid amount.";
+        return;
+      }
+
+      logSavingResultEl.textContent = "Saving...";
+
+      callAppsScript({
+        action:  "logSaving",
+        idToken: currentUser.idToken,
+        amount:  amount,
+        type:    type,
+        note:    note
+      })
+        .then(function (data) {
+          if (data.ok) {
+            savingAmountInputEl.value = "";
+            savingNoteInputEl.value = "";
+            logSavingResultEl.textContent =
+              "✅ Split — Emergency: ₹" + data.emergencyAmt.toLocaleString("en-IN") +
+              " · Wish List: ₹" + data.wishlistAmt.toLocaleString("en-IN") +
+              " · Free: ₹" + data.freeAmt.toLocaleString("en-IN");
+            loadSavings(); // refresh totals
+          } else {
+            logSavingResultEl.textContent = "❌ " + data.error;
+          }
+        })
+        .catch(function (err) {
+          logSavingResultEl.textContent = "❌ " + err.message;
         });
     });
 
