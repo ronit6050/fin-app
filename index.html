@@ -204,6 +204,13 @@
     <!-- ===== Everything below is hidden until you sign in ===== -->
     <div id="appContent" style="display:none">
 
+      <!-- ===== TEMPORARY: test button for checking the Apps Script connection =====
+           This whole block gets removed once we build the real transaction screen. -->
+      <div class="signin-box" style="flex-direction:column; gap:8px;">
+        <button id="testConnectionButton" type="button">Test Apps Script Connection</button>
+        <div id="testConnectionResult" style="font-size:0.9rem; text-align:center;"></div>
+      </div>
+
       <!-- ===== Title and running total ===== -->
       <header>
         <h1>My Expenses</h1>
@@ -262,6 +269,9 @@
     // The real, unbreakable lock happens later in Apps Script, which will
     // check this same way but on the server — nothing can bypass that one.
     const ALLOWED_EMAIL = "ronitnadar9@gmail.com";
+
+    // The web address of your Apps Script backend (the "/exec" link).
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v/exec";
 
     // We'll keep the signed-in person's info here once they sign in.
     // Later steps (talking to the Google Sheet) will use this.
@@ -387,6 +397,36 @@
     tryAgainButton.addEventListener("click", function () {
       google.accounts.id.disableAutoSelect();
       showSignedOutUI();
+    });
+
+    // ---------------------------------------------------------
+    // TEMPORARY: test button to check the Apps Script connection
+    // ---------------------------------------------------------
+    const testConnectionButton = document.getElementById("testConnectionButton");
+    const testConnectionResult = document.getElementById("testConnectionResult");
+
+    testConnectionButton.addEventListener("click", function () {
+      testConnectionResult.textContent = "Checking...";
+
+      fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        // Using text/plain avoids the browser doing an extra "permission check"
+        // request first (called a CORS preflight) that Apps Script doesn't handle well.
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({
+          action: "ping",
+          idToken: currentUser ? currentUser.idToken : null
+        })
+      })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          testConnectionResult.textContent = data.ok
+            ? "✅ " + data.message
+            : "❌ " + data.error;
+        })
+        .catch(function (err) {
+          testConnectionResult.textContent = "❌ Couldn't reach Apps Script: " + err.message;
+        });
     });
 
     // ---------------------------------------------------------
