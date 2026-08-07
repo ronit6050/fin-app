@@ -6,6 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Expenses</title>
 
+  <!-- Google's official Sign-In script. This is Google's own code,
+       loaded straight from Google — not a 3rd-party company. -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
   <style>
     /* ---------- Basic page setup ---------- */
     * {
@@ -135,54 +139,210 @@
       color: #2f6fed;
       white-space: nowrap;
     }
+
+    /* ---------- Sign-in area ---------- */
+    .signin-box {
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      display: flex;
+      justify-content: center;
+    }
+
+    .signedin-info {
+      background: white;
+      padding: 12px 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      display: none; /* hidden until someone actually signs in */
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .signedin-email {
+      font-size: 0.9rem;
+      color: #444;
+    }
+
+    .signout-link {
+      font-size: 0.85rem;
+      color: #2f6fed;
+      cursor: pointer;
+      text-decoration: underline;
+      background: none;
+      border: none;
+      padding: 0;
+      width: auto;
+    }
   </style>
 </head>
 <body>
 
   <div class="app">
 
-    <!-- ===== Title and running total ===== -->
-    <header>
-      <h1>My Expenses</h1>
-      <div class="total-box">
-        <div class="total-label">Total Spent</div>
-        <!-- The total amount will be updated automatically by JavaScript -->
-        <div class="total-amount" id="totalAmount">$0.00</div>
-      </div>
-    </header>
+    <!-- ===== Sign in with Google ===== -->
+    <!-- The actual Google button gets drawn inside this box by Google's script. -->
+    <div class="signin-box" id="signInBox"></div>
 
-    <!-- ===== Form to add a new expense ===== -->
-    <form id="expenseForm">
-      <div class="field">
-        <label for="amount">Amount ($)</label>
-        <input type="number" id="amount" step="0.01" min="0" placeholder="0.00" required>
-      </div>
+    <!-- ===== Shown instead, once signed in ===== -->
+    <div class="signedin-info" id="signedInInfo">
+      <span class="signedin-email" id="signedInEmail"></span>
+      <button class="signout-link" id="signOutButton">Sign out</button>
+    </div>
 
-      <div class="field">
-        <label for="category">Category</label>
-        <select id="category" required>
-          <option value="Food">Food</option>
-          <option value="Transport">Transport</option>
-          <option value="Bills">Bills</option>
-          <option value="Shopping">Shopping</option>
-          <option value="Other">Other</option>
-        </select>
-      </div>
+    <!-- ===== Everything below is hidden until you sign in ===== -->
+    <div id="appContent" style="display:none">
 
-      <div class="field">
-        <label for="date">Date</label>
-        <input type="date" id="date" required>
-      </div>
+      <!-- ===== Title and running total ===== -->
+      <header>
+        <h1>My Expenses</h1>
+        <div class="total-box">
+          <div class="total-label">Total Spent</div>
+          <!-- The total amount will be updated automatically by JavaScript -->
+          <div class="total-amount" id="totalAmount">$0.00</div>
+        </div>
+      </header>
 
-      <button type="submit">Add Expense</button>
-    </form>
+      <!-- ===== Form to add a new expense ===== -->
+      <form id="expenseForm">
+        <div class="field">
+          <label for="amount">Amount ($)</label>
+          <input type="number" id="amount" step="0.01" min="0" placeholder="0.00" required>
+        </div>
 
-    <!-- ===== List of expenses gets filled in by JavaScript ===== -->
-    <ul class="expense-list" id="expenseList"></ul>
+        <div class="field">
+          <label for="category">Category</label>
+          <select id="category" required>
+            <option value="Food">Food</option>
+            <option value="Transport">Transport</option>
+            <option value="Bills">Bills</option>
+            <option value="Shopping">Shopping</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="date">Date</label>
+          <input type="date" id="date" required>
+        </div>
+
+        <button type="submit">Add Expense</button>
+      </form>
+
+      <!-- ===== List of expenses gets filled in by JavaScript ===== -->
+      <ul class="expense-list" id="expenseList"></ul>
+
+    </div>
 
   </div>
 
   <script>
+    // ---------------------------------------------------------
+    // 0. GOOGLE SIGN-IN
+    // ---------------------------------------------------------
+    // This is our app's own ID, so Google knows which app is asking.
+    // It's safe for this to be visible in the code (it's not a password).
+    const GOOGLE_CLIENT_ID = "1090460874478-0mnc81l34b10hi7n0u6bl9bkv9a45862.apps.googleusercontent.com";
+
+    // We'll keep the signed-in person's info here once they sign in.
+    // Later steps (talking to the Google Sheet) will use this.
+    let currentUser = null;
+
+    // Grab the sign-in related elements from the page
+    const signInBox     = document.getElementById("signInBox");
+    const signedInInfo  = document.getElementById("signedInInfo");
+    const signedInEmail = document.getElementById("signedInEmail");
+    const signOutButton = document.getElementById("signOutButton");
+    const appContent    = document.getElementById("appContent");
+
+    // The key we use to remember your sign-in in this browser,
+    // so you don't have to sign in again every time you open the app.
+    const STORAGE_KEY = "finapp_user";
+
+    // Shows the app and hides the sign-in button
+    function showSignedInUI(user) {
+      signInBox.style.display = "none";
+      signedInEmail.textContent = "Signed in as " + user.email;
+      signedInInfo.style.display = "flex";
+      appContent.style.display = "block";
+    }
+
+    // Shows the sign-in button and hides the app
+    function showSignedOutUI() {
+      signedInInfo.style.display = "none";
+      appContent.style.display = "none";
+      signInBox.style.display = "flex";
+    }
+
+    // Google calls this function automatically after someone signs in
+    // (either by clicking the button, or being silently re-signed-in).
+    // It hands us a "credential" — a signed proof of who just logged in.
+    function handleCredentialResponse(response) {
+      // The proof is a JWT: three parts separated by dots.
+      // The middle part holds the actual info (name, email) as text,
+      // just encoded so it can travel safely inside a web address/token.
+      const payload = JSON.parse(atob(response.credential.split(".")[1]));
+
+      currentUser = {
+        email: payload.email,
+        name: payload.name,
+        idToken: response.credential // we'll send this to Apps Script in a later step
+      };
+
+      // Remember this browser is signed in, so next visit skips the button
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        email: currentUser.email,
+        name: currentUser.name
+      }));
+
+      showSignedInUI(currentUser);
+    }
+
+    // Set up Google's sign-in button once the page has loaded
+    window.addEventListener("load", function () {
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleCredentialResponse,
+        auto_select: true // if Google already knows you, sign in silently
+      });
+
+      google.accounts.id.renderButton(signInBox, {
+        theme: "outline",
+        size: "large",
+        text: "signin_with"
+      });
+
+      // If we remember you from before, show the app right away
+      // instead of making you look at the sign-in button again...
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        showSignedInUI(JSON.parse(saved));
+      }
+
+      // ...and quietly ask Google to re-confirm you in the background.
+      // If your Google session is still valid, handleCredentialResponse
+      // runs again with a fresh proof. If not, we sign you out below.
+      google.accounts.id.prompt(function (notification) {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          if (!saved) {
+            showSignedOutUI(); // nothing remembered, and no auto sign-in — show the button
+          }
+        }
+      });
+    });
+
+    // "Sign out" clears what we remembered and shows the button again.
+    // (It doesn't sign you out of Google itself, just out of this app.)
+    signOutButton.addEventListener("click", function () {
+      currentUser = null;
+      localStorage.removeItem(STORAGE_KEY);
+      google.accounts.id.disableAutoSelect();
+      showSignedOutUI();
+    });
+
     // ---------------------------------------------------------
     // 1. Set up our starting data
     // ---------------------------------------------------------
