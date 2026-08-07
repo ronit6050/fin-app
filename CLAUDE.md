@@ -61,7 +61,7 @@ exist in the PWA — order/timing can flex, but nothing gets dropped.
 | 6 | Savings & Wish List view | Savings Advisor | done |
 | 6.5 | Investments dashboard (log + view, separate from Savings pots) | Investment logs, Investment Dashboard | done |
 | 7 | Cash entry (lower priority) | Cash spend/receive | done |
-| 8 | Real background push via Firebase (separate later phase) | Alerts arriving even when app is closed | not started |
+| 8 | Real background push via Firebase (separate later phase) | Alerts arriving even when app is closed | done |
 | 9 | Daily check-ins, nudges, threshold alerts as push | Remaining proactive messages | not started |
 | 10 | Turn off the Telegram bot | Full cutover | not started |
 | 11 | Full UI/UX structuring pass (after everything above works) | — new phase, not a Telegram replacement | not started |
