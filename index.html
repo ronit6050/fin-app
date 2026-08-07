@@ -174,6 +174,106 @@
       font-size: 0.85rem;
       margin-top: 6px;
     }
+
+    /* ---------- Today's Summary ---------- */
+    .today-total-box {
+      background-color: #2f6fed;
+      color: white;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .today-total-label {
+      font-size: 0.9rem;
+      opacity: 0.9;
+    }
+
+    .today-total-amount {
+      font-size: 2rem;
+      font-weight: bold;
+    }
+
+    .today-split {
+      font-size: 0.85rem;
+      opacity: 0.9;
+      margin-top: 4px;
+    }
+
+    .category-row {
+      background: white;
+      padding: 10px 14px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .category-row .category-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      margin-bottom: 6px;
+    }
+
+    .category-row .category-bar-track {
+      background: #eee;
+      border-radius: 6px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    .category-row .category-bar-fill {
+      background: #2f6fed;
+      height: 100%;
+      border-radius: 6px;
+    }
+
+    /* ---------- Bottom tab bar ---------- */
+    .tab-bar {
+      display: none; /* shown once signed in */
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 420px;
+      background: white;
+      box-shadow: 0 -1px 6px rgba(0, 0, 0, 0.1);
+      justify-content: space-around;
+      padding: 6px 0;
+    }
+
+    .tab-btn {
+      flex: 1;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 0.75rem;
+      padding: 6px 0;
+      cursor: pointer;
+      width: auto;
+    }
+
+    .tab-btn .tab-icon {
+      display: block;
+      font-size: 1.3rem;
+      margin-bottom: 2px;
+    }
+
+    .tab-btn.active {
+      color: #2f6fed;
+      font-weight: bold;
+    }
+
+    .tab-btn:hover {
+      background: none;
+      color: #2f6fed;
+    }
+
+    /* Room at the bottom so content isn't hidden behind the fixed tab bar */
+    #appContent {
+      padding-bottom: 70px;
+    }
   </style>
 </head>
 <body>
@@ -205,23 +305,50 @@
     </div>
 
     <!-- ===== Everything below is hidden until you sign in ===== -->
+    <!-- Each screen below is a "tab" — only one is shown at a time.
+         The bottom tab bar (further down) switches between them.
+         New features get their own tab here as we build them. -->
     <div id="appContent" style="display:none">
 
-      <!-- ===== Pending Transactions — your real bank/UPI data ===== -->
+      <!-- ===== TAB: Pending Transactions — your real bank/UPI data ===== -->
       <!-- This replaces Telegram's "reply to alert" flow: transactions that
            were already alerted but still have no note show up here. -->
-      <section>
+      <section id="view-pending" class="tab-view">
         <h2 class="section-title">Pending Transactions</h2>
         <div class="pending-status" id="pendingStatus">Loading...</div>
         <div id="pendingList"></div>
         <button type="button" id="showMoreButton" style="display:none">Show more</button>
       </section>
 
-      <!-- More sections (Dashboard, CC Advisor, Debts, Savings...) will be
-           added here as their own clearly-labeled <section> blocks, as we
-           work through the roadmap. -->
+      <!-- ===== TAB: Today's Summary ===== -->
+      <section id="view-today" class="tab-view" style="display:none">
+        <h2 class="section-title">Today's Summary</h2>
+        <div id="todayStatus">Loading...</div>
+        <div id="todayContent" style="display:none">
+          <div class="today-total-box">
+            <div class="today-total-label">Spent Today</div>
+            <div class="today-total-amount" id="todayTotalAmount">₹0</div>
+            <div class="today-split" id="todaySplit"></div>
+          </div>
+          <div id="todayCategories"></div>
+        </div>
+      </section>
+
+      <!-- More tabs (Analysis, CC Advisor, Debts, Savings...) will be added
+           here as their own <section class="tab-view"> blocks, plus a
+           matching button below, as we work through the roadmap. -->
 
     </div>
+
+    <!-- ===== Bottom tab bar — only visible once signed in ===== -->
+    <nav class="tab-bar" id="tabBar">
+      <button class="tab-btn active" data-tab="pending" type="button">
+        <span class="tab-icon">📋</span>Pending
+      </button>
+      <button class="tab-btn" data-tab="today" type="button">
+        <span class="tab-icon">📊</span>Today
+      </button>
+    </nav>
 
   </div>
 
@@ -257,6 +384,7 @@
     const signedInEmail = document.getElementById("signedInEmail");
     const signOutButton = document.getElementById("signOutButton");
     const appContent    = document.getElementById("appContent");
+    const tabBar        = document.getElementById("tabBar");
 
     // The key we use to remember your sign-in in this browser,
     // so you don't have to sign in again every time you open the app.
@@ -269,6 +397,7 @@
       signedInEmail.textContent = "Signed in as " + user.email;
       signedInInfo.style.display = "flex";
       appContent.style.display = "block";
+      tabBar.style.display = "flex";
     }
 
     // Shows the sign-in button and hides the app
@@ -276,6 +405,7 @@
       signedInInfo.style.display = "none";
       notAllowedBox.style.display = "none";
       appContent.style.display = "none";
+      tabBar.style.display = "none";
       signInBox.style.display = "flex";
     }
 
@@ -284,6 +414,7 @@
       signInBox.style.display = "none";
       signedInInfo.style.display = "none";
       appContent.style.display = "none";
+      tabBar.style.display = "none";
       notAllowedBox.style.display = "flex";
     }
 
@@ -608,6 +739,106 @@
 
     // Check once a minute, for as long as the page stays open.
     setInterval(checkForNewTransactions, 60000);
+
+    // ---------------------------------------------------------
+    // TAB BAR — switches which screen is showing
+    // ---------------------------------------------------------
+    const tabButtons = document.querySelectorAll(".tab-btn");
+    const tabViews = {
+      pending: document.getElementById("view-pending"),
+      today:   document.getElementById("view-today")
+    };
+
+    // Only load a tab's data the first time it's opened, not every time
+    const tabLoaded = { pending: true, today: false }; // pending loads on sign-in already
+
+    function switchTab(tabName) {
+      Object.keys(tabViews).forEach(function (key) {
+        tabViews[key].style.display = (key === tabName) ? "block" : "none";
+      });
+
+      tabButtons.forEach(function (btn) {
+        btn.classList.toggle("active", btn.dataset.tab === tabName);
+      });
+
+      if (tabName === "today" && !tabLoaded.today) {
+        tabLoaded.today = true;
+        loadTodaySummary();
+      }
+    }
+
+    tabButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () { switchTab(btn.dataset.tab); });
+    });
+
+    // ---------------------------------------------------------
+    // TODAY'S SUMMARY
+    // ---------------------------------------------------------
+    const todayStatusEl     = document.getElementById("todayStatus");
+    const todayContentEl    = document.getElementById("todayContent");
+    const todayTotalAmountEl = document.getElementById("todayTotalAmount");
+    const todaySplitEl      = document.getElementById("todaySplit");
+    const todayCategoriesEl = document.getElementById("todayCategories");
+
+    function loadTodaySummary() {
+      todayStatusEl.textContent = "Loading...";
+      todayContentEl.style.display = "none";
+
+      callAppsScript({ action: "getTodaySummary", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (!data.ok) {
+            if (isAuthError(data.error)) {
+              handleSessionExpired();
+            } else {
+              todayStatusEl.textContent = "❌ " + data.error;
+            }
+            return;
+          }
+
+          renderTodaySummary(data.summary);
+        })
+        .catch(function (err) {
+          todayStatusEl.textContent = "❌ Couldn't load: " + err.message;
+        });
+    }
+
+    function renderTodaySummary(summary) {
+      todayStatusEl.textContent = "";
+      todayContentEl.style.display = "block";
+
+      todayTotalAmountEl.textContent = "₹" + summary.total.toLocaleString("en-IN");
+      todaySplitEl.textContent =
+        "Bank: ₹" + summary.bankSpend.toLocaleString("en-IN") +
+        "  ·  Cash: ₹" + summary.cashSpend.toLocaleString("en-IN") +
+        "  ·  " + summary.transactionCount + " transaction" + (summary.transactionCount === 1 ? "" : "s");
+
+      todayCategoriesEl.innerHTML = "";
+
+      if (summary.categories.length === 0) {
+        todayCategoriesEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">Nothing spent yet today. 🎉</p>";
+        return;
+      }
+
+      // The biggest category's amount decides how "full" each bar looks
+      const maxAmount = summary.categories[0].amount;
+
+      summary.categories.forEach(function (entry) {
+        const percentOfMax = maxAmount > 0 ? Math.round((entry.amount / maxAmount) * 100) : 0;
+
+        const row = document.createElement("div");
+        row.className = "category-row";
+        row.innerHTML = `
+          <div class="category-top">
+            <span>${entry.category}</span>
+            <span>₹${entry.amount.toLocaleString("en-IN")}</span>
+          </div>
+          <div class="category-bar-track">
+            <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
+          </div>
+        `;
+        todayCategoriesEl.appendChild(row);
+      });
+    }
 
   </script>
 
