@@ -1350,23 +1350,30 @@
     const todayCategoriesEl = document.getElementById("todayCategories");
 
     function loadTodaySummary() {
-      todayStatusEl.textContent = "Loading...";
-      todayContentEl.style.display = "none";
+      const cached = loadCache("today");
+      if (cached) {
+        renderTodaySummary(cached); // show instantly, refresh quietly below
+      } else {
+        todayStatusEl.textContent = "Loading...";
+        todayContentEl.style.display = "none";
+      }
 
       callAppsScript({ action: "getTodaySummary", idToken: currentUser.idToken })
         .then(function (data) {
           if (!data.ok) {
             if (isAuthError(data.error)) {
               handleSessionExpired();
-            } else {
+            } else if (!cached) {
               todayStatusEl.textContent = "❌ " + data.error;
             }
             return;
           }
 
+          saveCache("today", data.summary);
           renderTodaySummary(data.summary);
         })
         .catch(function (err) {
+          if (cached) return;
           todayStatusEl.textContent = "❌ Couldn't load: " + err.message;
         });
     }
@@ -1433,8 +1440,17 @@
 
     function loadMonthlyAnalysis() {
       monthLabelEl.textContent = MONTH_NAMES[analysisMonth - 1] + " " + analysisYear;
-      analysisStatusEl.textContent = "Loading...";
-      analysisContentEl.style.display = "none";
+
+      // Each month gets its own saved copy, since they show different data
+      const cacheKey = "analysis_" + analysisYear + "_" + analysisMonth;
+      const cached = loadCache(cacheKey);
+
+      if (cached) {
+        renderMonthlyAnalysis(cached);
+      } else {
+        analysisStatusEl.textContent = "Loading...";
+        analysisContentEl.style.display = "none";
+      }
 
       callAppsScript({
         action:  "getMonthlyAnalysis",
@@ -1446,15 +1462,17 @@
           if (!data.ok) {
             if (isAuthError(data.error)) {
               handleSessionExpired();
-            } else {
+            } else if (!cached) {
               analysisStatusEl.textContent = "❌ " + data.error;
             }
             return;
           }
 
+          saveCache(cacheKey, data.analysis);
           renderMonthlyAnalysis(data.analysis);
         })
         .catch(function (err) {
+          if (cached) return;
           analysisStatusEl.textContent = "❌ Couldn't load: " + err.message;
         });
     }
@@ -1538,23 +1556,30 @@
     const ccTopCategoriesEl = document.getElementById("ccTopCategories");
 
     function loadCCAdvisor() {
-      ccStatusEl.textContent = "Loading...";
-      ccContentEl.style.display = "none";
+      const cached = loadCache("cc");
+      if (cached) {
+        renderCCAdvisor(cached);
+      } else {
+        ccStatusEl.textContent = "Loading...";
+        ccContentEl.style.display = "none";
+      }
 
       callAppsScript({ action: "getCCAdvisor", idToken: currentUser.idToken })
         .then(function (data) {
           if (!data.ok) {
             if (isAuthError(data.error)) {
               handleSessionExpired();
-            } else {
+            } else if (!cached) {
               ccStatusEl.textContent = "❌ " + data.error;
             }
             return;
           }
 
+          saveCache("cc", data.cc);
           renderCCAdvisor(data.cc);
         })
         .catch(function (err) {
+          if (cached) return;
           ccStatusEl.textContent = "❌ Couldn't load: " + err.message;
         });
     }
@@ -1665,23 +1690,30 @@
     const addDebtResultEl   = document.getElementById("addDebtResult");
 
     function loadDebts() {
-      debtsStatusEl.textContent = "Loading...";
-      debtsContentEl.style.display = "none";
+      const cached = loadCache("debts");
+      if (cached) {
+        renderDebts(cached);
+      } else {
+        debtsStatusEl.textContent = "Loading...";
+        debtsContentEl.style.display = "none";
+      }
 
       callAppsScript({ action: "getDebts", idToken: currentUser.idToken })
         .then(function (data) {
           if (!data.ok) {
             if (isAuthError(data.error)) {
               handleSessionExpired();
-            } else {
+            } else if (!cached) {
               debtsStatusEl.textContent = "❌ " + data.error;
             }
             return;
           }
 
+          saveCache("debts", data.debts);
           renderDebts(data.debts);
         })
         .catch(function (err) {
+          if (cached) return;
           debtsStatusEl.textContent = "❌ Couldn't load: " + err.message;
         });
     }
@@ -1726,6 +1758,10 @@
           .then(function (data) {
             if (data.ok) {
               card.remove();
+              // Quietly refresh the saved copy so this settled debt doesn't
+              // briefly reappear next time the app opens
+              callAppsScript({ action: "getDebts", idToken: currentUser.idToken })
+                .then(function (fresh) { if (fresh.ok) saveCache("debts", fresh.debts); });
             } else {
               resultEl.textContent = "❌ " + data.error;
             }
@@ -1802,7 +1838,11 @@
             debtDueDateInputEl.value = "";
             addDebtResultEl.textContent = "";
             addDebtFormEl.style.display = "none";
-            loadDebts(); // refresh the list with the new entry included
+            // Fetch fresh (not cache-first) since the cache is now stale
+            callAppsScript({ action: "getDebts", idToken: currentUser.idToken })
+              .then(function (fresh) {
+                if (fresh.ok) { saveCache("debts", fresh.debts); renderDebts(fresh.debts); }
+              });
           } else {
             addDebtResultEl.textContent = "❌ " + data.error;
           }
@@ -1841,24 +1881,40 @@
     const logSavingResultEl   = document.getElementById("logSavingResult");
 
     function loadSavings() {
-      savingsStatusEl.textContent = "Loading...";
-      savingsContentEl.style.display = "none";
+      const cached = loadCache("savings");
+      if (cached) {
+        renderSavings(cached);
+      } else {
+        savingsStatusEl.textContent = "Loading...";
+        savingsContentEl.style.display = "none";
+      }
 
       callAppsScript({ action: "getSavings", idToken: currentUser.idToken })
         .then(function (data) {
           if (!data.ok) {
             if (isAuthError(data.error)) {
               handleSessionExpired();
-            } else {
+            } else if (!cached) {
               savingsStatusEl.textContent = "❌ " + data.error;
             }
             return;
           }
 
+          saveCache("savings", data.savings);
           renderSavings(data.savings);
         })
         .catch(function (err) {
+          if (cached) return;
           savingsStatusEl.textContent = "❌ Couldn't load: " + err.message;
+        });
+    }
+
+    // Fetches fresh (skips the cache) and updates the saved copy — used
+    // right after a save/purchase action, since the cache is now stale.
+    function refreshSavings() {
+      return callAppsScript({ action: "getSavings", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (data.ok) { saveCache("savings", data.savings); renderSavings(data.savings); }
         });
     }
 
@@ -1930,7 +1986,7 @@
           })
             .then(function (data) {
               if (data.ok) {
-                loadSavings(); // refresh everything — purchase changes pot totals too
+                refreshSavings(); // refresh everything — purchase changes pot totals too
               } else {
                 resultEl.textContent = "❌ " + data.error;
               }
@@ -1974,7 +2030,7 @@
             wishPriceInputEl.value = "";
             addWishlistResultEl.textContent = "";
             addWishlistFormEl.style.display = "none";
-            loadSavings();
+            refreshSavings();
           } else {
             addWishlistResultEl.textContent = "❌ " + data.error;
           }
@@ -2011,7 +2067,7 @@
               "✅ Split — Emergency: ₹" + data.emergencyAmt.toLocaleString("en-IN") +
               " · Wish List: ₹" + data.wishlistAmt.toLocaleString("en-IN") +
               " · Free: ₹" + data.freeAmt.toLocaleString("en-IN");
-            loadSavings(); // refresh totals
+            refreshSavings(); // refresh totals
           } else {
             logSavingResultEl.textContent = "❌ " + data.error;
           }
@@ -2036,23 +2092,30 @@
     const logInvestmentResultEl = document.getElementById("logInvestmentResult");
 
     function loadInvestments() {
-      investmentsStatusEl.textContent = "Loading...";
-      investmentsContentEl.style.display = "none";
+      const cached = loadCache("investments");
+      if (cached) {
+        renderInvestments(cached);
+      } else {
+        investmentsStatusEl.textContent = "Loading...";
+        investmentsContentEl.style.display = "none";
+      }
 
       callAppsScript({ action: "getInvestments", idToken: currentUser.idToken })
         .then(function (data) {
           if (!data.ok) {
             if (isAuthError(data.error)) {
               handleSessionExpired();
-            } else {
+            } else if (!cached) {
               investmentsStatusEl.textContent = "❌ " + data.error;
             }
             return;
           }
 
+          saveCache("investments", data.investments);
           renderInvestments(data.investments);
         })
         .catch(function (err) {
+          if (cached) return;
           investmentsStatusEl.textContent = "❌ Couldn't load: " + err.message;
         });
     }
@@ -2125,7 +2188,11 @@
             investAmountInputEl.value = "";
             investTypeInputEl.value = "";
             logInvestmentResultEl.textContent = "✅ Saved!";
-            loadInvestments(); // refresh totals
+            // Fetch fresh (not cache-first) since the cache is now stale
+            callAppsScript({ action: "getInvestments", idToken: currentUser.idToken })
+              .then(function (fresh) {
+                if (fresh.ok) { saveCache("investments", fresh.investments); renderInvestments(fresh.investments); }
+              });
           } else {
             logInvestmentResultEl.textContent = "❌ " + data.error;
           }
@@ -2157,23 +2224,30 @@
       .join("");
 
     function loadCash() {
-      cashStatusEl.textContent = "Loading...";
-      cashContentEl.style.display = "none";
+      const cached = loadCache("cash");
+      if (cached) {
+        renderCash(cached);
+      } else {
+        cashStatusEl.textContent = "Loading...";
+        cashContentEl.style.display = "none";
+      }
 
       callAppsScript({ action: "getCash", idToken: currentUser.idToken })
         .then(function (data) {
           if (!data.ok) {
             if (isAuthError(data.error)) {
               handleSessionExpired();
-            } else {
+            } else if (!cached) {
               cashStatusEl.textContent = "❌ " + data.error;
             }
             return;
           }
 
+          saveCache("cash", data.cash);
           renderCash(data.cash);
         })
         .catch(function (err) {
+          if (cached) return;
           cashStatusEl.textContent = "❌ Couldn't load: " + err.message;
         });
     }
@@ -2228,7 +2302,11 @@
             cashAmountInputEl.value = "";
             cashNoteInputEl.value = "";
             cashResultEl.textContent = "✅ Saved!";
-            loadCash(); // refresh balance + recent list
+            // Fetch fresh (not cache-first) since the cache is now stale
+            callAppsScript({ action: "getCash", idToken: currentUser.idToken })
+              .then(function (fresh) {
+                if (fresh.ok) { saveCache("cash", fresh.cash); renderCash(fresh.cash); }
+              });
           } else {
             cashResultEl.textContent = "❌ " + data.error;
           }
