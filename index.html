@@ -550,6 +550,13 @@
     // while this tab is open, and pops a browser notification for them.
     // ---------------------------------------------------------
 
+    // Register the service worker (sw.js). Notifications are shown through
+    // it rather than directly, because some browsers — Android Chrome in
+    // particular — refuse to show notifications any other way.
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js");
+    }
+
     // Ask permission once, right after signing in (browsers require this —
     // a website can't show notifications without you explicitly allowing it).
     function requestNotificationPermission() {
@@ -561,12 +568,14 @@
     // Shows a real browser notification for one new transaction.
     function showNewTransactionNotification(txn) {
       if (!("Notification" in window) || Notification.permission !== "granted") return;
+      if (!("serviceWorker" in navigator)) return;
 
       const counterpartyText = txn.counterparty ? " at " + txn.counterparty : " · " + txn.mode;
-      const notification = new Notification("💳 New transaction", {
-        body: "₹" + txn.amount.toLocaleString("en-IN") + counterpartyText
+      const body = "₹" + txn.amount.toLocaleString("en-IN") + counterpartyText;
+
+      navigator.serviceWorker.ready.then(function (registration) {
+        registration.showNotification("💳 New transaction", { body: body });
       });
-      notification.onclick = function () { window.focus(); };
     }
 
     // Runs every minute: quietly checks for anything not already in knownRows.
