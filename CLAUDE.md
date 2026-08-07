@@ -36,7 +36,7 @@
 ## The plan (in order)
 1. Build the look: add-expense form + expense list (using pretend data). <- done, may revisit once real data flows in
 2. Connect to the Google Sheet via the existing "finance-bot" Apps Script, with real Google Sign-In for privacy. <- done
-3. Make it installable on my phone as a PWA (needs real HTTPS hosting). <- hosting done (step 0); installability (manifest/icons) still open
+3. Make it installable on my phone as a PWA (needs real HTTPS hosting). <- done
 4. Work through the roadmap below to reach full Telegram parity. <- in progress, see table
 5. (Later, optional) Support friends using their own sheets.
 6. Once full Telegram parity is reached: a dedicated pass to properly structure/
