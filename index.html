@@ -980,7 +980,53 @@
     }
 
     // Asks Apps Script for your pending transactions and draws the first batch.
+    // Small helpers: remember the last-seen version of a screen's data on
+    // this phone, so next time it can show instantly instead of waiting.
+    function loadCache(key) {
+      try {
+        const raw = localStorage.getItem("cache_" + key);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function saveCache(key, data) {
+      try {
+        localStorage.setItem("cache_" + key, JSON.stringify(data));
+      } catch (e) { /* storage full or unavailable — just skip caching this once */ }
+    }
+
     function loadPendingTransactions() {
+      const cached = loadCache("pending");
+
+      if (cached) {
+        // Show what we saw last time, instantly — no waiting. The regular
+        // once-a-minute check (further down) will pick up anything
+        // genuinely new shortly, same as it always does.
+        allPending = cached;
+        knownRows = new Set(allPending.map(function (t) { return t.row; }));
+        shownCount = 0;
+        pendingListEl.innerHTML = "";
+
+        if (allPending.length === 0) {
+          pendingStatusEl.textContent = "✅ All caught up — nothing pending!";
+        } else {
+          showNextBatch();
+        }
+
+        // Quietly refresh the SAVED copy for next time — doesn't touch
+        // what's on screen right now, so nothing you're doing gets disturbed.
+        callAppsScript({ action: "getPending", idToken: currentUser.idToken })
+          .then(function (data) {
+            if (data.ok) saveCache("pending", data.transactions);
+          })
+          .catch(function () { /* fine — we'll just try again next time */ });
+
+        return;
+      }
+
+      // No saved copy yet — this is a first-ever visit, load normally
       pendingStatusEl.textContent = "Loading...";
       pendingListEl.innerHTML = "";
       showMoreButtonEl.style.display = "none";
@@ -999,6 +1045,7 @@
           }
 
           allPending = data.transactions;
+          saveCache("pending", allPending);
 
           // Remember the ENTIRE backlog as "already known" right away,
           // before any notification checking starts.
@@ -1092,6 +1139,7 @@
               if (idx !== -1) allPending.splice(idx, 1);
               shownCount = Math.max(shownCount - 1, 0);
               updatePendingStatusText();
+              saveCache("pending", allPending); // so it doesn't briefly reappear next time
             } else {
               resultEl.textContent = "❌ " + data.error;
             }
@@ -1182,6 +1230,7 @@
 
           if (newOnes.length > 0) {
             updatePendingStatusText();
+            saveCache("pending", allPending);
           }
         })
         .catch(function () { /* stay quiet — we'll just try again next minute */ });
