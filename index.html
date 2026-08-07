@@ -177,6 +177,56 @@
       padding: 0;
       width: auto;
     }
+
+    /* ---------- Pending transactions ---------- */
+    .section-title {
+      font-size: 1.1rem;
+      margin: 0 0 10px 0;
+    }
+
+    .pending-status {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 12px;
+    }
+
+    .pending-item {
+      background: white;
+      padding: 14px 16px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .pending-item .pending-top {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .pending-item .pending-amount {
+      font-weight: bold;
+      color: #2f6fed;
+    }
+
+    .pending-item .pending-meta {
+      font-size: 0.8rem;
+      color: #777;
+      margin-bottom: 10px;
+    }
+
+    .pending-item .field {
+      margin-bottom: 8px;
+    }
+
+    .pending-item .save-btn {
+      margin-top: 4px;
+    }
+
+    .pending-result {
+      font-size: 0.85rem;
+      margin-top: 6px;
+    }
   </style>
 </head>
 <body>
@@ -204,14 +254,19 @@
     <!-- ===== Everything below is hidden until you sign in ===== -->
     <div id="appContent" style="display:none">
 
-      <!-- ===== TEMPORARY: test button for checking the Apps Script connection =====
-           This whole block gets removed once we build the real transaction screen. -->
-      <div class="signin-box" style="flex-direction:column; gap:8px;">
-        <button id="testConnectionButton" type="button">Test Apps Script Connection</button>
-        <div id="testConnectionResult" style="font-size:0.9rem; text-align:center;"></div>
-      </div>
+      <!-- ===== Pending Transactions — your real bank/UPI data ===== -->
+      <!-- This replaces Telegram's "reply to alert" flow: transactions that
+           were already alerted but still have no note show up here. -->
+      <section>
+        <h2 class="section-title">Pending Transactions</h2>
+        <div class="pending-status" id="pendingStatus">Loading...</div>
+        <div id="pendingList"></div>
+      </section>
 
       <!-- ===== Title and running total ===== -->
+      <!-- NOTE: everything below (form + list) still uses pretend sample
+           data from Step 1 of the plan. We'll revisit this once we get to
+           the cash-entry step — for now it's harmless, just not real yet. -->
       <header>
         <h1>My Expenses</h1>
         <div class="total-box">
@@ -334,7 +389,7 @@
       currentUser = {
         email: payload.email,
         name: payload.name,
-        idToken: response.credential // we'll send this to Apps Script in a later step
+        idToken: response.credential // sent to Apps Script with every request
       };
 
       // Remember this browser is signed in, so next visit skips the button
@@ -344,6 +399,9 @@
       }));
 
       showSignedInUI(currentUser);
+
+      // Now that we have a fresh, valid sign-in proof, load real data
+      loadPendingTransactions();
     }
 
     // Set up Google's sign-in button once the page has loaded
@@ -400,34 +458,124 @@
     });
 
     // ---------------------------------------------------------
-    // TEMPORARY: test button to check the Apps Script connection
+    // PENDING TRANSACTIONS — your real bank/UPI data
     // ---------------------------------------------------------
-    const testConnectionButton = document.getElementById("testConnectionButton");
-    const testConnectionResult = document.getElementById("testConnectionResult");
 
-    testConnectionButton.addEventListener("click", function () {
-      testConnectionResult.textContent = "Checking...";
+    // The full set of categories, matching what the Telegram bot already uses
+    // (so reports/summaries stay consistent no matter which door you used).
+    const CATEGORY_OPTIONS = [
+      "Food", "Transport", "Bills", "Shopping", "Lifestyle",
+      "Financial", "Income", "Education", "Health", "Other"
+    ];
 
-      fetch(APPS_SCRIPT_URL, {
+    const pendingStatusEl = document.getElementById("pendingStatus");
+    const pendingListEl   = document.getElementById("pendingList");
+
+    // Small helper: sends a request to Apps Script and hands back the parsed reply.
+    function callAppsScript(payload) {
+      return fetch(APPS_SCRIPT_URL, {
         method: "POST",
-        // Using text/plain avoids the browser doing an extra "permission check"
-        // request first (called a CORS preflight) that Apps Script doesn't handle well.
+        // text/plain avoids the browser's extra "permission check" request
+        // (a CORS preflight) that Apps Script doesn't handle well.
         headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({
-          action: "ping",
-          idToken: currentUser ? currentUser.idToken : null
-        })
-      })
-        .then(function (response) { return response.json(); })
+        body: JSON.stringify(payload)
+      }).then(function (response) { return response.json(); });
+    }
+
+    // Asks Apps Script for your pending transactions and draws them on screen.
+    function loadPendingTransactions() {
+      pendingStatusEl.textContent = "Loading...";
+      pendingListEl.innerHTML = "";
+
+      callAppsScript({ action: "getPending", idToken: currentUser.idToken })
         .then(function (data) {
-          testConnectionResult.textContent = data.ok
-            ? "✅ " + data.message
-            : "❌ " + data.error;
+          if (!data.ok) {
+            pendingStatusEl.textContent = "❌ " + data.error;
+            return;
+          }
+
+          if (data.transactions.length === 0) {
+            pendingStatusEl.textContent = "✅ All caught up — nothing pending!";
+            return;
+          }
+
+          pendingStatusEl.textContent = data.transactions.length + " waiting for a note:";
+          data.transactions.forEach(function (txn) {
+            pendingListEl.appendChild(buildPendingItem(txn));
+          });
         })
         .catch(function (err) {
-          testConnectionResult.textContent = "❌ Couldn't reach Apps Script: " + err.message;
+          pendingStatusEl.textContent = "❌ Couldn't load: " + err.message;
         });
-    });
+    }
+
+    // Updates the "X waiting" text after one gets saved and removed
+    function refreshPendingStatus() {
+      const remaining = pendingListEl.children.length;
+      pendingStatusEl.textContent = remaining === 0
+        ? "✅ All caught up — nothing pending!"
+        : remaining + " waiting for a note:";
+    }
+
+    // Builds one transaction "card": details + a note field + category + Save button
+    function buildPendingItem(txn) {
+      const card = document.createElement("div");
+      card.className = "pending-item";
+
+      const categoryOptionsHtml = CATEGORY_OPTIONS
+        .map(function (cat) { return `<option value="${cat}">${cat}</option>`; })
+        .join("");
+
+      const counterpartyText = txn.counterparty ? " · " + txn.counterparty : "";
+
+      card.innerHTML = `
+        <div class="pending-top">
+          <span class="pending-amount">₹${txn.amount.toLocaleString("en-IN")}</span>
+          <span>${txn.mode}</span>
+        </div>
+        <div class="pending-meta">${txn.date} ${txn.time} · ${txn.bank}${counterpartyText}</div>
+        <div class="field">
+          <label>Note</label>
+          <input type="text" class="note-input" placeholder="What was this for?">
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <select class="category-select">${categoryOptionsHtml}</select>
+        </div>
+        <button type="button" class="save-btn">Save</button>
+        <div class="pending-result"></div>
+      `;
+
+      const noteInput      = card.querySelector(".note-input");
+      const categorySelect = card.querySelector(".category-select");
+      const saveButton     = card.querySelector(".save-btn");
+      const resultEl       = card.querySelector(".pending-result");
+
+      saveButton.addEventListener("click", function () {
+        resultEl.textContent = "Saving...";
+
+        callAppsScript({
+          action:   "saveNote",
+          idToken:  currentUser.idToken,
+          row:      txn.row,
+          note:     noteInput.value,
+          category: categorySelect.value
+        })
+          .then(function (data) {
+            if (data.ok) {
+              card.remove();
+              refreshPendingStatus();
+            } else {
+              resultEl.textContent = "❌ " + data.error;
+            }
+          })
+          .catch(function (err) {
+            resultEl.textContent = "❌ " + err.message;
+          });
+      });
+
+      return card;
+    }
 
     // ---------------------------------------------------------
     // 1. Set up our starting data
