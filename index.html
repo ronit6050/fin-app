@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- This makes the page render nicely on phone screens instead of zoomed out -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Expenses</title>
+
+  <style>
+    /* ---------- Basic page setup ---------- */
+    * {
+      box-sizing: border-box; /* makes width/height calculations include padding & border */
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background-color: #f4f5f7;
+      color: #222;
+      /* Center the app and keep it narrow-ish, like a phone screen,
+         even when viewed on a wide desktop browser */
+      display: flex;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 420px; /* keeps things phone-width even on desktop */
+    }
+
+    /* ---------- Header / Title / Total ---------- */
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    header h1 {
+      margin: 0 0 8px 0;
+      font-size: 1.8rem;
+    }
+
+    .total-box {
+      background-color: #2f6fed;
+      color: white;
+      padding: 16px;
+      border-radius: 12px;
+    }
+
+    .total-label {
+      font-size: 0.9rem;
+      opacity: 0.9;
+    }
+
+    .total-amount {
+      font-size: 2rem;
+      font-weight: bold;
+    }
+
+    /* ---------- Form ---------- */
+    form {
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .field {
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    label {
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+      font-weight: bold;
+    }
+
+    input,
+    select {
+      padding: 10px;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      font-size: 1rem;
+      font-weight: bold;
+      color: white;
+      background-color: #2f6fed;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #2559c4;
+    }
+
+    /* ---------- Expense list ---------- */
+    .expense-list {
+      list-style: none; /* removes default bullet points */
+      padding: 0;
+      margin: 0;
+    }
+
+    .expense-item {
+      background: white;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .expense-info .category {
+      font-weight: bold;
+      display: block;
+    }
+
+    .expense-info .date {
+      font-size: 0.8rem;
+      color: #777;
+    }
+
+    .expense-amount {
+      font-weight: bold;
+      color: #2f6fed;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- ===== Title and running total ===== -->
+    <header>
+      <h1>My Expenses</h1>
+      <div class="total-box">
+        <div class="total-label">Total Spent</div>
+        <!-- The total amount will be updated automatically by JavaScript -->
+        <div class="total-amount" id="totalAmount">$0.00</div>
+      </div>
+    </header>
+
+    <!-- ===== Form to add a new expense ===== -->
+    <form id="expenseForm">
+      <div class="field">
+        <label for="amount">Amount ($)</label>
+        <input type="number" id="amount" step="0.01" min="0" placeholder="0.00" required>
+      </div>
+
+      <div class="field">
+        <label for="category">Category</label>
+        <select id="category" required>
+          <option value="Food">Food</option>
+          <option value="Transport">Transport</option>
+          <option value="Bills">Bills</option>
+          <option value="Shopping">Shopping</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="date">Date</label>
+        <input type="date" id="date" required>
+      </div>
+
+      <button type="submit">Add Expense</button>
+    </form>
+
+    <!-- ===== List of expenses gets filled in by JavaScript ===== -->
+    <ul class="expense-list" id="expenseList"></ul>
+
+  </div>
+
+  <script>
+    // ---------------------------------------------------------
+    // 1. Set up our starting data
+    // ---------------------------------------------------------
+    // This array holds all our expenses. Each expense is an object
+    // with an amount, category, and date.
+    // We start with 3 sample expenses so there's something to look at.
+    let expenses = [
+      { amount: 12.50, category: "Food", date: "2026-08-01" },
+      { amount: 35.00, category: "Transport", date: "2026-08-03" },
+      { amount: 60.00, category: "Bills", date: "2026-08-05" }
+    ];
+
+    // ---------------------------------------------------------
+    // 2. Grab references to the HTML elements we need to work with
+    // ---------------------------------------------------------
+    const form = document.getElementById("expenseForm");
+    const amountInput = document.getElementById("amount");
+    const categoryInput = document.getElementById("category");
+    const dateInput = document.getElementById("date");
+    const expenseListEl = document.getElementById("expenseList");
+    const totalAmountEl = document.getElementById("totalAmount");
+
+    // ---------------------------------------------------------
+    // 3. Function to draw (render) the expense list on the page
+    // ---------------------------------------------------------
+    // Whenever our "expenses" array changes, we call this function
+    // to rebuild the list shown to the user, and update the total.
+    function renderExpenses() {
+      // Clear out whatever is currently in the list
+      expenseListEl.innerHTML = "";
+
+      // Loop through every expense and create a list item for it
+      expenses.forEach(function (expense) {
+        const li = document.createElement("li");
+        li.className = "expense-item";
+
+        // li innerHTML builds the little card showing category, date, and amount
+        li.innerHTML = `
+          <div class="expense-info">
+            <span class="category">${expense.category}</span>
+            <span class="date">${formatDate(expense.date)}</span>
+          </div>
+          <div class="expense-amount">$${expense.amount.toFixed(2)}</div>
+        `;
+
+        expenseListEl.appendChild(li);
+      });
+
+      // Update the running total at the top of the page
+      updateTotal();
+    }
+
+    // ---------------------------------------------------------
+    // 4. Function to calculate and display the total of all expenses
+    // ---------------------------------------------------------
+    function updateTotal() {
+      // reduce() adds up all the "amount" values in the expenses array
+      const total = expenses.reduce(function (sum, expense) {
+        return sum + expense.amount;
+      }, 0);
+
+      totalAmountEl.textContent = "$" + total.toFixed(2);
+    }
+
+    // ---------------------------------------------------------
+    // 5. Helper function to make dates more readable (e.g. "Aug 1, 2026")
+    // ---------------------------------------------------------
+    function formatDate(dateString) {
+      const options = { year: "numeric", month: "short", day: "numeric" };
+      // new Date(dateString) turns "2026-08-01" into a real Date object
+      return new Date(dateString + "T00:00:00").toLocaleDateString(undefined, options);
+    }
+
+    // ---------------------------------------------------------
+    // 6. Handle the form submission (when "Add Expense" is clicked)
+    // ---------------------------------------------------------
+    form.addEventListener("submit", function (event) {
+      // Prevent the page from reloading, which is the default form behavior
+      event.preventDefault();
+
+      // Build a new expense object from the form's current values
+      const newExpense = {
+        amount: parseFloat(amountInput.value),
+        category: categoryInput.value,
+        date: dateInput.value
+      };
+
+      // Add the new expense to our array
+      expenses.push(newExpense);
+
+      // Redraw the list and total to include the new expense
+      renderExpenses();
+
+      // Reset the form fields so it's ready for the next entry
+      form.reset();
+    });
+
+    // ---------------------------------------------------------
+    // 7. Draw the initial list when the page first loads
+    // ---------------------------------------------------------
+    renderExpenses();
+  </script>
+
+</body>
+</html>
