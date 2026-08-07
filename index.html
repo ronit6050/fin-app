@@ -187,6 +187,14 @@
     <!-- The actual Google button gets drawn inside this box by Google's script. -->
     <div class="signin-box" id="signInBox"></div>
 
+    <!-- ===== Shown if someone signs in with the WRONG account ===== -->
+    <div class="signin-box" id="notAllowedBox" style="display:none">
+      <div style="text-align:center">
+        <p style="margin:0 0 8px 0">🚫 This app is only for Ronit's account.</p>
+        <button class="signout-link" id="tryAgainButton">Try a different account</button>
+      </div>
+    </div>
+
     <!-- ===== Shown instead, once signed in ===== -->
     <div class="signedin-info" id="signedInInfo">
       <span class="signedin-email" id="signedInEmail"></span>
@@ -247,12 +255,22 @@
     // It's safe for this to be visible in the code (it's not a password).
     const GOOGLE_CLIENT_ID = "1090460874478-0mnc81l34b10hi7n0u6bl9bkv9a45862.apps.googleusercontent.com";
 
+    // Only this email is allowed to use the app right now.
+    // NOTE: this is a first, simple check — anyone determined enough could
+    // edit this in their browser and get past it. It's fine for now because
+    // there's still no real private data behind it (just sample expenses).
+    // The real, unbreakable lock happens later in Apps Script, which will
+    // check this same way but on the server — nothing can bypass that one.
+    const ALLOWED_EMAIL = "ronitnadar9@gmail.com";
+
     // We'll keep the signed-in person's info here once they sign in.
     // Later steps (talking to the Google Sheet) will use this.
     let currentUser = null;
 
     // Grab the sign-in related elements from the page
     const signInBox     = document.getElementById("signInBox");
+    const notAllowedBox = document.getElementById("notAllowedBox");
+    const tryAgainButton = document.getElementById("tryAgainButton");
     const signedInInfo  = document.getElementById("signedInInfo");
     const signedInEmail = document.getElementById("signedInEmail");
     const signOutButton = document.getElementById("signOutButton");
@@ -262,9 +280,10 @@
     // so you don't have to sign in again every time you open the app.
     const STORAGE_KEY = "finapp_user";
 
-    // Shows the app and hides the sign-in button
+    // Shows the app and hides everything else
     function showSignedInUI(user) {
       signInBox.style.display = "none";
+      notAllowedBox.style.display = "none";
       signedInEmail.textContent = "Signed in as " + user.email;
       signedInInfo.style.display = "flex";
       appContent.style.display = "block";
@@ -273,8 +292,17 @@
     // Shows the sign-in button and hides the app
     function showSignedOutUI() {
       signedInInfo.style.display = "none";
+      notAllowedBox.style.display = "none";
       appContent.style.display = "none";
       signInBox.style.display = "flex";
+    }
+
+    // Shows the "wrong account" message and hides the app
+    function showNotAllowedUI() {
+      signInBox.style.display = "none";
+      signedInInfo.style.display = "none";
+      appContent.style.display = "none";
+      notAllowedBox.style.display = "flex";
     }
 
     // Google calls this function automatically after someone signs in
@@ -285,6 +313,13 @@
       // The middle part holds the actual info (name, email) as text,
       // just encoded so it can travel safely inside a web address/token.
       const payload = JSON.parse(atob(response.credential.split(".")[1]));
+
+      // ── Check this is actually the allowed account ──
+      if (payload.email.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
+        localStorage.removeItem(STORAGE_KEY);
+        showNotAllowedUI();
+        return;
+      }
 
       currentUser = {
         email: payload.email,
@@ -319,7 +354,12 @@
       // instead of making you look at the sign-in button again...
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        showSignedInUI(JSON.parse(saved));
+        const savedUser = JSON.parse(saved);
+        if (savedUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
+          showSignedInUI(savedUser);
+        } else {
+          localStorage.removeItem(STORAGE_KEY); // stale/wrong data — ignore it
+        }
       }
 
       // ...and quietly ask Google to re-confirm you in the background.
@@ -339,6 +379,12 @@
     signOutButton.addEventListener("click", function () {
       currentUser = null;
       localStorage.removeItem(STORAGE_KEY);
+      google.accounts.id.disableAutoSelect();
+      showSignedOutUI();
+    });
+
+    // "Try a different account" on the not-allowed screen — same as signing out
+    tryAgainButton.addEventListener("click", function () {
       google.accounts.id.disableAutoSelect();
       showSignedOutUI();
     });
