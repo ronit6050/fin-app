@@ -214,6 +214,7 @@
         <h2 class="section-title">Pending Transactions</h2>
         <div class="pending-status" id="pendingStatus">Loading...</div>
         <div id="pendingList"></div>
+        <button type="button" id="showMoreButton" style="display:none">Show more</button>
       </section>
 
       <!-- More sections (Dashboard, CC Advisor, Debts, Savings...) will be
@@ -384,8 +385,16 @@
       "Financial", "Income", "Education", "Health", "Other"
     ];
 
-    const pendingStatusEl = document.getElementById("pendingStatus");
-    const pendingListEl   = document.getElementById("pendingList");
+    const pendingStatusEl  = document.getElementById("pendingStatus");
+    const pendingListEl    = document.getElementById("pendingList");
+    const showMoreButtonEl = document.getElementById("showMoreButton");
+
+    // How many cards to show at once, so a big backlog doesn't mean endless scrolling.
+    const PAGE_SIZE = 10;
+
+    // The full list from Apps Script (newest first), and how many we've shown so far.
+    let allPending = [];
+    let shownCount = 0;
 
     // Small helper: sends a request to Apps Script and hands back the parsed reply.
     function callAppsScript(payload) {
@@ -398,10 +407,13 @@
       }).then(function (response) { return response.json(); });
     }
 
-    // Asks Apps Script for your pending transactions and draws them on screen.
+    // Asks Apps Script for your pending transactions and draws the first batch.
     function loadPendingTransactions() {
       pendingStatusEl.textContent = "Loading...";
       pendingListEl.innerHTML = "";
+      showMoreButtonEl.style.display = "none";
+      allPending = [];
+      shownCount = 0;
 
       callAppsScript({ action: "getPending", idToken: currentUser.idToken })
         .then(function (data) {
@@ -410,28 +422,42 @@
             return;
           }
 
-          if (data.transactions.length === 0) {
+          allPending = data.transactions;
+
+          if (allPending.length === 0) {
             pendingStatusEl.textContent = "✅ All caught up — nothing pending!";
             return;
           }
 
-          pendingStatusEl.textContent = data.transactions.length + " waiting for a note:";
-          data.transactions.forEach(function (txn) {
-            pendingListEl.appendChild(buildPendingItem(txn));
-          });
+          showNextBatch();
         })
         .catch(function (err) {
           pendingStatusEl.textContent = "❌ Couldn't load: " + err.message;
         });
     }
 
-    // Updates the "X waiting" text after one gets saved and removed
-    function refreshPendingStatus() {
-      const remaining = pendingListEl.children.length;
-      pendingStatusEl.textContent = remaining === 0
-        ? "✅ All caught up — nothing pending!"
-        : remaining + " waiting for a note:";
+    // Draws the next PAGE_SIZE cards from allPending (already newest-first)
+    function showNextBatch() {
+      const nextItems = allPending.slice(shownCount, shownCount + PAGE_SIZE);
+      nextItems.forEach(function (txn) {
+        pendingListEl.appendChild(buildPendingItem(txn));
+      });
+      shownCount += nextItems.length;
+      updatePendingStatusText();
     }
+
+    // Keeps the "Showing X of Y" text and the Show More button in sync
+    function updatePendingStatusText() {
+      if (allPending.length === 0) {
+        pendingStatusEl.textContent = "✅ All caught up — nothing pending!";
+        showMoreButtonEl.style.display = "none";
+        return;
+      }
+      pendingStatusEl.textContent = "Showing " + shownCount + " of " + allPending.length + " waiting for a note";
+      showMoreButtonEl.style.display = shownCount < allPending.length ? "block" : "none";
+    }
+
+    showMoreButtonEl.addEventListener("click", showNextBatch);
 
     // Builds one transaction "card": details + a note field + category + Save button
     function buildPendingItem(txn) {
@@ -480,7 +506,12 @@
           .then(function (data) {
             if (data.ok) {
               card.remove();
-              refreshPendingStatus();
+
+              // Take it out of our remembered list too, and update the count
+              const idx = allPending.findIndex(function (t) { return t.row === txn.row; });
+              if (idx !== -1) allPending.splice(idx, 1);
+              shownCount = Math.max(shownCount - 1, 0);
+              updatePendingStatusText();
             } else {
               resultEl.textContent = "❌ " + data.error;
             }
