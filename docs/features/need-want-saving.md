@@ -1,6 +1,8 @@
 # Need / Want / Saving tagging (50/30/20 layer)
 
-**Status: in progress.** Backend suggestion engine (`needWantSaving.js`) is written and manually tested — all 6 test cases passed 2026-08-08 (exclusion rules, cold-start default, vote-counting majority). Not yet wired into `getPending`/`saveNote`, and no Pending UI changes yet — that's the next step.
+**Status: live.** Built, tested, wired into `getPending`/`saveNote` in `PWA.js`, and shown in the Pending screen — confirmed working on the real app 2026-08-08. Backend is now clasp-synced (`D:\fin-app\backend`, see CLAUDE.md), so `needWantSaving.js` is real, current code, not just this description.
+
+Not yet built: anywhere that actually *shows* the Need/Want/Saving breakdown (a 50/30/20 summary view). Right now this feature only collects the tag and the votes — nothing reads them back yet.
 
 ## What this feature is
 

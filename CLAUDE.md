@@ -133,14 +133,19 @@ feature; the feature doc is the source of truth for how it actually works.
   permanently at confidence 100 -> every future transaction from that
   merchant is auto-correct forever. No Sheets access needed at any point.
 
-**Next planned layer (in progress, started 2026-08-08): Need / Want / Saving
-tagging**, per the 50/30/20 budgeting rule. The original idea (a fixed
-category -> type table) was rejected during design — same category can be
-either type depending on context (a cab can be commute or a night out).
-Redesigned as a self-learning, per-merchant vote-counting system instead.
-**Full design doc: [docs/features/need-want-saving.md](docs/features/need-want-saving.md)**
+**Need / Want / Saving tagging (started + shipped 2026-08-08): done**, per
+the 50/30/20 budgeting rule. The original idea (a fixed category -> type
+table) was rejected during design — same category can be either type
+depending on context (a cab can be commute or a night out). Built instead
+as a self-learning, per-merchant+amount-band vote-counting system, live in
+the Pending screen now. **Full design doc:
+[docs/features/need-want-saving.md](docs/features/need-want-saving.md)**
 — always check that file for the current rules/schema before touching this
 feature; this section is just a pointer, not the source of truth.
+
+Not yet built: any screen that actually shows the Need/Want/Saving 50/30/20
+breakdown itself — this phase only added the tagging + learning, not a
+summary view. Worth revisiting once enough real votes have accumulated.
 
 As part of this design pass, discovered the live `Transactions` sheet has
 more columns than previously documented here (`Type` = debit/credit,
