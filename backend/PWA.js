@@ -115,13 +115,27 @@ function handlePwaRequest(data){
 // functions directly rather than re-scanning the sheets from scratch.
 function getDashboardData(){
   const now = new Date();
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
 
-  const today   = getTodaySummary();
-  const month   = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1);
-  const cash    = getCashData();
-  const cc      = getCCAdvisorData();
-  const debts   = getDebtsData();
-  const pending = getPendingTransactions();
+  // Read Transactions and Cash ONCE here and pass them into everything
+  // below, instead of each function reading its own copy fresh — this
+  // single call used to read Transactions up to 4 times and Cash twice.
+  // Fixed 2026-08-08, same reasoning as the SmartMemory/TypeMemory
+  // batching fix in getPendingTransactions.
+  const txnData  = ss.getSheetByName("Transactions").getDataRange().getValues();
+  const cashData = ss.getSheetByName("Cash").getDataRange().getValues();
+
+  const today   = getTodaySummary(txnData, cashData);
+  const month   = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, txnData, cashData);
+  const cash    = getCashData(cashData);
+  const cc      = getCCAdvisorData(txnData);
+  const pending = getPendingTransactions(txnData);
+
+  // Debts/Savings/Investments each read their own sheet(s) only once
+  // already — no duplication to fix there, just reusing their results.
+  const debts       = getDebtsData();
+  const savings     = getSavingsData();
+  const investments = getInvestmentsData();
 
   const recent = pending.slice(0, 3).map(function(t){
     return { label: t.counterparty || t.bank, amount: t.amount };
@@ -134,7 +148,21 @@ function getDashboardData(){
     cashBalance:  cash.balance,
     ccUsagePct:   cc.usagePct,
     debtsNet:     debts.netPosition,
-    recent:       recent
+    recent:       recent,
+
+    // Full data for every tab, so the PWA can seed each tab's own cache
+    // from this one call — opening any of them afterward is then instant,
+    // no extra network round-trip needed. See index.html's loadDashboard.
+    full: {
+      today:       today,
+      month:       month,
+      cash:        cash,
+      cc:          cc,
+      debts:       debts,
+      savings:     savings,
+      investments: investments,
+      pending:     pending
+    }
   };
 }
 
@@ -152,9 +180,12 @@ function registerPushToken(token){
 
 // Same balance/today-spend logic as sendCashBalance() and sendTodayCash()
 // in cash.js, combined into one call, plus a short recent-entries list.
-function getCashData(){
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Cash");
-  const data  = sheet.getDataRange().getValues();
+// cashData is optional — pass an already-read Cash sheet's values to skip
+// re-reading it (see getDashboardData, which reads Cash once and reuses
+// it here and in getTodaySummary/getMonthlyAnalysis instead of each of
+// them reading it fresh).
+function getCashData(cashData){
+  const data = cashData || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Cash").getDataRange().getValues();
 
   const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
@@ -467,8 +498,8 @@ function settleDebtRow(row){
 // Same billing-cycle math as sendCCAdvisorReport() in CCAdvisor.js, but
 // returns plain data instead of sending a Telegram message. Reuses the
 // CC_LIMIT / CC_WARN_AMT / CC_ALERT_AMT constants already defined there.
-function getCCAdvisorData(){
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+// txnData is optional — see getCashData's comment, same reasoning.
+function getCCAdvisorData(txnData){
 
   const today      = new Date();
   const dayOfMonth = today.getDate();
@@ -491,7 +522,7 @@ function getCCAdvisorData(){
   const daysElapsed  = daysInCycle - daysLeft;
   const daysUntilDue = Math.ceil((dueDate - today) / 86400000);
 
-  const data = sheet.getDataRange().getValues();
+  const data = txnData || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
 
   let cycleSpend = 0;
   let txnCount   = 0;
@@ -565,13 +596,12 @@ function getCCAdvisorData(){
 
 // Full breakdown for one month: total spend, income, savings, top expense,
 // and spending by category — combining bank/UPI and cash.
-function getMonthlyAnalysis(year, month){
-  const ss       = SpreadsheetApp.getActiveSpreadsheet();
-  const txnSheet = ss.getSheetByName("Transactions");
-  const cashSheet = ss.getSheetByName("Cash");
+// txnData/cashData are optional — see getCashData's comment, same reasoning.
+function getMonthlyAnalysis(year, month, txnData, cashData){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  const txnData  = txnSheet.getDataRange().getValues();
-  const cashData = cashSheet.getDataRange().getValues();
+  txnData  = txnData  || ss.getSheetByName("Transactions").getDataRange().getValues();
+  cashData = cashData || ss.getSheetByName("Cash").getDataRange().getValues();
 
   let totalDebit  = 0;
   let totalCredit = 0;
@@ -643,13 +673,12 @@ function getMonthlyAnalysis(year, month){
 }
 
 // Adds up everything spent today, from both bank/UPI and cash, by category.
-function getTodaySummary(){
-  const ss       = SpreadsheetApp.getActiveSpreadsheet();
-  const txnSheet = ss.getSheetByName("Transactions");
-  const cashSheet = ss.getSheetByName("Cash");
+// txnData/cashData are optional — see getCashData's comment, same reasoning.
+function getTodaySummary(txnData, cashData){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  const txnData  = txnSheet.getDataRange().getValues();
-  const cashData = cashSheet.getDataRange().getValues();
+  txnData  = txnData  || ss.getSheetByName("Transactions").getDataRange().getValues();
+  cashData = cashData || ss.getSheetByName("Cash").getDataRange().getValues();
 
   const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
@@ -699,14 +728,10 @@ function getTodaySummary(){
 
 // Finds bank transactions that were already alerted but still have no note —
 // same definition Telegram's /pending command already uses.
-// Finds bank transactions that were already alerted but still have no note —
-// same definition Telegram's /pending command already uses.
-// Finds bank transactions that were already alerted but still have no note —
-// same definition Telegram's /pending command already uses.
-function getPendingTransactions(){
+// txnData is optional — see getCashData's comment, same reasoning.
+function getPendingTransactions(txnData){
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("Transactions");
-  const data  = sheet.getDataRange().getValues();
+  const data  = txnData || ss.getSheetByName("Transactions").getDataRange().getValues();
   const pending = [];
 
   // Read these two lookup sheets ONCE, outside the loop below, and reuse

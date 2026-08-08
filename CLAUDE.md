@@ -165,6 +165,32 @@ thread. If resuming: check the roadmap table above for what's done, and
 the Automation phase section for exactly where categorization work left
 off before continuing.
 
+**Responsiveness pass (2026-08-08):** user asked specifically for minimal
+delay on (a) new transactions appearing and (b) switching tabs. Three
+changes:
+1. `getDashboardData` used to re-read `Transactions` up to 4 times and
+   `Cash` twice in one call (each sub-function read its own copy fresh).
+   `getTodaySummary`/`getMonthlyAnalysis`/`getCashData`/
+   `getCCAdvisorData`/`getPendingTransactions` now all accept optional
+   pre-loaded sheet data (same pattern as the earlier SmartMemory/
+   TypeMemory fix) so it reads each sheet once.
+2. That same dashboard call already secretly computed Today/Analysis/CC/
+   Debts/Savings/Investments/Cash data — `getDashboardData` now returns
+   all of it (under a `full` key), and `index.html`'s
+   `seedTabsFromDashboard()` seeds every tab's own cache (and renders it,
+   if not already loaded) from that one response. Tapping into any of
+   those 7 tabs after Home loads is then instant, zero extra network
+   call. Confirmed safe: each render function only ever touches its own
+   inner content div, never the outer tab container that controls actual
+   visibility.
+3. Frontend polling for new transactions dropped from 60s to 15s (cheap
+   now that `getPending` itself is fast), pauses entirely while the tab
+   is hidden, and checks immediately on becoming visible again — fixes
+   "got the push notification, opened the app, transaction wasn't
+   there yet." Also fixed: reopening Pending used to only quietly update
+   its *saved* cache in the background, not what was on screen — now it
+   reconciles the visible list immediately too.
+
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
 - **PWA source**: https://github.com/ronit6050/fin-app (this repo, `D:\fin-app` — the one this file lives in). Plain HTML/CSS/JS in `index.html`, plus `sw.js` (service worker), `manifest.json`, `icons/`.

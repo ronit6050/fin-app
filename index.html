@@ -1143,8 +1143,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-08-1";
-    const APP_CHANGELOG = "Added Reconcile: upload your bank statement to find missing transactions, or fill in notes it recovers automatically for ones you already have.";
+    const APP_VERSION = "2026-08-08-2";
+    const APP_CHANGELOG = "Faster app: tabs open instantly, new transactions show up quicker, and the app checks less often while you're not looking at it.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1490,11 +1490,46 @@
 
           saveCache("dashboard", data.dashboard);
           renderDashboard(data.dashboard);
+          seedTabsFromDashboard(data.dashboard.full);
         })
         .catch(function (err) {
           if (cached) return;
           homeStatusEl.textContent = "Couldn't load: " + err.message;
         });
+    }
+
+    // The dashboard call already computes Today/Analysis/CC/Debts/Savings/
+    // Investments/Cash data internally — instead of throwing that away,
+    // save it into each tab's own cache AND render it immediately if that
+    // tab hasn't loaded yet, so tapping into any of them afterward is
+    // instant, with no extra network call. Safe to render into a screen
+    // before it's visible: each render function only ever sets its own
+    // inner content div, never the outer tab container that controls
+    // whether it's actually shown on screen.
+    function seedTabsFromDashboard(full) {
+      if (!full) return;
+
+      saveCache("today", full.today);
+      if (!tabLoaded.today) { renderTodaySummary(full.today); tabLoaded.today = true; }
+
+      const analysisCacheKey = "analysis_" + analysisYear + "_" + analysisMonth;
+      saveCache(analysisCacheKey, full.month);
+      if (!tabLoaded.analysis) { renderMonthlyAnalysis(full.month); tabLoaded.analysis = true; }
+
+      saveCache("cc", full.cc);
+      if (!tabLoaded.cc) { renderCCAdvisor(full.cc); tabLoaded.cc = true; }
+
+      saveCache("debts", full.debts);
+      if (!tabLoaded.debts) { renderDebts(full.debts); tabLoaded.debts = true; }
+
+      saveCache("savings", full.savings);
+      if (!tabLoaded.savings) { renderSavings(full.savings); tabLoaded.savings = true; }
+
+      saveCache("investments", full.investments);
+      if (!tabLoaded.investments) { renderInvestments(full.investments); tabLoaded.investments = true; }
+
+      saveCache("cash", full.cash);
+      if (!tabLoaded.cash) { renderCash(full.cash); tabLoaded.cash = true; }
     }
 
     function renderDashboard(d) {
@@ -1525,9 +1560,7 @@
       const cached = loadCache("pending");
 
       if (cached) {
-        // Show what we saw last time, instantly — no waiting. The regular
-        // once-a-minute check (further down) will pick up anything
-        // genuinely new shortly, same as it always does.
+        // Show what we saw last time, instantly — no waiting.
         allPending = cached;
         knownRows = new Set(allPending.map(function (t) { return t.row; }));
         shownCount = 0;
@@ -1539,11 +1572,30 @@
           showNextBatch();
         }
 
-        // Quietly refresh the SAVED copy for next time — doesn't touch
-        // what's on screen right now, so nothing you're doing gets disturbed.
+        // Refresh in the background, and if anything's actually new since
+        // the cached copy (e.g. you opened the app right after a push
+        // notification), show it immediately — don't just quietly update
+        // the saved copy and make it wait for the next scheduled check.
         callAppsScript({ action: "getPending", idToken: currentUser.idToken })
           .then(function (data) {
-            if (data.ok) saveCache("pending", data.transactions);
+            if (!data.ok) return;
+
+            saveCache("pending", data.transactions);
+
+            const newOnes = data.transactions.filter(function (t) {
+              return !knownRows.has(t.row);
+            });
+
+            newOnes.forEach(function (txn) {
+              knownRows.add(txn.row);
+              allPending.unshift(txn);
+              shownCount++;
+              pendingListEl.insertBefore(buildPendingItem(txn), pendingListEl.firstChild);
+              // No popup notification here — you're already looking at
+              // the list it just appeared in, that'd just be noise.
+            });
+
+            if (newOnes.length > 0) updatePendingStatusText();
           })
           .catch(function () { /* fine — we'll just try again next time */ });
 
@@ -1808,8 +1860,40 @@
         .catch(function () { /* stay quiet — we'll just try again next minute */ });
     }
 
-    // Check once a minute, for as long as the page stays open.
-    setInterval(checkForNewTransactions, 60000);
+    // Checks for new transactions every 15 seconds while the tab is
+    // actually visible — cheap now that getPending itself is fast (was
+    // 60s before, back when each check was expensive). Paused entirely
+    // while the tab is hidden (phone locked, app backgrounded), and
+    // checks immediately the moment it becomes visible again, so opening
+    // the app right after a push notification doesn't have to wait for
+    // the next scheduled tick to show the transaction you were just
+    // notified about.
+    const CHECK_INTERVAL_MS = 15000;
+    let checkIntervalId = null;
+
+    function startCheckingForNewTransactions() {
+      if (checkIntervalId) return; // already running
+      checkForNewTransactions(); // check right away, don't wait for the first tick
+      checkIntervalId = setInterval(checkForNewTransactions, CHECK_INTERVAL_MS);
+    }
+
+    function stopCheckingForNewTransactions() {
+      if (!checkIntervalId) return;
+      clearInterval(checkIntervalId);
+      checkIntervalId = null;
+    }
+
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") {
+        startCheckingForNewTransactions();
+      } else {
+        stopCheckingForNewTransactions();
+      }
+    });
+
+    if (document.visibilityState === "visible") {
+      startCheckingForNewTransactions();
+    }
 
     // ---------------------------------------------------------
     // TAB BAR — switches which screen is showing
