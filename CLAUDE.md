@@ -72,7 +72,8 @@ of any app... think creatively... improve user's usage"), with one rule:
 show or describe a change before making it (mockups via the visualize tool
 work well for this). Not a fixed checklist — revisit and keep iterating.
 
-Done so far:
+Design/UI done so far (user says "good enough for now", not investing more
+UI time until the automation/features work below is solid):
 - Navigation restructured: 8 scrolling tabs -> 4 (Home/Pending/Analysis/More)
   + a "More" menu grid for the rest
 - Instant-load caching (stale-while-revalidate) on all screens
@@ -83,49 +84,143 @@ Done so far:
   getDashboard Apps Script action reusing existing screen logic
 - Header redesign: dropped subtitle line and inline email; added a circular
   avatar with a profile popover (email + sign out)
+- Design system pass: category color badges (icon + color per category),
+  status pills (Debts/CC), standardized empty states, skeleton loaders on
+  Home/Pending. Then a deliberate emoji-reduction pass — user felt the app
+  looked "toy-like"; kept emoji ONLY for nav icons, More-menu icons, category
+  badges, and small empty-state icons, stripped everywhere else (no more
+  ✅/❌ prefixes, no emoji in headers/status text/push titles).
+
+## Automation phase (started 2026-08-08, current focus)
+User's core ask: "zero interference" over time — the app should almost
+never need to ask for a category, and ALL routine interaction must happen
+in the PWA itself, never in Google Sheets (one-time data cleanup is the
+only acceptable exception).
+
+**Auto-categorization rebuild — root cause found and fixed:**
+- Diagnosed the `SmartMemory` sheet (merchant -> category learning table):
+  it was ~90% polluted by generic cash-note words ("tea","mart","lunch")
+  from an old one-time migration (`migrateToSmartMemory()`), NOT real bank
+  merchant names — because Cash entries only ever have a free-text note,
+  no real counterparty, yet fed the same table used for bank-transaction
+  matching. Confidence=75 + identical timestamp was the tell for migration
+  junk; confidence=100 + multiple uses (e.g. "NEELADRI VEGETABLE AND FR...")
+  was the tell for genuinely trustworthy data.
+- Fix: user renamed the old sheet, created a fresh `SmartMemory` with just
+  the trustworthy seed row(s) kept — done manually since it's one-time
+  (user explicitly OK with manual for one-time tasks, NOT for anything
+  ongoing).
+- Confirmed this pollution source can't recur: Telegram is off, and the
+  PWA's Cash tab never touches SmartMemory (category picked manually,
+  no learning write). Only real bank-transaction confirmations write to
+  it now, via `getPending`'s new `suggestedCategory` field (fast layers
+  only — merchant memory + hand-written keyword patterns, Gemini
+  deliberately skipped for bulk suggestions to avoid slow/costly calls on
+  a big backlog) and `saveNote`'s `handleCategoryCorrection` call.
+- Refined `matchByPattern` in category.js: split grocery-delivery apps
+  (Zepto/Blinkit/BigBasket/Instamart -> Need) from restaurant/food-delivery
+  apps (Swiggy/Zomato/Dunzo -> Want) — previously lumped together, which
+  also would have broken the Need/Want split below.
+- Self-learning loop (already fully in-app, confirmed working): unknown
+  merchant -> guesses "Other" -> user corrects once in Pending -> saved
+  permanently at confidence 100 -> every future transaction from that
+  merchant is auto-correct forever. No Sheets access needed at any point.
+
+**Next planned layer (not started): Need / Want / Saving tagging**, per the
+50/30/20 budgeting rule. Proposed category list (trimmed from 10) and
+default type mapping — pending final confirmation from user:
+
+| Category | Default type | Notes |
+|---|---|---|
+| Food | Want | unless grocery-pattern merchant (BigBasket, Instamart, etc.) -> Need |
+| Transport | Need | |
+| Bills | Need | |
+| Shopping | Want | |
+| Health | Need | |
+| Lifestyle | Want | |
+| Financial | Need or Saving | EMI/loan/insurance -> Need; SIP/mutual fund/investment -> Saving |
+| Income | — | excluded, not spending |
+| Other | Need | safe default |
+
+Also flagged by user, not yet started: revisit/rebuild other ported
+features for reliability (AI Advisor, CC Advisor, etc.) — explicitly
+sequenced AFTER the categorization system is solid, not concurrent.
+
+**Session continuity note:** this project has run in one very long
+conversation (context window got to ~92% full). User was advised to
+start fresh conversations at clean checkpoints like this one, relying on
+this file + memory to carry context forward rather than one endless
+thread. If resuming: check the roadmap table above for what's done, and
+the Automation phase section for exactly where categorization work left
+off before continuing.
+
+## Live deployment reference
+- **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
+- **PWA source**: https://github.com/ronit6050/fin-app (this repo, `D:\fin-app` — the one this file lives in). Plain HTML/CSS/JS in `index.html`, plus `sw.js` (service worker), `manifest.json`, `icons/`.
+- **Apps Script Web App URL** (what the PWA calls): `https://script.google.com/macros/s/AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v/exec` — also hardcoded as `APPS_SCRIPT_URL` in `index.html`. If ever redeployed as a genuinely new deployment (not "manage deployments -> new version"), this URL changes and must be updated in `index.html`.
+- **Apps Script project**: named "Telegram Note Fetcher" in the Apps Script editor (misleading name, historical) — edited directly at script.google.com, NOT through this repo. See "finance-bot backend — current state" below, this matters a lot.
+- **Firebase project**: `fin-app-76c40`, used only for push notifications (Stage 8). Console: console.firebase.google.com.
+- **Only allowed user**: `ronitnadar9@gmail.com` — hardcoded in both `index.html` (`ALLOWED_EMAIL`) and Apps Script (`PWA_ALLOWED_EMAIL` in pwa.gs). Client-side check is UI-only; the real enforcement is server-side in Apps Script.
 
 ## Tech choices
 - Plain HTML, CSS, and JavaScript. No frameworks. Keep it simple.
-- Existing backend/brain lives here: https://github.com/ronit6050/finance-bot (Google Apps Script + Google Sheets).
+- Backend/brain: Google Apps Script + Google Sheets, originally from https://github.com/ronit6050/finance-bot — **but see the note below, that GitHub repo is now stale and does NOT reflect the live backend.**
 
 ## How to work with me
 - One step at a time.
 - Clear comments in the code.
 - Plain, simple explanations.
 
-## finance-bot architecture (reviewed 2026-08-07)
-Telegram is currently the front door. Every message/button hits one webhook
-(`doPost` in `main.js`) → routed in `handlers.js` → feature module → reads/writes
-Google Sheets → sometimes calls Gemini AI for advice.
+## finance-bot backend — current state (updated 2026-08-08)
+
+**IMPORTANT: the GitHub repo (ronit6050/finance-bot) is STALE.** Every backend
+change made while building the PWA was pasted directly into the live Apps
+Script editor (script.google.com) by the user, copy-pasting code given in
+chat — none of it was ever pushed back to GitHub. If you (or a future
+session) clone/read that repo expecting it to match reality, it won't for
+anything touched since 2026-08-08. Treat descriptions below as the source of
+truth for the live backend; the GitHub repo only reflects the original
+Telegram-only version.
+
+Originally Telegram was the only front door: every message/button hit one
+webhook (`doPost` in `main.js`) → routed in `handlers.js` → feature module →
+read/wrote Google Sheets → sometimes called Gemini AI for advice. The PWA is
+now a second front door into the same backend, added alongside it.
 
 **Sheets (the database):**
-- `Transactions` — bank transactions, alerted via Telegram, notes added by reply
-- `Cash` — manual cash spend/receive entries
+- `Transactions` — bank transactions (written by Tasker independently), notes/category added via Pending in the PWA (or historically via Telegram reply)
+- `Cash` — manual cash spend/receive entries (now written by the PWA's Cash tab, category picked manually — does NOT feed SmartMemory)
 - `Credit_Card` — parsed credit card statement uploads
 - `Debts` — lent/borrowed money, due dates, settlement status
 - `Savings` — savings entries split into 3 pots (Emergency/WishList/Free)
 - `Investments` — investment logs
 - `WishList` — savings goals
-- `SmartMemory` / `CategoryMemory` — learned merchant → category mappings
-- `AILogs` — error/event log
+- `SmartMemory` — learned merchant → category mappings. **Rebuilt clean on 2026-08-08** after the original was found ~90% polluted by generic cash-note words from an old migration; old sheet renamed `SmartMemory_old_...` (or similar, user did this manually), new `SmartMemory` seeded with only the few trustworthy rows (confidence 100 / used multiple times). See "Automation phase" section above for full diagnosis.
+- `CategoryMemory` — old legacy pre-SmartMemory table, superseded, not actively used
+- `AILogs` — error/event log — useful for debugging (e.g. `PUSH_SENT`/`PUSH_ERROR`/`PUSH_TOKEN_ERROR` entries when push notifications misbehave)
 
-**Feature modules (one file each):**
-- `transactions.js` — bank transaction alerts + note-taking
-- `cash.js` — cash tracking, daily 8pm check-in
-- `category.js` — 4-layer smart category engine (memory → fuzzy → pattern → Gemini), learns from corrections
-- `Credit Card.js` — credit card statement import/parsing
-- `CCAdvisor.js` — CC usage vs ₹50,000 combined limit, 18th→18th billing cycle, 25%/30% alerts
-- `DebtAdvisor.js` — lent/borrowed tracking, due-date reminders, settlements, AI repayment plans
-- `SavingsAdvisor.js` — 3-pot auto-split savings, wishlist affordability tracking
-- `Analysis.js` / `Summary.js` — monthly/daily spend breakdowns, charts, Gemini insights
-- `Recon.js` — reconciles uploaded bank statement against `Transactions`
-- `AIAdvisor.js` — Gemini reaction after each transaction note
-- `telegram.js` — Telegram dashboard/menu UI
-- `Logger.js` — silent error logging to `AILogs`
+**Original feature modules (one file each, pre-PWA):**
+- `transactions.js` — bank transaction alerts + note-taking. **Modified**: `processNewTransactions()` now checks a `TELEGRAM_ENABLED` flag before sending to Telegram (currently `false`), and always also calls `sendPushNotification(...)` for new transactions.
+- `cash.js` — Telegram cash tracking, daily 8pm check-in (still callable, but Telegram is off so this path is dormant unless re-enabled)
+- `category.js` — smart category engine (memory → fuzzy → pattern → Gemini), learns from corrections. **Modified**: `matchByPattern`'s food-delivery rule split into grocery-delivery (Zepto/Blinkit/BigBasket/Instamart → Need) vs restaurant-delivery (Swiggy/Zomato/Dunzo → Want). **Added**: `migrateSmartMemoryToClean()`, a one-time utility function (already run) that archived the old SmartMemory and rebuilt it clean.
+- `Credit Card.js` — credit card statement import/parsing (untouched)
+- `CCAdvisor.js` — CC usage vs ₹50,000 combined limit, 18th→18th billing cycle, 25%/30% alerts. Its constants (`CC_LIMIT`, `CC_WARN_AMT`, `CC_ALERT_AMT`) are reused directly by `pwa.gs`'s CC function — do not redeclare these elsewhere, Apps Script shares one global scope across all files and it will collide.
+- `DebtAdvisor.js` — lent/borrowed tracking, due-date reminders, settlements, AI repayment plans (untouched, its logic is reused by pwa.gs's debt functions)
+- `SavingsAdvisor.js` — 3-pot auto-split savings, wishlist affordability tracking. Its `getSavingsTotals()`, `getSplitRule()`, `getStageLabel()`, and constants (`EMERGENCY_TARGET`, `MONTHLY_SAVE_GOAL`) are reused directly by pwa.gs — same global-scope reuse pattern.
+- `Analysis.js` / `Summary.js` — original Telegram-triggered monthly/daily spend breakdowns with charts + Gemini insight text (untouched, still Telegram-only; the PWA's Today/Analysis screens use separate lighter functions in pwa.gs, not these)
+- `Recon.js` — reconciles uploaded bank statement against `Transactions` (untouched, Telegram-only, not yet ported to PWA)
+- `AIAdvisor.js` — Gemini reaction after each transaction note (untouched, Telegram-only path, dormant since Telegram is off)
+- `telegram.js` — Telegram dashboard/menu UI. **Modified**: added `const TELEGRAM_ENABLED = false;` (the on/off switch — flip to `true` to instantly restore Telegram sending). `sendMessage(text)` now only sends to Telegram if that flag is true, and — regardless of the flag — always also calls `sendPushNotification()`, using the message's first line as the push title and the rest as the body. This one change is what extended push to every existing proactive alert (CC warnings, debt nudges, savings reminders, daily check-in) without touching those files individually.
+- `Logger.js` — silent error logging to `AILogs` (untouched, `logAI(type, message)` used throughout, including by the new pwa.gs/push.gs code)
 
-**Key fact for PWA integration:** the Apps Script is already deployed as a public
-Web App (`appsscript.json` → `"access": "ANYONE_ANONYMOUS"`). Today `doPost(e)`
-only understands Telegram's payload shape and checks the message's `chat_id`
-against mine, silently dropping anything else. Adding the PWA means teaching
-`doPost` to recognize "this is from my PWA" (its own secret/token check, since
-Telegram's `chat_id` check won't apply to it).
+**New files, added for the PWA (do not exist in the GitHub repo):**
+- `main.js` **modified**: `doPost(e)` now branches — if the incoming JSON has an `action` field, routes to `handlePwaRequest(data)`; otherwise falls through to the original `handleTelegramUpdate(e)` unchanged. This is the single shared entry point both Telegram and the PWA hit.
+- **`pwa.gs`** (new file) — everything the PWA talks to, one action per `data.action` value routed inside `handlePwaRequest(data)`. Every action first calls `verifyGoogleIdToken(data.idToken)` (checks the token against Google's tokeninfo endpoint, then checks `PWA_ALLOWED_EMAIL`) before doing anything. Actions implemented: `ping`, `getPending` (includes a `suggestedCategory` per item via `getSuggestedCategoryFast`, fast layers only, no Gemini), `saveNote` (writes note+category, also calls `handleCategoryCorrection` to teach SmartMemory using the real counterparty), `getTodaySummary`, `getMonthlyAnalysis`, `getCCAdvisor`, `getDebts`/`addDebt`/`settleDebt`, `getSavings`/`logSaving`/`addWishlistItem`/`markWishlistPurchased`, `getInvestments`/`logInvestment`, `getCash`/`addCashEntry`, `registerPushToken`, `getDashboard` (aggregates several of the above into one call for the Home screen).
+- **`push.gs`** (new file) — real background push via Firebase Cloud Messaging. `sendPushNotification(title, body)` reads the saved device token from Script Properties (`PWA_PUSH_TOKEN`) and a service account key (`FIREBASE_SERVICE_ACCOUNT`, also Script Properties — sensitive, never in any file/repo) to sign a JWT (`getFirebaseAccessToken()`) and call FCM's HTTP v1 API directly. `testPushNotification()` is a manual-run test helper.
+
+**Script Properties** (Project Settings in the Apps Script editor — not in any file):
+- `BOT_TOKEN`, `CHAT_ID`, `GEMINI_KEY` — pre-existing, for Telegram/Gemini
+- `PWA_PUSH_TOKEN` (new) — the current device's Firebase push registration token, single value, overwritten each time `registerPushToken` runs
+- `FIREBASE_SERVICE_ACCOUNT` (new) — the full service-account JSON from Firebase Console, used only server-side to sign push-send requests. Sensitive, treat like a password.
+
+**Web App deployment settings:** deployed with `"access": "ANYONE_ANONYMOUS"` in `appsscript.json` (unauthenticated at the HTTP layer — this is normal/required for both Telegram webhooks and the PWA to reach it). Real security is entirely inside `doPost`/`verifyGoogleIdToken`, not at the deployment-access level.
