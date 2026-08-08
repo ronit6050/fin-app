@@ -29,7 +29,24 @@
       --color-primary-dark: #2559c4;
       --color-danger: #d93025;
       --color-warning: #f29900;
+      --color-success: #1e8e3e;
+      --bg-danger: #fcebeb;
+      --bg-warning: #faeeda;
+      --bg-success: #eaf3de;
       --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.08);
+
+      /* Category colors — each a light background + a readable dark text
+         of the same hue, so badges stay consistent wherever they appear. */
+      --cat-food-bg:      #faece7; --cat-food-text:      #8a3a1f;
+      --cat-transport-bg: #e6f1fb; --cat-transport-text: #0c447c;
+      --cat-bills-bg:     #f1efe8; --cat-bills-text:     #5f5e5a;
+      --cat-shopping-bg:  #fbeaf0; --cat-shopping-text:  #8a3050;
+      --cat-lifestyle-bg: #eeedfe; --cat-lifestyle-text: #4a4299;
+      --cat-financial-bg: #e1f5ee; --cat-financial-text: #0f6e56;
+      --cat-income-bg:    #eaf3de; --cat-income-text:    #3b6d11;
+      --cat-education-bg: #faeeda; --cat-education-text: #854f0b;
+      --cat-health-bg:    #fcebeb; --cat-health-text:    #a3401f;
+      --cat-other-bg:     #f1efe8; --cat-other-text:     #5f5e5a;
     }
 
     /* ---------- Basic page setup ---------- */
@@ -379,6 +396,67 @@
       border-radius: 6px;
     }
 
+    /* ---------- Category badge — icon + color chip, used wherever a
+       category name is shown (replaces plain text) ---------- */
+    .category-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    /* ---------- Status pill — small colored label for a state
+       (overdue, due soon, settled, healthy, warning, alert) ---------- */
+    .status-pill {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    .status-pill.danger  { background: var(--bg-danger);  color: var(--color-danger); }
+    .status-pill.warning { background: var(--bg-warning); color: var(--color-warning); }
+    .status-pill.success { background: var(--bg-success); color: var(--color-success); }
+
+    /* ---------- Empty states — icon + friendly message, used instead
+       of plain gray text wherever a list has nothing in it ---------- */
+    .empty-state {
+      text-align: center;
+      padding: 24px 12px;
+      color: #666;
+    }
+
+    .empty-state .empty-icon {
+      font-size: 1.8rem;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .empty-state p {
+      margin: 0;
+      font-size: 0.9rem;
+    }
+
+    /* ---------- Skeleton loading placeholders — shown instead of a
+       spinner while a screen's real data is still loading ---------- */
+    .skeleton-block {
+      background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%);
+      background-size: 200% 100%;
+      animation: skeleton-shimmer 1.3s ease-in-out infinite;
+      border-radius: 10px;
+    }
+
+    @keyframes skeleton-shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
     /* ---------- Debts ---------- */
     .debt-item {
       background: white;
@@ -403,16 +481,6 @@
       font-size: 0.8rem;
       color: #777;
       margin-bottom: 8px;
-    }
-
-    .debt-overdue {
-      color: var(--color-danger);
-      font-weight: bold;
-    }
-
-    .debt-due-soon {
-      color: var(--color-warning);
-      font-weight: bold;
     }
 
     .debt-item .settle-btn {
@@ -568,7 +636,7 @@
     <!-- ===== Shown if someone signs in with the WRONG account ===== -->
     <div class="signin-box" id="notAllowedBox" style="display:none">
       <div style="text-align:center">
-        <p style="margin:0 0 8px 0">🚫 This app is only for Ronit's account.</p>
+        <p style="margin:0 0 8px 0">This app is only for Ronit's account.</p>
         <button class="signout-link" id="tryAgainButton">Try a different account</button>
       </div>
     </div>
@@ -581,7 +649,17 @@
 
       <!-- ===== TAB: Home — dashboard, the new default landing screen ===== -->
       <section id="view-home" class="tab-view">
-        <div id="homeStatus"><span class="spinner"></span>Loading...</div>
+        <div id="homeStatus">
+          <div class="skeleton-block" style="height:110px; margin-bottom:16px;"></div>
+          <div class="stat-grid" style="margin-bottom:16px;">
+            <div class="skeleton-block" style="height:56px;"></div>
+            <div class="skeleton-block" style="height:56px;"></div>
+            <div class="skeleton-block" style="height:56px;"></div>
+            <div class="skeleton-block" style="height:56px;"></div>
+          </div>
+          <div class="skeleton-block" style="height:36px; margin-bottom:8px;"></div>
+          <div class="skeleton-block" style="height:36px;"></div>
+        </div>
         <div id="homeContent" style="display:none">
 
           <div class="hero-card">
@@ -619,8 +697,12 @@
            were already alerted but still have no note show up here. -->
       <section id="view-pending" class="tab-view" style="display:none">
         <h2 class="section-title">Pending Transactions</h2>
-        <div class="pending-status" id="pendingStatus"><span class="spinner"></span>Loading...</div>
-        <div id="pendingList"></div>
+        <div class="pending-status" id="pendingStatus"></div>
+        <div id="pendingList">
+          <div class="skeleton-block" style="height:120px; margin-bottom:12px;"></div>
+          <div class="skeleton-block" style="height:120px; margin-bottom:12px;"></div>
+          <div class="skeleton-block" style="height:120px; margin-bottom:12px;"></div>
+        </div>
         <button type="button" id="showMoreButton" style="display:none">Show more</button>
       </section>
 
@@ -704,7 +786,6 @@
           <div class="category-row">
             <div class="category-top">
               <span id="ccUsageLabel">0%</span>
-              <span id="ccStatusIcon"></span>
             </div>
             <div class="category-bar-track">
               <div class="category-bar-fill" id="ccUsageBar" style="width:0%"></div>
@@ -736,10 +817,10 @@
             <div class="today-split" id="debtsTotalsLine"></div>
           </div>
 
-          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">🔴 You Owe</h3>
+          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">You owe</h3>
           <div id="debtsYouOwe"></div>
 
-          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">🟢 They Owe You</h3>
+          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">They owe you</h3>
           <div id="debtsTheyOwe"></div>
 
           <button type="button" id="addDebtToggleButton" style="margin-top:16px;">+ Add Debt</button>
@@ -782,7 +863,7 @@
         <div id="savingsContent" style="display:none">
 
           <div class="today-total-box">
-            <div class="today-total-label">🛡️ Emergency Fund</div>
+            <div class="today-total-label">Emergency fund</div>
             <div class="today-total-amount" id="savingsEmergencyAmount">₹0</div>
             <div class="today-split" id="savingsEmergencyTarget"></div>
           </div>
@@ -797,13 +878,13 @@
 
           <div class="category-row" style="margin-top:14px;">
             <div class="category-top">
-              <span>🎯 Wish List Pot</span>
+              <span>Wish list pot</span>
               <span id="savingsWishlistAmount">₹0</span>
             </div>
           </div>
           <div class="category-row">
             <div class="category-top">
-              <span>💰 Free Savings</span>
+              <span>Free savings</span>
               <span id="savingsFreeAmount">₹0</span>
             </div>
           </div>
@@ -865,7 +946,7 @@
           <div class="today-total-box">
             <div class="today-total-label">Total Invested</div>
             <div class="today-total-amount" id="investmentsTotalAmount">₹0</div>
-            <div class="today-split">⚠️ Separate from savings — not counted toward your emergency fund</div>
+            <div class="today-split">Separate from savings — not counted toward your emergency fund</div>
           </div>
 
           <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Breakdown</h3>
@@ -1155,6 +1236,30 @@
       "Financial", "Income", "Education", "Health", "Other"
     ];
 
+    // One emoji + one color per category, matching the CSS variables
+    // defined in <style>. Used to build a consistent badge everywhere
+    // a category name is shown.
+    const CATEGORY_STYLES = {
+      Food:       { icon: "🍔", css: "food" },
+      Transport:  { icon: "🚗", css: "transport" },
+      Bills:      { icon: "🧾", css: "bills" },
+      Shopping:   { icon: "🛍️", css: "shopping" },
+      Lifestyle:  { icon: "🎬", css: "lifestyle" },
+      Financial:  { icon: "💰", css: "financial" },
+      Income:     { icon: "💵", css: "income" },
+      Education:  { icon: "📚", css: "education" },
+      Health:     { icon: "🏥", css: "health" },
+      Other:      { icon: "📦", css: "other" }
+    };
+
+    // Builds a small colored pill for a category name — used instead of
+    // plain text wherever a category shows up (Today, Analysis, CC top
+    // categories, Pending items).
+    function categoryBadgeHtml(categoryName) {
+      const style = CATEGORY_STYLES[categoryName] || CATEGORY_STYLES.Other;
+      return `<span class="category-badge" style="background:var(--cat-${style.css}-bg); color:var(--cat-${style.css}-text);">${style.icon} ${categoryName}</span>`;
+    }
+
     const pendingStatusEl  = document.getElementById("pendingStatus");
     const pendingListEl    = document.getElementById("pendingList");
     const showMoreButtonEl = document.getElementById("showMoreButton");
@@ -1231,7 +1336,14 @@
       if (cached) {
         renderDashboard(cached);
       } else {
-        homeStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+        homeStatusEl.innerHTML =
+          '<div class="skeleton-block" style="height:110px; margin-bottom:16px;"></div>' +
+          '<div class="stat-grid" style="margin-bottom:16px;">' +
+          '<div class="skeleton-block" style="height:56px;"></div><div class="skeleton-block" style="height:56px;"></div>' +
+          '<div class="skeleton-block" style="height:56px;"></div><div class="skeleton-block" style="height:56px;"></div>' +
+          '</div>' +
+          '<div class="skeleton-block" style="height:36px; margin-bottom:8px;"></div>' +
+          '<div class="skeleton-block" style="height:36px;"></div>';
         homeContentEl.style.display = "none";
       }
 
@@ -1241,7 +1353,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              homeStatusEl.textContent = "❌ " + data.error;
+              homeStatusEl.textContent = data.error;
             }
             return;
           }
@@ -1251,7 +1363,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          homeStatusEl.textContent = "❌ Couldn't load: " + err.message;
+          homeStatusEl.textContent = "Couldn't load: " + err.message;
         });
     }
 
@@ -1268,7 +1380,7 @@
 
       homeRecentEl.innerHTML = "";
       if (d.recent.length === 0) {
-        homeRecentEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">Nothing pending right now.</p>";
+        homeRecentEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🎉</span><p>Nothing pending right now.</p></div>";
       } else {
         d.recent.forEach(function (entry) {
           const row = document.createElement("div");
@@ -1292,7 +1404,7 @@
         pendingListEl.innerHTML = "";
 
         if (allPending.length === 0) {
-          pendingStatusEl.textContent = "✅ All caught up — nothing pending!";
+          pendingStatusEl.textContent = "All caught up — nothing pending.";
         } else {
           showNextBatch();
         }
@@ -1308,9 +1420,10 @@
         return;
       }
 
-      // No saved copy yet — this is a first-ever visit, load normally
-      pendingStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
-      pendingListEl.innerHTML = "";
+      // No saved copy yet — this is a first-ever visit, load normally.
+      // pendingListEl already shows skeleton placeholders by default, so
+      // we leave it alone until the real data is ready to replace it.
+      pendingStatusEl.textContent = "";
       showMoreButtonEl.style.display = "none";
       allPending = [];
       shownCount = 0;
@@ -1321,7 +1434,8 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else {
-              pendingStatusEl.textContent = "❌ " + data.error;
+              pendingListEl.innerHTML = "";
+              pendingStatusEl.textContent = data.error;
             }
             return;
           }
@@ -1333,15 +1447,18 @@
           // before any notification checking starts.
           knownRows = new Set(allPending.map(function (t) { return t.row; }));
 
+          pendingListEl.innerHTML = ""; // clear the skeleton placeholders
+
           if (allPending.length === 0) {
-            pendingStatusEl.textContent = "✅ All caught up — nothing pending!";
+            pendingStatusEl.textContent = "All caught up — nothing pending.";
             return;
           }
 
           showNextBatch();
         })
         .catch(function (err) {
-          pendingStatusEl.textContent = "❌ Couldn't load: " + err.message;
+          pendingListEl.innerHTML = "";
+          pendingStatusEl.textContent = "Couldn't load: " + err.message;
         });
     }
 
@@ -1358,7 +1475,7 @@
     // Keeps the "Showing X of Y" text and the Show More button in sync
     function updatePendingStatusText() {
       if (allPending.length === 0) {
-        pendingStatusEl.textContent = "✅ All caught up — nothing pending!";
+        pendingStatusEl.textContent = "All caught up — nothing pending.";
         showMoreButtonEl.style.display = "none";
         return;
       }
@@ -1423,11 +1540,11 @@
               updatePendingStatusText();
               saveCache("pending", allPending); // so it doesn't briefly reappear next time
             } else {
-              resultEl.textContent = "❌ " + data.error;
+              resultEl.textContent = data.error;
             }
           })
           .catch(function (err) {
-            resultEl.textContent = "❌ " + err.message;
+            resultEl.textContent = err.message;
           });
       });
 
@@ -1485,7 +1602,7 @@
       const body = "₹" + txn.amount.toLocaleString("en-IN") + counterpartyText;
 
       navigator.serviceWorker.ready.then(function (registration) {
-        registration.showNotification("💳 New transaction", { body: body });
+        registration.showNotification("New transaction", { body: body });
       });
     }
 
@@ -1648,7 +1765,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              todayStatusEl.textContent = "❌ " + data.error;
+              todayStatusEl.textContent = data.error;
             }
             return;
           }
@@ -1658,7 +1775,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          todayStatusEl.textContent = "❌ Couldn't load: " + err.message;
+          todayStatusEl.textContent = "Couldn't load: " + err.message;
         });
     }
 
@@ -1675,7 +1792,7 @@
       todayCategoriesEl.innerHTML = "";
 
       if (summary.categories.length === 0) {
-        todayCategoriesEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">Nothing spent yet today. 🎉</p>";
+        todayCategoriesEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🎉</span><p>Nothing spent yet today.</p></div>";
         return;
       }
 
@@ -1689,7 +1806,7 @@
         row.className = "category-row";
         row.innerHTML = `
           <div class="category-top">
-            <span>${entry.category}</span>
+            ${categoryBadgeHtml(entry.category)}
             <span>₹${entry.amount.toLocaleString("en-IN")}</span>
           </div>
           <div class="category-bar-track">
@@ -1747,7 +1864,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              analysisStatusEl.textContent = "❌ " + data.error;
+              analysisStatusEl.textContent = data.error;
             }
             return;
           }
@@ -1757,7 +1874,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          analysisStatusEl.textContent = "❌ Couldn't load: " + err.message;
+          analysisStatusEl.textContent = "Couldn't load: " + err.message;
         });
     }
 
@@ -1779,7 +1896,7 @@
       analysisCategoriesEl.innerHTML = "";
 
       if (a.categories.length === 0) {
-        analysisCategoriesEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">No spending recorded this month.</p>";
+        analysisCategoriesEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">📭</span><p>No spending recorded this month.</p></div>";
         return;
       }
 
@@ -1792,7 +1909,7 @@
         row.className = "category-row";
         row.innerHTML = `
           <div class="category-top">
-            <span>${entry.category}</span>
+            ${categoryBadgeHtml(entry.category)}
             <span>₹${entry.amount.toLocaleString("en-IN")}</span>
           </div>
           <div class="category-bar-track">
@@ -1805,7 +1922,7 @@
       if (a.topAmount > 0) {
         const topLine = document.createElement("p");
         topLine.style.cssText = "font-size:0.85rem; color:#666; margin-top:10px;";
-        topLine.textContent = "🏆 Top expense: ₹" + a.topAmount.toLocaleString("en-IN") +
+        topLine.textContent = "Top expense: ₹" + a.topAmount.toLocaleString("en-IN") +
           (a.topNote ? " (" + a.topNote + ")" : "");
         analysisCategoriesEl.appendChild(topLine);
       }
@@ -1831,7 +1948,6 @@
     const ccCycleDatesEl    = document.getElementById("ccCycleDates");
     const ccUsageLabelEl    = document.getElementById("ccUsageLabel");
     const ccUsageBarEl      = document.getElementById("ccUsageBar");
-    const ccStatusIconEl    = document.getElementById("ccStatusIcon");
     const ccStatusMessageEl = document.getElementById("ccStatusMessage");
     const ccDueInfoEl       = document.getElementById("ccDueInfo");
     const ccProjectionEl    = document.getElementById("ccProjection");
@@ -1854,7 +1970,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              ccStatusEl.textContent = "❌ " + data.error;
+              ccStatusEl.textContent = data.error;
             }
             return;
           }
@@ -1864,7 +1980,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          ccStatusEl.textContent = "❌ Couldn't load: " + err.message;
+          ccStatusEl.textContent = "Couldn't load: " + err.message;
         });
     }
 
@@ -1881,22 +1997,21 @@
 
       // Colour and message depend on how close to the limit we are
       let barColor = "var(--color-primary)";
-      let icon = "✅";
-      let statusText = "Usage healthy — within safe limits";
+      let statusText = "Usage healthy";
+      let pillClass = "success";
 
       if (cc.status === "alert") {
         barColor = "var(--color-danger)";
-        icon = "🚨";
-        statusText = "ALERT: Hit 30% of your combined credit limit!";
+        statusText = "Alert: hit 30% of limit";
+        pillClass = "danger";
       } else if (cc.status === "warning") {
         barColor = "var(--color-warning)";
-        icon = "⚠️";
-        statusText = "WARNING: Crossed 25% of your combined credit limit";
+        statusText = "Warning: crossed 25% of limit";
+        pillClass = "warning";
       }
 
       ccUsageBarEl.style.background = barColor;
-      ccStatusIconEl.textContent = icon;
-      ccStatusMessageEl.textContent = statusText;
+      ccStatusMessageEl.innerHTML = `<span class="status-pill ${pillClass}">${statusText}</span>`;
 
       ccDueInfoEl.textContent =
         cc.daysLeft + " day" + (cc.daysLeft === 1 ? "" : "s") + " left in cycle · Due " +
@@ -1908,12 +2023,12 @@
 
       ccSafeDailyEl.textContent = cc.safeDaily > 0
         ? "Safe to spend: ₹" + cc.safeDaily.toLocaleString("en-IN") + "/day to stay under 30%"
-        : "🚨 Avoid further card spending to stay under 30%";
+        : "Avoid further card spending to stay under 30%";
 
       // Per-card breakdown
       ccCardBreakdownEl.innerHTML = "";
       if (cc.cardBreakdown.length === 0) {
-        ccCardBreakdownEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">No card transactions this cycle.</p>";
+        ccCardBreakdownEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💳</span><p>No card transactions this cycle.</p></div>";
       } else {
         cc.cardBreakdown.forEach(function (entry) {
           const row = document.createElement("div");
@@ -1931,7 +2046,7 @@
       // Top categories, same bar style used elsewhere
       ccTopCategoriesEl.innerHTML = "";
       if (cc.topCategories.length === 0) {
-        ccTopCategoriesEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">No data yet.</p>";
+        ccTopCategoriesEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💳</span><p>No card transactions yet.</p></div>";
       } else {
         const maxAmount = cc.topCategories[0].amount;
         cc.topCategories.forEach(function (entry) {
@@ -1940,7 +2055,7 @@
           row.className = "category-row";
           row.innerHTML = `
             <div class="category-top">
-              <span>${entry.category}</span>
+              ${categoryBadgeHtml(entry.category)}
               <span>₹${entry.amount.toLocaleString("en-IN")}</span>
             </div>
             <div class="category-bar-track">
@@ -1988,7 +2103,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              debtsStatusEl.textContent = "❌ " + data.error;
+              debtsStatusEl.textContent = data.error;
             }
             return;
           }
@@ -1998,17 +2113,17 @@
         })
         .catch(function (err) {
           if (cached) return;
-          debtsStatusEl.textContent = "❌ Couldn't load: " + err.message;
+          debtsStatusEl.textContent = "Couldn't load: " + err.message;
         });
     }
 
     // Turns a debt entry's due-date info into a short status line
     function formatDebtDueText(entry) {
       if (entry.isOverdue) {
-        return `<span class="debt-overdue">🚨 Overdue by ${Math.abs(entry.daysUntilDue)}d</span>`;
+        return `<span class="status-pill danger">Overdue ${Math.abs(entry.daysUntilDue)}d</span>`;
       }
       if (entry.dueSoon) {
-        return `<span class="debt-due-soon">⚠️ Due in ${entry.daysUntilDue}d</span>`;
+        return `<span class="status-pill warning">Due in ${entry.daysUntilDue}d</span>`;
       }
       if (entry.dueDate) {
         return "Due " + entry.dueDate;
@@ -2047,11 +2162,11 @@
               callAppsScript({ action: "getDebts", idToken: currentUser.idToken })
                 .then(function (fresh) { if (fresh.ok) saveCache("debts", fresh.debts); });
             } else {
-              resultEl.textContent = "❌ " + data.error;
+              resultEl.textContent = data.error;
             }
           })
           .catch(function (err) {
-            resultEl.textContent = "❌ " + err.message;
+            resultEl.textContent = err.message;
           });
       });
 
@@ -2076,13 +2191,13 @@
       const theyOwe = d.debts.filter(function (e) { return e.type === "LENT" || e.type === "SPLIT"; });
 
       if (youOwe.length === 0) {
-        debtsYouOweEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">None — you're clean!</p>";
+        debtsYouOweEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">✅</span><p>None — you're clean!</p></div>";
       } else {
         youOwe.forEach(function (entry) { debtsYouOweEl.appendChild(buildDebtItem(entry)); });
       }
 
       if (theyOwe.length === 0) {
-        debtsTheyOweEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">None pending.</p>";
+        debtsTheyOweEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🤝</span><p>None pending.</p></div>";
       } else {
         theyOwe.forEach(function (entry) { debtsTheyOweEl.appendChild(buildDebtItem(entry)); });
       }
@@ -2099,7 +2214,7 @@
       const amount = parseFloat(debtAmountInputEl.value);
 
       if (!person || !amount || amount <= 0) {
-        addDebtResultEl.textContent = "❌ Enter a person and a valid amount.";
+        addDebtResultEl.textContent = "Enter a person and a valid amount.";
         return;
       }
 
@@ -2128,11 +2243,11 @@
                 if (fresh.ok) { saveCache("debts", fresh.debts); renderDebts(fresh.debts); }
               });
           } else {
-            addDebtResultEl.textContent = "❌ " + data.error;
+            addDebtResultEl.textContent = data.error;
           }
         })
         .catch(function (err) {
-          addDebtResultEl.textContent = "❌ " + err.message;
+          addDebtResultEl.textContent = err.message;
         });
     });
 
@@ -2179,7 +2294,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              savingsStatusEl.textContent = "❌ " + data.error;
+              savingsStatusEl.textContent = data.error;
             }
             return;
           }
@@ -2189,7 +2304,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          savingsStatusEl.textContent = "❌ Couldn't load: " + err.message;
+          savingsStatusEl.textContent = "Couldn't load: " + err.message;
         });
     }
 
@@ -2224,7 +2339,7 @@
 
       wishlistItemsEl.innerHTML = "";
       if (s.wishItems.length === 0) {
-        wishlistItemsEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">No active wish list items yet.</p>";
+        wishlistItemsEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🎯</span><p>No active wish list items yet.</p></div>";
       } else {
         s.wishItems.forEach(function (entry) {
           wishlistItemsEl.appendChild(buildWishlistItem(entry, s.wishlist));
@@ -2241,7 +2356,7 @@
         : 0;
 
       const actionHtml = entry.canAfford
-        ? '<button type="button" class="settle-btn purchase-btn" style="margin-top:8px;">✅ Mark Purchased</button><div class="pending-result"></div>'
+        ? '<button type="button" class="settle-btn purchase-btn" style="margin-top:8px;">Mark Purchased</button><div class="pending-result"></div>'
         : `<div style="font-size:0.8rem; color:#777; margin-top:6px;">Need ₹${entry.remaining.toLocaleString("en-IN")} more</div>`;
 
       card.innerHTML = `
@@ -2272,11 +2387,11 @@
               if (data.ok) {
                 refreshSavings(); // refresh everything — purchase changes pot totals too
               } else {
-                resultEl.textContent = "❌ " + data.error;
+                resultEl.textContent = data.error;
               }
             })
             .catch(function (err) {
-              resultEl.textContent = "❌ " + err.message;
+              resultEl.textContent = err.message;
             });
         });
       }
@@ -2295,7 +2410,7 @@
       const price = parseFloat(wishPriceInputEl.value);
 
       if (!item || !price || price <= 0) {
-        addWishlistResultEl.textContent = "❌ Enter an item name and a valid price.";
+        addWishlistResultEl.textContent = "Enter an item name and a valid price.";
         return;
       }
 
@@ -2316,11 +2431,11 @@
             addWishlistFormEl.style.display = "none";
             refreshSavings();
           } else {
-            addWishlistResultEl.textContent = "❌ " + data.error;
+            addWishlistResultEl.textContent = data.error;
           }
         })
         .catch(function (err) {
-          addWishlistResultEl.textContent = "❌ " + err.message;
+          addWishlistResultEl.textContent = err.message;
         });
     });
 
@@ -2330,7 +2445,7 @@
       const note   = savingNoteInputEl.value.trim();
 
       if (!amount || amount <= 0) {
-        logSavingResultEl.textContent = "❌ Enter a valid amount.";
+        logSavingResultEl.textContent = "Enter a valid amount.";
         return;
       }
 
@@ -2348,16 +2463,16 @@
             savingAmountInputEl.value = "";
             savingNoteInputEl.value = "";
             logSavingResultEl.textContent =
-              "✅ Split — Emergency: ₹" + data.emergencyAmt.toLocaleString("en-IN") +
+              "Split — Emergency: ₹" + data.emergencyAmt.toLocaleString("en-IN") +
               " · Wish List: ₹" + data.wishlistAmt.toLocaleString("en-IN") +
               " · Free: ₹" + data.freeAmt.toLocaleString("en-IN");
             refreshSavings(); // refresh totals
           } else {
-            logSavingResultEl.textContent = "❌ " + data.error;
+            logSavingResultEl.textContent = data.error;
           }
         })
         .catch(function (err) {
-          logSavingResultEl.textContent = "❌ " + err.message;
+          logSavingResultEl.textContent = err.message;
         });
     });
 
@@ -2390,7 +2505,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              investmentsStatusEl.textContent = "❌ " + data.error;
+              investmentsStatusEl.textContent = data.error;
             }
             return;
           }
@@ -2400,7 +2515,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          investmentsStatusEl.textContent = "❌ Couldn't load: " + err.message;
+          investmentsStatusEl.textContent = "Couldn't load: " + err.message;
         });
     }
 
@@ -2412,7 +2527,7 @@
 
       investmentsBreakdownEl.innerHTML = "";
       if (inv.breakdown.length === 0) {
-        investmentsBreakdownEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">No investments logged yet.</p>";
+        investmentsBreakdownEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💹</span><p>No investments logged yet.</p></div>";
       } else {
         const maxAmount = inv.breakdown[0].amount;
         inv.breakdown.forEach(function (entry) {
@@ -2434,7 +2549,7 @@
 
       investmentsRecentEl.innerHTML = "";
       if (inv.recent.length === 0) {
-        investmentsRecentEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">None yet.</p>";
+        investmentsRecentEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💹</span><p>None yet.</p></div>";
       } else {
         inv.recent.forEach(function (entry) {
           const row = document.createElement("div");
@@ -2455,7 +2570,7 @@
       const type   = investTypeInputEl.value.trim();
 
       if (!amount || amount <= 0 || !type) {
-        logInvestmentResultEl.textContent = "❌ Enter a type and a valid amount.";
+        logInvestmentResultEl.textContent = "Enter a type and a valid amount.";
         return;
       }
 
@@ -2471,18 +2586,18 @@
           if (data.ok) {
             investAmountInputEl.value = "";
             investTypeInputEl.value = "";
-            logInvestmentResultEl.textContent = "✅ Saved!";
+            logInvestmentResultEl.textContent = "Saved.";
             // Fetch fresh (not cache-first) since the cache is now stale
             callAppsScript({ action: "getInvestments", idToken: currentUser.idToken })
               .then(function (fresh) {
                 if (fresh.ok) { saveCache("investments", fresh.investments); renderInvestments(fresh.investments); }
               });
           } else {
-            logInvestmentResultEl.textContent = "❌ " + data.error;
+            logInvestmentResultEl.textContent = data.error;
           }
         })
         .catch(function (err) {
-          logInvestmentResultEl.textContent = "❌ " + err.message;
+          logInvestmentResultEl.textContent = err.message;
         });
     });
 
@@ -2522,7 +2637,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              cashStatusEl.textContent = "❌ " + data.error;
+              cashStatusEl.textContent = data.error;
             }
             return;
           }
@@ -2532,7 +2647,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          cashStatusEl.textContent = "❌ Couldn't load: " + err.message;
+          cashStatusEl.textContent = "Couldn't load: " + err.message;
         });
     }
 
@@ -2545,7 +2660,7 @@
 
       cashRecentEl.innerHTML = "";
       if (c.recent.length === 0) {
-        cashRecentEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">No cash entries yet.</p>";
+        cashRecentEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💵</span><p>No cash entries yet.</p></div>";
       } else {
         c.recent.forEach(function (entry) {
           const row = document.createElement("div");
@@ -2567,7 +2682,7 @@
       const amount = parseFloat(cashAmountInputEl.value);
 
       if (!amount || amount <= 0) {
-        cashResultEl.textContent = "❌ Enter a valid amount.";
+        cashResultEl.textContent = "Enter a valid amount.";
         return;
       }
 
@@ -2585,18 +2700,18 @@
           if (data.ok) {
             cashAmountInputEl.value = "";
             cashNoteInputEl.value = "";
-            cashResultEl.textContent = "✅ Saved!";
+            cashResultEl.textContent = "Saved.";
             // Fetch fresh (not cache-first) since the cache is now stale
             callAppsScript({ action: "getCash", idToken: currentUser.idToken })
               .then(function (fresh) {
                 if (fresh.ok) { saveCache("cash", fresh.cash); renderCash(fresh.cash); }
               });
           } else {
-            cashResultEl.textContent = "❌ " + data.error;
+            cashResultEl.textContent = data.error;
           }
         })
         .catch(function (err) {
-          cashResultEl.textContent = "❌ " + err.message;
+          cashResultEl.textContent = err.message;
         });
     });
 
