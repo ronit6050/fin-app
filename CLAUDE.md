@@ -64,7 +64,25 @@ exist in the PWA — order/timing can flex, but nothing gets dropped.
 | 8 | Real background push via Firebase (separate later phase) | Alerts arriving even when app is closed | done |
 | 9 | Daily check-ins, nudges, threshold alerts as push | Remaining proactive messages | done |
 | 10 | Turn off the Telegram bot | Full cutover | done |
-| 11 | Full UI/UX structuring pass (after everything above works) | — new phase, not a Telegram replacement | not started |
+| 11 | Full UI/UX structuring pass (after everything above works) | — new phase, not a Telegram replacement | in progress |
+
+## Step 11 notes (started 2026-08-08)
+Open-ended design pass — user gave full creative liberty ("take a reference
+of any app... think creatively... improve user's usage"), with one rule:
+show or describe a change before making it (mockups via the visualize tool
+work well for this). Not a fixed checklist — revisit and keep iterating.
+
+Done so far:
+- Navigation restructured: 8 scrolling tabs -> 4 (Home/Pending/Analysis/More)
+  + a "More" menu grid for the rest
+- Instant-load caching (stale-while-revalidate) on all screens
+- Visual pass: system font, CSS variables for shared colors/shadow, loading
+  spinner, tap feedback, app icon in header
+- New Home dashboard (default landing screen): today/month spend, 2x2 stat
+  grid (pending/cash/CC%/debts net), recent pending items — via one new
+  getDashboard Apps Script action reusing existing screen logic
+- Header redesign: dropped subtitle line and inline email; added a circular
+  avatar with a profile popover (email + sign out)
 
 ## Tech choices
 - Plain HTML, CSS, and JavaScript. No frameworks. Keep it simple.
