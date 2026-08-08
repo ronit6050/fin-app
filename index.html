@@ -789,6 +789,10 @@
             <span class="more-menu-icon">💵</span>
             <span>Cash</span>
           </button>
+          <button type="button" class="more-menu-item" data-target="reconcile">
+            <span class="more-menu-icon">🔎</span>
+            <span>Reconcile</span>
+          </button>
         </div>
 
       <!-- ===== SUB-SCREEN: Today's Summary ===== -->
@@ -1043,6 +1047,25 @@
           <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Recent</h3>
           <div id="cashRecent"></div>
         </div>
+      </div>
+
+      <!-- ===== SUB-SCREEN: Reconcile ===== -->
+      <div id="view-reconcile" style="display:none">
+        <button type="button" class="back-to-more">← Back</button>
+        <h2 class="section-title">Reconcile</h2>
+        <p class="pending-status">
+          Upload your bank statement (.xls) to find transactions that
+          might be missing from your Sheet — nothing gets added until
+          you review and approve each one below.
+        </p>
+
+        <div class="field">
+          <input type="file" id="reconFileInput" accept=".xls,.xlsx">
+        </div>
+        <button type="button" id="reconUploadButton">Check Statement</button>
+
+        <div id="reconStatus" class="pending-status" style="display:none"></div>
+        <div id="reconResults" style="margin-top:12px;"></div>
       </div>
 
       </section>
@@ -1737,7 +1760,8 @@
       debts:       document.getElementById("view-debts"),
       savings:     document.getElementById("view-savings"),
       investments: document.getElementById("view-investments"),
-      cash:        document.getElementById("view-cash")
+      cash:        document.getElementById("view-cash"),
+      reconcile:   document.getElementById("view-reconcile")
     };
 
     // Only load a screen's data the first time it's opened, not every time.
@@ -2791,6 +2815,201 @@
         .catch(function (err) {
           cashResultEl.textContent = err.message;
         });
+    });
+
+    // ---------------------------------------------------------
+    // RECONCILE — upload a bank statement, review what's missing,
+    // approve before anything gets added. See
+    // docs/features/reconciliation.md for the full design.
+    // ---------------------------------------------------------
+
+    const reconFileInputEl    = document.getElementById("reconFileInput");
+    const reconUploadButtonEl = document.getElementById("reconUploadButton");
+    const reconStatusEl       = document.getElementById("reconStatus");
+    const reconResultsEl      = document.getElementById("reconResults");
+
+    // Builds one review card for a missing transaction — same look and
+    // interaction as a Pending card (note, category, optional
+    // Need/Want/Saving), plus an Include checkbox for the bulk-approve step.
+    function buildReconItem(txn) {
+      const card = document.createElement("div");
+      card.className = "pending-item";
+
+      const suggested = txn.suggestedCategory || "Other";
+      const categoryOptionsHtml = CATEGORY_OPTIONS
+        .map(function (cat) {
+          const selectedAttr = (cat === suggested) ? " selected" : "";
+          return `<option value="${cat}"${selectedAttr}>${cat}</option>`;
+        })
+        .join("");
+
+      const showTypeToggle = txn.type !== "credit";
+      const typeToggleHtml = showTypeToggle ? `
+        <div class="field">
+          <label>Type</label>
+          <div class="type-toggle">
+            <button type="button" class="type-btn" data-type="Need">Need</button>
+            <button type="button" class="type-btn" data-type="Want">Want</button>
+            <button type="button" class="type-btn" data-type="Saving">Saving</button>
+          </div>
+        </div>
+      ` : "";
+
+      const noteValue = (txn.note || "").replace(/"/g, "&quot;");
+
+      card.innerHTML = `
+        <div class="pending-top">
+          <span class="pending-amount">₹${txn.amount.toLocaleString("en-IN")}</span>
+          <label style="display:flex; align-items:center; gap:6px; font-weight:normal; font-size:0.85rem;">
+            <input type="checkbox" class="recon-include" checked> Include
+          </label>
+        </div>
+        <div class="pending-meta">${txn.date} · ${txn.name || "Unknown"}${txn.type === "credit" ? " · credit" : ""}</div>
+        <div class="field">
+          <label>Note</label>
+          <input type="text" class="recon-note" value="${noteValue}" placeholder="What was this for?">
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <select class="recon-category">${categoryOptionsHtml}</select>
+        </div>
+        ${typeToggleHtml}
+      `;
+
+      let selectedType = null;
+      if (showTypeToggle) {
+        const typeButtons = card.querySelectorAll(".type-btn");
+        typeButtons.forEach(function (btn) {
+          if (txn.suggestedType && btn.dataset.type === txn.suggestedType) {
+            btn.classList.add("active");
+            selectedType = txn.suggestedType;
+          }
+          btn.addEventListener("click", function () {
+            typeButtons.forEach(function (b) { b.classList.remove("active"); });
+            btn.classList.add("active");
+            selectedType = btn.dataset.type;
+          });
+        });
+      }
+
+      // Keep the original parsed fields (not user-editable) attached to
+      // the card, so submitting can read both these and the edited ones.
+      card._reconTxn = txn;
+      card._getSelectedType = function () { return selectedType; };
+
+      return card;
+    }
+
+    function renderReconResults(data) {
+      reconStatusEl.style.display = "block";
+      reconStatusEl.textContent = data.matched + " already in your Sheet, " +
+        data.missing.length + " missing.";
+
+      reconResultsEl.innerHTML = "";
+
+      if (data.missing.length === 0) return;
+
+      const itemEls = data.missing.map(buildReconItem);
+      itemEls.forEach(function (el) { reconResultsEl.appendChild(el); });
+
+      const addButton = document.createElement("button");
+      addButton.type = "button";
+      addButton.textContent = "Add Selected Transactions";
+      addButton.style.marginTop = "8px";
+      addButton.addEventListener("click", function () {
+        submitReconciledTransactions(itemEls, addButton);
+      });
+      reconResultsEl.appendChild(addButton);
+    }
+
+    function submitReconciledTransactions(itemEls, addButton) {
+      const toSubmit = [];
+
+      itemEls.forEach(function (card) {
+        if (!card.querySelector(".recon-include").checked) return;
+
+        const txn = card._reconTxn;
+        toSubmit.push({
+          date:           txn.rawDate,
+          amount:         txn.amount,
+          type:           txn.type,
+          mode:           txn.mode,
+          ref:            txn.ref,
+          name:           txn.name,
+          note:           card.querySelector(".recon-note").value,
+          category:       card.querySelector(".recon-category").value,
+          needWantSaving: card._getSelectedType()
+        });
+      });
+
+      if (toSubmit.length === 0) {
+        reconStatusEl.textContent = "Nothing selected to add.";
+        return;
+      }
+
+      addButton.disabled = true;
+      reconStatusEl.style.display = "block";
+      reconStatusEl.textContent = "Adding " + toSubmit.length + " transaction(s)...";
+
+      callAppsScript({
+        action:       "insertReconciledTransactions",
+        idToken:      currentUser.idToken,
+        transactions: toSubmit
+      })
+        .then(function (data) {
+          if (!data.ok) {
+            reconStatusEl.textContent = "Couldn't add: " + data.error;
+            addButton.disabled = false;
+            return;
+          }
+          reconStatusEl.textContent = "Added " + data.added + " transaction(s).";
+          reconResultsEl.innerHTML = "";
+          reconFileInputEl.value = "";
+        })
+        .catch(function (err) {
+          reconStatusEl.textContent = "Couldn't add: " + err.message;
+          addButton.disabled = false;
+        });
+    }
+
+    reconUploadButtonEl.addEventListener("click", function () {
+      const file = reconFileInputEl.files[0];
+      if (!file) {
+        reconStatusEl.style.display = "block";
+        reconStatusEl.textContent = "Choose a file first.";
+        return;
+      }
+
+      reconStatusEl.style.display = "block";
+      reconStatusEl.innerHTML = '<span class="spinner"></span>Checking your statement — this can take a few seconds...';
+      reconResultsEl.innerHTML = "";
+
+      const reader = new FileReader();
+      reader.onload = function () {
+        // reader.result looks like "data:application/vnd.ms-excel;base64,XXXX"
+        const base64 = reader.result.split(",")[1];
+
+        callAppsScript({
+          action:     "reconcileStatement",
+          idToken:    currentUser.idToken,
+          fileBase64: base64,
+          fileName:   file.name
+        })
+          .then(function (data) {
+            if (!data.ok) {
+              reconStatusEl.textContent = "Couldn't check statement: " + data.error;
+              return;
+            }
+            renderReconResults(data);
+          })
+          .catch(function (err) {
+            reconStatusEl.textContent = "Couldn't check statement: " + err.message;
+          });
+      };
+      reader.onerror = function () {
+        reconStatusEl.textContent = "Couldn't read that file.";
+      };
+      reader.readAsDataURL(file);
     });
 
   </script>
