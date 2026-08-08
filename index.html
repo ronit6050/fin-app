@@ -158,6 +158,40 @@
       background: #f4f5f7;
     }
 
+    /* ---------- "What's New" popup — shown once after an update ---------- */
+    .whats-new-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .whats-new-card {
+      background: white;
+      border-radius: 14px;
+      padding: 20px;
+      max-width: 340px;
+      width: 100%;
+      box-shadow: var(--shadow-card);
+      text-align: center;
+    }
+
+    .whats-new-card h3 {
+      margin: 0 0 10px 0;
+      font-size: 1.05rem;
+    }
+
+    .whats-new-card p {
+      margin: 0 0 16px 0;
+      font-size: 0.9rem;
+      color: #444;
+      line-height: 1.4;
+    }
+
     /* ---------- Home dashboard ---------- */
     .hero-card {
       background-color: var(--color-primary);
@@ -645,6 +679,15 @@
 </head>
 <body>
 
+  <!-- Shown once, only when the app version has changed since your last visit -->
+  <div id="whatsNewOverlay" class="whats-new-overlay" style="display:none">
+    <div class="whats-new-card">
+      <h3>✨ Updated</h3>
+      <p id="whatsNewText"></p>
+      <button type="button" id="whatsNewDismiss">Got it</button>
+    </div>
+  </div>
+
   <div class="app">
 
     <!-- ===== App title bar — always visible, signed in or not ===== -->
@@ -1095,7 +1138,36 @@
 
   <script>
     // ---------------------------------------------------------
-    // 0. GOOGLE SIGN-IN
+    // 0. WHAT'S NEW — shown once after an update, so it's obvious a
+    // change actually reached your phone instead of wondering whether it
+    // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
+    // and update APP_CHANGELOG every time a real user-facing change ships.
+    // ---------------------------------------------------------
+    const APP_VERSION = "2026-08-08-1";
+    const APP_CHANGELOG = "Added Reconcile: upload your bank statement to find missing transactions, or fill in notes it recovers automatically for ones you already have.";
+
+    (function checkWhatsNew() {
+      const lastSeen = localStorage.getItem("lastSeenAppVersion");
+
+      // First-ever visit — nothing to compare against yet, just remember it.
+      if (!lastSeen) {
+        localStorage.setItem("lastSeenAppVersion", APP_VERSION);
+        return;
+      }
+
+      if (lastSeen !== APP_VERSION) {
+        document.getElementById("whatsNewText").textContent = APP_CHANGELOG;
+        document.getElementById("whatsNewOverlay").style.display = "flex";
+      }
+    })();
+
+    document.getElementById("whatsNewDismiss").addEventListener("click", function () {
+      document.getElementById("whatsNewOverlay").style.display = "none";
+      localStorage.setItem("lastSeenAppVersion", APP_VERSION);
+    });
+
+    // ---------------------------------------------------------
+    // 0.1 GOOGLE SIGN-IN
     // ---------------------------------------------------------
     // This is our app's own ID, so Google knows which app is asking.
     // It's safe for this to be visible in the code (it's not a password).
