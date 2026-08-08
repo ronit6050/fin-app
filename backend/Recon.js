@@ -271,11 +271,16 @@ function insertConfirmed(){
    straight to Recon_Temp) since this returns JSON directly instead.
 =============================== */
 
-// Matches parsed bank transactions against Transactions and returns
-// what's missing, with a category + Need/Want/Saving guess attached to
-// each — but writes nothing. smartMemoryData/typeMemoryData are read
-// once here and reused for every missing transaction, same fix applied
-// to getPendingTransactions on 2026-08-08 (see needWantSaving.js).
+// Matches parsed bank transactions against Transactions and returns two
+// separate opportunities — nothing is written here, this is preview-only:
+//   missing    — transactions Tasker never caught at all
+//   notesFound — transactions Tasker DID catch, but with no note yet,
+//                where the statement has a recoverable note. This is
+//                usually the bigger of the two, since SMS text never
+//                carries the UPI note — only the statement does.
+// smartMemoryData/typeMemoryData are read once here and reused for every
+// transaction, same fix applied to getPendingTransactions on 2026-08-08
+// (see needWantSaving.js) — avoids re-reading those sheets per row.
 function previewReconciliation(bankTxns){
 
   const sheetData = getSheetData();
@@ -288,18 +293,43 @@ function previewReconciliation(bankTxns){
 
   let matched = 0;
   const missing = [];
+  const notesFound = [];
 
   bankTxns.forEach(function(txn){
 
     let bestScore = 0;
+    let bestRowIndex = -1;
     for(let i = 1; i < sheetData.length; i++){
       const score = calculateScore(txn, sheetData[i]);
-      if(score > bestScore) bestScore = score;
+      if(score > bestScore){ bestScore = score; bestRowIndex = i; }
       if(score === 100) break;
     }
 
     if(bestScore >= 90){
       matched++;
+
+      const sheetRow         = sheetData[bestRowIndex];
+      const existingNote     = (sheetRow[12] || "").toString().trim(); // column M
+      const existingCategory = (sheetRow[13] || "").toString().trim(); // column N
+
+      // Already noted — nothing to recover, nothing to do.
+      if(existingNote || !txn.note) return;
+
+      const suggestedCategory = (!existingCategory || existingCategory === "Other")
+        ? getSuggestedCategoryFast(txn.name, txn.amount, txn.mode, smartMemoryData)
+        : existingCategory;
+
+      notesFound.push({
+        row:               bestRowIndex + 1, // sheet rows are 1-indexed
+        date:              Utilities.formatDate(txn.date, Session.getScriptTimeZone(), "dd MMM yyyy"),
+        amount:            Number(txn.amount),
+        type:              txn.type,
+        name:              sheetRow[7] || txn.name, // real Counterparty already on that row
+        note:              txn.note,
+        suggestedCategory: suggestedCategory,
+        suggestedType:     getSuggestedType(txn.type, suggestedCategory, txn.name, txn.amount, typeMemoryData)
+      });
+
       return;
     }
 
@@ -319,7 +349,7 @@ function previewReconciliation(bankTxns){
     });
   });
 
-  return { total: bankTxns.length, matched: matched, missing: missing };
+  return { total: bankTxns.length, matched: matched, missing: missing, notesFound: notesFound };
 }
 
 // Entry point for the PWA's reconcileStatement action. The browser can't
@@ -349,7 +379,7 @@ function reconcileStatementPreview(fileBase64, fileName){
     const bankTxns = parseBankSheet(sheet);
     const result   = previewReconciliation(bankTxns);
 
-    return { ok: true, total: result.total, matched: result.matched, missing: result.missing };
+    return { ok: true, total: result.total, matched: result.matched, missing: result.missing, notesFound: result.notesFound };
 
   }catch(err){
     logAI("RECON_ERROR", err.toString());

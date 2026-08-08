@@ -2831,11 +2831,14 @@
     // Builds one review card for a missing transaction — same look and
     // interaction as a Pending card (note, category, optional
     // Need/Want/Saving), plus an Include checkbox for the bulk-approve step.
-    function buildReconItem(txn) {
+    // Shared by both review sections below (missing transactions to add,
+    // and existing transactions found a note for) — same fields, same
+    // interaction. Each caller attaches its own identity data afterward.
+    function buildReviewCardShell(amount, metaLine, note, suggestedCategory, txnType, suggestedType) {
       const card = document.createElement("div");
       card.className = "pending-item";
 
-      const suggested = txn.suggestedCategory || "Other";
+      const suggested = suggestedCategory || "Other";
       const categoryOptionsHtml = CATEGORY_OPTIONS
         .map(function (cat) {
           const selectedAttr = (cat === suggested) ? " selected" : "";
@@ -2843,7 +2846,7 @@
         })
         .join("");
 
-      const showTypeToggle = txn.type !== "credit";
+      const showTypeToggle = txnType !== "credit";
       const typeToggleHtml = showTypeToggle ? `
         <div class="field">
           <label>Type</label>
@@ -2855,16 +2858,16 @@
         </div>
       ` : "";
 
-      const noteValue = (txn.note || "").replace(/"/g, "&quot;");
+      const noteValue = (note || "").replace(/"/g, "&quot;");
 
       card.innerHTML = `
         <div class="pending-top">
-          <span class="pending-amount">₹${txn.amount.toLocaleString("en-IN")}</span>
+          <span class="pending-amount">₹${amount.toLocaleString("en-IN")}</span>
           <label style="display:flex; align-items:center; gap:6px; font-weight:normal; font-size:0.85rem;">
             <input type="checkbox" class="recon-include" checked> Include
           </label>
         </div>
-        <div class="pending-meta">${txn.date} · ${txn.name || "Unknown"}${txn.type === "credit" ? " · credit" : ""}</div>
+        <div class="pending-meta">${metaLine}</div>
         <div class="field">
           <label>Note</label>
           <input type="text" class="recon-note" value="${noteValue}" placeholder="What was this for?">
@@ -2880,9 +2883,9 @@
       if (showTypeToggle) {
         const typeButtons = card.querySelectorAll(".type-btn");
         typeButtons.forEach(function (btn) {
-          if (txn.suggestedType && btn.dataset.type === txn.suggestedType) {
+          if (suggestedType && btn.dataset.type === suggestedType) {
             btn.classList.add("active");
-            selectedType = txn.suggestedType;
+            selectedType = suggestedType;
           }
           btn.addEventListener("click", function () {
             typeButtons.forEach(function (b) { b.classList.remove("active"); });
@@ -2892,34 +2895,125 @@
         });
       }
 
+      card._getSelectedType = function () { return selectedType; };
+      return card;
+    }
+
+    // A transaction Tasker never caught — approving inserts a new row.
+    function buildReconItem(txn) {
+      const metaLine = `${txn.date} · ${txn.name || "Unknown"}${txn.type === "credit" ? " · credit" : ""}`;
+      const card = buildReviewCardShell(txn.amount, metaLine, txn.note, txn.suggestedCategory, txn.type, txn.suggestedType);
       // Keep the original parsed fields (not user-editable) attached to
       // the card, so submitting can read both these and the edited ones.
       card._reconTxn = txn;
-      card._getSelectedType = function () { return selectedType; };
+      return card;
+    }
 
+    // A transaction already in the Sheet, missing only a note — approving
+    // updates that existing row instead of inserting a new one.
+    function buildNoteFoundItem(item) {
+      const metaLine = `${item.date} · ${item.name || "Unknown"} · already in your Sheet`;
+      const card = buildReviewCardShell(item.amount, metaLine, item.note, item.suggestedCategory, item.type, item.suggestedType);
+      card._reconRow = item.row;
+      card._reconName = item.name;
       return card;
     }
 
     function renderReconResults(data) {
       reconStatusEl.style.display = "block";
       reconStatusEl.textContent = data.matched + " already in your Sheet, " +
-        data.missing.length + " missing.";
+        data.missing.length + " missing, " +
+        data.notesFound.length + " found a note for.";
 
       reconResultsEl.innerHTML = "";
 
-      if (data.missing.length === 0) return;
+      if (data.missing.length > 0) {
+        const heading = document.createElement("h3");
+        heading.style.cssText = "font-size:0.95rem; margin:12px 0 8px 0;";
+        heading.textContent = "Missing from your Sheet (" + data.missing.length + ")";
+        reconResultsEl.appendChild(heading);
 
-      const itemEls = data.missing.map(buildReconItem);
-      itemEls.forEach(function (el) { reconResultsEl.appendChild(el); });
+        const itemEls = data.missing.map(buildReconItem);
+        itemEls.forEach(function (el) { reconResultsEl.appendChild(el); });
 
-      const addButton = document.createElement("button");
-      addButton.type = "button";
-      addButton.textContent = "Add Selected Transactions";
-      addButton.style.marginTop = "8px";
-      addButton.addEventListener("click", function () {
-        submitReconciledTransactions(itemEls, addButton);
+        const addButton = document.createElement("button");
+        addButton.type = "button";
+        addButton.textContent = "Add Selected Transactions";
+        addButton.style.marginTop = "8px";
+        addButton.addEventListener("click", function () {
+          submitReconciledTransactions(itemEls, addButton);
+        });
+        reconResultsEl.appendChild(addButton);
+      }
+
+      if (data.notesFound.length > 0) {
+        const heading = document.createElement("h3");
+        heading.style.cssText = "font-size:0.95rem; margin:20px 0 8px 0;";
+        heading.textContent = "Notes found for existing transactions (" + data.notesFound.length + ")";
+        reconResultsEl.appendChild(heading);
+
+        const itemEls = data.notesFound.map(buildNoteFoundItem);
+        itemEls.forEach(function (el) { reconResultsEl.appendChild(el); });
+
+        const saveButton = document.createElement("button");
+        saveButton.type = "button";
+        saveButton.textContent = "Save Selected Notes";
+        saveButton.style.marginTop = "8px";
+        saveButton.addEventListener("click", function () {
+          submitFoundNotes(itemEls, saveButton);
+        });
+        reconResultsEl.appendChild(saveButton);
+      }
+
+      if (data.missing.length === 0 && data.notesFound.length === 0) {
+        const p = document.createElement("p");
+        p.className = "pending-status";
+        p.textContent = "Nothing to review — your Sheet is already up to date.";
+        reconResultsEl.appendChild(p);
+      }
+    }
+
+    // Approving here updates existing rows (via the same saveNote action
+    // Pending already uses), one call per approved item.
+    function submitFoundNotes(itemEls, saveButton) {
+      const toSubmit = itemEls.filter(function (card) {
+        return card.querySelector(".recon-include").checked;
       });
-      reconResultsEl.appendChild(addButton);
+
+      if (toSubmit.length === 0) {
+        reconStatusEl.textContent = "Nothing selected to save.";
+        return;
+      }
+
+      saveButton.disabled = true;
+      reconStatusEl.style.display = "block";
+      reconStatusEl.textContent = "Saving " + toSubmit.length + " note(s)...";
+
+      const promises = toSubmit.map(function (card) {
+        return callAppsScript({
+          action:       "saveNote",
+          idToken:      currentUser.idToken,
+          row:          card._reconRow,
+          note:         card.querySelector(".recon-note").value,
+          category:     card.querySelector(".recon-category").value,
+          counterparty: card._reconName,
+          type:         card._getSelectedType()
+        });
+      });
+
+      Promise.all(promises)
+        .then(function (results) {
+          const failed = results.filter(function (r) { return !r.ok; }).length;
+          reconStatusEl.textContent = failed
+            ? (failed + " of " + toSubmit.length + " failed to save.")
+            : "Saved " + toSubmit.length + " note(s).";
+          toSubmit.forEach(function (card) { card.remove(); });
+          saveButton.disabled = false;
+        })
+        .catch(function (err) {
+          reconStatusEl.textContent = "Couldn't save: " + err.message;
+          saveButton.disabled = false;
+        });
     }
 
     function submitReconciledTransactions(itemEls, addButton) {

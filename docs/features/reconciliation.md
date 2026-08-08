@@ -1,7 +1,6 @@
 # Bank statement reconciliation
 
-**Status: in progress**, started 2026-08-08. Backend being built first, no
-Pending/UI changes yet.
+**Status: live**, shipped 2026-08-08.
 
 ## What this feature is
 
@@ -10,9 +9,18 @@ but SMS can be missed (deleted before Tasker reads it, a silent parsing
 failure, etc.), so transactions can go missing without anyone noticing.
 Reconciliation closes that gap: you upload your real bank statement (an
 `.xls` export), the app compares it against what's actually in
-`Transactions`, and shows you anything missing — pre-filled with a note,
-category, and Need/Want/Saving guess — for you to review and approve
-before anything gets written.
+`Transactions`, and shows you two things to review and approve — nothing
+is ever written automatically:
+
+1. **Missing transactions** — Tasker never caught these at all. Rare in
+   practice (Tasker generally works), pre-filled with note/category/
+   Need-Want-Saving guesses, approving inserts a new row.
+2. **Notes found for existing transactions** — Tasker *did* catch these,
+   but they have no note yet, because bank SMS text never carries the
+   UPI note — only the statement does. This turned out to be the bigger
+   of the two in practice; approving updates the existing row (reuses the
+   same `saveNote` action Pending already calls, no new backend action
+   needed for this part).
 
 **Nothing is ever written automatically.** This is a review-and-approve
 flow, not a mass-update. Confirmed with the user 2026-08-08 after an
@@ -80,13 +88,17 @@ there.
   `extractNoteFromNarration` per row and includes it as `note`.
 - `previewReconciliation(bankTxns)` (new, `Recon.js`) — matches parsed
   bank transactions against `Transactions` (reuses the existing
-  `calculateScore` logic unchanged), returns `{ total, matched, missing }`
-  without writing anything. For each missing transaction, also attaches
+  `calculateScore` logic unchanged, but now also tracks *which row*
+  matched, not just the score), returns
+  `{ total, matched, missing, notesFound }` without writing anything.
+  Every missing transaction and every notesFound entry gets a
   `suggestedCategory` (via `getSuggestedCategoryFast`) and
-  `suggestedType` (via `getSuggestedType`) — both called with the
-  SmartMemory/TypeMemory data pre-read once, same batching fix applied to
-  `getPendingTransactions` on 2026-08-08, so this doesn't re-introduce the
-  same slowness bug for a statement with many missing rows.
+  `suggestedType` (via `getSuggestedType`) attached — both called with
+  the SmartMemory/TypeMemory data pre-read once, same batching fix
+  applied to `getPendingTransactions` on 2026-08-08, so this doesn't
+  re-introduce the same slowness bug for a statement with many rows to
+  check. A matched row only becomes a `notesFound` entry if its existing
+  Note is empty AND the statement recovered a real note for it.
 - `reconcileStatementPreview(fileBase64, fileName)` (new, `Recon.js`) —
   the actual entry point: base64 → Blob → Drive conversion → Sheet →
   `parseBankSheet` → `previewReconciliation` → cleans up the temporary
@@ -108,7 +120,12 @@ upload flow unreachable), so this has caused no real harm, but it's why
 `insertConfirmed`. Not fixed, since the old function isn't used going
 forward — noted here in case anyone considers reviving the Telegram path.
 
-## Not yet built
+## UI
 
-The PWA action wiring and the actual Reconcile screen UI — backend logic
-is being built and tested first, per usual.
+Reconcile screen lives under More. File upload → `reconcileStatement` →
+two labeled review sections (missing / notes found), each item built
+from a shared `buildReviewCardShell()` (note input, category dropdown,
+optional Need/Want/Saving toggle, include checkbox) — same interaction
+pattern as Pending. "Add Selected Transactions" calls
+`insertReconciledTransactions` once with the whole batch; "Save Selected
+Notes" calls the existing `saveNote` action once per approved item.
