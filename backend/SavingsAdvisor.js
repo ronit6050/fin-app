@@ -12,11 +12,18 @@ const EMERGENCY_TARGET    = MONTHLY_EXPENSES * 3;  // ₹90,000
 const MONTHLY_SAVE_GOAL   = 1000;
 
 // ── Split rules based on emergency fund stage ──
-function getSplitRule(emergencyTotal){
-  if(emergencyTotal < MONTHLY_EXPENSES){
+// monthlyExpenses/emergencyTarget are optional overrides — the PWA passes
+// the user's live Settings values here; everything else (dormant
+// Telegram code) keeps calling this with 1 arg and gets the original
+// hardcoded defaults, unchanged.
+function getSplitRule(emergencyTotal, monthlyExpenses, emergencyTarget){
+  monthlyExpenses = monthlyExpenses || MONTHLY_EXPENSES;
+  emergencyTarget = emergencyTarget || EMERGENCY_TARGET;
+
+  if(emergencyTotal < monthlyExpenses){
     // Stage 1: less than 1 month — build emergency fast
     return { emergency: 0.70, wishlist: 0.20, free: 0.10 };
-  } else if(emergencyTotal < EMERGENCY_TARGET){
+  } else if(emergencyTotal < emergencyTarget){
     // Stage 2: 1-3 months — balanced split
     return { emergency: 0.50, wishlist: 0.40, free: 0.10 };
   } else {
@@ -736,10 +743,15 @@ function getSavingsTotals(savSheet){
 /* =======================================
    HELPER: Stage label
 ======================================= */
-function getStageLabel(emergencyTotal){
-  if(emergencyTotal >= EMERGENCY_TARGET){
+// monthlyExpenses/emergencyTarget are optional overrides — same reasoning
+// as getSplitRule above.
+function getStageLabel(emergencyTotal, monthlyExpenses, emergencyTarget){
+  monthlyExpenses = monthlyExpenses || MONTHLY_EXPENSES;
+  emergencyTarget = emergencyTarget || EMERGENCY_TARGET;
+
+  if(emergencyTotal >= emergencyTarget){
     return "Stage 3 — Emergency fund complete 🎉";
-  } else if(emergencyTotal >= MONTHLY_EXPENSES){
+  } else if(emergencyTotal >= monthlyExpenses){
     return "Stage 2 — Building emergency fund (1-3 months)";
   } else {
     return "Stage 1 — Building foundation (< 1 month)";

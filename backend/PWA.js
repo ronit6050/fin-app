@@ -108,6 +108,14 @@ function handlePwaRequest(data){
     return jsonResponse(insertReconciledTransactions(data.transactions));
   }
 
+  if(data.action === "getSettings"){
+    return jsonResponse({ ok:true, settings: getSettings() });
+  }
+
+  if(data.action === "updateSettings"){
+    return jsonResponse(updateSettings(data.settings));
+  }
+
   return jsonResponse({ ok:false, error:"Unknown action." });
 }
 
@@ -294,17 +302,22 @@ function logInvestmentFromApp(amount, type){
   }
 }
 
-// Reuses getSavingsTotals(), getSplitRule(), getStageLabel() and the
-// EMERGENCY_TARGET / MONTHLY_SAVE_GOAL constants already defined in
-// SavingsAdvisor.js — same global-scope reasoning as the CC Advisor code.
+// Reuses getSavingsTotals(), getSplitRule(), getStageLabel() from
+// SavingsAdvisor.js, but passes the live Settings values into the two
+// functions that accept overrides, instead of their hardcoded defaults
+// — see settings.js for why those two specifically were changed and the
+// rest of SavingsAdvisor.js wasn't.
 function getSavingsData(){
   const ss        = SpreadsheetApp.getActiveSpreadsheet();
   const savSheet  = ss.getSheetByName("Savings");
   const wishSheet = ss.getSheetByName("WishList");
 
+  const settings = getSettings();
+  const emergencyTarget = settings.monthlyExpenses * 3;
+
   const totals     = getSavingsTotals(savSheet);
-  const split      = getSplitRule(totals.emergency);
-  const stageLabel = getStageLabel(totals.emergency);
+  const split      = getSplitRule(totals.emergency, settings.monthlyExpenses, emergencyTarget);
+  const stageLabel = getStageLabel(totals.emergency, settings.monthlyExpenses, emergencyTarget);
 
   const wishData = wishSheet.getDataRange().getValues();
   let wishItems = [];
@@ -329,7 +342,7 @@ function getSavingsData(){
 
   return {
     emergency: totals.emergency,
-    emergencyTarget: EMERGENCY_TARGET,
+    emergencyTarget: emergencyTarget,
     wishlist: totals.wishlist,
     free: totals.free,
     stageLabel: stageLabel,
@@ -338,7 +351,7 @@ function getSavingsData(){
       wishlist:  Math.round(split.wishlist * 100),
       free:      Math.round(split.free * 100)
     },
-    monthlyGoal: MONTHLY_SAVE_GOAL,
+    monthlyGoal: settings.monthlySaveGoal,
     wishItems: wishItems
   };
 }
@@ -349,8 +362,9 @@ function logSavingFromApp(amount, type, note){
   try{
     const savSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Savings");
 
+    const settings = getSettings();
     const totals = getSavingsTotals(savSheet);
-    const split  = getSplitRule(totals.emergency);
+    const split  = getSplitRule(totals.emergency, settings.monthlyExpenses, settings.monthlyExpenses * 3);
 
     const emergencyAmt = Math.round(amount * split.emergency);
     const wishlistAmt  = Math.round(amount * split.wishlist);
@@ -496,8 +510,10 @@ function settleDebtRow(row){
 }
 
 // Same billing-cycle math as sendCCAdvisorReport() in CCAdvisor.js, but
-// returns plain data instead of sending a Telegram message. Reuses the
-// CC_LIMIT / CC_WARN_AMT / CC_ALERT_AMT constants already defined there.
+// returns plain data instead of sending a Telegram message, and reads
+// the limit/warn/alert values from getSettings() (settings.js) instead
+// of CCAdvisor.js's hardcoded constants, so the Settings screen actually
+// affects this.
 // txnData is optional — see getCashData's comment, same reasoning.
 function getCCAdvisorData(txnData){
 
@@ -524,6 +540,11 @@ function getCCAdvisorData(txnData){
 
   const data = txnData || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
 
+  const settings  = getSettings();
+  const ccLimit   = settings.ccLimit;
+  const ccWarnAmt = ccLimit * settings.ccWarnPct;
+  const ccAlertAmt = ccLimit * settings.ccAlertPct;
+
   let cycleSpend = 0;
   let txnCount   = 0;
   let categoryTotals = {};
@@ -548,18 +569,18 @@ function getCCAdvisorData(txnData){
     }
   }
 
-  const usagePct  = Math.round((cycleSpend / CC_LIMIT) * 100);
-  const remaining = CC_LIMIT - cycleSpend;
+  const usagePct  = Math.round((cycleSpend / ccLimit) * 100);
+  const remaining = ccLimit - cycleSpend;
   const dailyAvg  = daysElapsed > 0 ? cycleSpend / daysElapsed : 0;
   const projected = Math.round(dailyAvg * daysInCycle);
-  const projectedPct = Math.round((projected / CC_LIMIT) * 100);
-  const safeDaily = (daysLeft > 0 && cycleSpend < CC_ALERT_AMT)
-    ? Math.round((CC_ALERT_AMT - cycleSpend) / daysLeft)
+  const projectedPct = Math.round((projected / ccLimit) * 100);
+  const safeDaily = (daysLeft > 0 && cycleSpend < ccAlertAmt)
+    ? Math.round((ccAlertAmt - cycleSpend) / daysLeft)
     : 0;
 
   let status = "healthy";
-  if(cycleSpend >= CC_ALERT_AMT) status = "alert";
-  else if(cycleSpend >= CC_WARN_AMT) status = "warning";
+  if(cycleSpend >= ccAlertAmt) status = "alert";
+  else if(cycleSpend >= ccWarnAmt) status = "warning";
 
   const cardBreakdown = Object.entries(cardTotals)
     .sort(function(a, b){ return b[1] - a[1]; })
@@ -581,7 +602,7 @@ function getCCAdvisorData(txnData){
     daysLeft: daysLeft,
     daysUntilDue: daysUntilDue,
     cycleSpend: cycleSpend,
-    limit: CC_LIMIT,
+    limit: ccLimit,
     usagePct: usagePct,
     remaining: remaining,
     projected: projected,

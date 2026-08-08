@@ -836,6 +836,10 @@
             <span class="more-menu-icon">🔎</span>
             <span>Reconcile</span>
           </button>
+          <button type="button" class="more-menu-item" data-target="settings">
+            <span class="more-menu-icon">⚙️</span>
+            <span>Settings</span>
+          </button>
         </div>
 
       <!-- ===== SUB-SCREEN: Today's Summary ===== -->
@@ -1111,6 +1115,37 @@
         <div id="reconResults" style="margin-top:12px;"></div>
       </div>
 
+      <!-- ===== SUB-SCREEN: Settings ===== -->
+      <div id="view-settings" style="display:none">
+        <button type="button" class="back-to-more">← Back</button>
+        <h2 class="section-title">Settings</h2>
+        <p class="pending-status">These control the CC Advisor and Savings screens.</p>
+
+        <div class="field">
+          <label>Combined credit card limit (₹)</label>
+          <input type="number" id="settingsCcLimit" min="0" step="1">
+        </div>
+        <div class="field">
+          <label>CC warning threshold (% of limit)</label>
+          <input type="number" id="settingsCcWarnPct" min="0" max="100" step="1">
+        </div>
+        <div class="field">
+          <label>CC alert threshold (% of limit)</label>
+          <input type="number" id="settingsCcAlertPct" min="0" max="100" step="1">
+        </div>
+        <div class="field">
+          <label>Monthly essential expenses (₹)</label>
+          <input type="number" id="settingsMonthlyExpenses" min="0" step="1">
+        </div>
+        <div class="field">
+          <label>Monthly savings goal (₹)</label>
+          <input type="number" id="settingsMonthlySaveGoal" min="0" step="1">
+        </div>
+
+        <button type="button" id="saveSettingsButton">Save</button>
+        <div id="settingsResult" class="pending-result"></div>
+      </div>
+
       </section>
       <!-- (end of #view-more — CC/Debts/Savings/Investments/Cash all live above) -->
 
@@ -1143,8 +1178,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-08-3";
-    const APP_CHANGELOG = "Refreshing the app now keeps you on the same screen instead of always jumping back to Home.";
+    const APP_VERSION = "2026-08-08-4";
+    const APP_CHANGELOG = "Added Settings: edit your credit card limit and savings targets right from the app, under More.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1919,13 +1954,14 @@
       savings:     document.getElementById("view-savings"),
       investments: document.getElementById("view-investments"),
       cash:        document.getElementById("view-cash"),
-      reconcile:   document.getElementById("view-reconcile")
+      reconcile:   document.getElementById("view-reconcile"),
+      settings:    document.getElementById("view-settings")
     };
 
     // Only load a screen's data the first time it's opened, not every time.
     // Home and Pending load on sign-in already (not lazily), since Home is
     // the landing screen and Pending needs to be ready for notifications.
-    const tabLoaded = { home: true, pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false };
+    const tabLoaded = { home: true, pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false, settings: false };
 
     // Switches between the 4 primary tabs
     // Remembers which tab (and, if it's More, which sub-screen) you were
@@ -2020,6 +2056,10 @@
       if (name === "cash" && !tabLoaded.cash) {
         tabLoaded.cash = true;
         loadCash();
+      }
+      if (name === "settings" && !tabLoaded.settings) {
+        tabLoaded.settings = true;
+        loadSettings();
       }
     }
 
@@ -3292,6 +3332,77 @@
         reconStatusEl.textContent = "Couldn't read that file.";
       };
       reader.readAsDataURL(file);
+    });
+
+    // ---------------------------------------------------------
+    // SETTINGS — CC limit/thresholds, savings targets. See
+    // docs/features/settings.md.
+    // ---------------------------------------------------------
+
+    const settingsCcLimitEl         = document.getElementById("settingsCcLimit");
+    const settingsCcWarnPctEl       = document.getElementById("settingsCcWarnPct");
+    const settingsCcAlertPctEl      = document.getElementById("settingsCcAlertPct");
+    const settingsMonthlyExpensesEl = document.getElementById("settingsMonthlyExpenses");
+    const settingsMonthlySaveGoalEl = document.getElementById("settingsMonthlySaveGoal");
+    const saveSettingsButtonEl      = document.getElementById("saveSettingsButton");
+    const settingsResultEl          = document.getElementById("settingsResult");
+
+    function loadSettings() {
+      const cached = loadCache("settings");
+      if (cached) renderSettings(cached);
+
+      callAppsScript({ action: "getSettings", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (!data.ok) {
+            if (isAuthError(data.error)) handleSessionExpired();
+            return;
+          }
+          saveCache("settings", data.settings);
+          renderSettings(data.settings);
+        })
+        .catch(function () { /* fine if we already showed the cached copy */ });
+    }
+
+    // Backend stores percentages as 0-1 (e.g. 0.25); shown here as 0-100
+    function renderSettings(s) {
+      settingsCcLimitEl.value         = s.ccLimit;
+      settingsCcWarnPctEl.value       = Math.round(s.ccWarnPct * 100);
+      settingsCcAlertPctEl.value      = Math.round(s.ccAlertPct * 100);
+      settingsMonthlyExpensesEl.value = s.monthlyExpenses;
+      settingsMonthlySaveGoalEl.value = s.monthlySaveGoal;
+    }
+
+    saveSettingsButtonEl.addEventListener("click", function () {
+      settingsResultEl.textContent = "Saving...";
+
+      callAppsScript({
+        action:   "updateSettings",
+        idToken:  currentUser.idToken,
+        settings: {
+          ccLimit:         parseFloat(settingsCcLimitEl.value) || 0,
+          ccWarnPct:       (parseFloat(settingsCcWarnPctEl.value) || 0) / 100,
+          ccAlertPct:      (parseFloat(settingsCcAlertPctEl.value) || 0) / 100,
+          monthlyExpenses: parseFloat(settingsMonthlyExpensesEl.value) || 0,
+          monthlySaveGoal: parseFloat(settingsMonthlySaveGoalEl.value) || 0
+        }
+      })
+        .then(function (data) {
+          if (!data.ok) {
+            settingsResultEl.textContent = data.error;
+            return;
+          }
+          settingsResultEl.textContent = "Saved.";
+          // These feed CC Advisor and Savings — their caches are now
+          // stale, so clear them and let the next visit fetch fresh.
+          localStorage.removeItem("cache_cc");
+          localStorage.removeItem("cache_savings");
+          localStorage.removeItem("cache_dashboard");
+          tabLoaded.cc = false;
+          tabLoaded.savings = false;
+        })
+        .catch(function (err) {
+          settingsResultEl.textContent = err.message;
+        });
     });
 
   </script>
