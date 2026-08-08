@@ -100,6 +100,14 @@ function handlePwaRequest(data){
     return jsonResponse({ ok:true, dashboard: getDashboardData() });
   }
 
+  if(data.action === "reconcileStatement"){
+    return jsonResponse(reconcileStatementPreview(data.fileBase64, data.fileName));
+  }
+
+  if(data.action === "insertReconciledTransactions"){
+    return jsonResponse(insertReconciledTransactions(data.transactions));
+  }
+
   return jsonResponse({ ok:false, error:"Unknown action." });
 }
 
