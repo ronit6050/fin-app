@@ -47,6 +47,37 @@ function extractName(narration){
   }
 }
 
+/* ===== EXTRACT NOTE (2026-08-08) =====
+   UPI narrations put the note typed while paying in the LAST dash-
+   separated segment — but only when a note was actually typed. When it
+   wasn't, that slot just says "UPI", or holds boilerplate the payment
+   app inserted itself. This filters those out so only genuine-looking
+   notes get suggested — always still reviewed/editable by the user
+   before anything is saved. See docs/features/reconciliation.md. */
+function extractNoteFromNarration(narration){
+  try{
+    if(!narration) return "";
+
+    const parts = narration.toString().split("-");
+    if(parts.length < 2) return "";
+
+    const last = parts[parts.length - 1].trim();
+    if(!last) return "";
+
+    const lastUpper = last.toUpperCase();
+    if(lastUpper === "UPI") return "";
+
+    const boilerplatePrefixes = ["SENT VIA", "PAID VIA", "PAY VIA", "PAYMENT FOR", "PAYMENT TO"];
+    for(let i = 0; i < boilerplatePrefixes.length; i++){
+      if(lastUpper.indexOf(boilerplatePrefixes[i]) === 0) return "";
+    }
+
+    return last;
+  }catch(e){
+    return "";
+  }
+}
+
 /* ===== GET SHEET DATA ===== */
 function getSheetData(){
   return SpreadsheetApp.getActiveSpreadsheet()
@@ -97,6 +128,7 @@ function parseBankSheet(sheet){
     const cleanRef = normalizeRef(ref);
     const mode     = detectMode(narration);
     const name     = extractName(narration);
+    const note     = extractNoteFromNarration(narration);
 
     txns.push({
       date: parsedDate,
@@ -104,7 +136,8 @@ function parseBankSheet(sheet){
       type,
       ref:  cleanRef || ("NOREF_" + i),
       name,
-      mode
+      mode,
+      note
     });
   }
 
@@ -229,4 +262,180 @@ function insertConfirmed(){
   }
 
   return added;
+}
+
+/* ===============================
+   PWA RECONCILIATION (2026-08-08)
+   Preview-then-approve flow — see docs/features/reconciliation.md.
+   Kept separate from the Telegram-era functions above (which wrote
+   straight to Recon_Temp) since this returns JSON directly instead.
+=============================== */
+
+// Matches parsed bank transactions against Transactions and returns
+// what's missing, with a category + Need/Want/Saving guess attached to
+// each — but writes nothing. smartMemoryData/typeMemoryData are read
+// once here and reused for every missing transaction, same fix applied
+// to getPendingTransactions on 2026-08-08 (see needWantSaving.js).
+function previewReconciliation(bankTxns){
+
+  const sheetData = getSheetData();
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const smartMemorySheet = ss.getSheetByName("SmartMemory");
+  const smartMemoryData  = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
+  const typeMemorySheet  = ss.getSheetByName("TypeMemory");
+  const typeMemoryData   = typeMemorySheet ? typeMemorySheet.getDataRange().getValues() : [];
+
+  let matched = 0;
+  const missing = [];
+
+  bankTxns.forEach(function(txn){
+
+    let bestScore = 0;
+    for(let i = 1; i < sheetData.length; i++){
+      const score = calculateScore(txn, sheetData[i]);
+      if(score > bestScore) bestScore = score;
+      if(score === 100) break;
+    }
+
+    if(bestScore >= 90){
+      matched++;
+      return;
+    }
+
+    const suggestedCategory = getSuggestedCategoryFast(txn.name, txn.amount, txn.mode, smartMemoryData);
+
+    missing.push({
+      rawDate:           Utilities.formatDate(txn.date, Session.getScriptTimeZone(), "yyyy-MM-dd"),
+      date:              Utilities.formatDate(txn.date, Session.getScriptTimeZone(), "dd MMM yyyy"),
+      amount:            Number(txn.amount),
+      type:              txn.type,
+      mode:              txn.mode,
+      name:              txn.name,
+      ref:               txn.ref,
+      note:              txn.note || "",
+      suggestedCategory: suggestedCategory,
+      suggestedType:     getSuggestedType(txn.type, suggestedCategory, txn.name, txn.amount, typeMemoryData)
+    });
+  });
+
+  return { total: bankTxns.length, matched: matched, missing: missing };
+}
+
+// Entry point for the PWA's reconcileStatement action. The browser can't
+// send a raw file through the same JSON API everything else uses, so it
+// sends the file as base64 instead — decoded here into a Blob, then
+// converted to a Sheet via Drive the same way the old Telegram upload
+// flow did (already enabled for this project). Cleans up both temporary
+// Drive files afterward, whether this succeeds or fails.
+function reconcileStatementPreview(fileBase64, fileName){
+
+  let driveFile = null;
+  let convertedFile = null;
+
+  try{
+    const blob = Utilities.newBlob(
+      Utilities.base64Decode(fileBase64),
+      MimeType.MICROSOFT_EXCEL,
+      fileName || "statement.xls"
+    );
+
+    driveFile = DriveApp.createFile(blob);
+    convertedFile = Drive.Files.copy({ mimeType: MimeType.GOOGLE_SHEETS }, driveFile.getId());
+
+    const ss    = SpreadsheetApp.openById(convertedFile.id);
+    const sheet = ss.getSheets()[0];
+
+    const bankTxns = parseBankSheet(sheet);
+    const result   = previewReconciliation(bankTxns);
+
+    return { ok: true, total: result.total, matched: result.matched, missing: result.missing };
+
+  }catch(err){
+    logAI("RECON_ERROR", err.toString());
+    return { ok: false, error: err.toString() };
+  }finally{
+    try{ if(driveFile) driveFile.setTrashed(true); }catch(e){}
+    try{ if(convertedFile) DriveApp.getFileById(convertedFile.id).setTrashed(true); }catch(e){}
+  }
+}
+
+// Writes the user-approved (and possibly edited) missing transactions
+// into Transactions. Only ever called after the Reconcile screen has
+// shown them to the user and they've confirmed — never automatic.
+// Marks Processed = "YES" immediately, since these have already been
+// reviewed here and shouldn't also show up in Pending asking again.
+function insertReconciledTransactions(txns){
+
+  try{
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    const formattedTime = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "HH:mm:ss");
+
+    let added = 0;
+
+    txns.forEach(function(t){
+      sheet.appendRow([
+        t.date,             // Date
+        formattedTime,      // Time
+        "HDFC",             // Bank
+        t.type,             // Type (debit/credit)
+        t.mode,             // Mode
+        t.amount,           // Amount
+        t.ref,              // Reference
+        t.name,             // Counterparty
+        "Import",           // Channel
+        "Bank Statement",   // Source
+        "-",                // RawSMS
+        "-",                // Sender
+        t.note || "",       // Note
+        t.category || "",   // Category
+        "",                 // TelegramMsg
+        "YES"                // Processed
+      ]);
+      added++;
+
+      if(t.name && t.category){
+        handleCategoryCorrection(t.name, t.category, "Other");
+      }
+      if(t.name && t.needWantSaving){
+        recordTypeVote(t.name, Number(t.amount) || 0, t.needWantSaving);
+      }
+    });
+
+    const lastRow = sheet.getLastRow();
+    if(lastRow > 1){
+      sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn())
+        .sort([{column: 1, ascending: true}]);
+    }
+
+    return { ok: true, added: added };
+
+  }catch(err){
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// One-off test against real narration samples from an actual HDFC
+// statement (2026-08-08) — safe to delete once confirmed working.
+function testExtractNoteFromNarration(){
+  Logger.log("Genuine note 'MILK', expect MILK: " +
+    extractNoteFromNarration("UPI-NEELADRI VEGETABLE A-PAYTM.S26HQVN@PTY-YESB0MCHUPI-618368197341-MILK"));
+
+  Logger.log("No note given, expect empty: " +
+    extractNoteFromNarration("UPI-ABDUL AYAN BASHA-7090065269@PTYES-PUNB0477400-125760253171-UPI"));
+
+  Logger.log("App boilerplate 'SENT VIA...', expect empty: " +
+    extractNoteFromNarration("UPI-APSPL-JUPITERFPPI@ICICI-ICIC0DC0099-918494441876-SENT VIA JUPITER"));
+
+  Logger.log("Genuine note w/ spaces, expect HAPPY BIRTHDAY RON: " +
+    extractNoteFromNarration("UPI-NADAR SHALINI MUKESH-9426144524@PTYES-JSFB0003071-310029630196-HAPPY BIRTHDAY RON"));
+
+  Logger.log("Genuine note (truncated), expect LUNCH ME AND VAIDE: " +
+    extractNoteFromNarration("UPI-SMILEY SCOOPS AMUL-Q711211452@YBL-YESB0YBLUPI-619279408486-LUNCH ME AND VAIDE"));
+
+  Logger.log("App boilerplate 'PAYMENT FOR...', expect empty: " +
+    extractNoteFromNarration("UPI-RATNADEEP SUPERMARKE-RATNADEEPSUPERMARKETSARJAPURA@YBL-YESB0YBLUPI-619646958656-PAYMENT FOR 182870"));
+
+  Logger.log("Non-UPI narration (known messy case, acceptable since reviewed): " +
+    extractNoteFromNarration("DEBIT CARD ANNUAL FEE-JUL-2026-EPR2719626958892"));
 }
