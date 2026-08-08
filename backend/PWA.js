@@ -696,9 +696,21 @@ function getTodaySummary(){
 // Finds bank transactions that were already alerted but still have no note —
 // same definition Telegram's /pending command already uses.
 function getPendingTransactions(){
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Transactions");
   const data  = sheet.getDataRange().getValues();
   const pending = [];
+
+  // Read these two lookup sheets ONCE, outside the loop below, and reuse
+  // them for every pending transaction. Re-reading them fresh per
+  // transaction (the old approach) is what made this take 60-90+ seconds
+  // once there was a real backlog and real learned data — see
+  // docs/features/need-want-saving.md.
+  const smartMemorySheet = ss.getSheetByName("SmartMemory");
+  const smartMemoryData  = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
+
+  const typeMemorySheet = ss.getSheetByName("TypeMemory");
+  const typeMemoryData  = typeMemorySheet ? typeMemorySheet.getDataRange().getValues() : [];
 
   for(let i = 1; i < data.length; i++){
     const processed = (data[i][15] || "").toString().trim(); // column P
@@ -713,7 +725,7 @@ function getPendingTransactions(){
     const amount      = Number(data[i][5]) || 0;
     const counterparty = data[i][7] || "";
 
-    const suggestedCategory = getSuggestedCategoryFast(counterparty, amount, mode);
+    const suggestedCategory = getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
 
     pending.push({
       row:               i + 1,
@@ -728,7 +740,7 @@ function getPendingTransactions(){
       // Need/Want/Saving guess — null means "don't show a default" (credit,
       // a debt-settlement category, or an unrecognized merchant). See
       // docs/features/need-want-saving.md.
-      suggestedType:     getSuggestedType(txnType, suggestedCategory, counterparty, amount)
+      suggestedType:     getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeMemoryData)
     });
   }
 
@@ -739,14 +751,19 @@ function getPendingTransactions(){
 // keyword patterns as the full smart category engine in category.js, but
 // skips the Gemini fallback layer so guessing 50+ pending items at once
 // stays instant instead of making dozens of slow network calls.
-function getSuggestedCategoryFast(counterparty, amount, mode){
+// smartMemoryData is optional — see getSuggestedType's comment in
+// needWantSaving.js for why (same pattern, same reason).
+function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
   try{
     if(!counterparty) return "Other";
 
-    const smartMemory = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("SmartMemory");
-    if(!smartMemory) return "Other";
+    let memData = smartMemoryData;
+    if(!memData){
+      const smartMemory = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("SmartMemory");
+      if(!smartMemory) return "Other";
+      memData = smartMemory.getDataRange().getValues();
+    }
 
-    const memData = smartMemory.getDataRange().getValues();
     const cleanCounterparty = normalizeText(counterparty);
 
     const exactMatch = findMerchantMatch(cleanCounterparty, memData, true);

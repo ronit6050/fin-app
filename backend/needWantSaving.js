@@ -17,7 +17,14 @@ function getAmountBand(amount) {
 
 // Returns "Need" / "Want" / "Saving", or null if this transaction
 // shouldn't be tagged at all (not a real spend, or too ambiguous to guess).
-function getSuggestedType(txnType, category, counterparty, amount) {
+//
+// typeMemoryData is optional: pass the already-read TypeMemory sheet values
+// (sheet.getDataRange().getValues()) when checking many transactions in a
+// row, so the sheet only gets read once instead of once per transaction —
+// re-reading it per transaction is what made getPending very slow once
+// there was a real backlog (see docs/features/need-want-saving.md). If
+// omitted, this reads the sheet itself — fine for a single one-off check.
+function getSuggestedType(txnType, category, counterparty, amount, typeMemoryData) {
   // Rule 1: money coming IN is never a spend.
   if (txnType === "credit") return null;
 
@@ -32,8 +39,11 @@ function getSuggestedType(txnType, category, counterparty, amount) {
 
   // Rule 4: look up how this merchant+amount-band has voted before.
   var band = getAmountBand(amount);
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TypeMemory");
-  var data = sheet.getDataRange().getValues();
+  var data = typeMemoryData;
+  if (!data) {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TypeMemory");
+    data = sheet.getDataRange().getValues();
+  }
   // Columns: Merchant(0) AmountBand(1) NeedCount(2) WantCount(3) SavingCount(4) TimesUsed(5) LastUsed(6)
   for (var i = 1; i < data.length; i++) {
     if (data[i][0] === counterparty && data[i][1] === band) {
