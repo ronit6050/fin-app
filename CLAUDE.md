@@ -204,8 +204,20 @@ truth for "what."
 **Workflow from now on:**
 - To pull the latest from the live Apps Script project (e.g. if the user
   ever edits online again): `cd D:\fin-app\backend` then `clasp pull`.
-- To push local edits to the live Apps Script project: `cd D:\fin-app\backend`
-  then `clasp push`.
+- To push local edits into the Apps Script *editor*: `cd D:\fin-app\backend`
+  then `clasp push`. **This is NOT enough on its own** — see next point.
+- **IMPORTANT — `clasp push` alone does NOT update what the live PWA calls.**
+  There are two deployments: one at `@HEAD` (always latest), and one
+  **pinned to a fixed version** whose ID matches `APPS_SCRIPT_URL` in
+  `index.html` — that's the one the real app hits, and pinned deployments
+  don't move just because the editor's code changed. Discovered 2026-08-08
+  when a `clasp push`-only update (Need/Want/Saving tagging) silently never
+  reached the live app — `TypeMemory` stayed empty despite the code being
+  "pushed." **After every `clasp push` that should affect the live app,
+  also run:**
+  `clasp deploy -i "AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v" -d "<what changed>"`
+  — this cuts a new version and re-points that same deployment ID at it,
+  so the URL (and `index.html`) never need to change.
 - Local edits should also get `git add`/`git commit`/`git push` in the main
   `fin-app` repo like any other change, so history is preserved — clasp
   only handles the Apps Script <-> local sync, not git.
