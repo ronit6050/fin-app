@@ -6,11 +6,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fin App</title>
 
+  <!-- Applies your saved Light/Dark choice (from Settings) BEFORE the
+       page paints anything — has to run this early, synchronously,
+       right at the top, or you'd see a flash of the wrong theme for a
+       moment on every load. If you've never picked one, this does
+       nothing and the page just follows your system's setting. -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem("themePreference");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    })();
+  </script>
+
   <!-- These three lines are what let a phone offer "Add to Home Screen" -->
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <meta name="theme-color" content="#2f6fed">
+  <meta name="theme-color" content="#EEF0F3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B0B0C" media="(prefers-color-scheme: dark)">
 
   <!-- Google's official Sign-In script. This is Google's own code,
        loaded straight from Google — not a 3rd-party company. -->
@@ -22,8 +37,12 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 
   <style>
-    /* ---------- Shared values, so colors/spacing stay consistent
-       everywhere instead of being retyped in every rule ---------- */
+    /* ---------- Design tokens — light mode (default) ----------
+       Every color used anywhere in this file should reference one of
+       these variables, never a raw hex value, so the dark-mode block
+       further down (and the manual toggle in Settings) can override
+       every one of them in one place instead of hunting through 600+
+       lines of rules. */
     :root {
       --color-primary: #2f6fed;
       --color-primary-dark: #2559c4;
@@ -33,7 +52,33 @@
       --bg-danger: #fcebeb;
       --bg-warning: #faeeda;
       --bg-success: #eaf3de;
-      --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.08);
+
+      /* Page vs. card vs. inset — three elevation steps. The page is a
+         soft tint (not pure white) specifically so cards visibly sit ON
+         something instead of blending into the background. */
+      --bg-page:      #eef0f3;
+      --surface-card: #ffffff;
+      --surface-inset: #f5f5f6;
+      --border-hairline: #ececee;
+
+      /* The hero card (today's spend) and the active bottom-nav pill are
+         deliberately inverted — near-black on a light page — so they
+         read as the app's signature, high-contrast elements rather than
+         blending in with the rest of the light-blue-accent UI. */
+      --surface-hero: #111214;
+      --text-on-hero: #ffffff;
+      --text-on-hero-muted: #9a9ca3;
+
+      --text-primary: #111214;
+      --text-secondary: #6b6c72;
+      --text-muted: #9a9ca3;
+
+      --shadow-card: 0 1px 2px rgba(17, 18, 20, 0.05), 0 1px 1px rgba(17, 18, 20, 0.03);
+
+      --radius-sm: 10px;
+      --radius-md: 16px;
+      --radius-lg: 22px;
+      --radius-pill: 999px;
 
       /* Category colors — each a light background + a readable dark text
          of the same hue, so badges stay consistent wherever they appear. */
@@ -56,6 +101,87 @@
       --saving-bg: #e6f1fb; --saving-text: #0c447c;
     }
 
+    /* ---------- Design tokens — dark mode ----------
+       Applies automatically by system preference, unless the user picks
+       a theme explicitly in Settings (data-theme wins either direction —
+       see the tiny theme-init script right after <body>). */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --dark-mode-active: 1; }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]),
+      :root[data-theme="dark"] {
+        --bg-page:      #0b0b0c;
+        --surface-card: #18191c;
+        --surface-inset: #212226;
+        --border-hairline: #232427;
+
+        --surface-hero: #1d9e75;
+        --text-on-hero: #04342c;
+        --text-on-hero-muted: #0f6e56;
+
+        --text-primary: #f2f2f3;
+        --text-secondary: #9a9ca3;
+        --text-muted: #6b6c72;
+
+        --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+
+        --bg-danger: #2e1414;  --color-danger:  #f09595;
+        --bg-warning: #2e2308; --color-warning: #efc775;
+        --bg-success: #1b2408; --color-success: #97c459;
+
+        --cat-food-bg:      #2e1a10; --cat-food-text:      #f0997b;
+        --cat-transport-bg: #0f2033; --cat-transport-text: #85b7eb;
+        --cat-bills-bg:     #232320; --cat-bills-text:     #b4b2a9;
+        --cat-shopping-bg:  #2e131f; --cat-shopping-text:  #ed93b1;
+        --cat-lifestyle-bg: #201c3a; --cat-lifestyle-text: #afa9ec;
+        --cat-financial-bg: #0d2b22; --cat-financial-text: #5dcaa5;
+        --cat-income-bg:    #1b2408; --cat-income-text:    #97c459;
+        --cat-education-bg: #2e2308; --cat-education-text: #efc775;
+        --cat-health-bg:    #2e1414; --cat-health-text:    #f09595;
+        --cat-other-bg:     #232320; --cat-other-text:     #b4b2a9;
+
+        --need-bg:   #1b2408; --need-text:   #97c459;
+        --want-bg:   #2e2308; --want-text:   #efc775;
+        --saving-bg: #0f2033; --saving-text: #85b7eb;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg-page:      #0b0b0c;
+      --surface-card: #18191c;
+      --surface-inset: #212226;
+      --border-hairline: #232427;
+
+      --surface-hero: #1d9e75;
+      --text-on-hero: #04342c;
+      --text-on-hero-muted: #0f6e56;
+
+      --text-primary: #f2f2f3;
+      --text-secondary: #9a9ca3;
+      --text-muted: #6b6c72;
+
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+
+      --bg-danger: #2e1414;  --color-danger:  #f09595;
+      --bg-warning: #2e2308; --color-warning: #efc775;
+      --bg-success: #1b2408; --color-success: #97c459;
+
+      --cat-food-bg:      #2e1a10; --cat-food-text:      #f0997b;
+      --cat-transport-bg: #0f2033; --cat-transport-text: #85b7eb;
+      --cat-bills-bg:     #232320; --cat-bills-text:     #b4b2a9;
+      --cat-shopping-bg:  #2e131f; --cat-shopping-text:  #ed93b1;
+      --cat-lifestyle-bg: #201c3a; --cat-lifestyle-text: #afa9ec;
+      --cat-financial-bg: #0d2b22; --cat-financial-text: #5dcaa5;
+      --cat-income-bg:    #1b2408; --cat-income-text:    #97c459;
+      --cat-education-bg: #2e2308; --cat-education-text: #efc775;
+      --cat-health-bg:    #2e1414; --cat-health-text:    #f09595;
+      --cat-other-bg:     #232320; --cat-other-text:     #b4b2a9;
+
+      --need-bg:   #1b2408; --need-text:   #97c459;
+      --want-bg:   #2e2308; --want-text:   #efc775;
+      --saving-bg: #0f2033; --saving-text: #85b7eb;
+    }
+
     /* ---------- Basic page setup ---------- */
     * {
       box-sizing: border-box; /* makes width/height calculations include padding & border */
@@ -68,8 +194,9 @@
          Windows...) instead of always forcing Arial — makes the app
          feel like it belongs on your device. */
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #f4f5f7;
-      color: #222;
+      background-color: var(--bg-page);
+      color: var(--text-primary);
+      transition: background-color 0.2s ease, color 0.2s ease;
       /* Center the app and keep it narrow-ish, like a phone screen,
          even when viewed on a wide desktop browser */
       display: flex;
@@ -87,7 +214,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 16px;
+      margin-bottom: 20px;
     }
 
     .app-header-brand {
@@ -99,12 +226,13 @@
     .app-header-brand img {
       width: 30px;
       height: 30px;
-      border-radius: 8px;
+      border-radius: 9px;
     }
 
     .app-header-brand span {
-      font-size: 1.2rem;
-      font-weight: bold;
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.2px;
     }
 
     /* ---------- Avatar + profile popover ---------- */
@@ -113,23 +241,24 @@
     }
 
     .avatar-btn {
-      width: 36px;
-      height: 36px;
+      width: 34px;
+      height: 34px;
       border-radius: 50%;
-      background: var(--color-primary);
-      color: white;
-      font-weight: bold;
-      font-size: 0.9rem;
+      background: var(--surface-hero);
+      color: var(--text-on-hero);
+      font-weight: 700;
+      font-size: 0.85rem;
       border: none;
       cursor: pointer;
     }
 
     .profile-popover {
       position: absolute;
-      top: 44px;
+      top: 42px;
       right: 0;
-      background: white;
-      border-radius: 12px;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
       box-shadow: var(--shadow-card);
       padding: 12px;
       min-width: 180px;
@@ -138,7 +267,7 @@
 
     .profile-email {
       font-size: 0.8rem;
-      color: #666;
+      color: var(--text-secondary);
       margin-bottom: 8px;
       word-break: break-all;
     }
@@ -146,23 +275,23 @@
     .profile-signout-btn {
       width: 100%;
       background: none;
-      border: 1px solid #ddd;
-      color: #222;
+      border: 1px solid var(--border-hairline);
+      color: var(--text-primary);
       font-weight: normal;
       padding: 8px;
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
     }
 
     .profile-signout-btn:hover {
-      background: #f4f5f7;
+      background: var(--surface-inset);
     }
 
     /* ---------- "What's New" popup — shown once after an update ---------- */
     .whats-new-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.45);
+      background: rgba(0, 0, 0, 0.5);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -171,9 +300,9 @@
     }
 
     .whats-new-card {
-      background: white;
-      border-radius: 14px;
-      padding: 20px;
+      background: var(--surface-card);
+      border-radius: var(--radius-lg);
+      padding: 22px;
       max-width: 340px;
       width: 100%;
       box-shadow: var(--shadow-card);
@@ -183,38 +312,46 @@
     .whats-new-card h3 {
       margin: 0 0 10px 0;
       font-size: 1.05rem;
+      color: var(--text-primary);
     }
 
     .whats-new-card p {
       margin: 0 0 16px 0;
       font-size: 0.9rem;
-      color: #444;
-      line-height: 1.4;
+      color: var(--text-secondary);
+      line-height: 1.5;
     }
 
     /* ---------- Home dashboard ---------- */
+    /* Deliberately inverted (near-black on the light page, vivid green on
+       the dark page) — the one high-contrast "signature" surface, rather
+       than another card in the same blue-accent family as everything
+       else. Matches the active bottom-nav pill for the same reason. */
     .hero-card {
-      background-color: var(--color-primary);
-      color: white;
-      padding: 20px;
-      border-radius: 16px;
+      background-color: var(--surface-hero);
+      color: var(--text-on-hero);
+      padding: 22px;
+      border-radius: var(--radius-lg);
       margin-bottom: 16px;
     }
 
     .hero-label {
-      font-size: 0.85rem;
-      opacity: 0.85;
+      font-size: 0.78rem;
+      color: var(--text-on-hero-muted);
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
     }
 
     .hero-amount {
-      font-size: 2.2rem;
-      font-weight: bold;
-      margin: 2px 0;
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: -1px;
+      margin: 4px 0;
     }
 
     .hero-sub {
       font-size: 0.85rem;
-      opacity: 0.85;
+      color: var(--text-on-hero-muted);
     }
 
     .stat-grid {
@@ -224,32 +361,36 @@
     }
 
     .stat-card {
-      background: white;
-      border-radius: 12px;
-      padding: 12px 14px;
-      box-shadow: var(--shadow-card);
+      background: var(--surface-inset);
+      border-radius: var(--radius-md);
+      padding: 14px;
     }
 
     .stat-label {
-      font-size: 0.8rem;
-      color: #666;
-      margin-bottom: 2px;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
     }
 
     .stat-value {
-      font-size: 1.3rem;
-      font-weight: bold;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.3px;
     }
 
     .home-recent-row {
-      background: white;
-      border-radius: 10px;
-      padding: 10px 14px;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
       margin-bottom: 8px;
-      box-shadow: var(--shadow-card);
       display: flex;
       justify-content: space-between;
       font-size: 0.9rem;
+      color: var(--text-primary);
     }
 
     /* ---------- Loading spinner ---------- */
@@ -257,7 +398,7 @@
       display: inline-block;
       width: 14px;
       height: 14px;
-      border: 2px solid #ccc;
+      border: 2px solid var(--border-hairline);
       border-top-color: var(--color-primary);
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
@@ -277,28 +418,39 @@
     }
 
     label {
-      font-size: 0.85rem;
-      margin-bottom: 4px;
-      font-weight: bold;
+      font-size: 0.8rem;
+      margin-bottom: 6px;
+      font-weight: 600;
+      color: var(--text-secondary);
     }
 
     input,
     select {
-      padding: 10px;
+      padding: 11px 12px;
       font-size: 1rem;
-      border: 1px solid #ccc;
-      border-radius: 8px;
+      border: 1px solid transparent;
+      background: var(--surface-inset);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      background: var(--surface-card);
     }
 
     button {
       width: 100%;
-      padding: 12px;
-      font-size: 1rem;
-      font-weight: bold;
+      padding: 13px;
+      font-size: 0.95rem;
+      font-weight: 600;
       color: white;
       background-color: var(--color-primary);
       border: none;
-      border-radius: 8px;
+      border-radius: var(--radius-pill);
       cursor: pointer;
       transition: background-color 0.15s ease, transform 0.08s ease;
     }
@@ -314,9 +466,10 @@
 
     /* ---------- Sign-in area ---------- */
     .signin-box {
-      background: white;
-      padding: 16px;
-      border-radius: 12px;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      padding: 18px;
+      border-radius: var(--radius-md);
       margin-bottom: 16px;
       box-shadow: var(--shadow-card);
       display: flex;
@@ -336,20 +489,24 @@
 
     /* ---------- Pending transactions ---------- */
     .section-title {
-      font-size: 1.1rem;
-      margin: 0 0 10px 0;
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      margin: 0 0 12px 0;
+      color: var(--text-primary);
     }
 
     .pending-status {
       font-size: 0.9rem;
-      color: #666;
+      color: var(--text-secondary);
       margin-bottom: 12px;
     }
 
     .pending-item {
-      background: white;
-      padding: 14px 16px;
-      border-radius: 12px;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      padding: 16px;
+      border-radius: var(--radius-md);
       margin-bottom: 12px;
       box-shadow: var(--shadow-card);
     }
@@ -357,18 +514,21 @@
     .pending-item .pending-top {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       margin-bottom: 4px;
     }
 
     .pending-item .pending-amount {
-      font-weight: bold;
-      color: var(--color-primary);
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text-primary);
+      letter-spacing: -0.3px;
     }
 
     .pending-item .pending-meta {
       font-size: 0.8rem;
-      color: #777;
-      margin-bottom: 10px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
     }
 
     .pending-item .field {
@@ -382,6 +542,7 @@
     .pending-result {
       font-size: 0.85rem;
       margin-top: 6px;
+      color: var(--text-secondary);
     }
 
     /* Need / Want / Saving — three tappable buttons, at most one selected.
@@ -395,16 +556,17 @@
     .type-btn {
       flex: 1;
       width: auto;
-      padding: 8px 0;
+      padding: 9px 0;
       font-size: 0.85rem;
-      font-weight: normal;
-      color: #666;
-      background: white;
-      border: 1px solid #ccc;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: var(--surface-inset);
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
     }
 
     .type-btn.active {
-      font-weight: bold;
+      font-weight: 700;
       border-color: transparent;
     }
 
@@ -414,48 +576,52 @@
 
     /* ---------- Today's Summary ---------- */
     .today-total-box {
-      background-color: var(--color-primary);
-      color: white;
-      padding: 16px;
-      border-radius: 12px;
+      background-color: var(--surface-hero);
+      color: var(--text-on-hero);
+      padding: 18px;
+      border-radius: var(--radius-lg);
       margin-bottom: 16px;
     }
 
     .today-total-label {
-      font-size: 0.9rem;
-      opacity: 0.9;
+      font-size: 0.78rem;
+      color: var(--text-on-hero-muted);
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
     }
 
     .today-total-amount {
-      font-size: 2rem;
-      font-weight: bold;
+      font-size: 2.1rem;
+      font-weight: 700;
+      letter-spacing: -0.8px;
     }
 
     .today-split {
       font-size: 0.85rem;
-      opacity: 0.9;
+      color: var(--text-on-hero-muted);
       margin-top: 4px;
     }
 
     .category-row {
-      background: white;
-      padding: 10px 14px;
-      border-radius: 10px;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
       margin-bottom: 8px;
-      box-shadow: var(--shadow-card);
     }
 
     .category-row .category-top {
       display: flex;
       justify-content: space-between;
       font-size: 0.9rem;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
+      color: var(--text-primary);
     }
 
     .category-row .category-bar-track {
-      background: #eee;
+      background: var(--surface-inset);
       border-radius: 6px;
-      height: 8px;
+      height: 7px;
       overflow: hidden;
     }
 
@@ -472,9 +638,9 @@
       align-items: center;
       gap: 4px;
       padding: 3px 10px;
-      border-radius: 20px;
+      border-radius: var(--radius-pill);
       font-size: 0.78rem;
-      font-weight: bold;
+      font-weight: 700;
       white-space: nowrap;
     }
 
@@ -483,9 +649,9 @@
     .status-pill {
       display: inline-block;
       padding: 3px 10px;
-      border-radius: 20px;
+      border-radius: var(--radius-pill);
       font-size: 0.78rem;
-      font-weight: bold;
+      font-weight: 700;
       white-space: nowrap;
     }
 
@@ -498,7 +664,7 @@
     .empty-state {
       text-align: center;
       padding: 24px 12px;
-      color: #666;
+      color: var(--text-secondary);
     }
 
     .empty-state .empty-icon {
@@ -515,10 +681,10 @@
     /* ---------- Skeleton loading placeholders — shown instead of a
        spinner while a screen's real data is still loading ---------- */
     .skeleton-block {
-      background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%);
+      background: linear-gradient(90deg, var(--surface-inset) 25%, var(--surface-card) 50%, var(--surface-inset) 75%);
       background-size: 200% 100%;
       animation: skeleton-shimmer 1.3s ease-in-out infinite;
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
     }
 
     @keyframes skeleton-shimmer {
@@ -528,9 +694,10 @@
 
     /* ---------- Debts ---------- */
     .debt-item {
-      background: white;
-      padding: 12px 16px;
-      border-radius: 10px;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      padding: 14px 16px;
+      border-radius: var(--radius-md);
       margin-bottom: 10px;
       box-shadow: var(--shadow-card);
     }
@@ -542,13 +709,13 @@
     }
 
     .debt-item .debt-amount {
-      font-weight: bold;
-      color: var(--color-primary);
+      font-weight: 700;
+      color: var(--text-primary);
     }
 
     .debt-item .debt-meta {
       font-size: 0.8rem;
-      color: #777;
+      color: var(--text-muted);
       margin-bottom: 8px;
     }
 
@@ -563,7 +730,8 @@
       justify-content: center;
       gap: 20px;
       margin-bottom: 12px;
-      font-weight: bold;
+      font-weight: 700;
+      color: var(--text-primary);
     }
 
     .month-nav-btn {
@@ -573,7 +741,10 @@
     }
 
     /* ---------- Bottom tab bar ---------- */
-    /* Just 4 items now, so they all fit — no more sideways scrolling. */
+    /* Just 4 items now, so they all fit — no more sideways scrolling.
+       The active tab gets a solid pill behind its icon (same inverted
+       treatment as the hero card) instead of just a color change — a
+       much more distinctive, native-feeling active state. */
     .tab-bar {
       display: none; /* shown once signed in */
       position: fixed;
@@ -582,9 +753,10 @@
       transform: translateX(-50%);
       width: 100%;
       max-width: 420px;
-      background: white;
-      box-shadow: 0 -1px 6px rgba(0, 0, 0, 0.1);
-      padding: 6px 0;
+      background: var(--surface-card);
+      border-top: 0.5px solid var(--border-hairline);
+      box-shadow: 0 -1px 8px rgba(17, 18, 20, 0.05);
+      padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
       justify-content: space-around;
     }
 
@@ -592,28 +764,35 @@
       flex: 1;
       background: none;
       border: none;
-      color: #888;
-      font-size: 0.75rem;
-      padding: 6px 0;
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      padding: 4px 0;
       cursor: pointer;
       width: auto;
       transition: color 0.15s ease, transform 0.08s ease;
     }
 
     .tab-btn .tab-icon {
-      display: block;
-      font-size: 1.3rem;
-      margin-bottom: 2px;
+      display: inline-block;
+      font-size: 1.15rem;
+      margin-bottom: 3px;
+      padding: 3px 14px;
+      border-radius: var(--radius-pill);
+      transition: background-color 0.15s ease;
     }
 
     .tab-btn.active {
-      color: var(--color-primary);
-      font-weight: bold;
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .tab-btn.active .tab-icon {
+      background: var(--surface-hero);
     }
 
     .tab-btn:hover {
       background: none;
-      color: var(--color-primary);
+      color: var(--text-primary);
     }
 
     .tab-btn:active {
@@ -622,7 +801,7 @@
 
     /* Room at the bottom so content isn't hidden behind the fixed tab bar */
     #appContent {
-      padding-bottom: 70px;
+      padding-bottom: 74px;
     }
 
     /* ---------- "More" menu grid ---------- */
@@ -636,15 +815,15 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 6px;
-      background: white;
-      border: none;
-      border-radius: 12px;
+      gap: 8px;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
       padding: 20px 8px;
       box-shadow: var(--shadow-card);
-      color: #222;
-      font-size: 0.9rem;
-      font-weight: bold;
+      color: var(--text-primary);
+      font-size: 0.88rem;
+      font-weight: 600;
       cursor: pointer;
       width: auto;
       text-align: center;
@@ -656,11 +835,11 @@
     }
 
     .more-menu-item:hover {
-      background: #f4f5f7;
+      background: var(--surface-inset);
     }
 
     .more-menu-icon {
-      font-size: 1.8rem;
+      font-size: 1.7rem;
     }
 
     /* ---------- "Back" button on More's sub-screens ---------- */
@@ -670,7 +849,7 @@
       border: none;
       color: var(--color-primary);
       font-size: 0.9rem;
-      font-weight: bold;
+      font-weight: 600;
       padding: 0;
       margin-bottom: 12px;
       cursor: pointer;
@@ -883,9 +1062,9 @@
           </div>
 
           <p id="ccStatusMessage" style="font-size:0.9rem; margin:10px 0 4px 0;"></p>
-          <p id="ccDueInfo" style="font-size:0.85rem; color:#666; margin:2px 0;"></p>
-          <p id="ccProjection" style="font-size:0.85rem; color:#666; margin:2px 0;"></p>
-          <p id="ccSafeDaily" style="font-size:0.85rem; color:#666; margin:2px 0 14px 0;"></p>
+          <p id="ccDueInfo" style="font-size:0.85rem; color:var(--text-secondary); margin:2px 0;"></p>
+          <p id="ccProjection" style="font-size:0.85rem; color:var(--text-secondary); margin:2px 0;"></p>
+          <p id="ccSafeDaily" style="font-size:0.85rem; color:var(--text-secondary); margin:2px 0 14px 0;"></p>
 
           <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Per Card</h3>
           <div id="ccCardBreakdown"></div>
@@ -979,7 +1158,7 @@
             </div>
           </div>
 
-          <p id="savingsSplitLine" style="font-size:0.85rem; color:#666; margin:10px 0 16px 0;"></p>
+          <p id="savingsSplitLine" style="font-size:0.85rem; color:var(--text-secondary); margin:10px 0 16px 0;"></p>
 
           <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Wish List Items</h3>
           <div id="wishlistItems"></div>
@@ -1123,6 +1302,16 @@
       <div id="view-settings" style="display:none">
         <button type="button" class="back-to-more">← Back</button>
         <h2 class="section-title">Settings</h2>
+
+        <div class="field">
+          <label>Appearance</label>
+          <select id="settingsTheme">
+            <option value="system">Match my device</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+
         <p class="pending-status">These control the CC Advisor and Savings screens.</p>
 
         <div class="field">
@@ -1191,8 +1380,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-08-5";
-    const APP_CHANGELOG = "Added History: browse and fix past transactions (note, category, amount, type) under More, no need to touch the Sheet.";
+    const APP_VERSION = "2026-08-08-6";
+    const APP_CHANGELOG = "New look: redesigned the whole app, and added a Light/Dark theme choice under Settings.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -2269,7 +2458,7 @@
 
       if (a.topAmount > 0) {
         const topLine = document.createElement("p");
-        topLine.style.cssText = "font-size:0.85rem; color:#666; margin-top:10px;";
+        topLine.style.cssText = "font-size:0.85rem; color:var(--text-secondary); margin-top:10px;";
         topLine.textContent = "Top expense: ₹" + a.topAmount.toLocaleString("en-IN") +
           (a.topNote ? " (" + a.topNote + ")" : "");
         analysisCategoriesEl.appendChild(topLine);
@@ -2705,11 +2894,11 @@
 
       const actionHtml = entry.canAfford
         ? '<button type="button" class="settle-btn purchase-btn" style="margin-top:8px;">Mark Purchased</button><div class="pending-result"></div>'
-        : `<div style="font-size:0.8rem; color:#777; margin-top:6px;">Need ₹${entry.remaining.toLocaleString("en-IN")} more</div>`;
+        : `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:6px;">Need ₹${entry.remaining.toLocaleString("en-IN")} more</div>`;
 
       card.innerHTML = `
         <div class="category-top">
-          <span>${entry.item} <span style="color:#999; font-size:0.8rem;">[${entry.priority}]</span></span>
+          <span>${entry.item} <span style="color:var(--text-muted); font-size:0.8rem;">[${entry.priority}]</span></span>
           <span>₹${entry.price.toLocaleString("en-IN")}</span>
         </div>
         <div class="category-bar-track">
@@ -3365,6 +3554,25 @@
     const saveSettingsButtonEl      = document.getElementById("saveSettingsButton");
     const settingsResultEl          = document.getElementById("settingsResult");
 
+    // Theme is purely local (not stored on the backend) and applies the
+    // instant you pick it — no "Save" needed, unlike the CC/Savings
+    // fields below it on the same screen. Reflects whatever the
+    // early <head> script already applied (or "system" if you've never
+    // picked one), so the dropdown always shows the truth.
+    const settingsThemeEl = document.getElementById("settingsTheme");
+    settingsThemeEl.value = localStorage.getItem("themePreference") || "system";
+
+    settingsThemeEl.addEventListener("change", function () {
+      const choice = settingsThemeEl.value;
+      if (choice === "system") {
+        localStorage.removeItem("themePreference");
+        document.documentElement.removeAttribute("data-theme");
+      } else {
+        localStorage.setItem("themePreference", choice);
+        document.documentElement.setAttribute("data-theme", choice);
+      }
+    });
+
     function loadSettings() {
       const cached = loadCache("settings");
       if (cached) renderSettings(cached);
@@ -3463,7 +3671,7 @@
 
       card.innerHTML = `
         <div class="pending-top">
-          <span>₹<input type="number" class="history-amount" value="${txn.amount}" min="0" step="1" style="width:90px; font-size:1em; font-weight:bold; border:1px solid #ccc; border-radius:6px; padding:2px 4px;"></span>
+          <span>₹<input type="number" class="history-amount" value="${txn.amount}" min="0" step="1" style="width:90px; font-size:1em; font-weight:bold; border:1px solid transparent; background:var(--surface-inset); color:var(--text-primary); border-radius:6px; padding:2px 4px;"></span>
           <span>${txn.mode}</span>
         </div>
         <div class="pending-meta">${txn.date} ${txn.time} · ${txn.bank}${counterpartyText}</div>

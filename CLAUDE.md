@@ -91,6 +91,43 @@ UI time until the automation/features work below is solid):
   badges, and small empty-state icons, stripped everywhere else (no more
   ✅/❌ prefixes, no emoji in headers/status text/push titles).
 
+**Drastic visual redesign (2026-08-08, after Automation phase below was
+solid)** — user asked for a genuine "app vibe," explicitly wanted it
+drastic, offered the option of pulling in a CSS framework/theme. Declined
+that (confirmed with user) to keep the "no frameworks" rule from Tech
+choices intact — achieved entirely with hand-written CSS instead. Two
+mockup rounds via the visualize tool first (a soft pass, then a much
+bolder one) before touching real code, per the "show before building"
+rule. What changed:
+- Full design-token rewrite: page background is now a soft tint (not
+  white) so cards visibly sit on something; the hero card (today's spend)
+  and the active bottom-nav icon are deliberately inverted (near-black on
+  the light theme) as the app's one high-contrast signature element,
+  vivid green in dark mode; bigger/tighter number typography; softer
+  filled inputs instead of border-only; pill-shaped buttons.
+- **Full dark mode**, both automatic (`prefers-color-scheme`) and a
+  manual Light/Dark/System choice in Settings (`themePreference` in
+  localStorage, applied via a `data-theme` attribute set by a tiny
+  synchronous script at the very top of `<head>` — has to run before
+  first paint or you'd see a flash of the wrong theme). Every category
+  color, status color, and Need/Want/Saving color got a dark counterpart.
+- Same markup, all CSS-level — no JS render-function logic touched,
+  since every screen already used shared classes (`.pending-item`,
+  `.field`, `.type-toggle`, etc.) that the new stylesheet just redefines.
+  Also hunted down and fixed ~8 leftover hardcoded hex colors sitting in
+  inline styles/JS template strings outside the main stylesheet (CC
+  Advisor, Savings, History) that would've stayed wrong in dark mode
+  otherwise.
+- Automated browser testing hit a real limitation here: the preview tool
+  doesn't actively composite/repaint in this environment (confirmed via
+  failed screenshots, `document.visibilityState` reporting hidden, and
+  `requestAnimationFrame` never firing), so a live "toggle theme, does an
+  already-rendered element repaint" check couldn't be fully verified
+  automatically — fresh elements created directly in each theme did
+  verify correctly, and the CSS itself was checked for conflicting rules
+  (none found), but the live-toggle repaint was confirmed by the user on
+  their real device instead, not by the tooling.
+
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
 never need to ask for a category, and ALL routine interaction must happen

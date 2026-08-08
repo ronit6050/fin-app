@@ -813,7 +813,8 @@ function getTransactionHistory(offset, limit){
   offset = Number(offset) || 0;
   limit  = Number(limit) || 20;
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Transactions");
   const data  = sheet.getDataRange().getValues();
 
   const noted = [];
@@ -840,10 +841,24 @@ function getTransactionHistory(offset, limit){
   }
 
   noted.reverse(); // newest first
+  const page = noted.slice(offset, offset + limit);
+
+  // Only compute Need/Want/Saving guesses for the one page actually being
+  // returned, not the whole history — and batch-read TypeMemory once for
+  // that page instead of per row (same reasoning as getPendingTransactions).
+  const typeMemorySheet = ss.getSheetByName("TypeMemory");
+  const typeMemoryData  = typeMemorySheet ? typeMemorySheet.getDataRange().getValues() : [];
+
+  page.forEach(function(t){
+    // Uses the transaction's REAL stored category (not a fresh guess) —
+    // it may have been deliberately chosen differently than the category
+    // engine would suggest, and that choice should be respected here.
+    t.suggestedType = getSuggestedType(t.type, t.category, t.counterparty, t.amount, typeMemoryData);
+  });
 
   return {
     total:        noted.length,
-    transactions: noted.slice(offset, offset + limit)
+    transactions: page
   };
 }
 
