@@ -1490,8 +1490,14 @@
       const card = document.createElement("div");
       card.className = "pending-item";
 
+      // Pre-select whatever category the smart engine guessed, so most
+      // items just need a tap on Save instead of picking one manually.
+      const suggested = txn.suggestedCategory || "Other";
       const categoryOptionsHtml = CATEGORY_OPTIONS
-        .map(function (cat) { return `<option value="${cat}">${cat}</option>`; })
+        .map(function (cat) {
+          const selectedAttr = (cat === suggested) ? " selected" : "";
+          return `<option value="${cat}"${selectedAttr}>${cat}</option>`;
+        })
         .join("");
 
       const counterpartyText = txn.counterparty ? " · " + txn.counterparty : "";
@@ -1523,11 +1529,12 @@
         resultEl.textContent = "Saving...";
 
         callAppsScript({
-          action:   "saveNote",
-          idToken:  currentUser.idToken,
-          row:      txn.row,
-          note:     noteInput.value,
-          category: categorySelect.value
+          action:       "saveNote",
+          idToken:      currentUser.idToken,
+          row:          txn.row,
+          note:         noteInput.value,
+          category:     categorySelect.value,
+          counterparty: txn.counterparty
         })
           .then(function (data) {
             if (data.ok) {
