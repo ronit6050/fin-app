@@ -60,26 +60,138 @@
 
     /* ---------- App title bar ---------- */
     .app-header {
-      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: 16px;
     }
 
-    .app-header img {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
-      margin-bottom: 6px;
+    .app-header-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
-    .app-header h1 {
-      margin: 0 0 4px 0;
-      font-size: 1.6rem;
+    .app-header-brand img {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
     }
 
-    .app-header p {
-      margin: 0;
-      font-size: 0.85rem;
+    .app-header-brand span {
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+
+    /* ---------- Avatar + profile popover ---------- */
+    .avatar-wrap {
+      position: relative;
+    }
+
+    .avatar-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--color-primary);
+      color: white;
+      font-weight: bold;
+      font-size: 0.9rem;
+      border: none;
+      cursor: pointer;
+    }
+
+    .profile-popover {
+      position: absolute;
+      top: 44px;
+      right: 0;
+      background: white;
+      border-radius: 12px;
+      box-shadow: var(--shadow-card);
+      padding: 12px;
+      min-width: 180px;
+      z-index: 10;
+    }
+
+    .profile-email {
+      font-size: 0.8rem;
       color: #666;
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+
+    .profile-signout-btn {
+      width: 100%;
+      background: none;
+      border: 1px solid #ddd;
+      color: #222;
+      font-weight: normal;
+      padding: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .profile-signout-btn:hover {
+      background: #f4f5f7;
+    }
+
+    /* ---------- Home dashboard ---------- */
+    .hero-card {
+      background-color: var(--color-primary);
+      color: white;
+      padding: 20px;
+      border-radius: 16px;
+      margin-bottom: 16px;
+    }
+
+    .hero-label {
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+
+    .hero-amount {
+      font-size: 2.2rem;
+      font-weight: bold;
+      margin: 2px 0;
+    }
+
+    .hero-sub {
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat-card {
+      background: white;
+      border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: var(--shadow-card);
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: #666;
+      margin-bottom: 2px;
+    }
+
+    .stat-value {
+      font-size: 1.3rem;
+      font-weight: bold;
+    }
+
+    .home-recent-row {
+      background: white;
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      box-shadow: var(--shadow-card);
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
     }
 
     /* ---------- Loading spinner ---------- */
@@ -151,22 +263,6 @@
       box-shadow: var(--shadow-card);
       display: flex;
       justify-content: center;
-    }
-
-    .signedin-info {
-      background: white;
-      padding: 12px 16px;
-      border-radius: 12px;
-      margin-bottom: 16px;
-      box-shadow: var(--shadow-card);
-      display: none; /* hidden until someone actually signs in */
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .signedin-email {
-      font-size: 0.9rem;
-      color: #444;
     }
 
     .signout-link {
@@ -450,9 +546,19 @@
 
     <!-- ===== App title bar — always visible, signed in or not ===== -->
     <div class="app-header">
-      <img src="icons/icon-192.png" alt="">
-      <h1>Fin App</h1>
-      <p>Your finance-bot, without Telegram</p>
+      <div class="app-header-brand">
+        <img src="icons/icon-192.png" alt="">
+        <span>Fin App</span>
+      </div>
+
+      <!-- Avatar + profile popover — only shown once signed in -->
+      <div class="avatar-wrap" id="avatarWrap" style="display:none">
+        <button type="button" class="avatar-btn" id="profileAvatarButton"></button>
+        <div class="profile-popover" id="profilePopover" style="display:none">
+          <div class="profile-email" id="profileEmail"></div>
+          <button type="button" class="profile-signout-btn" id="signOutButton">Sign out</button>
+        </div>
+      </div>
     </div>
 
     <!-- ===== Sign in with Google ===== -->
@@ -467,40 +573,55 @@
       </div>
     </div>
 
-    <!-- ===== Shown instead, once signed in ===== -->
-    <div class="signedin-info" id="signedInInfo">
-      <span class="signedin-email" id="signedInEmail"></span>
-      <button class="signout-link" id="signOutButton">Sign out</button>
-    </div>
-
     <!-- ===== Everything below is hidden until you sign in ===== -->
     <!-- Each screen below is a "tab" — only one is shown at a time.
          The bottom tab bar (further down) switches between them.
          New features get their own tab here as we build them. -->
     <div id="appContent" style="display:none">
 
+      <!-- ===== TAB: Home — dashboard, the new default landing screen ===== -->
+      <section id="view-home" class="tab-view">
+        <div id="homeStatus"><span class="spinner"></span>Loading...</div>
+        <div id="homeContent" style="display:none">
+
+          <div class="hero-card">
+            <div class="hero-label">Spent today</div>
+            <div class="hero-amount" id="homeTodaySpend">₹0</div>
+            <div class="hero-sub" id="homeMonthSpend"></div>
+          </div>
+
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-label">Pending</div>
+              <div class="stat-value" id="homePendingCount">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Cash balance</div>
+              <div class="stat-value" id="homeCashBalance">₹0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">CC usage</div>
+              <div class="stat-value" id="homeCCUsage">0%</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Debts, net</div>
+              <div class="stat-value" id="homeDebtsNet">₹0</div>
+            </div>
+          </div>
+
+          <h3 style="font-size:0.95rem; margin:16px 0 8px 0;">Recent</h3>
+          <div id="homeRecent"></div>
+        </div>
+      </section>
+
       <!-- ===== TAB: Pending Transactions — your real bank/UPI data ===== -->
       <!-- This replaces Telegram's "reply to alert" flow: transactions that
            were already alerted but still have no note show up here. -->
-      <section id="view-pending" class="tab-view">
+      <section id="view-pending" class="tab-view" style="display:none">
         <h2 class="section-title">Pending Transactions</h2>
         <div class="pending-status" id="pendingStatus"><span class="spinner"></span>Loading...</div>
         <div id="pendingList"></div>
         <button type="button" id="showMoreButton" style="display:none">Show more</button>
-      </section>
-
-      <!-- ===== TAB: Today's Summary ===== -->
-      <section id="view-today" class="tab-view" style="display:none">
-        <h2 class="section-title">Today's Summary</h2>
-        <div id="todayStatus"><span class="spinner"></span>Loading...</div>
-        <div id="todayContent" style="display:none">
-          <div class="today-total-box">
-            <div class="today-total-label">Spent Today</div>
-            <div class="today-total-amount" id="todayTotalAmount">₹0</div>
-            <div class="today-split" id="todaySplit"></div>
-          </div>
-          <div id="todayCategories"></div>
-        </div>
       </section>
 
       <!-- ===== TAB: Monthly Analysis ===== -->
@@ -527,6 +648,10 @@
 
         <!-- Grid of buttons; tapping one hides this and shows that screen below -->
         <div id="moreMenu" class="more-menu">
+          <button type="button" class="more-menu-item" data-target="today">
+            <span class="more-menu-icon">📊</span>
+            <span>Today's Summary</span>
+          </button>
           <button type="button" class="more-menu-item" data-target="cc">
             <span class="more-menu-icon">💳</span>
             <span>CC Advisor</span>
@@ -548,6 +673,21 @@
             <span>Cash</span>
           </button>
         </div>
+
+      <!-- ===== SUB-SCREEN: Today's Summary ===== -->
+      <div id="view-today" style="display:none">
+        <button type="button" class="back-to-more">← Back</button>
+        <h2 class="section-title">Today's Summary</h2>
+        <div id="todayStatus"><span class="spinner"></span>Loading...</div>
+        <div id="todayContent" style="display:none">
+          <div class="today-total-box">
+            <div class="today-total-label">Spent Today</div>
+            <div class="today-total-amount" id="todayTotalAmount">₹0</div>
+            <div class="today-split" id="todaySplit"></div>
+          </div>
+          <div id="todayCategories"></div>
+        </div>
+      </div>
 
       <!-- ===== SUB-SCREEN: CC Advisor ===== -->
       <div id="view-cc" style="display:none">
@@ -798,11 +938,11 @@
          4 primary destinations. CC/Debts/Savings/Investments/Cash live
          inside the "More" tab instead, since they're used less often. -->
     <nav class="tab-bar" id="tabBar">
-      <button class="tab-btn active" data-tab="pending" type="button">
-        <span class="tab-icon">📋</span>Pending
+      <button class="tab-btn active" data-tab="home" type="button">
+        <span class="tab-icon">🏠</span>Home
       </button>
-      <button class="tab-btn" data-tab="today" type="button">
-        <span class="tab-icon">📊</span>Today
+      <button class="tab-btn" data-tab="pending" type="button">
+        <span class="tab-icon">📋</span>Pending
       </button>
       <button class="tab-btn" data-tab="analysis" type="button">
         <span class="tab-icon">📈</span>Analysis
@@ -863,8 +1003,10 @@
     const signInBox     = document.getElementById("signInBox");
     const notAllowedBox = document.getElementById("notAllowedBox");
     const tryAgainButton = document.getElementById("tryAgainButton");
-    const signedInInfo  = document.getElementById("signedInInfo");
-    const signedInEmail = document.getElementById("signedInEmail");
+    const avatarWrap     = document.getElementById("avatarWrap");
+    const profileAvatarButton = document.getElementById("profileAvatarButton");
+    const profilePopover = document.getElementById("profilePopover");
+    const profileEmail   = document.getElementById("profileEmail");
     const signOutButton = document.getElementById("signOutButton");
     const appContent    = document.getElementById("appContent");
     const tabBar        = document.getElementById("tabBar");
@@ -877,15 +1019,17 @@
     function showSignedInUI(user) {
       signInBox.style.display = "none";
       notAllowedBox.style.display = "none";
-      signedInEmail.textContent = "Signed in as " + user.email;
-      signedInInfo.style.display = "flex";
+      profileAvatarButton.textContent = user.email.charAt(0).toUpperCase();
+      profileEmail.textContent = user.email;
+      avatarWrap.style.display = "block";
       appContent.style.display = "block";
       tabBar.style.display = "flex";
     }
 
     // Shows the sign-in button and hides the app
     function showSignedOutUI() {
-      signedInInfo.style.display = "none";
+      avatarWrap.style.display = "none";
+      profilePopover.style.display = "none";
       notAllowedBox.style.display = "none";
       appContent.style.display = "none";
       tabBar.style.display = "none";
@@ -895,11 +1039,24 @@
     // Shows the "wrong account" message and hides the app
     function showNotAllowedUI() {
       signInBox.style.display = "none";
-      signedInInfo.style.display = "none";
+      avatarWrap.style.display = "none";
+      profilePopover.style.display = "none";
       appContent.style.display = "none";
       tabBar.style.display = "none";
       notAllowedBox.style.display = "flex";
     }
+
+    // Tapping the avatar toggles the little profile popover
+    profileAvatarButton.addEventListener("click", function () {
+      profilePopover.style.display = (profilePopover.style.display === "none") ? "block" : "none";
+    });
+
+    // Tapping anywhere else closes it
+    document.addEventListener("click", function (event) {
+      if (!avatarWrap.contains(event.target)) {
+        profilePopover.style.display = "none";
+      }
+    });
 
     // Google calls this function automatically after someone signs in
     // (either by clicking the button, or being silently re-signed-in).
@@ -929,7 +1086,10 @@
 
       showSignedInUI(currentUser);
 
-      // Now that we have a fresh, valid sign-in proof, load real data
+      // Now that we have a fresh, valid sign-in proof, load real data.
+      // Pending loads quietly in the background too (not just when its tab
+      // is opened) so new-transaction notifications keep working correctly.
+      loadDashboard();
       loadPendingTransactions();
 
       // Ask (once) if we're allowed to show notifications for new transactions
@@ -957,6 +1117,7 @@
         if (savedUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase() && savedUser.idToken) {
           currentUser = savedUser;
           showSignedInUI(currentUser);
+          loadDashboard();
           loadPendingTransactions();
           setupPushNotifications();
         } else {
@@ -1050,6 +1211,72 @@
       try {
         localStorage.setItem("cache_" + key, JSON.stringify(data));
       } catch (e) { /* storage full or unavailable — just skip caching this once */ }
+    }
+
+    // ---------------------------------------------------------
+    // HOME DASHBOARD
+    // ---------------------------------------------------------
+    const homeStatusEl        = document.getElementById("homeStatus");
+    const homeContentEl       = document.getElementById("homeContent");
+    const homeTodaySpendEl    = document.getElementById("homeTodaySpend");
+    const homeMonthSpendEl    = document.getElementById("homeMonthSpend");
+    const homePendingCountEl  = document.getElementById("homePendingCount");
+    const homeCashBalanceEl   = document.getElementById("homeCashBalance");
+    const homeCCUsageEl       = document.getElementById("homeCCUsage");
+    const homeDebtsNetEl      = document.getElementById("homeDebtsNet");
+    const homeRecentEl        = document.getElementById("homeRecent");
+
+    function loadDashboard() {
+      const cached = loadCache("dashboard");
+      if (cached) {
+        renderDashboard(cached);
+      } else {
+        homeStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+        homeContentEl.style.display = "none";
+      }
+
+      callAppsScript({ action: "getDashboard", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (!data.ok) {
+            if (isAuthError(data.error)) {
+              handleSessionExpired();
+            } else if (!cached) {
+              homeStatusEl.textContent = "❌ " + data.error;
+            }
+            return;
+          }
+
+          saveCache("dashboard", data.dashboard);
+          renderDashboard(data.dashboard);
+        })
+        .catch(function (err) {
+          if (cached) return;
+          homeStatusEl.textContent = "❌ Couldn't load: " + err.message;
+        });
+    }
+
+    function renderDashboard(d) {
+      homeStatusEl.textContent = "";
+      homeContentEl.style.display = "block";
+
+      homeTodaySpendEl.textContent = "₹" + d.todaySpend.toLocaleString("en-IN");
+      homeMonthSpendEl.textContent = "₹" + d.monthSpend.toLocaleString("en-IN") + " this month";
+      homePendingCountEl.textContent = d.pendingCount;
+      homeCashBalanceEl.textContent = "₹" + d.cashBalance.toLocaleString("en-IN");
+      homeCCUsageEl.textContent = d.ccUsagePct + "%";
+      homeDebtsNetEl.textContent = (d.debtsNet >= 0 ? "+₹" : "-₹") + Math.abs(d.debtsNet).toLocaleString("en-IN");
+
+      homeRecentEl.innerHTML = "";
+      if (d.recent.length === 0) {
+        homeRecentEl.innerHTML = "<p style=\"color:#666; font-size:0.9rem;\">Nothing pending right now.</p>";
+      } else {
+        d.recent.forEach(function (entry) {
+          const row = document.createElement("div");
+          row.className = "home-recent-row";
+          row.innerHTML = `<span>${entry.label}</span><span>₹${entry.amount.toLocaleString("en-IN")}</span>`;
+          homeRecentEl.appendChild(row);
+        });
+      }
     }
 
     function loadPendingTransactions() {
@@ -1301,8 +1528,8 @@
 
     // The 4 primary destinations in the bottom bar
     const tabViews = {
+      home:     document.getElementById("view-home"),
       pending:  document.getElementById("view-pending"),
-      today:    document.getElementById("view-today"),
       analysis: document.getElementById("view-analysis"),
       more:     document.getElementById("view-more")
     };
@@ -1310,6 +1537,7 @@
     // The less-frequent screens that live INSIDE the "More" tab
     const moreMenuEl = document.getElementById("moreMenu");
     const subViews = {
+      today:       document.getElementById("view-today"),
       cc:          document.getElementById("view-cc"),
       debts:       document.getElementById("view-debts"),
       savings:     document.getElementById("view-savings"),
@@ -1317,8 +1545,10 @@
       cash:        document.getElementById("view-cash")
     };
 
-    // Only load a screen's data the first time it's opened, not every time
-    const tabLoaded = { pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false }; // pending loads on sign-in already
+    // Only load a screen's data the first time it's opened, not every time.
+    // Home and Pending load on sign-in already (not lazily), since Home is
+    // the landing screen and Pending needs to be ready for notifications.
+    const tabLoaded = { home: true, pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false };
 
     // Switches between the 4 primary tabs
     function switchTab(tabName) {
@@ -1330,11 +1560,6 @@
       tabButtons.forEach(function (btn) {
         btn.classList.toggle("active", btn.dataset.tab === tabName);
       });
-
-      if (tabName === "today" && !tabLoaded.today) {
-        tabLoaded.today = true;
-        loadTodaySummary();
-      }
 
       if (tabName === "analysis" && !tabLoaded.analysis) {
         tabLoaded.analysis = true;
@@ -1365,6 +1590,10 @@
         subViews[key].style.display = (key === name) ? "block" : "none";
       });
 
+      if (name === "today" && !tabLoaded.today) {
+        tabLoaded.today = true;
+        loadTodaySummary();
+      }
       if (name === "cc" && !tabLoaded.cc) {
         tabLoaded.cc = true;
         loadCCAdvisor();
