@@ -33,7 +33,7 @@ function handlePwaRequest(data){
   }
 
   if(data.action === "saveNote"){
-    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type));
+    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount));
   }
 
   if(data.action === "getTodaySummary"){
@@ -114,6 +114,10 @@ function handlePwaRequest(data){
 
   if(data.action === "updateSettings"){
     return jsonResponse(updateSettings(data.settings));
+  }
+
+  if(data.action === "getTransactionHistory"){
+    return jsonResponse({ ok:true, ...getTransactionHistory(data.offset, data.limit) });
   }
 
   return jsonResponse({ ok:false, error:"Unknown action." });
@@ -801,6 +805,48 @@ function getPendingTransactions(txnData){
   return pending.reverse(); // newest first
 }
 
+// Already-noted transactions (the opposite filter from
+// getPendingTransactions) for the History screen's browse-and-edit flow.
+// offset/limit paginate, newest first — defaults to the first 20.
+// See docs/features/history.md.
+function getTransactionHistory(offset, limit){
+  offset = Number(offset) || 0;
+  limit  = Number(limit) || 20;
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  const data  = sheet.getDataRange().getValues();
+
+  const noted = [];
+
+  for(let i = 1; i < data.length; i++){
+    const processed = (data[i][15] || "").toString().trim();
+    const note       = (data[i][12] || "").toString().trim();
+
+    if(processed !== "YES") continue;
+    if(!note) continue;
+
+    noted.push({
+      row:          i + 1,
+      date:         Utilities.formatDate(new Date(data[i][0]), Session.getScriptTimeZone(), "dd MMM yyyy"),
+      time:         Utilities.formatDate(new Date(data[i][1]), Session.getScriptTimeZone(), "HH:mm"),
+      bank:         data[i][2] || "",
+      type:         data[i][3] || "",
+      mode:         data[i][4] || "",
+      amount:       Number(data[i][5]) || 0,
+      counterparty: data[i][7] || "",
+      note:         note,
+      category:     data[i][13] || "Other"
+    });
+  }
+
+  noted.reverse(); // newest first
+
+  return {
+    total:        noted.length,
+    transactions: noted.slice(offset, offset + limit)
+  };
+}
+
 // A fast, no-AI-call category guess — reuses the same merchant memory and
 // keyword patterns as the full smart category engine in category.js, but
 // skips the Gemini fallback layer so guessing 50+ pending items at once
@@ -839,11 +885,22 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
 // Writes the note + category you typed back into the right row, and
 // teaches the smart category engine this merchant -> category mapping
 // (same as confirming a category correction on Telegram).
-function saveTransactionNote(row, note, category, counterparty, type){
+// amount is optional — only the History screen's edit flow sends it
+// (Pending never does, since the parsed amount is trusted there). This
+// same function backs both "add a note to a pending transaction" and
+// "edit a past transaction," since editing a category/type later should
+// teach SmartMemory/TypeMemory exactly like a first-time correction does
+// (confirmed with the user 2026-08-08) — reusing this function is what
+// gets that for free instead of writing a second, parallel code path.
+function saveTransactionNote(row, note, category, counterparty, type, amount){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
     sheet.getRange(row, 13).setValue(note);     // column M
     sheet.getRange(row, 14).setValue(category); // column N
+
+    if(amount !== undefined && amount !== null && amount !== ""){
+      sheet.getRange(row, 6).setValue(Number(amount)); // column F
+    }
 
     if(counterparty){
       handleCategoryCorrection(counterparty, category, "Other");
@@ -854,8 +911,8 @@ function saveTransactionNote(row, note, category, counterparty, type){
     // at all (credit, a debt-settlement category, unrecognized merchant),
     // so the PWA won't send one for those, and there's nothing to vote on.
     if(counterparty && type){
-      const amount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F
-      recordTypeVote(counterparty, amount, type);
+      const voteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
+      recordTypeVote(counterparty, voteAmount, type);
     }
 
     return { ok:true };

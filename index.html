@@ -840,6 +840,10 @@
             <span class="more-menu-icon">⚙️</span>
             <span>Settings</span>
           </button>
+          <button type="button" class="more-menu-item" data-target="history">
+            <span class="more-menu-icon">🕘</span>
+            <span>History</span>
+          </button>
         </div>
 
       <!-- ===== SUB-SCREEN: Today's Summary ===== -->
@@ -1146,6 +1150,15 @@
         <div id="settingsResult" class="pending-result"></div>
       </div>
 
+      <!-- ===== SUB-SCREEN: History (edit past transactions) ===== -->
+      <div id="view-history" style="display:none">
+        <button type="button" class="back-to-more">← Back</button>
+        <h2 class="section-title">History</h2>
+        <div id="historyStatus" class="pending-status"></div>
+        <div id="historyList"></div>
+        <button type="button" id="historyShowMore" style="display:none">Show More</button>
+      </div>
+
       </section>
       <!-- (end of #view-more — CC/Debts/Savings/Investments/Cash all live above) -->
 
@@ -1178,8 +1191,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-08-4";
-    const APP_CHANGELOG = "Added Settings: edit your credit card limit and savings targets right from the app, under More.";
+    const APP_VERSION = "2026-08-08-5";
+    const APP_CHANGELOG = "Added History: browse and fix past transactions (note, category, amount, type) under More, no need to touch the Sheet.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1955,13 +1968,14 @@
       investments: document.getElementById("view-investments"),
       cash:        document.getElementById("view-cash"),
       reconcile:   document.getElementById("view-reconcile"),
-      settings:    document.getElementById("view-settings")
+      settings:    document.getElementById("view-settings"),
+      history:     document.getElementById("view-history")
     };
 
     // Only load a screen's data the first time it's opened, not every time.
     // Home and Pending load on sign-in already (not lazily), since Home is
     // the landing screen and Pending needs to be ready for notifications.
-    const tabLoaded = { home: true, pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false, settings: false };
+    const tabLoaded = { home: true, pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false, settings: false, history: false };
 
     // Switches between the 4 primary tabs
     // Remembers which tab (and, if it's More, which sub-screen) you were
@@ -2060,6 +2074,10 @@
       if (name === "settings" && !tabLoaded.settings) {
         tabLoaded.settings = true;
         loadSettings();
+      }
+      if (name === "history" && !tabLoaded.history) {
+        tabLoaded.history = true;
+        loadHistory();
       }
     }
 
@@ -3404,6 +3422,149 @@
           settingsResultEl.textContent = err.message;
         });
     });
+
+    // ---------------------------------------------------------
+    // HISTORY — browse and edit already-noted transactions. See
+    // docs/features/history.md.
+    // ---------------------------------------------------------
+
+    const HISTORY_PAGE_SIZE = 20;
+    let historyOffset = 0;
+
+    const historyListEl     = document.getElementById("historyList");
+    const historyStatusEl   = document.getElementById("historyStatus");
+    const historyShowMoreEl = document.getElementById("historyShowMore");
+
+    function buildHistoryItem(txn) {
+      const card = document.createElement("div");
+      card.className = "pending-item";
+
+      const categoryOptionsHtml = CATEGORY_OPTIONS
+        .map(function (cat) {
+          const selectedAttr = (cat === txn.category) ? " selected" : "";
+          return `<option value="${cat}"${selectedAttr}>${cat}</option>`;
+        })
+        .join("");
+
+      const showTypeToggle = txn.type !== "credit";
+      const typeToggleHtml = showTypeToggle ? `
+        <div class="field">
+          <label>Type</label>
+          <div class="type-toggle">
+            <button type="button" class="type-btn" data-type="Need">Need</button>
+            <button type="button" class="type-btn" data-type="Want">Want</button>
+            <button type="button" class="type-btn" data-type="Saving">Saving</button>
+          </div>
+        </div>
+      ` : "";
+
+      const noteValue = (txn.note || "").replace(/"/g, "&quot;");
+      const counterpartyText = txn.counterparty ? " · " + txn.counterparty : "";
+
+      card.innerHTML = `
+        <div class="pending-top">
+          <span>₹<input type="number" class="history-amount" value="${txn.amount}" min="0" step="1" style="width:90px; font-size:1em; font-weight:bold; border:1px solid #ccc; border-radius:6px; padding:2px 4px;"></span>
+          <span>${txn.mode}</span>
+        </div>
+        <div class="pending-meta">${txn.date} ${txn.time} · ${txn.bank}${counterpartyText}</div>
+        <div class="field">
+          <label>Note</label>
+          <input type="text" class="history-note" value="${noteValue}">
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <select class="history-category">${categoryOptionsHtml}</select>
+        </div>
+        ${typeToggleHtml}
+        <button type="button" class="history-save-btn">Save</button>
+        <div class="pending-result"></div>
+      `;
+
+      let selectedType = null;
+      if (showTypeToggle) {
+        const typeButtons = card.querySelectorAll(".type-btn");
+        typeButtons.forEach(function (btn) {
+          if (txn.suggestedType && btn.dataset.type === txn.suggestedType) {
+            btn.classList.add("active");
+            selectedType = txn.suggestedType;
+          }
+          btn.addEventListener("click", function () {
+            typeButtons.forEach(function (b) { b.classList.remove("active"); });
+            btn.classList.add("active");
+            selectedType = btn.dataset.type;
+          });
+        });
+      }
+
+      const noteInput      = card.querySelector(".history-note");
+      const categorySelect = card.querySelector(".history-category");
+      const amountInput    = card.querySelector(".history-amount");
+      const saveButton     = card.querySelector(".history-save-btn");
+      const resultEl       = card.querySelector(".pending-result");
+
+      saveButton.addEventListener("click", function () {
+        resultEl.textContent = "Saving...";
+
+        callAppsScript({
+          action:       "saveNote",
+          idToken:      currentUser.idToken,
+          row:          txn.row,
+          note:         noteInput.value,
+          category:     categorySelect.value,
+          counterparty: txn.counterparty,
+          type:         selectedType,
+          amount:       parseFloat(amountInput.value) || txn.amount
+        })
+          .then(function (data) {
+            resultEl.textContent = data.ok ? "Saved." : data.error;
+          })
+          .catch(function (err) {
+            resultEl.textContent = err.message;
+          });
+      });
+
+      return card;
+    }
+
+    function loadHistory() {
+      historyOffset = 0;
+      historyListEl.innerHTML = "";
+      historyStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+      historyShowMoreEl.style.display = "none";
+      loadMoreHistory();
+    }
+
+    function loadMoreHistory() {
+      callAppsScript({
+        action:  "getTransactionHistory",
+        idToken: currentUser.idToken,
+        offset:  historyOffset,
+        limit:   HISTORY_PAGE_SIZE
+      })
+        .then(function (data) {
+          if (!data.ok) {
+            if (isAuthError(data.error)) { handleSessionExpired(); return; }
+            historyStatusEl.textContent = data.error;
+            return;
+          }
+
+          data.transactions.forEach(function (txn) {
+            historyListEl.appendChild(buildHistoryItem(txn));
+          });
+          historyOffset += data.transactions.length;
+
+          historyStatusEl.textContent = (historyOffset === 0 && data.total === 0)
+            ? "No transactions noted yet."
+            : "Showing " + historyOffset + " of " + data.total;
+
+          historyShowMoreEl.style.display = (historyOffset < data.total) ? "block" : "none";
+        })
+        .catch(function (err) {
+          historyStatusEl.textContent = "Couldn't load: " + err.message;
+        });
+    }
+
+    historyShowMoreEl.addEventListener("click", loadMoreHistory);
 
   </script>
 
