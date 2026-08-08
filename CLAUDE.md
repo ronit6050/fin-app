@@ -97,6 +97,13 @@ never need to ask for a category, and ALL routine interaction must happen
 in the PWA itself, never in Google Sheets (one-time data cleanup is the
 only acceptable exception).
 
+**Documentation convention (started 2026-08-08):** each non-trivial feature
+built from here on gets its own file under `docs/features/` describing what
+it does, why it's built that way, its schema, and its functions — so a
+session picking this up later doesn't have to re-derive design decisions
+from a long chat history. CLAUDE.md keeps only a short pointer + status per
+feature; the feature doc is the source of truth for how it actually works.
+
 **Auto-categorization rebuild — root cause found and fixed:**
 - Diagnosed the `SmartMemory` sheet (merchant -> category learning table):
   it was ~90% polluted by generic cash-note words ("tea","mart","lunch")
@@ -126,21 +133,20 @@ only acceptable exception).
   permanently at confidence 100 -> every future transaction from that
   merchant is auto-correct forever. No Sheets access needed at any point.
 
-**Next planned layer (not started): Need / Want / Saving tagging**, per the
-50/30/20 budgeting rule. Proposed category list (trimmed from 10) and
-default type mapping — pending final confirmation from user:
+**Next planned layer (in progress, started 2026-08-08): Need / Want / Saving
+tagging**, per the 50/30/20 budgeting rule. The original idea (a fixed
+category -> type table) was rejected during design — same category can be
+either type depending on context (a cab can be commute or a night out).
+Redesigned as a self-learning, per-merchant vote-counting system instead.
+**Full design doc: [docs/features/need-want-saving.md](docs/features/need-want-saving.md)**
+— always check that file for the current rules/schema before touching this
+feature; this section is just a pointer, not the source of truth.
 
-| Category | Default type | Notes |
-|---|---|---|
-| Food | Want | unless grocery-pattern merchant (BigBasket, Instamart, etc.) -> Need |
-| Transport | Need | |
-| Bills | Need | |
-| Shopping | Want | |
-| Health | Need | |
-| Lifestyle | Want | |
-| Financial | Need or Saving | EMI/loan/insurance -> Need; SIP/mutual fund/investment -> Saving |
-| Income | — | excluded, not spending |
-| Other | Need | safe default |
+As part of this design pass, discovered the live `Transactions` sheet has
+more columns than previously documented here (`Type` = debit/credit,
+`Counterparty`, etc.) and a broader raw `Category` value set than the PWA's
+10-option list — see the schema captured in memory
+(`reference_transactions_sheet_schema`) since the backend isn't in this repo.
 
 Also flagged by user, not yet started: revisit/rebuild other ported
 features for reliability (AI Advisor, CC Advisor, etc.) — explicitly
@@ -158,13 +164,13 @@ off before continuing.
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
 - **PWA source**: https://github.com/ronit6050/fin-app (this repo, `D:\fin-app` — the one this file lives in). Plain HTML/CSS/JS in `index.html`, plus `sw.js` (service worker), `manifest.json`, `icons/`.
 - **Apps Script Web App URL** (what the PWA calls): `https://script.google.com/macros/s/AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v/exec` — also hardcoded as `APPS_SCRIPT_URL` in `index.html`. If ever redeployed as a genuinely new deployment (not "manage deployments -> new version"), this URL changes and must be updated in `index.html`.
-- **Apps Script project**: named "Telegram Note Fetcher" in the Apps Script editor (misleading name, historical) — edited directly at script.google.com, NOT through this repo. See "finance-bot backend — current state" below, this matters a lot.
+- **Apps Script project**: named "Telegram Note Fetcher" in the Apps Script editor (misleading name, historical), script ID `126C_anjXSfWvl1ILAREWFi4CUd059Rer01fZlMgecPvSoPMXD3CEZ6w3`. As of 2026-08-08, synced with `D:\fin-app\backend` via `clasp` (Google's official CLI) — see "finance-bot backend — current state" below for the new workflow. Never edit directly at script.google.com anymore; edit the local files and `clasp push`.
 - **Firebase project**: `fin-app-76c40`, used only for push notifications (Stage 8). Console: console.firebase.google.com.
-- **Only allowed user**: `ronitnadar9@gmail.com` — hardcoded in both `index.html` (`ALLOWED_EMAIL`) and Apps Script (`PWA_ALLOWED_EMAIL` in pwa.gs). Client-side check is UI-only; the real enforcement is server-side in Apps Script.
+- **Only allowed user**: `ronitnadar9@gmail.com` — hardcoded in both `index.html` (`ALLOWED_EMAIL`) and Apps Script (`PWA_ALLOWED_EMAIL` in PWA.js). Client-side check is UI-only; the real enforcement is server-side in Apps Script.
 
 ## Tech choices
 - Plain HTML, CSS, and JavaScript. No frameworks. Keep it simple.
-- Backend/brain: Google Apps Script + Google Sheets, originally from https://github.com/ronit6050/finance-bot — **but see the note below, that GitHub repo is now stale and does NOT reflect the live backend.**
+- Backend/brain: Google Apps Script + Google Sheets. As of 2026-08-08, the backend source lives in `D:\fin-app\backend` (this repo) and is kept in sync with the live Apps Script project via `clasp` — see "finance-bot backend — current state" below. The original `ronit6050/finance-bot` GitHub repo is old/stale and no longer used.
 
 ## How to work with me
 - One step at a time.
@@ -173,14 +179,34 @@ off before continuing.
 
 ## finance-bot backend — current state (updated 2026-08-08)
 
-**IMPORTANT: the GitHub repo (ronit6050/finance-bot) is STALE.** Every backend
-change made while building the PWA was pasted directly into the live Apps
-Script editor (script.google.com) by the user, copy-pasting code given in
-chat — none of it was ever pushed back to GitHub. If you (or a future
-session) clone/read that repo expecting it to match reality, it won't for
-anything touched since 2026-08-08. Treat descriptions below as the source of
-truth for the live backend; the GitHub repo only reflects the original
-Telegram-only version.
+**The backend is now properly synced, not just described.** Until
+2026-08-08, every backend change was pasted directly into the live Apps
+Script editor by the user, copy-pasting code given in chat — none of it
+was ever saved to any repo, so descriptions here were the only source of
+truth and the linked GitHub repo was stale.
+
+That's fixed now: the real backend source lives at **`D:\fin-app\backend`**
+(this repo), kept in sync with the live Apps Script project (script ID
+`126C_anjXSfWvl1ILAREWFi4CUd059Rer01fZlMgecPvSoPMXD3CEZ6w3`) via **clasp**
+(Google's official CLI for Apps Script, installed 2026-08-08 — needs
+Node.js, which was also installed then).
+
+**Going forward, read the actual files in `D:\fin-app\backend` first** —
+they're real, current code, not a description of it. The notes below are
+still useful for the "why," but the files themselves are the source of
+truth for "what."
+
+**Workflow from now on:**
+- To pull the latest from the live Apps Script project (e.g. if the user
+  ever edits online again): `cd D:\fin-app\backend` then `clasp pull`.
+- To push local edits to the live Apps Script project: `cd D:\fin-app\backend`
+  then `clasp push`.
+- Local edits should also get `git add`/`git commit`/`git push` in the main
+  `fin-app` repo like any other change, so history is preserved — clasp
+  only handles the Apps Script <-> local sync, not git.
+- `.clasp.json` (in `backend/`) holds the script ID — safe to commit, not
+  sensitive. The actual Google OAuth credential clasp uses lives outside
+  this repo (`~/.clasprc.json`, machine-specific, never committed).
 
 Originally Telegram was the only front door: every message/button hit one
 webhook (`doPost` in `main.js`) → routed in `handlers.js` → feature module →
@@ -204,19 +230,20 @@ now a second front door into the same backend, added alongside it.
 - `cash.js` — Telegram cash tracking, daily 8pm check-in (still callable, but Telegram is off so this path is dormant unless re-enabled)
 - `category.js` — smart category engine (memory → fuzzy → pattern → Gemini), learns from corrections. **Modified**: `matchByPattern`'s food-delivery rule split into grocery-delivery (Zepto/Blinkit/BigBasket/Instamart → Need) vs restaurant-delivery (Swiggy/Zomato/Dunzo → Want). **Added**: `migrateSmartMemoryToClean()`, a one-time utility function (already run) that archived the old SmartMemory and rebuilt it clean.
 - `Credit Card.js` — credit card statement import/parsing (untouched)
-- `CCAdvisor.js` — CC usage vs ₹50,000 combined limit, 18th→18th billing cycle, 25%/30% alerts. Its constants (`CC_LIMIT`, `CC_WARN_AMT`, `CC_ALERT_AMT`) are reused directly by `pwa.gs`'s CC function — do not redeclare these elsewhere, Apps Script shares one global scope across all files and it will collide.
-- `DebtAdvisor.js` — lent/borrowed tracking, due-date reminders, settlements, AI repayment plans (untouched, its logic is reused by pwa.gs's debt functions)
-- `SavingsAdvisor.js` — 3-pot auto-split savings, wishlist affordability tracking. Its `getSavingsTotals()`, `getSplitRule()`, `getStageLabel()`, and constants (`EMERGENCY_TARGET`, `MONTHLY_SAVE_GOAL`) are reused directly by pwa.gs — same global-scope reuse pattern.
-- `Analysis.js` / `Summary.js` — original Telegram-triggered monthly/daily spend breakdowns with charts + Gemini insight text (untouched, still Telegram-only; the PWA's Today/Analysis screens use separate lighter functions in pwa.gs, not these)
+- `CCAdvisor.js` — CC usage vs ₹50,000 combined limit, 18th→18th billing cycle, 25%/30% alerts. Its constants (`CC_LIMIT`, `CC_WARN_AMT`, `CC_ALERT_AMT`) are reused directly by `PWA.js`'s CC function — do not redeclare these elsewhere, Apps Script shares one global scope across all files and it will collide.
+- `DebtAdvisor.js` — lent/borrowed tracking, due-date reminders, settlements, AI repayment plans (untouched, its logic is reused by PWA.js's debt functions)
+- `SavingsAdvisor.js` — 3-pot auto-split savings, wishlist affordability tracking. Its `getSavingsTotals()`, `getSplitRule()`, `getStageLabel()`, and constants (`EMERGENCY_TARGET`, `MONTHLY_SAVE_GOAL`) are reused directly by PWA.js — same global-scope reuse pattern.
+- `Analysis.js` / `Summary.js` — original Telegram-triggered monthly/daily spend breakdowns with charts + Gemini insight text (untouched, still Telegram-only; the PWA's Today/Analysis screens use separate lighter functions in PWA.js, not these)
 - `Recon.js` — reconciles uploaded bank statement against `Transactions` (untouched, Telegram-only, not yet ported to PWA)
 - `AIAdvisor.js` — Gemini reaction after each transaction note (untouched, Telegram-only path, dormant since Telegram is off)
 - `telegram.js` — Telegram dashboard/menu UI. **Modified**: added `const TELEGRAM_ENABLED = false;` (the on/off switch — flip to `true` to instantly restore Telegram sending). `sendMessage(text)` now only sends to Telegram if that flag is true, and — regardless of the flag — always also calls `sendPushNotification()`, using the message's first line as the push title and the rest as the body. This one change is what extended push to every existing proactive alert (CC warnings, debt nudges, savings reminders, daily check-in) without touching those files individually.
-- `Logger.js` — silent error logging to `AILogs` (untouched, `logAI(type, message)` used throughout, including by the new pwa.gs/push.gs code)
+- `Logger.js` — silent error logging to `AILogs` (untouched, `logAI(type, message)` used throughout, including by the new PWA.js/push.js code)
 
-**New files, added for the PWA (do not exist in the GitHub repo):**
+**Files added for the PWA (real filenames, confirmed via `clasp clone` 2026-08-08):**
 - `main.js` **modified**: `doPost(e)` now branches — if the incoming JSON has an `action` field, routes to `handlePwaRequest(data)`; otherwise falls through to the original `handleTelegramUpdate(e)` unchanged. This is the single shared entry point both Telegram and the PWA hit.
-- **`pwa.gs`** (new file) — everything the PWA talks to, one action per `data.action` value routed inside `handlePwaRequest(data)`. Every action first calls `verifyGoogleIdToken(data.idToken)` (checks the token against Google's tokeninfo endpoint, then checks `PWA_ALLOWED_EMAIL`) before doing anything. Actions implemented: `ping`, `getPending` (includes a `suggestedCategory` per item via `getSuggestedCategoryFast`, fast layers only, no Gemini), `saveNote` (writes note+category, also calls `handleCategoryCorrection` to teach SmartMemory using the real counterparty), `getTodaySummary`, `getMonthlyAnalysis`, `getCCAdvisor`, `getDebts`/`addDebt`/`settleDebt`, `getSavings`/`logSaving`/`addWishlistItem`/`markWishlistPurchased`, `getInvestments`/`logInvestment`, `getCash`/`addCashEntry`, `registerPushToken`, `getDashboard` (aggregates several of the above into one call for the Home screen).
-- **`push.gs`** (new file) — real background push via Firebase Cloud Messaging. `sendPushNotification(title, body)` reads the saved device token from Script Properties (`PWA_PUSH_TOKEN`) and a service account key (`FIREBASE_SERVICE_ACCOUNT`, also Script Properties — sensitive, never in any file/repo) to sign a JWT (`getFirebaseAccessToken()`) and call FCM's HTTP v1 API directly. `testPushNotification()` is a manual-run test helper.
+- **`PWA.js`** — everything the PWA talks to, one action per `data.action` value routed inside `handlePwaRequest(data)`. Every action first calls `verifyGoogleIdToken(data.idToken)` (checks the token against Google's tokeninfo endpoint, then checks `PWA_ALLOWED_EMAIL`) before doing anything. Actions implemented: `ping`, `getPending` (includes a `suggestedCategory` per item via `getSuggestedCategoryFast`, fast layers only, no Gemini), `saveNote` (writes note+category, also calls `handleCategoryCorrection` to teach SmartMemory using the real counterparty), `getTodaySummary`, `getMonthlyAnalysis`, `getCCAdvisor`, `getDebts`/`addDebt`/`settleDebt`, `getSavings`/`logSaving`/`addWishlistItem`/`markWishlistPurchased`, `getInvestments`/`logInvestment`, `getCash`/`addCashEntry`, `registerPushToken`, `getDashboard` (aggregates several of the above into one call for the Home screen).
+- **`push.js`** — real background push via Firebase Cloud Messaging. `sendPushNotification(title, body)` reads the saved device token from Script Properties (`PWA_PUSH_TOKEN`) and a service account key (`FIREBASE_SERVICE_ACCOUNT`, also Script Properties — sensitive, never in any file/repo) to sign a JWT (`getFirebaseAccessToken()`) and call FCM's HTTP v1 API directly. `testPushNotification()` is a manual-run test helper.
+- **`needWantSaving.js`** — Need/Want/Saving suggestion engine, see [docs/features/need-want-saving.md](docs/features/need-want-saving.md). Written and manually tested 2026-08-08; not yet wired into `PWA.js`.
 
 **Script Properties** (Project Settings in the Apps Script editor — not in any file):
 - `BOT_TOKEN`, `CHAT_ID`, `GEMINI_KEY` — pre-existing, for Telegram/Gemini
