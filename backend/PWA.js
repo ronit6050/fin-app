@@ -33,7 +33,7 @@ function handlePwaRequest(data){
   }
 
   if(data.action === "saveNote"){
-    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty));
+    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type));
   }
 
   if(data.action === "getTodaySummary"){
@@ -708,20 +708,27 @@ function getPendingTransactions(){
     if(note) continue;                // already has a note
 
     const bank        = data[i][2] || "";
+    const txnType     = data[i][3] || ""; // "debit" or "credit"
     const mode        = data[i][4] || "";
     const amount      = Number(data[i][5]) || 0;
     const counterparty = data[i][7] || "";
+
+    const suggestedCategory = getSuggestedCategoryFast(counterparty, amount, mode);
 
     pending.push({
       row:               i + 1,
       date:              Utilities.formatDate(new Date(data[i][0]), Session.getScriptTimeZone(), "dd MMM yyyy"),
       time:              Utilities.formatDate(new Date(data[i][1]), Session.getScriptTimeZone(), "HH:mm"),
       bank:              bank,
-      type:              data[i][3] || "",
+      type:              txnType,
       mode:              mode,
       amount:            amount,
       counterparty:      counterparty,
-      suggestedCategory: getSuggestedCategoryFast(counterparty, amount, mode)
+      suggestedCategory: suggestedCategory,
+      // Need/Want/Saving guess — null means "don't show a default" (credit,
+      // a debt-settlement category, or an unrecognized merchant). See
+      // docs/features/need-want-saving.md.
+      suggestedType:     getSuggestedType(txnType, suggestedCategory, counterparty, amount)
     });
   }
 
@@ -761,7 +768,7 @@ function getSuggestedCategoryFast(counterparty, amount, mode){
 // Writes the note + category you typed back into the right row, and
 // teaches the smart category engine this merchant -> category mapping
 // (same as confirming a category correction on Telegram).
-function saveTransactionNote(row, note, category, counterparty){
+function saveTransactionNote(row, note, category, counterparty, type){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
     sheet.getRange(row, 13).setValue(note);     // column M
@@ -769,6 +776,15 @@ function saveTransactionNote(row, note, category, counterparty){
 
     if(counterparty){
       handleCategoryCorrection(counterparty, category, "Other");
+    }
+
+    // Record a Need/Want/Saving vote too — only if a type was actually
+    // confirmed/corrected. Some transactions never get a type suggestion
+    // at all (credit, a debt-settlement category, unrecognized merchant),
+    // so the PWA won't send one for those, and there's nothing to vote on.
+    if(counterparty && type){
+      const amount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F
+      recordTypeVote(counterparty, amount, type);
     }
 
     return { ok:true };

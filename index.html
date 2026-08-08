@@ -47,6 +47,13 @@
       --cat-education-bg: #faeeda; --cat-education-text: #854f0b;
       --cat-health-bg:    #fcebeb; --cat-health-text:    #a3401f;
       --cat-other-bg:     #f1efe8; --cat-other-text:     #5f5e5a;
+
+      /* Need / Want / Saving tag colors — separate from category colors
+         above, since this is a different, independent tag on the same
+         transaction (see docs/features/need-want-saving.md). */
+      --need-bg:   #eaf3de; --need-text:   #3b6d11;
+      --want-bg:   #faeeda; --want-text:   #854f0b;
+      --saving-bg: #e6f1fb; --saving-text: #0c447c;
     }
 
     /* ---------- Basic page setup ---------- */
@@ -342,6 +349,34 @@
       font-size: 0.85rem;
       margin-top: 6px;
     }
+
+    /* Need / Want / Saving — three tappable buttons, at most one selected.
+       Starts with none selected if we have no confident guess, otherwise
+       whichever one the merchant's past votes favor. */
+    .type-toggle {
+      display: flex;
+      gap: 8px;
+    }
+
+    .type-btn {
+      flex: 1;
+      width: auto;
+      padding: 8px 0;
+      font-size: 0.85rem;
+      font-weight: normal;
+      color: #666;
+      background: white;
+      border: 1px solid #ccc;
+    }
+
+    .type-btn.active {
+      font-weight: bold;
+      border-color: transparent;
+    }
+
+    .type-btn[data-type="Need"].active   { background: var(--need-bg);   color: var(--need-text); }
+    .type-btn[data-type="Want"].active   { background: var(--want-bg);   color: var(--want-text); }
+    .type-btn[data-type="Saving"].active { background: var(--saving-bg); color: var(--saving-text); }
 
     /* ---------- Today's Summary ---------- */
     .today-total-box {
@@ -1502,6 +1537,21 @@
 
       const counterpartyText = txn.counterparty ? " · " + txn.counterparty : "";
 
+      // Money coming IN (credit) is never "spending," so there's nothing
+      // to tag Need/Want/Saving — skip the whole control for those.
+      // See docs/features/need-want-saving.md.
+      const showTypeToggle = txn.type !== "credit";
+      const typeToggleHtml = showTypeToggle ? `
+        <div class="field">
+          <label>Type</label>
+          <div class="type-toggle">
+            <button type="button" class="type-btn" data-type="Need">Need</button>
+            <button type="button" class="type-btn" data-type="Want">Want</button>
+            <button type="button" class="type-btn" data-type="Saving">Saving</button>
+          </div>
+        </div>
+      ` : "";
+
       card.innerHTML = `
         <div class="pending-top">
           <span class="pending-amount">₹${txn.amount.toLocaleString("en-IN")}</span>
@@ -1516,6 +1566,7 @@
           <label>Category</label>
           <select class="category-select">${categoryOptionsHtml}</select>
         </div>
+        ${typeToggleHtml}
         <button type="button" class="save-btn">Save</button>
         <div class="pending-result"></div>
       `;
@@ -1524,6 +1575,25 @@
       const categorySelect = card.querySelector(".category-select");
       const saveButton     = card.querySelector(".save-btn");
       const resultEl       = card.querySelector(".pending-result");
+
+      // Need/Want/Saving is a single-select toggle: pre-select the guess
+      // (if we have one), and clicking a button just moves the selection.
+      // Staying unselected is fine — it's optional, not required to Save.
+      let selectedType = null;
+      if (showTypeToggle) {
+        const typeButtons = card.querySelectorAll(".type-btn");
+        typeButtons.forEach(function (btn) {
+          if (txn.suggestedType && btn.dataset.type === txn.suggestedType) {
+            btn.classList.add("active");
+            selectedType = txn.suggestedType;
+          }
+          btn.addEventListener("click", function () {
+            typeButtons.forEach(function (b) { b.classList.remove("active"); });
+            btn.classList.add("active");
+            selectedType = btn.dataset.type;
+          });
+        });
+      }
 
       saveButton.addEventListener("click", function () {
         resultEl.textContent = "Saving...";
@@ -1534,7 +1604,8 @@
           row:          txn.row,
           note:         noteInput.value,
           category:     categorySelect.value,
-          counterparty: txn.counterparty
+          counterparty: txn.counterparty,
+          type:         selectedType
         })
           .then(function (data) {
             if (data.ok) {
