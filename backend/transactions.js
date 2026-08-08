@@ -33,30 +33,38 @@ function processNewTransactions() {
 
       const rowIndex = startRow + i + 1; // Actual row number in sheet
 
-      const date   = Utilities.formatDate(
-        new Date(data[i][0]), Session.getScriptTimeZone(), "dd MMM yyyy"
-      );
-      const time   = Utilities.formatDate(
-        new Date(data[i][1]), Session.getScriptTimeZone(), "HH:mm"
-      );
+      // One bad row (a formatting quirk, a flaky network call, anything)
+      // used to throw and abort this whole function BEFORE lastCheckedRow
+      // got saved below — which silently blocked every transaction after
+      // it too, forever, until someone noticed and fixed it by hand
+      // (happened 2026-08-08). Catching per-row means one bad row just
+      // gets skipped and logged, instead of jamming the whole pipeline.
+      try{
 
-      const bank        = data[i][2]  || "Unknown";
-      const type        = data[i][3]  || "Unknown";
-      const mode        = data[i][4]  || "Unknown";
-      const amount      = data[i][5]  || 0;
-      const reference   = data[i][6]  || "";
-      const counterparty = data[i][7] || "";
+        const date   = Utilities.formatDate(
+          new Date(data[i][0]), Session.getScriptTimeZone(), "dd MMM yyyy"
+        );
+        const time   = Utilities.formatDate(
+          new Date(data[i][1]), Session.getScriptTimeZone(), "HH:mm"
+        );
 
-      // ✅ Now shows merchant/counterparty name in the alert
-      const merchantLine = counterparty
-        ? `🏪 Merchant: ${counterparty}\n`
-        : "";
+        const bank        = data[i][2]  || "Unknown";
+        const type        = data[i][3]  || "Unknown";
+        const mode        = data[i][4]  || "Unknown";
+        const amount      = data[i][5]  || 0;
+        const reference   = data[i][6]  || "";
+        const counterparty = data[i][7] || "";
 
-      const refLine = reference
-        ? `🔖 Ref: ${reference}\n`
-        : "";
+        // ✅ Now shows merchant/counterparty name in the alert
+        const merchantLine = counterparty
+          ? `🏪 Merchant: ${counterparty}\n`
+          : "";
 
-      const message =
+        const refLine = reference
+          ? `🔖 Ref: ${reference}\n`
+          : "";
+
+        const message =
 `💳 New Transaction
 
 💰 Amount: ₹${Number(amount).toLocaleString('en-IN')}
@@ -69,32 +77,36 @@ ${merchantLine}${refLine}
 
 Reply to add a note for this transaction.`;
 
-      let messageId = "";
+        let messageId = "";
 
-      if(TELEGRAM_ENABLED){
-        const url = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
+        if(TELEGRAM_ENABLED){
+          const url = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
 
-        const response = UrlFetchApp.fetch(url, {
-          method: "post",
-          contentType: "application/json",
-          payload: JSON.stringify({
-            chat_id: CHAT_ID,
-            text: message
-          })
-        });
+          const response = UrlFetchApp.fetch(url, {
+            method: "post",
+            contentType: "application/json",
+            payload: JSON.stringify({
+              chat_id: CHAT_ID,
+              text: message
+            })
+          });
 
-        const result = JSON.parse(response.getContentText());
-        messageId = result.result.message_id;
+          const result = JSON.parse(response.getContentText());
+          messageId = result.result.message_id;
+        }
+
+        // ── Real push notification — the main alert now that Telegram is off ──
+        const pushBody = "₹" + Number(amount).toLocaleString('en-IN') + " · " + bank +
+          (counterparty ? " · " + counterparty : "");
+        sendPushNotification("💳 New Transaction", pushBody);
+
+        // Save messageId (empty if Telegram is off) and mark as processed
+        sheet.getRange(rowIndex, 15).setValue(messageId);
+        sheet.getRange(rowIndex, 16).setValue("YES");
+
+      }catch(err){
+        logAI("PROCESS_TXN_ERROR", "Row " + rowIndex + ": " + err.toString());
       }
-
-      // ── Real push notification — the main alert now that Telegram is off ──
-      const pushBody = "₹" + Number(amount).toLocaleString('en-IN') + " · " + bank +
-        (counterparty ? " · " + counterparty : "");
-      sendPushNotification("💳 New Transaction", pushBody);
-
-      // Save messageId (empty if Telegram is off) and mark as processed
-      sheet.getRange(rowIndex, 15).setValue(messageId);
-      sheet.getRange(rowIndex, 16).setValue("YES");
     }
   }
 
