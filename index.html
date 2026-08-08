@@ -185,6 +185,11 @@
     /* ---------- Basic page setup ---------- */
     * {
       box-sizing: border-box; /* makes width/height calculations include padding & border */
+      /* Without this, tapping any button/link on Android Chrome flashes
+         a solid blue rectangle over it (the browser's default touch
+         feedback) — clashes badly with our own tap-scale animation. */
+      -webkit-tap-highlight-color: transparent;
+      tap-highlight-color: transparent;
     }
 
     body {
@@ -773,12 +778,22 @@
     }
 
     .tab-btn .tab-icon {
-      display: inline-block;
-      font-size: 1.15rem;
-      margin-bottom: 3px;
-      padding: 3px 14px;
+      /* flex (not inline-flex) so it stays block-level — the label text
+         after it needs to wrap onto its own line below, same as the old
+         emoji version relied on display:block for. */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 3px auto;
+      padding: 5px 16px;
+      width: fit-content;
       border-radius: var(--radius-pill);
-      transition: background-color 0.15s ease;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .tab-btn .tab-icon svg {
+      width: 20px;
+      height: 20px;
     }
 
     .tab-btn.active {
@@ -788,6 +803,11 @@
 
     .tab-btn.active .tab-icon {
       background: var(--surface-hero);
+      /* Overrides the inherited text-primary color specifically for the
+         icon — it's sitting ON the near-black/green pill now, not on the
+         page background, so it needs the "on-hero" contrast color
+         instead, same as the hero card's own text. */
+      color: var(--text-on-hero);
     }
 
     .tab-btn:hover {
@@ -839,7 +859,12 @@
     }
 
     .more-menu-icon {
-      font-size: 1.7rem;
+      display: inline-flex;
+    }
+
+    .more-menu-icon svg {
+      width: 26px;
+      height: 26px;
     }
 
     /* ---------- "Back" button on More's sub-screens ---------- */
@@ -988,39 +1013,39 @@
         <!-- Grid of buttons; tapping one hides this and shows that screen below -->
         <div id="moreMenu" class="more-menu">
           <button type="button" class="more-menu-item" data-target="today">
-            <span class="more-menu-icon">📊</span>
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5"/><path d="M16 3v3.5"/><path d="M8 13.5l2 2 4-4.5"/></svg></span>
             <span>Today's Summary</span>
           </button>
           <button type="button" class="more-menu-item" data-target="cc">
-            <span class="more-menu-icon">💳</span>
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 9.5h19"/><path d="M6 14.5h4"/></svg></span>
             <span>CC Advisor</span>
           </button>
           <button type="button" class="more-menu-item" data-target="debts">
-            <span class="more-menu-icon">💰</span>
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3v12"/><path d="M13 11l4 4 4-4"/><path d="M7 21V9"/><path d="M11 13l-4-4-4 4"/></svg></span>
             <span>Debts</span>
           </button>
           <button type="button" class="more-menu-item" data-target="savings">
-            <span class="more-menu-icon">🎯</span>
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg></span>
             <span>Savings &amp; Wish List</span>
           </button>
           <button type="button" class="more-menu-item" data-target="investments">
-            <span class="more-menu-icon">💹</span>
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></span>
             <span>Investments</span>
           </button>
           <button type="button" class="more-menu-item" data-target="cash">
-            <span class="more-menu-icon">💵</span>
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><circle cx="12" cy="12" r="2.7"/></svg></span>
             <span>Cash</span>
           </button>
           <button type="button" class="more-menu-item" data-target="reconcile">
-            <span class="more-menu-icon">🔎</span>
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5"/></svg></span>
             <span>Reconcile</span>
           </button>
           <button type="button" class="more-menu-item" data-target="settings">
-            <span class="more-menu-icon">⚙️</span>
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.4M12 18.6V21M4.9 6.5l1.7 1.7M17.4 15.8l1.7 1.7M3 12h2.4M18.6 12H21M4.9 17.5l1.7-1.7M17.4 8.2l1.7-1.7"/></svg></span>
             <span>Settings</span>
           </button>
           <button type="button" class="more-menu-item" data-target="history">
-            <span class="more-menu-icon">🕘</span>
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
             <span>History</span>
           </button>
         </div>
@@ -1358,16 +1383,16 @@
          inside the "More" tab instead, since they're used less often. -->
     <nav class="tab-bar" id="tabBar">
       <button class="tab-btn active" data-tab="home" type="button">
-        <span class="tab-icon">🏠</span>Home
+        <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9"/><path d="M9.5 20v-6h5v6"/></svg></span>Home
       </button>
       <button class="tab-btn" data-tab="pending" type="button">
-        <span class="tab-icon">📋</span>Pending
+        <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h9"/><path d="M4 12h9"/><path d="M4 18h6"/><path d="M16 16l2.5 2.5L22 14"/></svg></span>Pending
       </button>
       <button class="tab-btn" data-tab="analysis" type="button">
-        <span class="tab-icon">📈</span>Analysis
+        <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/></svg></span>Analysis
       </button>
       <button class="tab-btn" data-tab="more" type="button">
-        <span class="tab-icon">⋯</span>More
+        <span class="tab-icon"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span>More
       </button>
     </nav>
 
@@ -1380,8 +1405,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-08-6";
-    const APP_CHANGELOG = "New look: redesigned the whole app, and added a Light/Dark theme choice under Settings.";
+    const APP_VERSION = "2026-08-08-7";
+    const APP_CHANGELOG = "Fixed: proper icons instead of emoji, no more blue flash on tap, and the back button now steps through the app instead of closing it.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -2171,9 +2196,41 @@
     // on, so refreshing the page doesn't always dump you back on Home.
     const TAB_STORAGE_KEY = "lastActiveTab";
 
+    // Without real URL routing, this is a single "page" as far as the
+    // browser/phone is concerned — so the phone's back button/gesture had
+    // nothing of ours to step back through, and just closed the app
+    // straight away. Pushing a history entry on every tab/sub-screen
+    // change (below) gives the back button somewhere real to go: back
+    // one tab at a time, then exit only once you're back at the start.
+    // isApplyingHistoryState guards against re-pushing while we're the
+    // ones RESPONDING to a back/forward press, or restoring on load.
+    let isApplyingHistoryState = false;
+
     function saveActiveTab(tabName, subViewName) {
-      localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify({ tab: tabName, subView: subViewName || null }));
+      const state = { tab: tabName, subView: subViewName || null };
+      localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(state));
+
+      if (!isApplyingHistoryState) {
+        history.pushState(state, "");
+      }
     }
+
+    window.addEventListener("popstate", function (event) {
+      isApplyingHistoryState = true;
+
+      if (event.state) {
+        switchTab(event.state.tab);
+        if (event.state.tab === "more" && event.state.subView && subViews[event.state.subView]) {
+          showMoreSubView(event.state.subView);
+        }
+      } else {
+        // Back past anything we ever pushed (the very first load) — land
+        // on Home rather than leaving whatever was on screen.
+        switchTab("home");
+      }
+
+      isApplyingHistoryState = false;
+    });
 
     // Called once, right after sign-in (fresh or restored) — see both
     // places that call loadDashboard()/loadPendingTransactions().
@@ -2185,11 +2242,19 @@
         const state = JSON.parse(saved);
         if (!tabViews[state.tab]) return; // unknown/stale value — ignore, stay on default
 
+        // Suppress pushState while restoring — switchTab()/showMoreSubView()
+        // below could each try to push their own entry, which would leave
+        // an extra intermediate step (e.g. "more" then "more/debts") for
+        // the back button to walk through. One clean push at the end
+        // instead, reflecting the fully-restored state.
+        isApplyingHistoryState = true;
         switchTab(state.tab);
-
         if (state.tab === "more" && state.subView && subViews[state.subView]) {
           showMoreSubView(state.subView);
         }
+        isApplyingHistoryState = false;
+
+        history.pushState(state, "");
       } catch (e) { /* malformed saved state — ignore, stay on default */ }
     }
 

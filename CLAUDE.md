@@ -128,6 +128,32 @@ rule. What changed:
   (none found), but the live-toggle repaint was confirmed by the user on
   their real device instead, not by the tooling.
 
+**Post-redesign fixes (2026-08-08, user tested live and reported 3
+issues):**
+- Emoji nav/More-menu icons replaced with hand-drawn inline SVG line
+  icons (`currentColor` stroke, so they're theme-aware automatically) —
+  user felt the emoji looked "regular"/low-quality against the new look.
+  No icon library pulled in, same "no frameworks" reasoning as the
+  redesign itself. Uncovered and fixed a real contrast bug this exposed:
+  the active nav icon sits on the inverted hero-colored pill, but was
+  inheriting the page's normal text color instead of the hero's contrast
+  color — invisible-ish icon on the pill. Needed its own
+  `--text-on-hero` override.
+- Fixed the default Android/Chrome blue tap-highlight rectangle flashing
+  on every button press (`-webkit-tap-highlight-color: transparent`) —
+  clashed with the app's own tap-scale feedback animation.
+- Fixed the phone's back button/gesture closing the app immediately —
+  this is a single-page app with no real URL routing, so the browser had
+  nothing of ours to step back through. Now pushes a `history` entry on
+  every tab/sub-screen change (`saveActiveTab`), and a `popstate`
+  listener replays that state on back/forward instead of letting the
+  browser navigate away — back now steps through the app's own screens
+  first (e.g. a More sub-screen → the More menu → the previous tab),
+  only exiting once you're back at the start. Verified end-to-end via
+  `history.back()` simulation in the browser tool this time (unlike the
+  dark-mode repaint check, this didn't depend on the pane actually
+  compositing frames, so it could be fully confirmed automatically).
+
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
 never need to ask for a category, and ALL routine interaction must happen
