@@ -1302,6 +1302,7 @@
       // is opened) so new-transaction notifications keep working correctly.
       loadDashboard();
       loadPendingTransactions();
+      restoreLastTab();
 
       // Ask (once) if we're allowed to show notifications for new transactions
       setupPushNotifications();
@@ -1330,6 +1331,7 @@
           showSignedInUI(currentUser);
           loadDashboard();
           loadPendingTransactions();
+          restoreLastTab();
           setupPushNotifications();
         } else {
           localStorage.removeItem(STORAGE_KEY); // stale/wrong data — ignore it
@@ -1926,6 +1928,32 @@
     const tabLoaded = { home: true, pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false };
 
     // Switches between the 4 primary tabs
+    // Remembers which tab (and, if it's More, which sub-screen) you were
+    // on, so refreshing the page doesn't always dump you back on Home.
+    const TAB_STORAGE_KEY = "lastActiveTab";
+
+    function saveActiveTab(tabName, subViewName) {
+      localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify({ tab: tabName, subView: subViewName || null }));
+    }
+
+    // Called once, right after sign-in (fresh or restored) — see both
+    // places that call loadDashboard()/loadPendingTransactions().
+    function restoreLastTab() {
+      const saved = localStorage.getItem(TAB_STORAGE_KEY);
+      if (!saved) return;
+
+      try {
+        const state = JSON.parse(saved);
+        if (!tabViews[state.tab]) return; // unknown/stale value — ignore, stay on default
+
+        switchTab(state.tab);
+
+        if (state.tab === "more" && state.subView && subViews[state.subView]) {
+          showMoreSubView(state.subView);
+        }
+      } catch (e) { /* malformed saved state — ignore, stay on default */ }
+    }
+
     function switchTab(tabName) {
       Object.keys(tabViews).forEach(function (key) {
         tabViews[key].style.display = "none";
@@ -1943,6 +1971,8 @@
 
       if (tabName === "more") {
         showMoreMenu(); // always reset to the menu grid when tapping "More" itself
+      } else {
+        saveActiveTab(tabName, null);
       }
     }
 
@@ -1956,6 +1986,7 @@
         subViews[key].style.display = "none";
       });
       moreMenuEl.style.display = "grid";
+      saveActiveTab("more", null);
     }
 
     // Shows one of the 5 sub-screens, hiding the menu grid
@@ -1964,6 +1995,7 @@
       Object.keys(subViews).forEach(function (key) {
         subViews[key].style.display = (key === name) ? "block" : "none";
       });
+      saveActiveTab("more", name);
 
       if (name === "today" && !tabLoaded.today) {
         tabLoaded.today = true;
