@@ -406,6 +406,11 @@ function markWishlistPurchasedFromApp(row, item, price){
     const ss       = SpreadsheetApp.getActiveSpreadsheet();
     const wishSheet = ss.getSheetByName("WishList");
     const savSheet  = ss.getSheetByName("Savings");
+
+    if(!Number.isInteger(row) || row < 2 || row > wishSheet.getLastRow()){
+      return { ok: false, error: "Invalid row." };
+    }
+
     const today     = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
     wishSheet.getRange(row, 4).setValue("Purchased");
@@ -502,6 +507,11 @@ function addDebtEntryFromApp(person, type, amount, note, dueDate){
 function settleDebtRow(row){
   try{
     const debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+
+    if(!Number.isInteger(row) || row < 2 || row > debtSheet.getLastRow()){
+      return { ok:false, error:"Invalid row." };
+    }
+
     const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
     debtSheet.getRange(row, 7).setValue("Settled");
@@ -910,6 +920,14 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
 function saveTransactionNote(row, note, category, counterparty, type, amount){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+
+    // The app sends which row to write to — make sure it's a real data
+    // row (not the header, not something out of range) before touching
+    // the sheet. Row 1 is headers, so the smallest valid row is 2.
+    if(!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()){
+      return { ok:false, error:"Invalid row." };
+    }
+
     sheet.getRange(row, 13).setValue(note);     // column M
     sheet.getRange(row, 14).setValue(category); // column N
 

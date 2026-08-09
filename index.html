@@ -1620,6 +1620,27 @@
     });
 
     // ---------------------------------------------------------
+    // SECURITY: escape untrusted text before putting it in HTML
+    // ---------------------------------------------------------
+    // Transaction fields like "counterparty" and "note" aren't typed by
+    // you directly — they come from your bank's SMS text (parsed by
+    // Tasker) or an uploaded bank statement. Whenever that text gets
+    // inserted into the page with innerHTML, it must go through this
+    // first, or a cleverly-crafted merchant name / UPI note could run as
+    // real code inside your app (and your sign-in token lives in
+    // localStorage, so that's not a hypothetical risk). Every place below
+    // that builds a card with innerHTML runs merchant/note/person/item
+    // text through this.
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    // ---------------------------------------------------------
     // PENDING TRANSACTIONS — your real bank/UPI data
     // ---------------------------------------------------------
 
@@ -1651,7 +1672,7 @@
     // categories, Pending items).
     function categoryBadgeHtml(categoryName) {
       const style = CATEGORY_STYLES[categoryName] || CATEGORY_STYLES.Other;
-      return `<span class="category-badge" style="background:var(--cat-${style.css}-bg); color:var(--cat-${style.css}-text);">${style.icon} ${categoryName}</span>`;
+      return `<span class="category-badge" style="background:var(--cat-${style.css}-bg); color:var(--cat-${style.css}-text);">${style.icon} ${escapeHtml(categoryName)}</span>`;
     }
 
     const pendingStatusEl  = document.getElementById("pendingStatus");
@@ -1814,7 +1835,7 @@
         d.recent.forEach(function (entry) {
           const row = document.createElement("div");
           row.className = "home-recent-row";
-          row.innerHTML = `<span>${entry.label}</span><span>₹${entry.amount.toLocaleString("en-IN")}</span>`;
+          row.innerHTML = `<span>${escapeHtml(entry.label)}</span><span>₹${entry.amount.toLocaleString("en-IN")}</span>`;
           homeRecentEl.appendChild(row);
         });
       }
@@ -1946,7 +1967,7 @@
         })
         .join("");
 
-      const counterpartyText = txn.counterparty ? " · " + txn.counterparty : "";
+      const counterpartyText = txn.counterparty ? " · " + escapeHtml(txn.counterparty) : "";
 
       // Money coming IN (credit) is never "spending," so there's nothing
       // to tag Need/Want/Saving — skip the whole control for those.
@@ -1966,9 +1987,9 @@
       card.innerHTML = `
         <div class="pending-top">
           <span class="pending-amount">₹${txn.amount.toLocaleString("en-IN")}</span>
-          <span>${txn.mode}</span>
+          <span>${escapeHtml(txn.mode)}</span>
         </div>
-        <div class="pending-meta">${txn.date} ${txn.time} · ${txn.bank}${counterpartyText}</div>
+        <div class="pending-meta">${txn.date} ${txn.time} · ${escapeHtml(txn.bank)}${counterpartyText}</div>
         <div class="field">
           <label>Note</label>
           <input type="text" class="note-input" placeholder="What was this for?">
@@ -2637,7 +2658,7 @@
           row.className = "category-row";
           row.innerHTML = `
             <div class="category-top">
-              <span>${entry.card}</span>
+              <span>${escapeHtml(entry.card)}</span>
               <span>₹${entry.amount.toLocaleString("en-IN")}</span>
             </div>
           `;
@@ -2737,11 +2758,11 @@
       const card = document.createElement("div");
       card.className = "debt-item";
 
-      const noteText = entry.note ? " · " + entry.note : "";
+      const noteText = entry.note ? " · " + escapeHtml(entry.note) : "";
 
       card.innerHTML = `
         <div class="debt-top">
-          <span>${entry.person}</span>
+          <span>${escapeHtml(entry.person)}</span>
           <span class="debt-amount">₹${entry.amount.toLocaleString("en-IN")}</span>
         </div>
         <div class="debt-meta">${formatDebtDueText(entry)}${noteText}</div>
@@ -2963,7 +2984,7 @@
 
       card.innerHTML = `
         <div class="category-top">
-          <span>${entry.item} <span style="color:var(--text-muted); font-size:0.8rem;">[${entry.priority}]</span></span>
+          <span>${escapeHtml(entry.item)} <span style="color:var(--text-muted); font-size:0.8rem;">[${escapeHtml(entry.priority)}]</span></span>
           <span>₹${entry.price.toLocaleString("en-IN")}</span>
         </div>
         <div class="category-bar-track">
@@ -3138,7 +3159,7 @@
           row.className = "category-row";
           row.innerHTML = `
             <div class="category-top">
-              <span>${entry.type}</span>
+              <span>${escapeHtml(entry.type)}</span>
               <span>₹${entry.amount.toLocaleString("en-IN")}</span>
             </div>
             <div class="category-bar-track">
@@ -3158,7 +3179,7 @@
           row.className = "category-row";
           row.innerHTML = `
             <div class="category-top">
-              <span>${entry.date} — ${entry.type}</span>
+              <span>${entry.date} — ${escapeHtml(entry.type)}</span>
               <span>₹${entry.amount.toLocaleString("en-IN")}</span>
             </div>
           `;
@@ -3268,7 +3289,7 @@
           const row = document.createElement("div");
           row.className = "category-row";
           const sign = entry.type === "credit" ? "+" : "-";
-          const noteText = entry.note ? " · " + entry.note : "";
+          const noteText = entry.note ? " · " + escapeHtml(entry.note) : "";
           row.innerHTML = `
             <div class="category-top">
               <span>${entry.date}${noteText}</span>
@@ -3358,7 +3379,7 @@
         </div>
       ` : "";
 
-      const noteValue = (note || "").replace(/"/g, "&quot;");
+      const noteValue = escapeHtml(note || "");
 
       card.innerHTML = `
         <div class="pending-top">
@@ -3401,7 +3422,7 @@
 
     // A transaction Tasker never caught — approving inserts a new row.
     function buildReconItem(txn) {
-      const metaLine = `${txn.date} · ${txn.name || "Unknown"}${txn.type === "credit" ? " · credit" : ""}`;
+      const metaLine = `${txn.date} · ${escapeHtml(txn.name || "Unknown")}${txn.type === "credit" ? " · credit" : ""}`;
       const card = buildReviewCardShell(txn.amount, metaLine, txn.note, txn.suggestedCategory, txn.type, txn.suggestedType);
       // Keep the original parsed fields (not user-editable) attached to
       // the card, so submitting can read both these and the edited ones.
@@ -3412,7 +3433,7 @@
     // A transaction already in the Sheet, missing only a note — approving
     // updates that existing row instead of inserting a new one.
     function buildNoteFoundItem(item) {
-      const metaLine = `${item.date} · ${item.name || "Unknown"} · already in your Sheet`;
+      const metaLine = `${item.date} · ${escapeHtml(item.name || "Unknown")} · already in your Sheet`;
       const card = buildReviewCardShell(item.amount, metaLine, item.note, item.suggestedCategory, item.type, item.suggestedType);
       card._reconRow = item.row;
       card._reconName = item.name;
@@ -3731,15 +3752,15 @@
         </div>
       ` : "";
 
-      const noteValue = (txn.note || "").replace(/"/g, "&quot;");
-      const counterpartyText = txn.counterparty ? " · " + txn.counterparty : "";
+      const noteValue = escapeHtml(txn.note || "");
+      const counterpartyText = txn.counterparty ? " · " + escapeHtml(txn.counterparty) : "";
 
       card.innerHTML = `
         <div class="pending-top">
           <span>₹<input type="number" class="history-amount" value="${txn.amount}" min="0" step="1" style="width:90px; font-size:1em; font-weight:bold; border:1px solid transparent; background:var(--surface-inset); color:var(--text-primary); border-radius:6px; padding:2px 4px;"></span>
-          <span>${txn.mode}</span>
+          <span>${escapeHtml(txn.mode)}</span>
         </div>
-        <div class="pending-meta">${txn.date} ${txn.time} · ${txn.bank}${counterpartyText}</div>
+        <div class="pending-meta">${txn.date} ${txn.time} · ${escapeHtml(txn.bank)}${counterpartyText}</div>
         <div class="field">
           <label>Note</label>
           <input type="text" class="history-note" value="${noteValue}">

@@ -4,6 +4,17 @@
 
 function handleTelegramUpdate(e){
   try{
+    // The bot is fully retired (TELEGRAM_ENABLED = false in telegram.js).
+    // This whole path used to only be gated by your Telegram chat ID
+    // matching — not a real secret, just an unlisted number — so anyone
+    // who ever learned that ID could still drive the bot's commands
+    // (add debts, settle debts, etc.) through this same public URL even
+    // with replies silenced. Since nothing legitimate should reach here
+    // while the bot is off, shut the whole door instead of relying on
+    // the chat-ID check alone. Flip TELEGRAM_ENABLED back to true to
+    // restore this instantly if the bot is ever turned back on.
+    if(!TELEGRAM_ENABLED) return;
+
     const data = JSON.parse(e.postData.contents);
 
     // ── SECURITY: reject anyone who isn't you ──
