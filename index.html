@@ -371,6 +371,16 @@
       padding: 14px;
     }
 
+    /* Tappable Home widgets — tapping one switches what "Recent" shows below */
+    .stat-card[data-widget] {
+      cursor: pointer;
+    }
+
+    .stat-card.active {
+      outline: 2px solid var(--color-primary);
+      outline-offset: -2px;
+    }
+
     .stat-label {
       font-size: 0.72rem;
       color: var(--text-muted);
@@ -951,26 +961,31 @@
           </div>
 
           <div class="stat-grid">
-            <div class="stat-card">
+            <div class="stat-card" data-widget="pending">
               <div class="stat-label">Pending</div>
               <div class="stat-value" id="homePendingCount">0</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" data-widget="cash">
               <div class="stat-label">Cash balance</div>
               <div class="stat-value" id="homeCashBalance">₹0</div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" data-widget="cc">
               <div class="stat-label">CC usage</div>
               <div class="stat-value" id="homeCCUsage">0%</div>
+              <div style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;" id="homeCCUsageAmount"></div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" data-widget="debts">
               <div class="stat-label">Debts, net</div>
               <div class="stat-value" id="homeDebtsNet">₹0</div>
             </div>
           </div>
 
-          <h3 style="font-size:0.95rem; margin:16px 0 8px 0;">Recent</h3>
+          <h3 style="font-size:0.95rem; margin:16px 0 8px 0;">Top Categories This Month</h3>
+          <div id="homeCategoryChart"></div>
+
+          <h3 style="font-size:0.95rem; margin:16px 0 8px 0;" id="homeRecentLabel">Recent Pending</h3>
           <div id="homeRecent"></div>
+          <p style="font-size:0.78rem; color:var(--text-muted); margin-top:6px;">Tap a card above to see its recent activity here.</p>
         </div>
       </section>
 
@@ -1405,8 +1420,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-09-1";
-    const APP_CHANGELOG = "Safety fix: transaction text is now cleaned up before being shown on screen, so it can't be misused. Nothing for you to do — this popup just confirms the fix reached your phone.";
+    const APP_VERSION = "2026-08-09-2";
+    const APP_CHANGELOG = "Home screen update: tap Pending/Cash/CC/Debts to see recent activity for that one, CC now shows the amount spent, and a top-categories chart was added. Old pending notes now start pre-filled with the merchant name to make catching up faster.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1743,8 +1758,100 @@
     const homePendingCountEl  = document.getElementById("homePendingCount");
     const homeCashBalanceEl   = document.getElementById("homeCashBalance");
     const homeCCUsageEl       = document.getElementById("homeCCUsage");
+    const homeCCUsageAmountEl = document.getElementById("homeCCUsageAmount");
     const homeDebtsNetEl      = document.getElementById("homeDebtsNet");
     const homeRecentEl        = document.getElementById("homeRecent");
+    const homeRecentLabelEl   = document.getElementById("homeRecentLabel");
+    const homeCategoryChartEl = document.getElementById("homeCategoryChart");
+
+    // The full detail behind the dashboard's headline numbers (same object
+    // seedTabsFromDashboard uses) — kept here too so tapping a Home widget
+    // can switch the "Recent" list below without another network call.
+    let dashboardFull  = null;
+    let homeRecentMode = "pending";
+
+    // Tapping a stat-card switches which list "Recent" shows, without
+    // leaving the Home screen. Wired once here (the cards themselves never
+    // change), not inside renderDashboard (which runs on every refresh).
+    document.querySelectorAll(".stat-card[data-widget]").forEach(function (card) {
+      card.addEventListener("click", function () {
+        renderHomeRecentList(card.dataset.widget);
+      });
+    });
+
+    // Builds the "Recent" list for whichever widget was last tapped.
+    // Each mode's data already exists in dashboardFull — no extra fetch.
+    function renderHomeRecentList(mode) {
+      homeRecentMode = mode;
+
+      document.querySelectorAll(".stat-card[data-widget]").forEach(function (card) {
+        card.classList.toggle("active", card.dataset.widget === mode);
+      });
+
+      const labels = { pending: "Recent Pending", cash: "Recent Cash", cc: "Recent Card Spend", debts: "Debts" };
+      homeRecentLabelEl.textContent = labels[mode] || "Recent";
+
+      const full = dashboardFull || {};
+      let rows = [];
+
+      if (mode === "pending") {
+        rows = (full.pending || []).slice(0, 3).map(function (t) {
+          return { label: t.counterparty || t.bank, amount: t.amount, sign: "-" };
+        });
+      } else if (mode === "cash") {
+        rows = (full.cash && full.cash.recent ? full.cash.recent : []).slice(0, 3).map(function (e) {
+          return { label: e.note ? e.note : e.date, amount: e.amount, sign: e.type === "credit" ? "+" : "-" };
+        });
+      } else if (mode === "cc") {
+        rows = (full.cc && full.cc.recentCardTxns ? full.cc.recentCardTxns : []).slice(0, 3).map(function (e) {
+          return { label: e.counterparty || "Card payment", amount: e.amount, sign: "-" };
+        });
+      } else if (mode === "debts") {
+        rows = (full.debts && full.debts.debts ? full.debts.debts : []).slice(0, 3).map(function (e) {
+          return { label: e.person + (e.type === "BORROWED" ? " (you owe)" : " (owes you)"), amount: e.amount, sign: "" };
+        });
+      }
+
+      homeRecentEl.innerHTML = "";
+      if (rows.length === 0) {
+        homeRecentEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🎉</span><p>Nothing here right now.</p></div>";
+        return;
+      }
+      rows.forEach(function (r) {
+        const row = document.createElement("div");
+        row.className = "home-recent-row";
+        row.innerHTML = `<span>${escapeHtml(r.label)}</span><span>${r.sign}₹${r.amount.toLocaleString("en-IN")}</span>`;
+        homeRecentEl.appendChild(row);
+      });
+    }
+
+    // Small visual: top few categories this month, same bar style already
+    // used on Today/Analysis/CC — reusing it here instead of building a
+    // separate chart component.
+    function renderHomeCategoryChart(categories) {
+      homeCategoryChartEl.innerHTML = "";
+      if (!categories || categories.length === 0) {
+        homeCategoryChartEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">📊</span><p>No spending yet this month.</p></div>";
+        return;
+      }
+      const top = categories.slice(0, 4);
+      const maxAmount = top[0].amount;
+      top.forEach(function (entry) {
+        const percentOfMax = maxAmount > 0 ? Math.round((entry.amount / maxAmount) * 100) : 0;
+        const row = document.createElement("div");
+        row.className = "category-row";
+        row.innerHTML = `
+          <div class="category-top">
+            ${categoryBadgeHtml(entry.category)}
+            <span>₹${entry.amount.toLocaleString("en-IN")}</span>
+          </div>
+          <div class="category-bar-track">
+            <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
+          </div>
+        `;
+        homeCategoryChartEl.appendChild(row);
+      });
+    }
 
     function loadDashboard() {
       const cached = loadCache("dashboard");
@@ -1828,17 +1935,14 @@
       homeCCUsageEl.textContent = d.ccUsagePct + "%";
       homeDebtsNetEl.textContent = (d.debtsNet >= 0 ? "+₹" : "-₹") + Math.abs(d.debtsNet).toLocaleString("en-IN");
 
-      homeRecentEl.innerHTML = "";
-      if (d.recent.length === 0) {
-        homeRecentEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🎉</span><p>Nothing pending right now.</p></div>";
-      } else {
-        d.recent.forEach(function (entry) {
-          const row = document.createElement("div");
-          row.className = "home-recent-row";
-          row.innerHTML = `<span>${escapeHtml(entry.label)}</span><span>₹${entry.amount.toLocaleString("en-IN")}</span>`;
-          homeRecentEl.appendChild(row);
-        });
+      if (d.full && d.full.cc) {
+        homeCCUsageAmountEl.textContent =
+          "₹" + d.full.cc.cycleSpend.toLocaleString("en-IN") + " of ₹" + d.full.cc.limit.toLocaleString("en-IN");
       }
+
+      dashboardFull = d.full || null;
+      renderHomeRecentList(homeRecentMode);
+      renderHomeCategoryChart(d.full && d.full.month ? d.full.month.categories : []);
     }
 
     function loadPendingTransactions() {
@@ -1992,7 +2096,7 @@
         <div class="pending-meta">${txn.date} ${txn.time} · ${escapeHtml(txn.bank)}${counterpartyText}</div>
         <div class="field">
           <label>Note</label>
-          <input type="text" class="note-input" placeholder="What was this for?">
+          <input type="text" class="note-input" value="${escapeHtml(txn.counterparty || "")}" placeholder="What was this for?">
         </div>
         <div class="field">
           <label>Category</label>

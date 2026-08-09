@@ -563,6 +563,7 @@ function getCCAdvisorData(txnData){
   let txnCount   = 0;
   let categoryTotals = {};
   let cardTotals     = {};
+  let recentCardTxns = []; // for the Home screen's "tap the CC widget" view — filled in below, formatted after the loop
 
   for(let i = 1; i < data.length; i++){
     const rawDate = data[i][0];
@@ -580,6 +581,7 @@ function getCCAdvisorData(txnData){
       txnCount++;
       categoryTotals[cat] = (categoryTotals[cat] || 0) + amount;
       cardTotals[mode]    = (cardTotals[mode] || 0) + amount;
+      recentCardTxns.push({ date: d, counterparty: (data[i][7] || "").toString().trim(), amount: amount });
     }
   }
 
@@ -609,6 +611,12 @@ function getCCAdvisorData(txnData){
     return Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM yyyy");
   };
 
+  // Newest first, last 5 only — enough for a quick glance on Home.
+  const recentCardTxnsFormatted = recentCardTxns
+    .sort(function(a, b){ return b.date - a.date; })
+    .slice(0, 5)
+    .map(function(t){ return { date: fmtDate(t.date), counterparty: t.counterparty, amount: t.amount }; });
+
   return {
     cycleStart: fmtDate(cycleStart),
     cycleEnd:   fmtDate(cycleEnd),
@@ -625,7 +633,8 @@ function getCCAdvisorData(txnData){
     status: status,
     txnCount: txnCount,
     cardBreakdown: cardBreakdown,
-    topCategories: topCategories
+    topCategories: topCategories,
+    recentCardTxns: recentCardTxnsFormatted
   };
 }
 
