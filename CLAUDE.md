@@ -4,6 +4,12 @@
 - I am a complete beginner learning to build my app.
 - Explain things simply (like to a beginner). Comment code clearly.
 - Work in small steps. Check my understanding before moving on.
+- **Always use plain, simple English — no technical jargon without
+  explaining it.** Confirmed 2026-08-09 after a security review used terms
+  like "stored XSS" without explaining what they meant. Every time
+  something is checked or changed, say plainly: what the problem was, why
+  it mattered, and what was done about it — in everyday words, not
+  developer terms.
 
 ## Goal
 - Build a personal expense tracker web app (PWA) that installs on my phone.
@@ -153,6 +159,28 @@ issues):**
   `history.back()` simulation in the browser tool this time (unlike the
   dark-mode repaint check, this didn't depend on the pane actually
   compositing frames, so it could be fully confirmed automatically).
+
+**Security review + fixes (2026-08-09):** went through every backend file
+and the frontend for safety issues before continuing feature work. Found
+and fixed: transaction/note text was being put on screen without
+cleaning it first (a real risk, since that text can come from outside —
+bank SMS, uploaded statements — and the sign-in token lives in the
+phone's storage); some actions weren't checking that a row number sent
+from the app was valid before writing to it; and the retired Telegram
+bot's inbound door was still technically reachable. All three fixed and
+live. See chat history for full detail if this needs revisiting.
+
+**Home screen refinement (2026-08-09):** tapping a Home stat card
+(Pending/Cash/CC/Debts) now switches the "Recent" list below to that
+card's own recent activity instead of always showing pending
+transactions; CC usage widget now also shows the rupee amount, not just
+the percent; added a small top-categories bar chart to Home (reuses the
+existing bar style from Today/Analysis/CC, no new chart library); and
+Pending transaction notes now start pre-filled with the merchant name,
+so clearing an old backlog is a single tap instead of typing each one.
+Also clarified for the user: Cash balance (wallet cash) and Savings
+(Emergency/Wish List/Free pots) are intentionally separate trackers —
+cash set aside as savings needs logging under Savings, not Cash.
 
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
