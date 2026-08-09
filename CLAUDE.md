@@ -182,6 +182,28 @@ Also clarified for the user: Cash balance (wallet cash) and Savings
 (Emergency/Wish List/Free pots) are intentionally separate trackers —
 cash set aside as savings needs logging under Savings, not Cash.
 
+**Home screen follow-up fixes (2026-08-09, after user tested live):** the
+top-categories chart above was removed (not wanted); the "Spent today"
+hero card wasn't actually wired up to be clickable, fixed — now shows
+today's spend by category when tapped; CC usage's recent list was
+showing the raw UPI payment ID instead of the note actually written on
+the transaction, fixed to prefer the note.
+
+**Optimistic save on Pending (2026-08-09):** tapping Save now removes
+the card immediately instead of waiting for Apps Script to confirm —
+much faster for working through a large backlog. If the background save
+fails, the card reappears at the top of the list with a clear error
+instead of silently vanishing. Frontend-only change (`index.html`).
+
+**Note Memory (2026-08-09): done.** Pending's note field now suggests a
+remembered note per merchant + amount band (e.g. a restaurant you always
+call "dinner"), not just the merchant's raw name — falls back to the old
+behavior when there's no confident suggestion yet. Deliberately built
+without any AI call (same reasoning as fast category suggestions) and
+handles person-to-person payments sensibly via a "used at least twice"
+confidence bar rather than special-casing merchant-vs-person. **Full
+design doc: [docs/features/note-memory.md](docs/features/note-memory.md)**.
+
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
 never need to ask for a category, and ALL routine interaction must happen

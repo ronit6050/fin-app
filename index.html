@@ -1418,8 +1418,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-09-4";
-    const APP_CHANGELOG = "Pending screen is now faster to work through: tapping Save removes the card right away instead of making you wait. If a save ever fails, the card comes back at the top with a clear error instead of silently disappearing.";
+    const APP_VERSION = "2026-08-09-5";
+    const APP_CHANGELOG = "Pending notes now suggest what you actually wrote before for that merchant (e.g. \"dinner\"), not just the merchant's name — gets smarter the more you use it, and handles friends/family payments sensibly too.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -2081,7 +2081,7 @@
         <div class="pending-meta">${txn.date} ${txn.time} · ${escapeHtml(txn.bank)}${counterpartyText}</div>
         <div class="field">
           <label>Note</label>
-          <input type="text" class="note-input" value="${escapeHtml(txn.counterparty || "")}" placeholder="What was this for?">
+          <input type="text" class="note-input" value="${escapeHtml(txn.suggestedNote || txn.counterparty || "")}" placeholder="What was this for?">
         </div>
         <div class="field">
           <label>Category</label>

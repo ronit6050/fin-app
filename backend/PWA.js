@@ -794,6 +794,9 @@ function getPendingTransactions(txnData){
   const typeMemorySheet = ss.getSheetByName("TypeMemory");
   const typeMemoryData  = typeMemorySheet ? typeMemorySheet.getDataRange().getValues() : [];
 
+  const noteMemorySheet = ss.getSheetByName("NoteMemory");
+  const noteMemoryData  = noteMemorySheet ? noteMemorySheet.getDataRange().getValues() : [];
+
   for(let i = 1; i < data.length; i++){
     const processed = (data[i][15] || "").toString().trim(); // column P
     const note       = (data[i][12] || "").toString().trim(); // column M
@@ -822,7 +825,11 @@ function getPendingTransactions(txnData){
       // Need/Want/Saving guess — null means "don't show a default" (credit,
       // a debt-settlement category, or an unrecognized merchant). See
       // docs/features/need-want-saving.md.
-      suggestedType:     getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeMemoryData)
+      suggestedType:     getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeMemoryData),
+      // Remembered note for this merchant+amount — empty string means
+      // "nothing confident enough yet," and the PWA falls back to showing
+      // the merchant name instead. See docs/features/note-memory.md.
+      suggestedNote:     getSuggestedNote(counterparty, amount, noteMemoryData)
     });
   }
 
@@ -960,6 +967,13 @@ function saveTransactionNote(row, note, category, counterparty, type, amount){
     if(counterparty && type){
       const voteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
       recordTypeVote(counterparty, voteAmount, type);
+    }
+
+    // Remember this note against the merchant (+ amount band) so it can be
+    // suggested again later — see noteMemory.js / docs/features/note-memory.md.
+    if(counterparty && note){
+      const noteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
+      recordNoteUsage(counterparty, noteAmount, note);
     }
 
     return { ok:true };
