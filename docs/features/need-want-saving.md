@@ -3,15 +3,15 @@
 **Status: live.** Built, tested, wired into `getPending`/`saveNote` in `PWA.js`, and shown in the Pending screen — confirmed working on the real app 2026-08-08. Backend is now clasp-synced (`D:\fin-app\backend`, see CLAUDE.md), so `needWantSaving.js` is real, current code, not just this description.
 
 **Extended 2026-08-09** with a 4th tag, **Investment**, and smarter
-cold-start guessing — see "Investment as a 4th tag" and "Smart cold-start
-guessing" below. Frontend change scoped to the Pending screen only
-(`buildPendingItem` in `index.html`) — History and Reconciliation still
-only show 3 buttons (Need/Want/Saving) as of this entry; they read the
-same `suggestedType` field from the backend, so an "Investment" backend
-answer just won't get pre-highlighted there yet. Deliberately not touched
-in this pass — user's explicit instruction was to perfect one feature
-(Pending) at a time rather than spread a change across every screen at
-once. Revisit those two screens' buttons when it's their turn.
+cold-start guessing — see "Investment as a 4th tag" below. Initially
+shipped Pending-only, then corrected the same day: the user clarified
+"one feature at a time" means the *tagging system* is the feature, not
+one screen — since History and Reconciliation show this exact same
+Need/Want/Saving/Investment toggle too (reading the same `suggestedType`
+field from the same backend function), leaving them at 3 buttons was an
+inconsistency, not a scope boundary. All three (`buildPendingItem`,
+`buildHistoryItem`, `buildReviewCardShell` in `index.html`) now show all
+4 buttons.
 
 **Redesigned 2026-08-09** from an all-time vote count to a recent-answers
 sliding window — see "Why a sliding window, not an all-time count" below.
@@ -108,5 +108,4 @@ Live in `needWantSaving.js` (source of truth — read the actual file, not just 
 - Whether `Category = Other` should ever get a type once the user manually assigns a real category in the same Pending action (order-of-operations question, revisit once UI is wired up).
 - Whether more categories besides `Lent` should be treated as debt-settlement-excluded — revisit once real usage surfaces examples.
 - Whether `TYPE_VOTE_WINDOW` (5) is the right size — revisit if suggestions feel too twitchy (lower it) or too slow to adapt (raise it) once there's more real usage to judge by.
-- History and Reconciliation screens still only show 3 buttons (no Investment) — extend when those screens get their turn (see status note at top).
 - `getFinancialSubtype`'s keyword list is intentionally small/conservative (e.g. bare "fd"/"rd" deliberately excluded, unlike the general category engine's looser matching, to avoid false positives) — revisit if real transactions reveal it's missing obvious cases.

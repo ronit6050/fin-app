@@ -509,8 +509,11 @@ specific phrase "home loan"/"housing loan" does. Also critically: none of
 these are hard-coded forever — real answer history for a specific
 merchant always overrides the cold-start guess once it exists. No
 category-list changes were made (Rent/EMI are NOT new top-level
-categories, unlike what Phase 1 below describes) — this was a narrower,
-Pending-screen-only fix. Full detail:
+categories, unlike what Phase 1 below describes). Initially shipped
+Pending-only, then corrected same day per user: "one feature at a time"
+means the tagging system is the feature, not one screen — History and
+Reconciliation show this same toggle too, so all three now have all 4
+buttons. Full detail:
 [docs/features/need-want-saving.md](docs/features/need-want-saving.md).
 
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as
