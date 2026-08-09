@@ -220,13 +220,77 @@ Also flagged by user, not yet started: revisit/rebuild other ported
 features for reliability (AI Advisor, CC Advisor, etc.) — explicitly
 sequenced AFTER the categorization system is solid, not concurrent.
 
-**Session continuity note:** this project has run in one very long
-conversation (context window got to ~92% full). User was advised to
-start fresh conversations at clean checkpoints like this one, relying on
-this file + memory to carry context forward rather than one endless
-thread. If resuming: check the roadmap table above for what's done, and
-the Automation phase section for exactly where categorization work left
-off before continuing.
+**Bank statement reconciliation (started + shipped 2026-08-08): done.**
+Upload a bank statement (`.xls`) under More → Reconcile; finds transactions
+Tasker missed entirely, AND (the more common case) transactions Tasker
+caught but never got a note, since bank SMS text never carries the UPI
+note — only the statement does. Recovers that note automatically from the
+statement narration, review-and-approve only, nothing writes without
+confirming. **Full design doc:
+[docs/features/reconciliation.md](docs/features/reconciliation.md)** —
+always check that file before touching this feature.
+
+**Settings screen (started + shipped 2026-08-08): done.** CC limit,
+CC warn/alert %, monthly expenses, monthly savings goal — previously
+hardcoded constants — now editable from More → Settings, backed by
+Script Properties (not a Sheet). **Full design doc:
+[docs/features/settings.md](docs/features/settings.md)**.
+
+**History screen / edit past transactions (started + shipped
+2026-08-08): done.** Pending only ever shows un-noted transactions; once
+noted there was no way to fix a mistake short of editing the Sheet
+directly. More → History browses already-noted transactions and lets you
+edit note/category/amount/Need-Want-Saving in place — reuses the same
+`saveNote` action Pending does, so an edit teaches SmartMemory/TypeMemory
+exactly like a first-time correction would. **Full design doc:
+[docs/features/history.md](docs/features/history.md)**.
+
+**Responsiveness + drastic visual redesign + dark mode: done**, see the
+"Responsiveness pass" and "Drastic visual redesign" notes under Step 11
+above — both happened after this Automation phase work, in the same long
+session, at the user's explicit request ("think deeply... prepare a list
+of amazing new features... improve responsiveness... give an app vibe").
+
+**"What's New" popup: done.** Shows a one-time dismissible popup after an
+app update, comparing `APP_VERSION` (top of `index.html`'s main script)
+against a version saved on the phone — confirms an update actually
+reached the device. **Whenever a real user-facing change ships, bump
+`APP_VERSION` and update `APP_CHANGELOG` to a one-line description of
+what changed** — this is a manual habit, not automatic, and it's easy to
+forget after a big change.
+
+**Session continuity note (updated 2026-08-08, end of a very long
+session):** this project has run in one very long conversation. The user
+is now deliberately starting a fresh chat and relying on this file +
+memory (`reference_transactions_sheet_schema`, `feedback_beginner_collaboration`,
+`project_expense_tracker`) to carry context forward, rather than one
+endless thread — **read this whole file first if picking this up cold.**
+
+As of this checkpoint: full Telegram parity (roadmap table above) is
+done, and everything in the Automation phase section above is also
+done — auto-categorization rebuild, Need/Want/Saving tagging,
+responsiveness pass, bank statement reconciliation, Settings screen,
+History screen, the "What's New" popup, and a full visual redesign with
+dark mode (see Step 11 notes above for that last one, including the 3
+post-redesign fixes the user found by testing live: icons, tap-highlight,
+back button).
+
+**Nothing is currently in progress.** The natural next things, none
+started yet:
+- A screen showing the actual Need/Want/Saving 50/30/20 breakdown (the
+  tagging/learning exists, nothing displays it yet) — worth revisiting
+  once enough real votes have accumulated (user explicitly chose to wait
+  on this).
+- CC statement import (`Credit Card.js` → PWA) — user explicitly wants
+  this **after the 18th of the month**, when the next bill generates.
+- Smart Reaction (Gemini one-liner after saving a note) and richer
+  Analysis (chart + Gemini insight) — both explicitly deferred until
+  "core features" are solid, per user.
+- Revisiting other ported features for reliability (AI Advisor, CC
+  Advisor's own math, etc.) — flagged by user, not yet started.
+
+If the user asks "what's next" cold, these four are the honest answer —
+don't assume, ask which one (or something new) before building.
 
 **Responsiveness pass (2026-08-08):** user asked specifically for minimal
 delay on (a) new transactions appearing and (b) switching tabs. Three
@@ -340,16 +404,17 @@ now a second front door into the same backend, added alongside it.
 - `DebtAdvisor.js` — lent/borrowed tracking, due-date reminders, settlements, AI repayment plans (untouched, its logic is reused by PWA.js's debt functions)
 - `SavingsAdvisor.js` — 3-pot auto-split savings, wishlist affordability tracking. Its `getSavingsTotals()`, `getSplitRule()`, `getStageLabel()`, and constants (`EMERGENCY_TARGET`, `MONTHLY_SAVE_GOAL`) are reused directly by PWA.js — same global-scope reuse pattern.
 - `Analysis.js` / `Summary.js` — original Telegram-triggered monthly/daily spend breakdowns with charts + Gemini insight text (untouched, still Telegram-only; the PWA's Today/Analysis screens use separate lighter functions in PWA.js, not these)
-- `Recon.js` — reconciles uploaded bank statement against `Transactions` (untouched, Telegram-only, not yet ported to PWA)
+- `Recon.js` — reconciliation. Original Telegram-only functions (`runReconciliation`, `insertConfirmed`, etc.) untouched and still dormant. **Added 2026-08-08**: `extractNoteFromNarration()`, `previewReconciliation()`, `reconcileStatementPreview()`, `insertReconciledTransactions()` — the PWA-facing preview-then-approve flow, see [docs/features/reconciliation.md](docs/features/reconciliation.md). Note: the old `insertConfirmed()` has a pre-existing off-by-one bug (17 values for a 16-column sheet) — harmless since it's dormant, not fixed since nothing calls it anymore.
 - `AIAdvisor.js` — Gemini reaction after each transaction note (untouched, Telegram-only path, dormant since Telegram is off)
 - `telegram.js` — Telegram dashboard/menu UI. **Modified**: added `const TELEGRAM_ENABLED = false;` (the on/off switch — flip to `true` to instantly restore Telegram sending). `sendMessage(text)` now only sends to Telegram if that flag is true, and — regardless of the flag — always also calls `sendPushNotification()`, using the message's first line as the push title and the rest as the body. This one change is what extended push to every existing proactive alert (CC warnings, debt nudges, savings reminders, daily check-in) without touching those files individually.
 - `Logger.js` — silent error logging to `AILogs` (untouched, `logAI(type, message)` used throughout, including by the new PWA.js/push.js code)
 
 **Files added for the PWA (real filenames, confirmed via `clasp clone` 2026-08-08):**
 - `main.js` **modified**: `doPost(e)` now branches — if the incoming JSON has an `action` field, routes to `handlePwaRequest(data)`; otherwise falls through to the original `handleTelegramUpdate(e)` unchanged. This is the single shared entry point both Telegram and the PWA hit.
-- **`PWA.js`** — everything the PWA talks to, one action per `data.action` value routed inside `handlePwaRequest(data)`. Every action first calls `verifyGoogleIdToken(data.idToken)` (checks the token against Google's tokeninfo endpoint, then checks `PWA_ALLOWED_EMAIL`) before doing anything. Actions implemented: `ping`, `getPending` (includes a `suggestedCategory` per item via `getSuggestedCategoryFast`, fast layers only, no Gemini), `saveNote` (writes note+category, also calls `handleCategoryCorrection` to teach SmartMemory using the real counterparty), `getTodaySummary`, `getMonthlyAnalysis`, `getCCAdvisor`, `getDebts`/`addDebt`/`settleDebt`, `getSavings`/`logSaving`/`addWishlistItem`/`markWishlistPurchased`, `getInvestments`/`logInvestment`, `getCash`/`addCashEntry`, `registerPushToken`, `getDashboard` (aggregates several of the above into one call for the Home screen).
+- **`PWA.js`** — everything the PWA talks to, one action per `data.action` value routed inside `handlePwaRequest(data)`. Every action first calls `verifyGoogleIdToken(data.idToken)` (checks the token against Google's tokeninfo endpoint, then checks `PWA_ALLOWED_EMAIL`) before doing anything. Actions implemented: `ping`, `getPending` (includes `suggestedCategory` + `suggestedType` per item, fast layers only, no Gemini), `saveNote` (writes note/category/optional amount, calls `handleCategoryCorrection` + `recordTypeVote` — same function backs both Pending's first note AND History's edits), `getTodaySummary`, `getMonthlyAnalysis`, `getCCAdvisor`, `getDebts`/`addDebt`/`settleDebt`, `getSavings`/`logSaving`/`addWishlistItem`/`markWishlistPurchased`, `getInvestments`/`logInvestment`, `getCash`/`addCashEntry`, `registerPushToken`, `getDashboard` (aggregates most of the above into one call for the Home screen, `getDashboardData` reads `Transactions`/`Cash` once and passes them through — see Responsiveness pass notes above), `getSettings`/`updateSettings`, `getTransactionHistory`, `reconcileStatement`/`insertReconciledTransactions`.
 - **`push.js`** — real background push via Firebase Cloud Messaging. `sendPushNotification(title, body)` reads the saved device token from Script Properties (`PWA_PUSH_TOKEN`) and a service account key (`FIREBASE_SERVICE_ACCOUNT`, also Script Properties — sensitive, never in any file/repo) to sign a JWT (`getFirebaseAccessToken()`) and call FCM's HTTP v1 API directly. `testPushNotification()` is a manual-run test helper.
-- **`needWantSaving.js`** — Need/Want/Saving suggestion engine, see [docs/features/need-want-saving.md](docs/features/need-want-saving.md). Written and manually tested 2026-08-08; not yet wired into `PWA.js`.
+- **`needWantSaving.js`** — Need/Want/Saving suggestion engine, see [docs/features/need-want-saving.md](docs/features/need-want-saving.md). Wired into `PWA.js`'s `getPendingTransactions`/`saveTransactionNote`/`getTransactionHistory`, live since 2026-08-08.
+- **`settings.js`** (new file, 2026-08-08) — user-editable CC limit/thresholds and savings targets, backed by Script Properties. See [docs/features/settings.md](docs/features/settings.md).
 
 **Script Properties** (Project Settings in the Apps Script editor — not in any file):
 - `BOT_TOKEN`, `CHAT_ID`, `GEMINI_KEY` — pre-existing, for Telegram/Gemini
