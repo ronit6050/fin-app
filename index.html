@@ -1418,8 +1418,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-09-3";
-    const APP_CHANGELOG = "Home screen fixes: removed the top-categories chart, tapping \"Spent today\" now actually shows today's spend, and tapping CC usage now shows the note you wrote instead of a raw payment ID.";
+    const APP_VERSION = "2026-08-09-4";
+    const APP_CHANGELOG = "Pending screen is now faster to work through: tapping Save removes the card right away instead of making you wait. If a save ever fails, the card comes back at the top with a clear error instead of silently disappearing.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -2116,35 +2116,52 @@
         });
       }
 
+      // Optimistic save: the card disappears the instant you tap Save,
+      // instead of waiting for Apps Script to confirm — makes plowing
+      // through a big backlog feel instant. The actual save still happens
+      // in the background; if it fails (bad connection, etc.), the card
+      // isn't just gone — it comes back at the top of the list with a
+      // clear error, so nothing gets silently lost. Confirmed with the
+      // user 2026-08-09 as the preferred trade-off over waiting each time.
       saveButton.addEventListener("click", function () {
-        resultEl.textContent = "Saving...";
+        const savedNote     = noteInput.value;
+        const savedCategory = categorySelect.value;
+        const savedType     = selectedType;
+
+        const idx = allPending.findIndex(function (t) { return t.row === txn.row; });
+        if (idx !== -1) allPending.splice(idx, 1);
+        shownCount = Math.max(shownCount - 1, 0);
+        updatePendingStatusText();
+        saveCache("pending", allPending);
+        card.remove();
 
         callAppsScript({
           action:       "saveNote",
           idToken:      currentUser.idToken,
           row:          txn.row,
-          note:         noteInput.value,
-          category:     categorySelect.value,
+          note:         savedNote,
+          category:     savedCategory,
           counterparty: txn.counterparty,
-          type:         selectedType
+          type:         savedType
         })
           .then(function (data) {
-            if (data.ok) {
-              card.remove();
-
-              // Take it out of our remembered list too, and update the count
-              const idx = allPending.findIndex(function (t) { return t.row === txn.row; });
-              if (idx !== -1) allPending.splice(idx, 1);
-              shownCount = Math.max(shownCount - 1, 0);
-              updatePendingStatusText();
-              saveCache("pending", allPending); // so it doesn't briefly reappear next time
-            } else {
-              resultEl.textContent = data.error;
-            }
+            if (!data.ok) restoreAfterFailedSave(data.error);
+            // success: nothing more to do, it's already off the screen
           })
           .catch(function (err) {
-            resultEl.textContent = err.message;
+            restoreAfterFailedSave(err.message);
           });
+
+        function restoreAfterFailedSave(errorMessage) {
+          allPending.unshift(txn);
+          shownCount++;
+          updatePendingStatusText();
+          saveCache("pending", allPending);
+
+          resultEl.style.color = "var(--color-danger)";
+          resultEl.textContent = "Couldn't save (" + errorMessage + ") — check your connection and tap Save again.";
+          pendingListEl.insertBefore(card, pendingListEl.firstChild);
+        }
       });
 
       return card;
