@@ -132,7 +132,7 @@ function getDashboardData(){
   // Read Transactions and Cash ONCE here and pass them into everything
   // below, instead of each function reading its own copy fresh — this
   // single call used to read Transactions up to 4 times and Cash twice.
-  // Fixed 2026-08-08, same reasoning as the SmartMemory/TypeMemory
+  // Fixed 2026-08-08, same reasoning as the SmartMemory/TypeVotes
   // batching fix in getPendingTransactions.
   const txnData  = ss.getSheetByName("Transactions").getDataRange().getValues();
   const cashData = ss.getSheetByName("Cash").getDataRange().getValues();
@@ -791,8 +791,8 @@ function getPendingTransactions(txnData){
   const smartMemorySheet = ss.getSheetByName("SmartMemory");
   const smartMemoryData  = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
 
-  const typeMemorySheet = ss.getSheetByName("TypeMemory");
-  const typeMemoryData  = typeMemorySheet ? typeMemorySheet.getDataRange().getValues() : [];
+  const typeVotesSheet = ss.getSheetByName("TypeVotes");
+  const typeVotesData  = typeVotesSheet ? typeVotesSheet.getDataRange().getValues() : [];
 
   const noteMemorySheet = ss.getSheetByName("NoteMemory");
   const noteMemoryData  = noteMemorySheet ? noteMemorySheet.getDataRange().getValues() : [];
@@ -825,7 +825,7 @@ function getPendingTransactions(txnData){
       // Need/Want/Saving guess — null means "don't show a default" (credit,
       // a debt-settlement category, or an unrecognized merchant). See
       // docs/features/need-want-saving.md.
-      suggestedType:     getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeMemoryData),
+      suggestedType:     getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeVotesData),
       // Remembered note for this merchant+amount — empty string means
       // "nothing confident enough yet," and the PWA falls back to showing
       // the merchant name instead. See docs/features/note-memory.md.
@@ -875,16 +875,16 @@ function getTransactionHistory(offset, limit){
   const page = noted.slice(offset, offset + limit);
 
   // Only compute Need/Want/Saving guesses for the one page actually being
-  // returned, not the whole history — and batch-read TypeMemory once for
+  // returned, not the whole history — and batch-read TypeVotes once for
   // that page instead of per row (same reasoning as getPendingTransactions).
-  const typeMemorySheet = ss.getSheetByName("TypeMemory");
-  const typeMemoryData  = typeMemorySheet ? typeMemorySheet.getDataRange().getValues() : [];
+  const typeVotesSheet = ss.getSheetByName("TypeVotes");
+  const typeVotesData  = typeVotesSheet ? typeVotesSheet.getDataRange().getValues() : [];
 
   page.forEach(function(t){
     // Uses the transaction's REAL stored category (not a fresh guess) —
     // it may have been deliberately chosen differently than the category
     // engine would suggest, and that choice should be respected here.
-    t.suggestedType = getSuggestedType(t.type, t.category, t.counterparty, t.amount, typeMemoryData);
+    t.suggestedType = getSuggestedType(t.type, t.category, t.counterparty, t.amount, typeVotesData);
   });
 
   return {
@@ -935,7 +935,7 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
 // (Pending never does, since the parsed amount is trusted there). This
 // same function backs both "add a note to a pending transaction" and
 // "edit a past transaction," since editing a category/type later should
-// teach SmartMemory/TypeMemory exactly like a first-time correction does
+// teach SmartMemory/TypeVotes exactly like a first-time correction does
 // (confirmed with the user 2026-08-08) — reusing this function is what
 // gets that for free instead of writing a second, parallel code path.
 function saveTransactionNote(row, note, category, counterparty, type, amount){

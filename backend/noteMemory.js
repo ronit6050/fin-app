@@ -1,6 +1,6 @@
 // noteMemory.js
 // Self-learning note suggestions, per merchant + amount band — same idea
-// as SmartMemory (category) and TypeMemory (Need/Want/Saving), applied to
+// as SmartMemory (category) and TypeVotes (Need/Want/Saving), applied to
 // the note text itself. See docs/features/note-memory.md for the full
 // design and reasoning — this file only has short comments, that doc is
 // the source of truth. Reuses getAmountBand() from needWantSaving.js

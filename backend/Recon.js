@@ -288,8 +288,8 @@ function previewReconciliation(bankTxns){
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const smartMemorySheet = ss.getSheetByName("SmartMemory");
   const smartMemoryData  = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
-  const typeMemorySheet  = ss.getSheetByName("TypeMemory");
-  const typeMemoryData   = typeMemorySheet ? typeMemorySheet.getDataRange().getValues() : [];
+  const typeVotesSheet   = ss.getSheetByName("TypeVotes");
+  const typeVotesData    = typeVotesSheet ? typeVotesSheet.getDataRange().getValues() : [];
 
   let matched = 0;
   const missing = [];
@@ -327,7 +327,7 @@ function previewReconciliation(bankTxns){
         name:              sheetRow[7] || txn.name, // real Counterparty already on that row
         note:              txn.note,
         suggestedCategory: suggestedCategory,
-        suggestedType:     getSuggestedType(txn.type, suggestedCategory, txn.name, txn.amount, typeMemoryData)
+        suggestedType:     getSuggestedType(txn.type, suggestedCategory, txn.name, txn.amount, typeVotesData)
       });
 
       return;

@@ -203,6 +203,26 @@ without any AI call (same reasoning as fast category suggestions) and
 handles person-to-person payments sensibly via a "used at least twice"
 confidence bar rather than special-casing merchant-vs-person. **Full
 design doc: [docs/features/note-memory.md](docs/features/note-memory.md)**.
+Also fixed same day: already-visible Pending cards weren't picking up
+newly-learned note suggestions until saved/reopened — background refresh
+now updates any note box that's still exactly what was auto-filled
+(never touches one you've started editing).
+
+**Need/Want/Saving redesign — sliding window, not all-time count
+(2026-08-09): done.** After clearing a 249-item backlog mostly with
+guessed answers ("Want" selected ~90% of the time out of uncertainty,
+not real judgment), the user flagged that an all-time running vote count
+would let that guessed block permanently outweigh real, careful answers
+going forward. Fixed: `getSuggestedType` now only looks at the most
+recent 5 answers per merchant+band (new `TypeVotes` sheet, one row per
+answer, old `TypeMemory` sheet abandoned in place — safe to delete
+manually, nothing reads it anymore). A real bug was caught and fixed
+during this work too: the first version sorted by a `Timestamp` column,
+which broke when two answers landed in the same millisecond (hit this
+in testing) — fixed by using the sheet's natural append-only row order
+for recency instead of comparing dates. Verified with a standalone Node
+test before shipping, not just the in-app manual test function. See
+[docs/features/need-want-saving.md](docs/features/need-want-saving.md).
 
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost

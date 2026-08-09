@@ -2,6 +2,14 @@
 
 **Status: live.** Built, tested, wired into `getPending`/`saveNote` in `PWA.js`, and shown in the Pending screen — confirmed working on the real app 2026-08-08. Backend is now clasp-synced (`D:\fin-app\backend`, see CLAUDE.md), so `needWantSaving.js` is real, current code, not just this description.
 
+**Redesigned 2026-08-09** from an all-time vote count to a recent-answers
+sliding window — see "Why a sliding window, not an all-time count" below.
+The old `TypeMemory` sheet (Merchant/AmountBand/NeedCount/WantCount/
+SavingCount) is no longer read or written; a new `TypeVotes` sheet
+(Merchant/AmountBand/Type/Timestamp, one row per answer) replaced it.
+`TypeMemory` itself was left untouched on the Sheet — safe to rename or
+delete manually whenever, nothing reads it anymore.
+
 Not yet built: anywhere that actually *shows* the Need/Want/Saving breakdown (a 50/30/20 summary view). Right now this feature only collects the tag and the votes — nothing reads them back yet.
 
 ## What this feature is
@@ -36,114 +44,42 @@ Amount bands (fixed, simple, no per-merchant statistics needed):
 
 ## Why vote-counting, not a single "confidence score"
 
-The existing `SmartMemory` category memory stores one value + one confidence number per merchant. That design is what let a single bad or unusual entry silently overwrite or pollute the learned answer (see the 2026-08-08 SmartMemory cleanup in CLAUDE.md). `TypeMemory` avoids that: it keeps a running count for **each** of Need/Want/Saving per merchant+band. Every confirm/correction adds one vote; nothing is ever overwritten. One odd ice-cream order from BigBasket just becomes `Want: 1` sitting next to `Need: 18` — it doesn't flip the suggestion, and it's still recorded truthfully.
+The existing `SmartMemory` category memory stores one value + one confidence number per merchant. That design is what let a single bad or unusual entry silently overwrite or pollute the learned answer (see the 2026-08-08 SmartMemory cleanup in CLAUDE.md). `TypeVotes` avoids that: every confirm/correction is recorded as its own row, nothing is ever overwritten. One odd ice-cream order from BigBasket doesn't wipe out the pattern for every other order — it's just one more row sitting alongside the rest.
+
+## Why a sliding window, not an all-time count
+
+The original design (still described in the "vote-counting" heading above) kept an all-time running total per merchant+band forever — a vote from months ago counted exactly as much as one from today, with no way for it to fade. That broke down in a very real way on 2026-08-09: the user cleared a 249-item transaction backlog in one sitting and, since most of it was too old to actually remember, answered "Want" for the large majority of it as a guess rather than a real answer. Under the old all-time-count design, that block of guesses would have permanently outweighed every future, careful, real-time answer for those same merchants.
+
+The fix: `getSuggestedType` now only looks at your **last `TYPE_VOTE_WINDOW` (5) answers** for a given merchant+band, not your entire history. Practically:
+- A backlog-clearing session's guesses only matter until you've answered that same merchant 5 more times for real — then they fall completely out of the window and stop influencing anything.
+- A merchant you answer consistently (a restaurant that's always "Want") still gets a fast, confident suggestion — it just takes 5 answers to fully "own" the window instead of accumulating forever.
+- This is why `TypeVotes` had to become one-row-per-answer (with the sheet's natural append order used for recency, not the `Timestamp` column — see the code comment in `getSuggestedType` for why: two answers saved close together can land in the same millisecond, which would make a date-comparison sort unreliable. Row position is always unambiguous since `recordTypeVote` only ever appends).
 
 ## Cold start (a merchant+band combo seen for the first time, zero votes)
 
 Defaults to **Need** — a single neutral fallback, not category-based, so no category-to-type assumption sneaks back in through the back door. This only matters for the first transaction in that merchant+band bucket; after you confirm or correct it once, real votes take over.
 
-## `TypeMemory` sheet schema
+## `TypeVotes` sheet schema
 
-New sheet, independent of `SmartMemory` (no shared columns, no risk to existing category logic):
+Auto-created by the code the first time it's needed (same pattern `AILogs`/`NoteMemory` already use) — no manual sheet setup required. One row per answer, not per merchant:
 
 | Column | Meaning |
 |---|---|
 | Merchant | Counterparty name, same key `SmartMemory` uses |
 | AmountBand | Small / Medium / Large / XLarge (see above) |
-| NeedCount | Votes for Need |
-| WantCount | Votes for Want |
-| SavingCount | Votes for Saving |
-| TimesUsed | Sum of the three counts, for quick reference |
-| LastUsed | Timestamp of the last vote |
+| Type | Need / Want / Saving — whichever was chosen |
+| Timestamp | When this answer was saved (for reference only — the sliding window uses row order, not this column, see below) |
 
 ## Functions
 
-New Apps Script file `needWantSaving.js`, written 2026-08-08, **not yet wired into `pwa.gs`** — exists standalone so the logic can be tested in the Apps Script editor before anything user-facing depends on it.
-
-```javascript
-// needWantSaving.js
-// Self-learning Need/Want/Saving suggestion engine. See
-// docs/features/need-want-saving.md in the PWA repo for the full design
-// and reasoning — this file only has short comments, that doc is the
-// source of truth.
-
-// Buckets an amount into one of four fixed ranges. Used as part of the
-// TypeMemory lookup key, so the same merchant can have separately-learned
-// patterns for its usual purchase size vs an unusual one.
-function getAmountBand(amount) {
-  amount = Number(amount) || 0;
-  if (amount < 200) return "Small";
-  if (amount < 1000) return "Medium";
-  if (amount < 5000) return "Large";
-  return "XLarge";
-}
-
-// Returns "Need" / "Want" / "Saving", or null if this transaction
-// shouldn't be tagged at all (not a real spend, or too ambiguous to guess).
-function getSuggestedType(txnType, category, counterparty, amount) {
-  // Rule 1: money coming IN is never a spend.
-  if (txnType === "credit") return null;
-
-  // Rule 2: money lent out (or other debt-settlement categories) isn't
-  // spending either — it's a transfer you expect back.
-  var excludedCategories = ["Lent"];
-  if (excludedCategories.indexOf(category) !== -1) return null;
-
-  // Rule 3: the category engine itself couldn't recognize this
-  // counterparty — likely an unrecognized personal transfer. Don't guess.
-  if (category === "Other") return null;
-
-  // Rule 4: look up how this merchant+amount-band has voted before.
-  var band = getAmountBand(amount);
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TypeMemory");
-  var data = sheet.getDataRange().getValues();
-  // Columns: Merchant(0) AmountBand(1) NeedCount(2) WantCount(3) SavingCount(4) TimesUsed(5) LastUsed(6)
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === counterparty && data[i][1] === band) {
-      var counts = { Need: data[i][2], Want: data[i][3], Saving: data[i][4] };
-      var best = "Need"; // tie-break / all-zero default
-      if (counts.Want > counts[best]) best = "Want";
-      if (counts.Saving > counts[best]) best = "Saving";
-      return best;
-    }
-  }
-
-  // Never seen this merchant+band combo before — neutral cold-start
-  // default. Deliberately NOT based on category, so no category-to-type
-  // assumption sneaks back in. Gets replaced by real votes after one use.
-  return "Need";
-}
-
-// Records one vote for chosenType against this merchant+band combo.
-// Called after the user confirms or corrects the tag in Pending.
-function recordTypeVote(counterparty, amount, chosenType) {
-  var band = getAmountBand(amount);
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TypeMemory");
-  var data = sheet.getDataRange().getValues();
-
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === counterparty && data[i][1] === band) {
-      var rowNum = i + 1; // sheet rows are 1-indexed; row 1 is the header
-      var colIndex = { Need: 3, Want: 4, Saving: 5 }[chosenType]; // C/D/E
-      var currentCount = sheet.getRange(rowNum, colIndex).getValue();
-      sheet.getRange(rowNum, colIndex).setValue(currentCount + 1);
-
-      var timesUsed = data[i][2] + data[i][3] + data[i][4] + 1;
-      sheet.getRange(rowNum, 6).setValue(timesUsed); // TimesUsed
-      sheet.getRange(rowNum, 7).setValue(new Date()); // LastUsed
-      return;
-    }
-  }
-
-  // First time seeing this merchant+band combo — add a new row.
-  var newRow = [counterparty, band, 0, 0, 0, 1, new Date()];
-  var typeColIndex = { Need: 2, Want: 3, Saving: 4 }[chosenType]; // 0-indexed
-  newRow[typeColIndex] = 1;
-  sheet.appendRow(newRow);
-}
-```
+Live in `needWantSaving.js` (source of truth — read the actual file, not just this doc):
+- `getAmountBand(amount)` — unchanged.
+- `getTypeVotesSheet()` — returns the `TypeVotes` sheet, creating it with headers if missing.
+- `getSuggestedType(txnType, category, counterparty, amount, typeVotesData)` — rules 1-3 unchanged (credit/Lent/Other all return `null`); rule 4 now takes the merchant+band's most recent `TYPE_VOTE_WINDOW` (5) answers and returns whichever of Need/Want/Saving appears most among just those. `typeVotesData` is optional, same batching reasoning as before.
+- `recordTypeVote(counterparty, amount, chosenType)` — now just appends one row; no more find-and-increment.
 
 ## Open items / not yet decided
 
 - Whether `Category = Other` should ever get a type once the user manually assigns a real category in the same Pending action (order-of-operations question, revisit once UI is wired up).
 - Whether more categories besides `Lent` should be treated as debt-settlement-excluded — revisit once real usage surfaces examples.
+- Whether `TYPE_VOTE_WINDOW` (5) is the right size — revisit if suggestions feel too twitchy (lower it) or too slow to adapt (raise it) once there's more real usage to judge by.
