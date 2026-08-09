@@ -1418,8 +1418,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-09-5";
-    const APP_CHANGELOG = "Pending notes now suggest what you actually wrote before for that merchant (e.g. \"dinner\"), not just the merchant's name — gets smarter the more you use it, and handles friends/family payments sensibly too.";
+    const APP_VERSION = "2026-08-09-6";
+    const APP_CHANGELOG = "Fixed: pending transactions already on screen weren't picking up newly learned note suggestions until you saved or reopened them — they now refresh automatically in the background (only if you haven't started typing your own note).";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1970,6 +1970,7 @@
             });
 
             if (newOnes.length > 0) updatePendingStatusText();
+            refreshUneditedNoteSuggestions(data.transactions);
           })
           .catch(function () { /* fine — we'll just try again next time */ });
 
@@ -2045,6 +2046,7 @@
     function buildPendingItem(txn) {
       const card = document.createElement("div");
       card.className = "pending-item";
+      card.dataset.row = txn.row;
 
       // Pre-select whatever category the smart engine guessed, so most
       // items just need a tap on Save instead of picking one manually.
@@ -2096,6 +2098,11 @@
       const categorySelect = card.querySelector(".category-select");
       const saveButton     = card.querySelector(".save-btn");
       const resultEl       = card.querySelector(".pending-result");
+
+      // Remembers what we auto-filled, so a later background refresh can
+      // tell "you haven't touched this yet" apart from "you're mid-typing"
+      // — see refreshUneditedNoteSuggestions below.
+      card.dataset.autoNote = noteInput.value;
 
       // Need/Want/Saving is a single-select toggle: pre-select the guess
       // (if we have one), and clicking a button just moves the selection.
@@ -2224,6 +2231,29 @@
 
     // Runs every minute: quietly checks for anything not already in knownRows.
     // Existing cards (and anything you're mid-typing) are left completely alone.
+    // Cards already on screen can still learn a better note suggestion in
+    // the background (e.g. Note Memory just crossed its "used twice" bar
+    // for that merchant, or the cached copy simply predates that update).
+    // This refreshes the note box on any visible card whose note still
+    // exactly matches what was auto-filled — it never touches one you've
+    // started editing yourself, same "don't disturb mid-typing" rule the
+    // rest of this screen already follows.
+    function refreshUneditedNoteSuggestions(freshTransactions) {
+      freshTransactions.forEach(function (fresh) {
+        const card = pendingListEl.querySelector('[data-row="' + fresh.row + '"]');
+        if (!card) return;
+
+        const noteInput = card.querySelector(".note-input");
+        if (!noteInput || noteInput.value !== card.dataset.autoNote) return;
+
+        const newAutoNote = fresh.suggestedNote || fresh.counterparty || "";
+        if (newAutoNote !== card.dataset.autoNote) {
+          noteInput.value = newAutoNote;
+          card.dataset.autoNote = newAutoNote;
+        }
+      });
+    }
+
     function checkForNewTransactions() {
       if (!currentUser) return; // not signed in — nothing to check
 
@@ -2247,6 +2277,8 @@
             updatePendingStatusText();
             saveCache("pending", allPending);
           }
+
+          refreshUneditedNoteSuggestions(data.transactions);
         })
         .catch(function () { /* stay quiet — we'll just try again next minute */ });
     }
