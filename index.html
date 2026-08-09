@@ -372,11 +372,12 @@
     }
 
     /* Tappable Home widgets — tapping one switches what "Recent" shows below */
-    .stat-card[data-widget] {
+    [data-widget] {
       cursor: pointer;
     }
 
-    .stat-card.active {
+    .stat-card.active,
+    .hero-card.active {
       outline: 2px solid var(--color-primary);
       outline-offset: -2px;
     }
@@ -954,7 +955,7 @@
         </div>
         <div id="homeContent" style="display:none">
 
-          <div class="hero-card">
+          <div class="hero-card" data-widget="today">
             <div class="hero-label">Spent today</div>
             <div class="hero-amount" id="homeTodaySpend">₹0</div>
             <div class="hero-sub" id="homeMonthSpend"></div>
@@ -979,9 +980,6 @@
               <div class="stat-value" id="homeDebtsNet">₹0</div>
             </div>
           </div>
-
-          <h3 style="font-size:0.95rem; margin:16px 0 8px 0;">Top Categories This Month</h3>
-          <div id="homeCategoryChart"></div>
 
           <h3 style="font-size:0.95rem; margin:16px 0 8px 0;" id="homeRecentLabel">Recent Pending</h3>
           <div id="homeRecent"></div>
@@ -1420,8 +1418,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-09-2";
-    const APP_CHANGELOG = "Home screen update: tap Pending/Cash/CC/Debts to see recent activity for that one, CC now shows the amount spent, and a top-categories chart was added. Old pending notes now start pre-filled with the merchant name to make catching up faster.";
+    const APP_VERSION = "2026-08-09-3";
+    const APP_CHANGELOG = "Home screen fixes: removed the top-categories chart, tapping \"Spent today\" now actually shows today's spend, and tapping CC usage now shows the note you wrote instead of a raw payment ID.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1762,7 +1760,6 @@
     const homeDebtsNetEl      = document.getElementById("homeDebtsNet");
     const homeRecentEl        = document.getElementById("homeRecent");
     const homeRecentLabelEl   = document.getElementById("homeRecentLabel");
-    const homeCategoryChartEl = document.getElementById("homeCategoryChart");
 
     // The full detail behind the dashboard's headline numbers (same object
     // seedTabsFromDashboard uses) — kept here too so tapping a Home widget
@@ -1770,10 +1767,11 @@
     let dashboardFull  = null;
     let homeRecentMode = "pending";
 
-    // Tapping a stat-card switches which list "Recent" shows, without
-    // leaving the Home screen. Wired once here (the cards themselves never
-    // change), not inside renderDashboard (which runs on every refresh).
-    document.querySelectorAll(".stat-card[data-widget]").forEach(function (card) {
+    // Tapping a widget (the 4 stat-cards, or the "Spent today" hero card)
+    // switches which list "Recent" shows, without leaving the Home screen.
+    // Wired once here (the cards themselves never change), not inside
+    // renderDashboard (which runs on every refresh).
+    document.querySelectorAll("[data-widget]").forEach(function (card) {
       card.addEventListener("click", function () {
         renderHomeRecentList(card.dataset.widget);
       });
@@ -1784,17 +1782,30 @@
     function renderHomeRecentList(mode) {
       homeRecentMode = mode;
 
-      document.querySelectorAll(".stat-card[data-widget]").forEach(function (card) {
+      document.querySelectorAll("[data-widget]").forEach(function (card) {
         card.classList.toggle("active", card.dataset.widget === mode);
       });
 
-      const labels = { pending: "Recent Pending", cash: "Recent Cash", cc: "Recent Card Spend", debts: "Debts" };
+      const labels = {
+        today: "Today's Spend by Category",
+        pending: "Recent Pending",
+        cash: "Recent Cash",
+        cc: "Recent Card Spend",
+        debts: "Debts"
+      };
       homeRecentLabelEl.textContent = labels[mode] || "Recent";
 
       const full = dashboardFull || {};
       let rows = [];
 
-      if (mode === "pending") {
+      if (mode === "today") {
+        // No single "today's transactions" list exists yet — the category
+        // breakdown for today is already computed on the backend, so show
+        // that instead of adding a new backend call just for this.
+        rows = (full.today && full.today.categories ? full.today.categories : []).slice(0, 5).map(function (c) {
+          return { label: c.category, amount: c.amount, sign: "-" };
+        });
+      } else if (mode === "pending") {
         rows = (full.pending || []).slice(0, 3).map(function (t) {
           return { label: t.counterparty || t.bank, amount: t.amount, sign: "-" };
         });
@@ -1803,8 +1814,11 @@
           return { label: e.note ? e.note : e.date, amount: e.amount, sign: e.type === "credit" ? "+" : "-" };
         });
       } else if (mode === "cc") {
+        // Prefer the note you actually wrote — falling back to the raw
+        // counterparty (often an unreadable UPI ID) only if there's no
+        // note yet.
         rows = (full.cc && full.cc.recentCardTxns ? full.cc.recentCardTxns : []).slice(0, 3).map(function (e) {
-          return { label: e.counterparty || "Card payment", amount: e.amount, sign: "-" };
+          return { label: e.note || e.counterparty || "Card payment", amount: e.amount, sign: "-" };
         });
       } else if (mode === "debts") {
         rows = (full.debts && full.debts.debts ? full.debts.debts : []).slice(0, 3).map(function (e) {
@@ -1822,34 +1836,6 @@
         row.className = "home-recent-row";
         row.innerHTML = `<span>${escapeHtml(r.label)}</span><span>${r.sign}₹${r.amount.toLocaleString("en-IN")}</span>`;
         homeRecentEl.appendChild(row);
-      });
-    }
-
-    // Small visual: top few categories this month, same bar style already
-    // used on Today/Analysis/CC — reusing it here instead of building a
-    // separate chart component.
-    function renderHomeCategoryChart(categories) {
-      homeCategoryChartEl.innerHTML = "";
-      if (!categories || categories.length === 0) {
-        homeCategoryChartEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">📊</span><p>No spending yet this month.</p></div>";
-        return;
-      }
-      const top = categories.slice(0, 4);
-      const maxAmount = top[0].amount;
-      top.forEach(function (entry) {
-        const percentOfMax = maxAmount > 0 ? Math.round((entry.amount / maxAmount) * 100) : 0;
-        const row = document.createElement("div");
-        row.className = "category-row";
-        row.innerHTML = `
-          <div class="category-top">
-            ${categoryBadgeHtml(entry.category)}
-            <span>₹${entry.amount.toLocaleString("en-IN")}</span>
-          </div>
-          <div class="category-bar-track">
-            <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
-          </div>
-        `;
-        homeCategoryChartEl.appendChild(row);
       });
     }
 
@@ -1942,7 +1928,6 @@
 
       dashboardFull = d.full || null;
       renderHomeRecentList(homeRecentMode);
-      renderHomeCategoryChart(d.full && d.full.month ? d.full.month.categories : []);
     }
 
     function loadPendingTransactions() {

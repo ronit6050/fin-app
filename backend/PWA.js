@@ -581,7 +581,12 @@ function getCCAdvisorData(txnData){
       txnCount++;
       categoryTotals[cat] = (categoryTotals[cat] || 0) + amount;
       cardTotals[mode]    = (cardTotals[mode] || 0) + amount;
-      recentCardTxns.push({ date: d, counterparty: (data[i][7] || "").toString().trim(), amount: amount });
+      recentCardTxns.push({
+        date: d,
+        counterparty: (data[i][7] || "").toString().trim(),
+        note: (data[i][12] || "").toString().trim(), // column M — what you actually wrote, shown instead of the raw UPI ID when present
+        amount: amount
+      });
     }
   }
 
@@ -615,7 +620,7 @@ function getCCAdvisorData(txnData){
   const recentCardTxnsFormatted = recentCardTxns
     .sort(function(a, b){ return b.date - a.date; })
     .slice(0, 5)
-    .map(function(t){ return { date: fmtDate(t.date), counterparty: t.counterparty, amount: t.amount }; });
+    .map(function(t){ return { date: fmtDate(t.date), counterparty: t.counterparty, note: t.note, amount: t.amount }; });
 
   return {
     cycleStart: fmtDate(cycleStart),
