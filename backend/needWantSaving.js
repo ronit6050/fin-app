@@ -1,5 +1,5 @@
 // needWantSaving.js
-// Self-learning Need/Want/Saving suggestion engine. See
+// Self-learning Need/Want/Saving/Investment suggestion engine. See
 // docs/features/need-want-saving.md in the PWA repo for the full design
 // and reasoning — this file only has short comments, that doc is the
 // source of truth.
@@ -16,14 +16,39 @@ function getAmountBand(amount) {
 }
 
 // How many of your most recent answers (for this merchant+band) to base a
-// suggestion on. Deliberately NOT an all-time running total — a big batch
-// of unsure guesses (e.g. clearing a large backlog in one sitting) would
-// otherwise outweigh careful, real-time answers forever. With a window,
-// once you've answered the same merchant this many times for real, the
-// old guesses age out completely and stop influencing anything. Confirmed
-// with the user 2026-08-09 after clearing a 249-item backlog mostly with
-// guessed answers.
+// suggestion on, once there IS real answer history. Deliberately NOT an
+// all-time running total — a big batch of unsure guesses (e.g. clearing a
+// large backlog in one sitting) would otherwise outweigh careful,
+// real-time answers forever. With a window, once you've answered the same
+// merchant this many times for real, the old guesses age out completely.
 var TYPE_VOTE_WINDOW = 5;
+
+// Recognizes a handful of specific financial instruments directly from
+// the transaction text — independent of the visible Category field
+// (SmartMemory's category doesn't carry this level of detail; see
+// docs/features/need-want-saving.md for why this had to be its own,
+// separate check). Used ONLY as a cold-start guess, never to override
+// real answer history — see getSuggestedType.
+//
+// EMI is deliberately NOT included here (other than the specific "home
+// loan" phrasing). Unlike rent, an EMI's nature depends entirely on what
+// was financed — a TV EMI and a home loan EMI are not the same kind of
+// spend — so guessing would often be wrong. Left to normal per-lender
+// learning instead, same as any other merchant.
+function getFinancialSubtype(counterparty) {
+  var text = (counterparty || "").toString().toLowerCase();
+
+  if (text.indexOf("home loan") !== -1 || text.indexOf("housing loan") !== -1) return "homeLoanEmi";
+  if (text.indexOf("rent") !== -1 || text.indexOf("landlord") !== -1 || text.indexOf("house rent") !== -1) return "rent";
+  if (text.indexOf("insurance") !== -1 || text.indexOf("lic") !== -1) return "insurance";
+  if (text.indexOf("ppf") !== -1 || text.indexOf("fixed deposit") !== -1 || text.indexOf("recurring deposit") !== -1) return "saving";
+  if (
+    text.indexOf("mutual fund") !== -1 || text.indexOf("sip") !== -1 || text.indexOf("stock") !== -1 ||
+    text.indexOf("zerodha") !== -1 || text.indexOf("groww") !== -1 || text.indexOf("nps") !== -1
+  ) return "investment";
+
+  return null;
+}
 
 function getTypeVotesSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -35,8 +60,9 @@ function getTypeVotesSheet() {
   return sheet;
 }
 
-// Returns "Need" / "Want" / "Saving", or null if this transaction
-// shouldn't be tagged at all (not a real spend, or too ambiguous to guess).
+// Returns "Need" / "Want" / "Saving" / "Investment", or null if this
+// transaction shouldn't be tagged at all (not a real spend, or too
+// ambiguous to guess).
 //
 // typeVotesData is optional: pass the already-read TypeVotes sheet values
 // (sheet.getDataRange().getValues()) when checking many transactions in a
@@ -80,16 +106,26 @@ function getSuggestedType(txnType, category, counterparty, amount, typeVotesData
     }
   }
 
+  // Cold start: no real answers yet for this specific merchant+band. A
+  // handful of financial instruments are recognizable enough from the
+  // transaction text alone to give a smarter first guess than a flat
+  // "Need" — but this is ONLY ever a starting point. As soon as you've
+  // actually answered this merchant for real, the vote-count below always
+  // wins over this guess, even if you consistently disagree with it (e.g.
+  // an insurance policy you personally treat differently). This matters —
+  // a hard-coded rule that could never be overridden by real behavior
+  // would repeat the exact mistake already fixed once for Need/Want/Saving
+  // generally (see the sliding-window redesign note above/in the doc).
   if (matches.length === 0) {
-    // Never seen this merchant+band combo before — neutral cold-start
-    // default. Deliberately NOT based on category, so no category-to-type
-    // assumption sneaks back in. Gets replaced by real answers after one use.
-    return "Need";
+    var subtype = getFinancialSubtype(counterparty);
+    if (subtype === "rent" || subtype === "homeLoanEmi" || subtype === "insurance") return "Need";
+    if (subtype === "saving") return "Saving";
+    if (subtype === "investment") return "Investment";
+    return "Need"; // generic cold-start default, unchanged from before
   }
 
-  var recent = matches.slice(-TYPE_VOTE_WINDOW); // last N, oldest of those first — order doesn't matter for counting
-
-  var counts = { Need: 0, Want: 0, Saving: 0 };
+  var recent = matches.slice(-TYPE_VOTE_WINDOW); // last N, order doesn't matter for counting
+  var counts = { Need: 0, Want: 0, Saving: 0, Investment: 0 };
   recent.forEach(function (t) {
     if (counts.hasOwnProperty(t)) counts[t]++;
   });
@@ -97,6 +133,7 @@ function getSuggestedType(txnType, category, counterparty, amount, typeVotesData
   var best = "Need"; // tie-break
   if (counts.Want > counts[best]) best = "Want";
   if (counts.Saving > counts[best]) best = "Saving";
+  if (counts.Investment > counts[best]) best = "Investment";
   return best;
 }
 
@@ -116,15 +153,28 @@ function testNeedWantSaving() {
   Logger.log("Test 1 (credit excluded, expect null): " + getSuggestedType("credit", "Income", "SALARY", 40000));
   Logger.log("Test 2 (Lent excluded, expect null): " + getSuggestedType("credit", "Lent", "TEST FRIEND", 12000));
   Logger.log("Test 3 (Other excluded, expect null): " + getSuggestedType("debit", "Other", "TEST RANDOM PERSON", 500));
-  Logger.log("Test 4 (cold start, expect Need): " + getSuggestedType("debit", "Food", "TEST ZEPTO", 274));
+  Logger.log("Test 4 (cold start, no subtype match, expect Need): " + getSuggestedType("debit", "Food", "TEST ZEPTO", 274));
+
+  Logger.log("Test 5 (rent, cold start, expect Need): " + getSuggestedType("debit", "Bills", "TEST LANDLORD RENT", 11000));
+  Logger.log("Test 6 (home loan EMI, cold start, expect Need): " + getSuggestedType("debit", "Financial", "TEST HOME LOAN EMI", 15000));
+  Logger.log("Test 7 (plain EMI, cold start, expect Need via generic fallback, NOT a hard rule): " + getSuggestedType("debit", "Financial", "TEST BAJAJ EMI", 3000));
+  Logger.log("Test 8 (mutual fund SIP, cold start, expect Investment): " + getSuggestedType("debit", "Financial", "TEST SIP MUTUAL FUND", 5000));
+  Logger.log("Test 9 (fixed deposit, cold start, expect Saving): " + getSuggestedType("debit", "Financial", "TEST FIXED DEPOSIT", 10000));
 
   recordTypeVote("TEST ZEPTO", 274, "Want");
   recordTypeVote("TEST ZEPTO", 274, "Want");
   recordTypeVote("TEST ZEPTO", 274, "Want");
-  Logger.log("Test 5 (after 3 Want answers, expect Want): " + getSuggestedType("debit", "Food", "TEST ZEPTO", 274));
+  Logger.log("Test 10 (after 3 Want answers, expect Want): " + getSuggestedType("debit", "Food", "TEST ZEPTO", 274));
 
   recordTypeVote("TEST ZEPTO", 274, "Need");
   recordTypeVote("TEST ZEPTO", 274, "Need");
   recordTypeVote("TEST ZEPTO", 274, "Need");
-  Logger.log("Test 6 (last 5 of 6 answers are 3 Need + 2 Want, expect Need): " + getSuggestedType("debit", "Food", "TEST ZEPTO", 274));
+  Logger.log("Test 11 (last 5 of 6 answers are 3 Need + 2 Want, expect Need): " + getSuggestedType("debit", "Food", "TEST ZEPTO", 274));
+
+  // A specific insurance merchant the user has repeatedly overridden to
+  // Investment — real answer history must win over the cold-start guess.
+  recordTypeVote("TEST LIC POLICY", 5000, "Investment");
+  recordTypeVote("TEST LIC POLICY", 5000, "Investment");
+  Logger.log("Test 12 (insurance merchant, but user has voted Investment twice, expect Investment — real history beats the cold-start guess): " +
+    getSuggestedType("debit", "Financial", "TEST LIC POLICY", 5000));
 }

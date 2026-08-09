@@ -99,6 +99,7 @@
       --need-bg:   #eaf3de; --need-text:   #3b6d11;
       --want-bg:   #faeeda; --want-text:   #854f0b;
       --saving-bg: #e6f1fb; --saving-text: #0c447c;
+      --investment-bg: #f2e9fb; --investment-text: #6b2fa0;
     }
 
     /* ---------- Design tokens — dark mode ----------
@@ -144,6 +145,7 @@
         --need-bg:   #1b2408; --need-text:   #97c459;
         --want-bg:   #2e2308; --want-text:   #efc775;
         --saving-bg: #0f2033; --saving-text: #85b7eb;
+        --investment-bg: #241633; --investment-text: #c79ef0;
       }
     }
     :root[data-theme="dark"] {
@@ -180,6 +182,7 @@
       --need-bg:   #1b2408; --need-text:   #97c459;
       --want-bg:   #2e2308; --want-text:   #efc775;
       --saving-bg: #0f2033; --saving-text: #85b7eb;
+      --investment-bg: #241633; --investment-text: #c79ef0;
     }
 
     /* ---------- Basic page setup ---------- */
@@ -566,12 +569,13 @@
        whichever one the merchant's past votes favor. */
     .type-toggle {
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
     }
 
     .type-btn {
-      flex: 1;
-      width: auto;
+      flex: 1 1 auto;
+      min-width: 72px;
       padding: 9px 0;
       font-size: 0.85rem;
       font-weight: 500;
@@ -586,9 +590,10 @@
       border-color: transparent;
     }
 
-    .type-btn[data-type="Need"].active   { background: var(--need-bg);   color: var(--need-text); }
-    .type-btn[data-type="Want"].active   { background: var(--want-bg);   color: var(--want-text); }
-    .type-btn[data-type="Saving"].active { background: var(--saving-bg); color: var(--saving-text); }
+    .type-btn[data-type="Need"].active       { background: var(--need-bg);       color: var(--need-text); }
+    .type-btn[data-type="Want"].active       { background: var(--want-bg);       color: var(--want-text); }
+    .type-btn[data-type="Saving"].active     { background: var(--saving-bg);     color: var(--saving-text); }
+    .type-btn[data-type="Investment"].active { background: var(--investment-bg); color: var(--investment-text); }
 
     /* ---------- Today's Summary ---------- */
     .today-total-box {
@@ -1418,8 +1423,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-09-6";
-    const APP_CHANGELOG = "Fixed: pending transactions already on screen weren't picking up newly learned note suggestions until you saved or reopened them — they now refresh automatically in the background (only if you haven't started typing your own note).";
+    const APP_VERSION = "2026-08-09-7";
+    const APP_CHANGELOG = "Pending: added a 4th tag, Investment, separate from Saving (a SIP isn't the same as an FD). Rent, home loans, and insurance now get a smarter first guess too — but your own answers always win once you've actually told it otherwise.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -2071,6 +2076,7 @@
             <button type="button" class="type-btn" data-type="Need">Need</button>
             <button type="button" class="type-btn" data-type="Want">Want</button>
             <button type="button" class="type-btn" data-type="Saving">Saving</button>
+            <button type="button" class="type-btn" data-type="Investment">Investment</button>
           </div>
         </div>
       ` : "";

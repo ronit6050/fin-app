@@ -1,6 +1,17 @@
-# Need / Want / Saving tagging (50/30/20 layer)
+# Need / Want / Saving / Investment tagging (50/30/20 layer)
 
 **Status: live.** Built, tested, wired into `getPending`/`saveNote` in `PWA.js`, and shown in the Pending screen — confirmed working on the real app 2026-08-08. Backend is now clasp-synced (`D:\fin-app\backend`, see CLAUDE.md), so `needWantSaving.js` is real, current code, not just this description.
+
+**Extended 2026-08-09** with a 4th tag, **Investment**, and smarter
+cold-start guessing — see "Investment as a 4th tag" and "Smart cold-start
+guessing" below. Frontend change scoped to the Pending screen only
+(`buildPendingItem` in `index.html`) — History and Reconciliation still
+only show 3 buttons (Need/Want/Saving) as of this entry; they read the
+same `suggestedType` field from the backend, so an "Investment" backend
+answer just won't get pre-highlighted there yet. Deliberately not touched
+in this pass — user's explicit instruction was to perfect one feature
+(Pending) at a time rather than spread a change across every screen at
+once. Revisit those two screens' buttons when it's their turn.
 
 **Redesigned 2026-08-09** from an all-time vote count to a recent-answers
 sliding window — see "Why a sliding window, not an all-time count" below.
@@ -14,7 +25,13 @@ Not yet built: anywhere that actually *shows* the Need/Want/Saving breakdown (a 
 
 ## What this feature is
 
-Every genuine spending transaction gets tagged **Need**, **Want**, or **Saving**, so the app can eventually show a 50/30/20-style budget breakdown. This sits on top of the existing category system (Food, Bills, etc.) but is a separate concept — category answers "what kind of thing was this," this answers "was this necessary, discretionary, or money set aside."
+Every genuine spending transaction gets tagged **Need**, **Want**, **Saving**, or **Investment**, so the app can eventually show a 50/30/20-style budget breakdown. This sits on top of the existing category system (Food, Bills, etc.) but is a separate concept — category answers "what kind of thing was this," this answers "was this necessary, discretionary, money set aside safely, or money invested with market risk."
+
+## Investment as a 4th tag
+
+User caught this 2026-08-09: Saving and Investment are not the same thing, and the app's own other screens already agree — there's a whole separate Savings tab (Emergency/Wish List/Free pots, capital-safe) and a separate Investments tab (SIPs/stocks, market risk). Tagging a mutual fund SIP as "Saving" in Pending contradicted how the rest of the app already treats money. Fixed by adding **Investment** as a genuine 4th type, not a subtype of Saving.
+
+This is Pending-only for now (see status note above) — not yet linked to the actual Investments tab/sheet (that's a *different*, bigger idea — auto-creating an Investments log entry from a recognized transaction — deliberately deferred, see the "PROPOSED PLAN" section in CLAUDE.md, Phase 2). This feature only fixes the *label*, not the cross-tab linking, on purpose — one feature at a time.
 
 ## Why it's NOT a fixed category -> type table
 
@@ -57,7 +74,14 @@ The fix: `getSuggestedType` now only looks at your **last `TYPE_VOTE_WINDOW` (5)
 
 ## Cold start (a merchant+band combo seen for the first time, zero votes)
 
-Defaults to **Need** — a single neutral fallback, not category-based, so no category-to-type assumption sneaks back in through the back door. This only matters for the first transaction in that merchant+band bucket; after you confirm or correct it once, real votes take over.
+Two layers, in order:
+
+1. **`getFinancialSubtype(counterparty)`** — recognizes a small, deliberately narrow set of financial instruments directly from the transaction text (not from Category — SmartMemory's `subcategory` field is never actually populated with anything meaningful in the PWA flow today, `handleCategoryCorrection` always hardcodes it to `"Other"`, so it couldn't be used as a signal here even if we wanted to). Recognized: `rent`, `homeLoanEmi` → suggest **Need**; `saving` (PPF/fixed deposit/recurring deposit) → suggest **Saving**; `investment` (mutual fund/SIP/stock/Zerodha/Groww/NPS) → suggest **Investment**; `insurance` → suggest **Need**.
+2. If nothing recognized, falls back to the old flat **Need** default.
+
+**Why plain EMI is deliberately NOT in that recognized list** (only the specific phrase "home loan"/"housing loan" is): unlike rent, what an EMI is *for* varies completely — a TV EMI and a home loan EMI are not the same kind of spend, and guessing would often be wrong (user caught this exact mistake in an earlier draft of this plan, where "Rent/EMI = Need" was proposed as one rule). Plain EMI falls through to the flat Need default, then behaves exactly like everything else from there — see point 2 below.
+
+**Critical property: this guess is ONLY a starting point, never a permanent override.** Once there's real answer history for that specific merchant+band (`matches.length > 0` in `getSuggestedType`), the vote-count from actual answers is used instead, even if it disagrees with the subtype guess — e.g. an insurance policy you've personally tagged "Investment" twice will keep suggesting Investment, not snap back to Need. This was a deliberate design choice, not an oversight — a hard-coded rule immune to real behavior would repeat the exact mistake the sliding-window redesign (above) already fixed once for Need/Want/Saving generally. See `testNeedWantSaving()`'s Test 12 for this exact scenario, verified with a standalone Node run before shipping.
 
 ## `TypeVotes` sheet schema
 
@@ -67,19 +91,22 @@ Auto-created by the code the first time it's needed (same pattern `AILogs`/`Note
 |---|---|
 | Merchant | Counterparty name, same key `SmartMemory` uses |
 | AmountBand | Small / Medium / Large / XLarge (see above) |
-| Type | Need / Want / Saving — whichever was chosen |
+| Type | Need / Want / Saving / Investment — whichever was chosen |
 | Timestamp | When this answer was saved (for reference only — the sliding window uses row order, not this column, see below) |
 
 ## Functions
 
 Live in `needWantSaving.js` (source of truth — read the actual file, not just this doc):
 - `getAmountBand(amount)` — unchanged.
+- `getFinancialSubtype(counterparty)` — new. Keyword-matches a handful of financial instruments directly from the transaction text; used only by `getSuggestedType`'s cold-start path, never anywhere else.
 - `getTypeVotesSheet()` — returns the `TypeVotes` sheet, creating it with headers if missing.
-- `getSuggestedType(txnType, category, counterparty, amount, typeVotesData)` — rules 1-3 unchanged (credit/Lent/Other all return `null`); rule 4 now takes the merchant+band's most recent `TYPE_VOTE_WINDOW` (5) answers and returns whichever of Need/Want/Saving appears most among just those. `typeVotesData` is optional, same batching reasoning as before.
-- `recordTypeVote(counterparty, amount, chosenType)` — now just appends one row; no more find-and-increment.
+- `getSuggestedType(txnType, category, counterparty, amount, typeVotesData)` — rules 1-3 unchanged (credit/Lent/Other all return `null`); cold start (no matching rows yet) now consults `getFinancialSubtype` before falling back to flat Need; once real answers exist, takes the merchant+band's most recent `TYPE_VOTE_WINDOW` (5) answers and returns whichever of Need/Want/Saving/Investment appears most among just those. `typeVotesData` is optional, same batching reasoning as before. Signature unchanged from the previous version — callers in `PWA.js`/`Recon.js` needed no changes.
+- `recordTypeVote(counterparty, amount, chosenType)` — unchanged; just appends one row, now potentially with `"Investment"` as the type.
 
 ## Open items / not yet decided
 
 - Whether `Category = Other` should ever get a type once the user manually assigns a real category in the same Pending action (order-of-operations question, revisit once UI is wired up).
 - Whether more categories besides `Lent` should be treated as debt-settlement-excluded — revisit once real usage surfaces examples.
 - Whether `TYPE_VOTE_WINDOW` (5) is the right size — revisit if suggestions feel too twitchy (lower it) or too slow to adapt (raise it) once there's more real usage to judge by.
+- History and Reconciliation screens still only show 3 buttons (no Investment) — extend when those screens get their turn (see status note at top).
+- `getFinancialSubtype`'s keyword list is intentionally small/conservative (e.g. bare "fd"/"rd" deliberately excluded, unlike the general category engine's looser matching, to avoid false positives) — revisit if real transactions reveal it's missing obvious cases.
