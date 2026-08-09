@@ -345,22 +345,17 @@ dark mode (see Step 11 notes above for that last one, including the 3
 post-redesign fixes the user found by testing live: icons, tap-highlight,
 back button).
 
-**Nothing is currently in progress.** The natural next things, none
-started yet:
-- A screen showing the actual Need/Want/Saving 50/30/20 breakdown (the
-  tagging/learning exists, nothing displays it yet) — worth revisiting
-  once enough real votes have accumulated (user explicitly chose to wait
-  on this).
-- CC statement import (`Credit Card.js` → PWA) — user explicitly wants
-  this **after the 18th of the month**, when the next bill generates.
-- Smart Reaction (Gemini one-liner after saving a note) and richer
-  Analysis (chart + Gemini insight) — both explicitly deferred until
-  "core features" are solid, per user.
-- Revisiting other ported features for reliability (AI Advisor, CC
-  Advisor's own math, etc.) — flagged by user, not yet started.
+**Superseded 2026-08-09 — see "Category/Type restructure" plan below**,
+which is now the authoritative "what's next." Still true and not folded
+into that plan: CC statement import (`Credit Card.js` → PWA), user wants
+this **after the 18th of the month** when the next bill generates; Smart
+Reaction (Gemini one-liner after saving a note) and richer Analysis
+(chart + Gemini insight), both still explicitly deferred until core
+features are solid.
 
-If the user asks "what's next" cold, these four are the honest answer —
-don't assume, ask which one (or something new) before building.
+If the user asks "what's next" cold: point at the phased plan below,
+don't assume, ask which phase/line item (or something new) before
+building — nothing in that plan is approved to start yet.
 
 **Responsiveness pass (2026-08-08):** user asked specifically for minimal
 delay on (a) new transactions appearing and (b) switching tabs. Three
@@ -492,3 +487,52 @@ now a second front door into the same backend, added alongside it.
 - `FIREBASE_SERVICE_ACCOUNT` (new) — the full service-account JSON from Firebase Console, used only server-side to sign push-send requests. Sensitive, treat like a password.
 
 **Web App deployment settings:** deployed with `"access": "ANYONE_ANONYMOUS"` in `appsscript.json` (unauthenticated at the HTTP layer — this is normal/required for both Telegram webhooks and the PWA to reach it). Real security is entirely inside `doPost`/`verifyGoogleIdToken`, not at the deployment-access level.
+
+## PROPOSED PLAN: Category/Type restructure + cross-tab linking (2026-08-09)
+
+**Status: proposed, NOT approved, NOT started.** User's explicit rule for
+this plan: present it, get explicit approval on which phase/line to work
+on, before touching any code. Do not assume or build ahead. User also
+explicitly asked for this plan to stay in one-line-per-item format, no
+paragraphs — keep edits to this section in that style.
+
+**Why this exists:** user flagged that "Rent"/"EMI" don't belong as
+categories at all (a category should group *varied* things — breakfast,
+lunch, dinner all fit under Food; rent has nothing else "under" it) and
+that using multiple tabs to piece together one financial picture is
+tedious. Full reasoning lives in chat history around 2026-08-09; this
+section is the actionable plan that came out of it.
+
+**Core distinction driving the whole plan:** *Category* = variety of
+spending (Food, Transport, Shopping...). *Type* = a recognized financial
+event (Rent, EMI, Lending, Borrowing, Investment, Income). Types are
+detected and routed, not picked from a category list.
+
+**Phase 1 — Fix classification**
+- Rent, EMI, Lending, Borrowing, Investment stop being categories/subcategories → become detected Types.
+- Detected Types skip the Need/Want/Saving question entirely (Rent/EMI = Need, Investment = Saving, Lending = excluded, all implied, not asked).
+- "Bills" category shrinks to small recurring stuff only (electricity, mobile, internet) once Rent/EMI leave it.
+
+**Phase 2 — Auto-link across tabs (no manual re-entry)**
+- SIP/mutual fund/stock payment detected → auto-logged in Investments. Ex: "SIP to Zerodha ₹5000" appears in Investments without opening that tab.
+- Money sent to a person (not a business) → auto-logged in Debts as Lent. Ex: "₹2000 to Raj" shows up as a pending debt automatically.
+- Money received from a person → auto-logged in Debts as Borrowed, same idea reversed.
+- Every auto-created entry stays editable/deletable — never locks the user in.
+
+**Phase 3 — Fix numbers that depend on Phase 1**
+- "Average per day spend" excludes Rent/EMI, divides by real days elapsed in the month, not just days with any spending (current bug: divides by days-with-spending only, inflating the number — flagged by user 2026-08-09).
+- New stat: "Fixed obligations this month" (Rent + EMI) shown separately from day-to-day spend.
+- Category charts (Today/Analysis/CC) get cleaner automatically — less clutter, since Types are pulled out of them.
+
+**Phase 4 — Less tab-hopping**
+- A transaction that auto-linked elsewhere shows a small "→ also added to Debts" note right on it — no need to go check that tab.
+- Goal: one transaction, one place to see its full story.
+
+**Phase 5 — Reliability pass** (folds in an already-flagged, not-yet-started item)
+- Re-check CC Advisor's own math for accuracy.
+- Re-check AI Advisor / Gemini tips still make sense once category/type splits land.
+
+**Open questions for the user, not yet answered:**
+- Which phase to start with, or a different order entirely.
+- Whether any other current category feels wrongly lumped together, beyond Rent/EMI (user was asked, hasn't answered yet as of this entry).
+- Exact detection rule for "money sent to a person" vs "money sent to a business" for Phase 2's auto-Debts linking (currently the category engine already has this rough distinction via `matchByPattern`'s Lending keywords, but it's not rigorous — needs real design before Phase 2 starts).
