@@ -1299,21 +1299,50 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       handleCategoryCorrection(counterparty, category, "Other");
     }
 
-    // Rent/EMI/Investment — see financialEvents.js. Written on the row
-    // itself (so it's remembered exactly, never re-guessed later, same
-    // reasoning as column Q below) and also recorded in the
-    // FinancialEvents memory sheet, so a future payment gets recognized
-    // with a one-tap confirm instead of starting from scratch.
-    // financialEventName (column S) only means something for EMI — more
-    // than one can exist, so each needs its own name (e.g. "Laptop
-    // EMI") to stay distinct from the others.
-    if(financialEvent){
-      sheet.getRange(row, 18).setValue(financialEvent); // column R
-      if(financialEvent === "EMI" && financialEventName){
-        sheet.getRange(row, 19).setValue(financialEventName); // column S
+    // Rent/EMI/Investment/Saving — see financialEvents.js. Written on
+    // the row itself (so it's remembered exactly, never re-guessed
+    // later, same reasoning as column Q below).
+    //
+    // Saving (added 2026-08-10) is different from the other three: it's
+    // detected purely from the note ("saving"/"savings" — isSavingsNote)
+    // rather than a confirm-chip, same trust-what-you-typed reasoning as
+    // Lending — so it can apply even though the frontend never sent a
+    // financialEvent for it. An explicit chip selection always wins if
+    // one was actually sent.
+    const effectiveFinancialEvent = financialEvent || (isSavingsNote(note) ? "Saving" : "");
+    const effectiveFinancialEventName = financialEvent ? financialEventName : null;
+
+    if(effectiveFinancialEvent){
+      sheet.getRange(row, 18).setValue(effectiveFinancialEvent); // column R
+      // financialEventName (column S) only means something for EMI/
+      // Investment — more than one of each can exist, so each needs its
+      // own name (e.g. "Laptop EMI", "Mutual Fund") to stay distinct.
+      if((effectiveFinancialEvent === "EMI" || effectiveFinancialEvent === "Investment") && effectiveFinancialEventName){
+        sheet.getRange(row, 19).setValue(effectiveFinancialEventName); // column S
       }
       const feAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
-      recordFinancialEvent(financialEvent, feAmount, counterparty, financialEventName);
+
+      // Only Rent/EMI/Investment use the amount/note-matching memory —
+      // Saving is re-detected fresh from the note every time, no memory
+      // needed (same as Lending).
+      if(effectiveFinancialEvent === "Rent" || effectiveFinancialEvent === "EMI" || effectiveFinancialEvent === "Investment"){
+        recordFinancialEvent(effectiveFinancialEvent, feAmount, counterparty, effectiveFinancialEventName);
+      }
+
+      // Auto-log into the real Investments/Savings tab (added
+      // 2026-08-10) — so a recognized investment or a note-detected
+      // saving doesn't ALSO need typing in by hand a second time.
+      // Skipped if a likely-duplicate manual entry already exists
+      // nearby in time — see hasLikelyDuplicateInvestment/
+      // hasLikelyDuplicateSaving in financialEvents.js.
+      const txnDateRaw = sheet.getRange(row, 1).getValue(); // column A
+      const txnDateStr = Utilities.formatDate(new Date(txnDateRaw), Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+      if(effectiveFinancialEvent === "Investment"){
+        autoLogInvestment(txnDateStr, effectiveFinancialEventName, feAmount, note);
+      } else if(effectiveFinancialEvent === "Saving"){
+        autoLogSaving(txnDateStr, feAmount, note);
+      }
     }
 
     // Save the actual chosen type ON this transaction (column Q) whenever
@@ -1355,7 +1384,7 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     const isNonSpendTransfer = isCreditCardBillPayment(savedMode, counterparty, note) || isWalletTopUp(counterparty, savedReference);
 
     let typeSaved = false;
-    if(type && !isLendingTransfer(counterparty, note) && !financialEvent && !isNonSpendTransfer){
+    if(type && !isLendingTransfer(counterparty, note) && !effectiveFinancialEvent && !isNonSpendTransfer){
       sheet.getRange(row, 17).setValue(type); // column Q
       typeSaved = true;
 

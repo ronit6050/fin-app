@@ -1,11 +1,15 @@
-# Financial Events (Rent, EMI, Investment) — Category/Type restructure
+# Financial Events (Rent, EMI, Investment, Saving) — Category/Type restructure
 
-**Status: live — Rent, EMI, and Investment all shipped 2026-08-10.** Built
-after a long design discussion (see chat history / CLAUDE.md's "PROPOSED
-PLAN: Category/Type restructure" section for the reasoning that led
-here). Rent + Investment shipped first; EMI followed the same day once a
-real user example (see "EMI" section below) revealed it needed a
-genuinely different detection mechanism, not just a copy of Rent's.
+**Status: live — Rent, EMI, Investment, and Saving all shipped
+2026-08-10.** Built after a long design discussion (see chat history /
+CLAUDE.md's "PROPOSED PLAN: Category/Type restructure" section for the
+reasoning that led here). Rent + Investment shipped first; EMI followed
+the same day once a real user example (see "EMI" section below) revealed
+it needed a genuinely different detection mechanism, not just a copy of
+Rent's. Phase 2 (cross-tab auto-linking — see CLAUDE.md's PROPOSED PLAN)
+followed the same day too: a confirmed Investment now auto-logs into the
+real Investments tab, and a note-detected Saving auto-logs into the real
+Savings tab — see "Auto-linking to Investments/Savings tabs" below.
 Lending stays handled separately (`isLendingTransfer` in
 `needWantSaving.js`) — not a Financial Event in the same sense, but now
 properly excluded from spend totals too (see "Lending" below).
@@ -322,7 +326,55 @@ appending only, nothing overwritten, same shape as `TypeVotes`:
 | Amount | The confirmed amount, used for future matching |
 | Counterparty | Whatever was captured — reference only, not matched on |
 | Confirmed | Timestamp |
-| Name | Only meaningful for EMI (e.g. "Laptop EMI") — blank for Rent/Investment |
+| Name | Only meaningful for EMI/Investment (e.g. "Laptop EMI", "Mutual Fund") — blank for Rent, since only one can exist |
+
+## Auto-linking to Investments/Savings tabs (Phase 2, added 2026-08-10)
+
+**Investment** — reuses the exact same naming/matching mechanism EMI
+already had (generalized `matchRecurringEmi` → `matchRecurringNamedEvent(type, ...)`,
+so there's one shared implementation, not a duplicate). A brand-new
+investment (no name matched yet) now shows the same "name it" text input
+EMI does — "This looks like an investment — what would you call it?" —
+and once confirmed, `saveTransactionNote` (`PWA.js`) calls
+`autoLogInvestment(date, name, amount, note)` (`financialEvents.js`),
+which appends a row directly to the real `Investments` sheet, using the
+transaction's own date (not "today") and the name as the "Type" column
+— exactly what a manual entry via More → Investments would have written.
+
+**Saving** — genuinely different mechanism, NOT part of the amount/name-
+matching system above. Detected purely from the note containing
+"saving"/"savings" (whole-word — `isSavingsNote`), the user's own
+suggestion during design, reusing the exact reasoning `isLendingTransfer`
+already relies on: bank text has no reliable "this is a saving" signal
+the way "SIP" signals an investment, but the user's own wording is
+trustworthy. No confirm-chip at all (same as Lending) — typing "saving"
+in the note is itself the confirmation. `saveTransactionNote` computes
+an `effectiveFinancialEvent` that's the explicit chip selection if one
+was sent, otherwise falls back to `"Saving"` if `isSavingsNote(note)` —
+so an explicit Rent/EMI/Investment choice always wins if you somehow
+also typed "saving." Once detected, `autoLogSaving(date, amount, note)`
+reuses `getSavingsTotals`/`getSplitRule` from `SavingsAdvisor.js` — the
+exact same 3-pot (Emergency/WishList/Free) split logic manual "Log a
+Saving" already uses — and writes up to 3 rows to the `Savings` sheet,
+so an auto-logged saving behaves identically to a hand-typed one.
+Frontend mirror `isSavingsNote()` (`index.html`) hides the Need/Want/
+Saving toggle live as you type "saving," same UX as lending.
+
+**Duplicate avoidance** — both `autoLogInvestment` and `autoLogSaving`
+first check `hasLikelyDuplicateInvestment`/`hasLikelyDuplicateSaving`:
+a similar amount (same 5%/₹50 tolerance as everything else) already
+present within `DUPLICATE_WINDOW_DAYS` (3) days skips the auto-log
+entirely, so someone who already manually logs investments/savings by
+hand doesn't get every entry doubled the moment this feature turns on.
+The Savings check sums same-day rows first (one manual "Log a Saving"
+writes up to 3 rows across pots, so comparing row-by-row would never
+match). Not perfect — a genuine coincidence within the window and
+tolerance would be wrongly skipped — but decided with the user as the
+right trade-off over requiring them to change any existing habit
+immediately. Verified with a 14-case Node test (generalized matching,
+`isSavingsNote`, and both duplicate-detection functions against
+simulated sheet data) before shipping — sheet I/O itself can only be
+verified live, since `SpreadsheetApp` doesn't exist outside Apps Script.
 
 ## Bugs fixed alongside this (in `category.js`, not part of Financial Events itself)
 
@@ -357,11 +409,14 @@ shipping — same discipline as every other fix in this project.
   for now (2026-08-10); Lending detection itself is unchanged (still
   `isLendingTransfer`, note-based only). Spend-total exclusion is done
   (see "Lending" section above) — the auto-link is the only piece left.
-- **Investment number sourcing** — `invested` currently sums confirmed
-  Financial Event rows directly from `Transactions`. Not yet cross-checked
-  against the actual Investments tab/sheet in case the same SIP also gets
-  logged there manually (would double-count) — flagged as open during
-  design, not resolved yet.
+- **Investment number sourcing — resolved differently than first
+  planned.** The `invested` figure on Analysis still sums confirmed
+  Financial Event rows from `Transactions` directly (unchanged) — but
+  the double-counting risk this was flagged for is now handled a
+  different way: since a confirmed Investment auto-logs into the real
+  Investments tab (see "Auto-linking" above, with duplicate-avoidance),
+  the two numbers should now reasonably agree instead of needing to be
+  reconciled after the fact.
 - **Reconciliation and Cash's Need/Want/Saving toggle** still show the
   old 4-button (including "Investment") version — not updated in this
   slice, since Financial Event detection isn't wired into either screen

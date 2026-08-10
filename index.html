@@ -1518,8 +1518,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-10";
-    const APP_CHANGELOG = "Credit card bill payments and wallet top-ups no longer ask Need/Want/Saving — they were already left out of your spend total silently, so the question never actually did anything useful.";
+    const APP_VERSION = "2026-08-10-11";
+    const APP_CHANGELOG = "New: confirmed investments now auto-log into your Investments tab (you name each one once, like \"Mutual Fund\") instead of typing it in twice. Notes containing \"saving\" now auto-log into your Savings tab too, split the same way manual entries already are. Both skip a likely duplicate if you already logged it by hand nearby in time.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1773,13 +1773,24 @@
       return LENDING_PATTERNS.some(function (p) { return p.test(t); });
     }
 
+    // Mirrors isSavingsNote() in backend/financialEvents.js — a note
+    // that says "saving"/"savings" gets auto-logged into the real
+    // Savings tab (split across pots, same as manual "Log a Saving")
+    // and isn't asked Need/Want/Saving, same trust-what-you-typed
+    // reasoning as lending above. Whole-word, not substring, same
+    // reason as the lending fix.
+    function isSavingsNote(text) {
+      return /\bsaving(s)?\b/i.test((text || "").toString());
+    }
+
     // Hides the Need/Want/Saving toggle live if the note looks like a
-    // loan/repayment, OR (new, 2026-08-10) if a Financial Event (Rent/
-    // Investment) is currently selected on this card — neither is real
-    // spending, so the question doesn't make sense for either one.
-    // isFinancialEventSelected is optional — only Pending/History pass
-    // it (see docs/features/financial-events.md); Reconciliation/Cash
-    // cards call this the old way, unaffected.
+    // loan/repayment or a saving (isSavingsNote — added 2026-08-10), OR
+    // if a Financial Event (Rent/EMI/Investment) is currently selected
+    // on this card — none of those are real spending, so the question
+    // doesn't make sense for any of them. isFinancialEventSelected is
+    // optional — only Pending/History pass it (see
+    // docs/features/financial-events.md); Reconciliation/Cash cards call
+    // this the old way, unaffected.
     //
     // Returns the internal `update` function so a caller can re-run the
     // same check after something OTHER than typing in the note changes
@@ -1791,7 +1802,7 @@
       if (!typeField || !noteInput) return function () {};
 
       function update() {
-        const hide = isLendingNote(noteInput.value) || !!(isFinancialEventSelected && isFinancialEventSelected());
+        const hide = isLendingNote(noteInput.value) || isSavingsNote(noteInput.value) || !!(isFinancialEventSelected && isFinancialEventSelected());
         typeField.style.display = hide ? "none" : "";
         if (hide && onHide) onHide();
       }
@@ -1801,36 +1812,41 @@
     }
 
     // Builds the HTML for the Rent/EMI/Investment chip row. Three shapes:
-    // - Rent/Investment, or an EMI already recognized by name — a plain
+    // - Rent, or an EMI/Investment already recognized by name — a plain
     //   Yes/No chip pair, same look as the Need/Want/Saving toggle.
-    // - A brand-new EMI (feType "EMI", feName null) — no name to offer
-    //   yet, so a text input + "Mark as this EMI" button instead, so the
-    //   user can name it (e.g. "Laptop EMI") the first time. See
-    //   docs/features/financial-events.md for why EMI needs this and
-    //   Rent/Investment don't (more than one EMI can exist).
+    // - A brand-new EMI or Investment (feName null) — no name to offer
+    //   yet, so a text input + "Mark as this" button instead, so the
+    //   user can name it (e.g. "Laptop EMI", "Mutual Fund") the first
+    //   time. See docs/features/financial-events.md for why EMI/
+    //   Investment need this and Rent doesn't (only one Rent can exist;
+    //   there can be several distinct EMIs or investments).
     // Returns "" (nothing rendered) when feType is null — an ordinary
     // transaction's card looks exactly like it always has. alreadyConfirmed
     // (History only — Pending can never have this true, nothing's
     // confirmed yet by definition) shows a neutral "Financial Event"
     // label instead of "Looks like X again," since this isn't a fresh
     // suggestion, it's what was actually saved.
+    const NAMEABLE_FE_TYPES = ["EMI", "Investment"];
     function buildFinancialEventHtml(feType, feName, confident, alreadyConfirmed) {
       if (!feType) return "";
 
-      if (feType === "EMI" && !feName) {
+      if (NAMEABLE_FE_TYPES.includes(feType) && !feName) {
+        const prompt = feType === "EMI"
+          ? { question: "This looks like an EMI — which one?", placeholder: "Name this EMI (e.g. Laptop EMI)", confirmLabel: "Mark as this EMI" }
+          : { question: "This looks like an investment — what would you call it?", placeholder: "Name this investment (e.g. Mutual Fund)", confirmLabel: "Mark as this investment" };
         return `
           <div class="field fe-field">
-            <label>This looks like an EMI — which one? (e.g. "Laptop EMI")</label>
-            <input type="text" class="fe-emi-name-input" placeholder="Name this EMI">
+            <label>${prompt.question}</label>
+            <input type="text" class="fe-emi-name-input" data-fe-type="${feType}" placeholder="${prompt.placeholder}">
             <div class="type-toggle">
-              <button type="button" class="fe-emi-confirm-btn fe-btn">Mark as this EMI</button>
+              <button type="button" class="fe-emi-confirm-btn fe-btn">${prompt.confirmLabel}</button>
               <button type="button" class="fe-btn" data-fe="">No, regular spend</button>
             </div>
           </div>
         `;
       }
 
-      const label = feType === "EMI" ? feName : feType;
+      const label = NAMEABLE_FE_TYPES.includes(feType) ? feName : feType;
       const labelText = alreadyConfirmed
         ? "Financial Event"
         : (confident ? "Looks like " + label + " again — right?" : "This might be " + label + " — is that right?");
@@ -1871,14 +1887,15 @@
         if (btn === emiConfirmBtn) return; // wired separately below
         const btnType = btn.dataset.fe || null;
         const btnName = btn.dataset.feName || null;
-        if (btnType && btnType === selected.type && (btnType !== "EMI" || btnName === selected.name)) {
+        const needsNameMatch = btnType && NAMEABLE_FE_TYPES.includes(btnType);
+        if (btnType && btnType === selected.type && (!needsNameMatch || btnName === selected.name)) {
           btn.classList.add("active");
         }
         btn.addEventListener("click", function () {
           clearActive();
           btn.classList.add("active");
           selected.type = btnType;
-          selected.name = btnType === "EMI" ? btnName : null;
+          selected.name = NAMEABLE_FE_TYPES.includes(btnType) ? btnName : null;
           if (onChange) onChange();
         });
       });
@@ -1889,7 +1906,7 @@
           if (!typed) return; // need a name to confirm — silently no-op, same as tapping nothing
           clearActive();
           emiConfirmBtn.classList.add("active");
-          selected.type = "EMI";
+          selected.type = emiNameInput.dataset.feType || "EMI";
           selected.name = typed;
           if (onChange) onChange();
         });

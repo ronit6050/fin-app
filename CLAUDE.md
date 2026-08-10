@@ -595,8 +595,10 @@ a future top-up to confirm before touching that logic.
 
 ## PROPOSED PLAN: Category/Type restructure + cross-tab linking (2026-08-09)
 
-**Status: Phase 1 — Rent, EMI, and Investment all shipped 2026-08-10.**
-User pushed back 2026-08-09: not confident in a big phased plan, wants one
+**Status: Phase 1 done. Phase 2 partly done (Investment + Saving
+auto-link shipped 2026-08-10; Debts auto-link explicitly still manual
+by choice).** User pushed back 2026-08-09: not confident in a big
+phased plan, wants one
 feature perfected at a time instead, starting with Pending. User's
 explicit rule for this plan stands regardless: present it, get explicit
 approval on which phase/line to work on, before touching any code. Do not
@@ -776,10 +778,11 @@ detected and routed, not picked from a category list.
 - "Bills" category shrinks to small recurring stuff only (electricity, mobile, internet) once Rent/EMI leave it.
 
 **Phase 2 — Auto-link across tabs (no manual re-entry)**
-- SIP/mutual fund/stock payment detected → auto-logged in Investments. Ex: "SIP to Zerodha ₹5000" appears in Investments without opening that tab.
-- Money sent to a person (not a business) → auto-logged in Debts as Lent. Ex: "₹2000 to Raj" shows up as a pending debt automatically.
-- Money received from a person → auto-logged in Debts as Borrowed, same idea reversed.
-- Every auto-created entry stays editable/deletable — never locks the user in.
+- ~~SIP/mutual fund/stock payment detected → auto-logged in Investments.~~ — **done 2026-08-10.** You name each investment once (e.g. "Mutual Fund"), confirmed ones auto-log into the real Investments tab, skips if a likely-duplicate manual entry already exists nearby in time. See [docs/features/financial-events.md](docs/features/financial-events.md).
+- ~~A "saving" note auto-logged into Savings~~ — **done 2026-08-10, not originally planned this way.** Your own idea: if the note says "saving"/"savings," auto-log it, split across the same 3 pots manual entries use. Same duplicate-avoidance as Investment.
+- Money sent to a person (not a business) → auto-logged in Debts as Lent. Ex: "₹2000 to Raj" shows up as a pending debt automatically. — **still NOT done, explicitly kept manual** (2026-08-10 decision, see Financial Events doc's "Lending" section).
+- Money received from a person → auto-logged in Debts as Borrowed, same idea reversed. — **still NOT done**, same reason.
+- Every auto-created entry stays editable/deletable — never locks the user in. — true for Investments/Savings auto-entries (edit via the same screens manual entries use).
 
 **Phase 3 — Fix numbers that depend on Phase 1**
 - "Average per day spend" excludes Rent/EMI, divides by real days elapsed in the month, not just days with any spending (current bug: divides by days-with-spending only, inflating the number — flagged by user 2026-08-09).

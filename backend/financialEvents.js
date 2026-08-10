@@ -4,27 +4,27 @@
 // as their own dashboard lines instead of blended into regular category
 // spending. See docs/features/financial-events.md.
 //
-// Two layers, same self-learning shape as everything else in this app:
+// Three layers, same self-learning shape as everything else in this app:
 // 1. A remembered AMOUNT match — once you've confirmed a Rent/EMI/
 //    Investment payment once, a future payment close to the same
 //    amount gets suggested with high confidence (one-tap confirm).
 //    Works well for anything that recurs at a genuinely fixed amount
 //    (rent, a real bank-auto-debited EMI, a SIP mandate).
-// 2. A NOTE-TEXT match, specifically for EMI (added 2026-08-10) — some
-//    EMIs are NOT a fixed amount every time (e.g. an informal
-//    arrangement paying a family member, where the amount sent varies
-//    month to month depending on other adjustments). For those, the
-//    user's own wording ("Laptop emi...") is the reliable repeat
-//    signal, not the amount. Real example that led to this: a mutual
-//    fund transaction correctly matched by amount, but a laptop EMI
-//    paid to the user's dad — ₹1,427 one month after deducting some
-//    home expenses, "really" ₹4,000 most months — would never match by
-//    amount at all.
+// 2. A NOTE-TEXT match, for EMI and Investment (Investment added
+//    2026-08-10, generalized from EMI's mechanism) — both can have more
+//    than one distinct instance (two EMIs, two different SIPs), and
+//    some EMIs specifically are NOT a fixed amount every time (e.g. an
+//    informal arrangement paying a family member, where the amount sent
+//    varies month to month). For those, the user's own wording
+//    ("Laptop emi...") is the reliable repeat signal, not the amount.
+//    Real example that led to this: a laptop EMI paid to the user's dad
+//    — ₹1,427 one month after deducting home expenses, "really" ₹4,000
+//    most months — would never match by amount alone.
 // 3. A soft keyword hint (reuses getFinancialSubtype from
 //    needWantSaving.js, plus a plain "emi" check here) — used only when
 //    neither of the above matched yet (e.g. the very first time for
-//    this specific EMI). Low confidence — needs a full manual confirm/
-//    naming, not just a tap.
+//    this specific EMI/investment). Low confidence — needs a full
+//    manual confirm/naming, not just a tap.
 //
 // Deliberately does NOT try to guess with full confidence from raw SMS
 // wording alone — real bank/UPI text varies too much platform to
@@ -53,6 +53,8 @@ function amountsMatch(a, b){
   return Math.abs(a - b) <= tolerance;
 }
 
+// Only for Rent — there's only ever one, so no name is needed to tell
+// two apart, unlike EMI/Investment.
 function matchRecurringFinancialEvent(type, amount, financialEventsData){
   for(var i = 1; i < financialEventsData.length; i++){
     if(financialEventsData[i][0] === type && amountsMatch(financialEventsData[i][1], amount)){
@@ -62,27 +64,30 @@ function matchRecurringFinancialEvent(type, amount, financialEventsData){
   return false;
 }
 
-// Strips the word "emi" out of a name like "Laptop EMI" to get the
-// distinguishing word(s) — "laptop" — used to recognize the SAME named
-// EMI again by note wording, when the amount itself can't be trusted.
-function emiKeywordFromName(name){
+// Strips the word "emi" (or nothing, for Investment) out of a name like
+// "Laptop EMI" to get the distinguishing word(s) — "laptop" — used to
+// recognize the SAME named event again by note wording, when the amount
+// itself can't be trusted. Works for both EMI and Investment names.
+function eventKeywordFromName(name){
   return (name || "").toString().toLowerCase().replace(/\bemi\b/g, "").trim();
 }
 
-// Tries every previously-confirmed EMI, amount first (works for a
-// normal fixed-amount EMI), then note-text (works for an EMI whose
-// amount varies, as long as the name's distinguishing word shows up in
-// the note again — e.g. "laptop" in "Laptop emi after deduction..."
-// matching a previously-named "Laptop EMI"). Returns {name} or null —
-// never invents a name, only recognizes one already confirmed once.
-function matchRecurringEmi(amount, note, financialEventsData){
+// Tries every previously-confirmed named event of this Type, amount
+// first (works for anything at a genuinely fixed amount), then note-
+// text (works when the amount varies, as long as the name's
+// distinguishing word shows up in the note again — e.g. "laptop" in
+// "Laptop emi after deduction..." matching a previously-named "Laptop
+// EMI"). Returns {name} or null — never invents a name, only recognizes
+// one already confirmed once. Generalized 2026-08-10 from an EMI-only
+// version so Investment (which can also have more than one — separate
+// SIPs, stocks, etc.) can reuse the exact same mechanism instead of a
+// duplicate copy.
+function matchRecurringNamedEvent(type, amount, note, financialEventsData){
   var noteText = (note || "").toString().toLowerCase();
   var seenNames = {};
 
-  // Amount match first — checked across ALL confirmed EMIs, not just
-  // one, since more than one EMI can exist (see docs).
   for(var i = 1; i < financialEventsData.length; i++){
-    if(financialEventsData[i][0] !== "EMI") continue;
+    if(financialEventsData[i][0] !== type) continue;
     var name = (financialEventsData[i][4] || "").toString();
     if(!name || seenNames[name]) continue;
     if(amountsMatch(financialEventsData[i][1], amount)){
@@ -90,15 +95,13 @@ function matchRecurringEmi(amount, note, financialEventsData){
     }
   }
 
-  // Note-text match — only useful once a name has been confirmed once
-  // before, so there's a keyword to look for.
   if(noteText){
     for(var j = 1; j < financialEventsData.length; j++){
-      if(financialEventsData[j][0] !== "EMI") continue;
+      if(financialEventsData[j][0] !== type) continue;
       var n = (financialEventsData[j][4] || "").toString();
       if(!n || seenNames[n]) continue;
       seenNames[n] = true;
-      var keyword = emiKeywordFromName(n);
+      var keyword = eventKeywordFromName(n);
       if(keyword && noteText.indexOf(keyword) !== -1){
         return { name: n };
       }
@@ -108,33 +111,52 @@ function matchRecurringEmi(amount, note, financialEventsData){
   return null;
 }
 
+// A whole-word check for "saving"/"savings" in the note — same idea as
+// isLendingTransfer (needWantSaving.js): trusts what the user actually
+// typed rather than guessing from raw bank text, which has no reliable
+// "this is a saving" wording the way "SIP"/"mutual fund" signals an
+// investment. Added 2026-08-10, the user's own suggestion after
+// confirming general savings can't be detected the way Rent/EMI/
+// Investment can. Whole-word, not substring — same lesson as the
+// "lent" bug (a substring version would also match unrelated words).
+function isSavingsNote(note){
+  return /\bsaving(s)?\b/i.test((note || "").toString());
+}
+
 // Returns {type, name, confident} or null.
 // - type: "Rent" | "Investment" | "EMI"
-// - name: only meaningful for EMI (e.g. "Laptop EMI"); null means "this
-//   looks like some EMI, but which one isn't known yet — ask the user
-//   to name it" (see index.html's EMI-naming UI).
+// - name: only meaningful for EMI/Investment (e.g. "Laptop EMI",
+//   "Mutual Fund"); null means "this looks like one of these, but which
+//   isn't known yet — ask the user to name it" (see index.html's
+//   naming UI, shared by EMI and Investment since 2026-08-10).
 // - confident: true = matched a remembered amount or note keyword, safe
 //   for a one-tap confirm. false = just a soft hint, needs a real
-//   decision (and, for a brand-new EMI, a name).
+//   decision (and, for a brand-new EMI/Investment, a name).
 //
 // note is optional — Pending never has one yet, but History always
 // does, and a real bank Counterparty text rarely spells out "rent" or
 // "laptop emi" the way a user's own note does (fixed 2026-08-10).
+//
+// Saving is NOT returned from here — unlike Rent/EMI/Investment, it's
+// detected purely from the note (isSavingsNote) with no amount-matching
+// or confirm-chip step at all, same as Lending. See saveTransactionNote
+// in PWA.js for where that actually gets applied.
 function suggestFinancialEvent(counterparty, amount, financialEventsData, note){
   if(matchRecurringFinancialEvent("Rent", amount, financialEventsData)){
     return { type: "Rent", confident: true };
   }
-  if(matchRecurringFinancialEvent("Investment", amount, financialEventsData)){
-    return { type: "Investment", confident: true };
+  var investMatch = matchRecurringNamedEvent("Investment", amount, note, financialEventsData);
+  if(investMatch){
+    return { type: "Investment", name: investMatch.name, confident: true };
   }
-  var emiMatch = matchRecurringEmi(amount, note, financialEventsData);
+  var emiMatch = matchRecurringNamedEvent("EMI", amount, note, financialEventsData);
   if(emiMatch){
     return { type: "EMI", name: emiMatch.name, confident: true };
   }
 
   var subtype = getFinancialSubtype(counterparty, note); // from needWantSaving.js
   if(subtype === "rent") return { type: "Rent", confident: false };
-  if(subtype === "investment") return { type: "Investment", confident: false };
+  if(subtype === "investment") return { type: "Investment", name: null, confident: false };
   if(subtype === "homeLoanEmi") return { type: "EMI", name: "Home Loan EMI", confident: false };
 
   // A generic "emi" mention with no specific match yet — still worth
@@ -151,9 +173,110 @@ function suggestFinancialEvent(counterparty, amount, financialEventsData, note){
 }
 
 // Called once a Financial Event is confirmed (first time, or a one-tap
-// re-confirm) — remembers the amount (and, for EMI, the name) so a
-// future payment gets recognized automatically next time.
+// re-confirm) — remembers the amount (and, for EMI/Investment, the
+// name) so a future payment gets recognized automatically next time.
 function recordFinancialEvent(type, amount, counterparty, name){
   var sheet = getFinancialEventsSheet();
   sheet.appendRow([type, Number(amount) || 0, counterparty || "", new Date(), name || ""]);
+}
+
+// ===============================
+// AUTO-LOGGING — Investments tab + Savings tab (added 2026-08-10)
+// ===============================
+// Duplicate-avoidance: if a similar amount was already logged manually
+// nearby in time, skip auto-logging — decided with the user 2026-08-10
+// after confirming they may already have investments logged by hand
+// from before this existed, and a duplicate would silently inflate
+// those totals. Not perfect (a genuine coincidence could be skipped),
+// but catches the common case without requiring the user to change any
+// habits immediately.
+var DUPLICATE_WINDOW_DAYS = 3;
+
+function isNearbyDate(a, b, windowDays){
+  var dayMs = 24 * 60 * 60 * 1000;
+  return Math.abs(a.getTime() - b.getTime()) <= windowDays * dayMs;
+}
+
+// Investments sheet: [Date, Type, Amount, Note] — see PWA.js's
+// logInvestmentFromApp for the manual-entry version this mirrors.
+function hasLikelyDuplicateInvestment(dateStr, amount){
+  var investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
+  if(!investSheet) return false;
+  var data = investSheet.getDataRange().getValues();
+  var txnDate = new Date(dateStr);
+  for(var i = 1; i < data.length; i++){
+    var rowDate = data[i][0] ? new Date(data[i][0]) : null;
+    var rowAmount = Number(data[i][2]) || 0;
+    if(!rowDate || !rowAmount) continue;
+    if(isNearbyDate(txnDate, rowDate, DUPLICATE_WINDOW_DAYS) && amountsMatch(rowAmount, amount)){
+      return true;
+    }
+  }
+  return false;
+}
+
+// Auto-logs a confirmed Investment Financial Event into the real
+// Investments tab, unless a likely-duplicate manual entry already
+// exists nearby (see hasLikelyDuplicateInvestment above).
+function autoLogInvestment(dateStr, name, amount, note){
+  if(hasLikelyDuplicateInvestment(dateStr, amount)) return { logged: false, reason: "duplicate" };
+  var investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
+  if(!investSheet) return { logged: false, reason: "no sheet" };
+  investSheet.appendRow([dateStr, name || "Investment", Number(amount) || 0, note || ""]);
+  return { logged: true };
+}
+
+// Savings sheet: one LOG SAVING action writes up to 3 rows (Emergency/
+// WishList/Free split), so a "similar amount nearby" check has to sum
+// same-day rows first, not compare row-by-row — a manual saving is
+// almost never a single row.
+function hasLikelyDuplicateSaving(dateStr, amount){
+  var savSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Savings");
+  if(!savSheet) return false;
+  var data = savSheet.getDataRange().getValues();
+  var txnDate = new Date(dateStr);
+  var totalsByDay = {};
+  for(var i = 1; i < data.length; i++){
+    var rowDate = data[i][0] ? new Date(data[i][0]) : null;
+    var rowAmount = Number(data[i][1]) || 0;
+    if(!rowDate) continue;
+    if(isNearbyDate(txnDate, rowDate, DUPLICATE_WINDOW_DAYS)){
+      var key = Utilities.formatDate(rowDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
+      totalsByDay[key] = (totalsByDay[key] || 0) + rowAmount;
+    }
+  }
+  for(var key in totalsByDay){
+    if(amountsMatch(totalsByDay[key], amount)) return true;
+  }
+  return false;
+}
+
+// Auto-logs a note-detected saving into the real Savings tab, split
+// across the same 3 pots (Emergency/WishList/Free) the manual "Log a
+// Saving" flow already uses (getSavingsTotals/getSplitRule from
+// SavingsAdvisor.js) — reuses that exact logic rather than a second
+// copy, so the split behaves identically either way. Skipped if a
+// likely-duplicate manual entry already exists nearby (see
+// hasLikelyDuplicateSaving above) — same reasoning as Investment.
+function autoLogSaving(dateStr, amount, note){
+  if(hasLikelyDuplicateSaving(dateStr, amount)) return { logged: false, reason: "duplicate" };
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var savSheet = ss.getSheetByName("Savings");
+  if(!savSheet) return { logged: false, reason: "no sheet" };
+
+  var settings = getSettings(); // settings.js
+  var totals = getSavingsTotals(savSheet); // SavingsAdvisor.js
+  var split = getSplitRule(totals.emergency, settings.monthlyExpenses, settings.monthlyExpenses * 3); // SavingsAdvisor.js
+
+  var emergencyAmt = Math.round(amount * split.emergency);
+  var wishlistAmt  = Math.round(amount * split.wishlist);
+  var freeAmt      = amount - emergencyAmt - wishlistAmt;
+  var type = "bank"; // source label, matches the free-text "type" column manual entries use
+
+  if(emergencyAmt > 0) savSheet.appendRow([dateStr, emergencyAmt, type, note || "saving", "Emergency"]);
+  if(wishlistAmt  > 0) savSheet.appendRow([dateStr, wishlistAmt, type, note || "saving", "WishList"]);
+  if(freeAmt      > 0) savSheet.appendRow([dateStr, freeAmt, type, note || "saving", "FreeSavings"]);
+
+  return { logged: true };
 }
