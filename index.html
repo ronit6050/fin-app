@@ -918,6 +918,41 @@
       margin-bottom: 12px;
       cursor: pointer;
     }
+
+    /* ---------- Laptop / desktop screens ---------- */
+    /* Everything above this point was written "phone width" (max 420px),
+       so on a laptop browser the app used to sit as a tiny column with
+       huge empty space on both sides. This section only kicks in once
+       the browser window is at least 700px wide (a phone, even turned
+       sideways, is never that wide) and widens things a bit so the app
+       uses the extra room instead of looking stretched-thin in the
+       middle of the screen. Nothing above this point changes, so the
+       phone version is untouched. */
+    @media (min-width: 700px) {
+      .app {
+        max-width: 640px;
+      }
+
+      /* The bottom tab bar is centered under the app, so it needs to
+         grow to the same width or it'll stay narrow while the content
+         above it gets wider. */
+      .tab-bar {
+        max-width: 640px;
+      }
+
+      /* The 2x2 Home stat grid (Pending/Cash/CC/Debts) has more room
+         now, so let it spread into a single row of 4 instead of staying
+         a tight 2x2 square. */
+      .stat-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+
+      /* The "More" menu grid gets a 3rd column instead of just 2, so the
+         icon tiles aren't stretched unnecessarily wide. */
+      .more-menu {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
   </style>
 </head>
 <body>
