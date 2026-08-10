@@ -1517,8 +1517,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-7";
-    const APP_CHANGELOG = "New: Rent and Investment payments can now be marked as such in Pending/History — once confirmed, they're left out of your spend total and shown as their own \"Fixed obligations\"/\"Invested\" lines on Analysis instead.";
+    const APP_VERSION = "2026-08-10-8";
+    const APP_CHANGELOG = "Fixed: marking a transaction as Rent/Investment now also hides the Category field, since \"what kind of spending\" doesn't apply once it's not spending at all.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -2267,7 +2267,7 @@
           <label>Note</label>
           <input type="text" class="note-input" value="${escapeHtml(txn.suggestedNote || txn.counterparty || "")}" placeholder="What was this for?">
         </div>
-        <div class="field">
+        <div class="field category-field">
           <label>Category</label>
           <select class="category-select">${categoryOptionsHtml}</select>
         </div>
@@ -2279,8 +2279,13 @@
 
       const noteInput      = card.querySelector(".note-input");
       const categorySelect = card.querySelector(".category-select");
+      const categoryField  = card.querySelector(".category-field");
       const saveButton     = card.querySelector(".save-btn");
       const resultEl       = card.querySelector(".pending-result");
+
+      // Whatever category was showing before any Financial Event
+      // selection — restored if the user later taps "No, regular spend".
+      const originalCategoryValue = categorySelect.value;
 
       // Remembers what we auto-filled, so a later background refresh can
       // tell "you haven't touched this yet" apart from "you're mid-typing"
@@ -2325,6 +2330,27 @@
         card.querySelectorAll(".type-field .type-btn").forEach(function (b) { b.classList.remove("active"); });
       }, function () { return !!selectedFinancialEvent; });
 
+      // Category doesn't make sense either once this is a confirmed
+      // Financial Event — "what kind of spending" isn't a meaningful
+      // question for money that isn't being spent. Set to "Financial"
+      // (rather than left on a stale guess like "Food") so the saved
+      // row still makes sense if anyone looks at the raw sheet later —
+      // harmless either way, since Analysis excludes this row from
+      // every category total once column R is set, regardless of what
+      // column N holds. Not tied to lending on purpose (unlike the type
+      // toggle above) — lending's own category handling is unchanged.
+      function updateCategoryVisibility() {
+        if (!categoryField) return;
+        if (selectedFinancialEvent) {
+          categoryField.style.display = "none";
+          categorySelect.value = "Financial";
+        } else {
+          categoryField.style.display = "";
+          categorySelect.value = originalCategoryValue;
+        }
+      }
+      updateCategoryVisibility(); // apply immediately in case a confident suggestion already pre-selected one
+
       const feField = card.querySelector(".fe-field");
       if (feField) {
         const feButtons = feField.querySelectorAll(".fe-btn");
@@ -2337,6 +2363,7 @@
             btn.classList.add("active");
             selectedFinancialEvent = btn.dataset.fe || null;
             updateTypeVisibility();
+            updateCategoryVisibility();
           });
         });
       }
@@ -4481,7 +4508,7 @@
           <label>Note</label>
           <input type="text" class="history-note" value="${noteValue}">
         </div>
-        <div class="field">
+        <div class="field category-field">
           <label>Category</label>
           <select class="history-category">${categoryOptionsHtml}</select>
         </div>
@@ -4509,9 +4536,14 @@
 
       const noteInput      = card.querySelector(".history-note");
       const categorySelect = card.querySelector(".history-category");
+      const categoryField  = card.querySelector(".category-field");
       const amountInput    = card.querySelector(".history-amount");
       const saveButton     = card.querySelector(".history-save-btn");
       const resultEl       = card.querySelector(".pending-result");
+
+      // Whatever category was showing before any Financial Event
+      // selection — restored if the user later taps "No, regular spend".
+      const originalCategoryValue = categorySelect.value;
 
       // Pre-select whatever's already confirmed, or a confident
       // suggestion — a low-confidence hint is offered but never
@@ -4525,6 +4557,21 @@
         card.querySelectorAll(".type-field .type-btn").forEach(function (b) { b.classList.remove("active"); });
       }, function () { return !!selectedFinancialEvent; });
 
+      // Category doesn't make sense either once this is a confirmed
+      // Financial Event — see buildPendingItem's matching comment for
+      // the full reasoning.
+      function updateCategoryVisibility() {
+        if (!categoryField) return;
+        if (selectedFinancialEvent) {
+          categoryField.style.display = "none";
+          categorySelect.value = "Financial";
+        } else {
+          categoryField.style.display = "";
+          categorySelect.value = originalCategoryValue;
+        }
+      }
+      updateCategoryVisibility();
+
       const feField = card.querySelector(".fe-field");
       if (feField) {
         const feButtons = feField.querySelectorAll(".fe-btn");
@@ -4537,6 +4584,7 @@
             btn.classList.add("active");
             selectedFinancialEvent = btn.dataset.fe || null;
             updateTypeVisibility();
+            updateCategoryVisibility();
           });
         });
       }

@@ -8,6 +8,21 @@ handled separately, see `isLendingTransfer` in `needWantSaving.js`) are
 deliberately NOT part of this slice — same "one feature at a time" rule
 already used elsewhere in this project.
 
+**Fixed same day, caught by the user testing live:** the Category field
+was still showing (and still being saved) after confirming something as
+Rent/Investment — the same "this question doesn't apply anymore" logic
+already applied to Need/Want/Saving hadn't been applied to Category too.
+Fixed in `buildPendingItem`/`buildHistoryItem` (`index.html`): a new
+`.category-field` wrapper + `updateCategoryVisibility()` hides it and
+sets the (now invisible) value to `"Financial"` whenever a Financial
+Event is selected, and restores whatever category was originally
+suggested if the user taps "No, regular spend" to undo it. Deliberately
+NOT tied into the lending exclusion (unlike the Need/Want/Saving hide,
+which covers both lending and Financial Events through one shared
+function) — lending's own category handling was left unchanged, out of
+scope for this fix. Backend-unaffected (frontend-only change) — nothing
+to redeploy via clasp for this one.
+
 ## Why this exists
 
 User noticed `Investment` sitting as a subcategory under `Financial` — the
