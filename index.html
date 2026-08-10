@@ -1518,8 +1518,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-11";
-    const APP_CHANGELOG = "New: confirmed investments now auto-log into your Investments tab (you name each one once, like \"Mutual Fund\") instead of typing it in twice. Notes containing \"saving\" now auto-log into your Savings tab too, split the same way manual entries already are. Both skip a likely duplicate if you already logged it by hand nearby in time.";
+    const APP_VERSION = "2026-08-10-12";
+    const APP_CHANGELOG = "New: \"lent to Raj\"/\"Raj paid back\" style notes now auto-log into your Debts tab too — confirm who it is once per person, then it's recognized automatically. A repayment only auto-settles when there's exactly one matching open debt, so it never guesses wrong.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1783,6 +1783,129 @@
       return /\bsaving(s)?\b/i.test((text || "").toString());
     }
 
+    // Mirrors classifyDebtDirection() in backend/financialEvents.js —
+    // works out whether a lending-flavored note is a NEW debt or a
+    // REPAYMENT of one, and which direction. See that function's own
+    // comment for the full reasoning; kept identical here so the live
+    // UI (as you type) and the server's own recompute at save time
+    // never disagree.
+    function classifyDebtDirection(txnType, note) {
+      const text = (note || "").toString().toLowerCase();
+      const isNewLendWord = /\blent\b/.test(text) || /\blend\b/.test(text);
+      const isBorrowWord  = /\bborrowed\b/.test(text);
+      const isRepayWord   = /\bpaid back\b/.test(text) || /\bgave back\b/.test(text) || /\breturned\b/.test(text);
+      if (txnType === "debit"  && isNewLendWord) return "newLent";
+      if (txnType === "credit" && isBorrowWord)  return "newBorrowed";
+      if (txnType === "credit" && isRepayWord)   return "repayLent";
+      if (txnType === "debit"  && isRepayWord)   return "repayBorrowed";
+      return null;
+    }
+
+    // Mirrors findKnownPersonInNote() in backend/financialEvents.js —
+    // recognizes a previously-confirmed person by their first name
+    // appearing in the note, so "lent to Raj" is auto-recognized once
+    // Raj has been named once before, no server round-trip needed.
+    function findKnownPersonInNote(note, knownPeople) {
+      const text = (note || "").toString().toLowerCase();
+      for (const person of (knownPeople || [])) {
+        const firstWord = (person || "").toLowerCase().split(/\s+/)[0];
+        if (firstWord) {
+          const re = new RegExp("\\b" + firstWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
+          if (re.test(text)) return person;
+        }
+      }
+      return null;
+    }
+
+    // Human-readable label for each direction classifyDebtDirection can
+    // return, shown in the debt-field prompt.
+    const DEBT_DIRECTION_LABELS = {
+      newLent:       "Lent",
+      newBorrowed:   "Borrowed",
+      repayLent:     "Settles what they owe you",
+      repayBorrowed: "Settles what you owe"
+    };
+
+    // Rebuilds the debt-confirm field's content based on the CURRENT
+    // note text — called on every keystroke (live, like the lending/
+    // saving checks above), since there's no reliable signal before a
+    // note exists. Person accuracy matters more here than a label did
+    // for EMI/Investment (a wrong person is a real mistake, not
+    // cosmetic — see docs/features/financial-events.md), so this always
+    // shows a confirm/name step rather than acting silently. Returns
+    // nothing — mutates debtFieldEl and calls onChange() whenever the
+    // confirmed person changes, so the caller can read the latest value
+    // at save time via getDebtPerson().
+    function updateDebtField(debtFieldEl, noteInput, txn, getSetDebtPerson, onChange) {
+      if (!debtFieldEl) return;
+      const note = noteInput.value;
+      const direction = classifyDebtDirection(txn.type, note);
+
+      if (!direction) {
+        debtFieldEl.innerHTML = "";
+        debtFieldEl.style.display = "none";
+        getSetDebtPerson(null);
+        if (onChange) onChange();
+        return;
+      }
+
+      const actionLabel = DEBT_DIRECTION_LABELS[direction];
+      const known = findKnownPersonInNote(note, txn.knownDebtPeople);
+      const isRepayment = direction === "repayLent" || direction === "repayBorrowed";
+
+      if (known) {
+        debtFieldEl.style.display = "";
+        debtFieldEl.innerHTML = `
+          <label>${escapeHtml(actionLabel)} — ${escapeHtml(known)}, right?</label>
+          <div class="type-toggle">
+            <button type="button" class="fe-btn debt-yes-btn">Yes</button>
+            <button type="button" class="fe-btn debt-no-btn">No</button>
+          </div>
+        `;
+        const yesBtn = debtFieldEl.querySelector(".debt-yes-btn");
+        const noBtn  = debtFieldEl.querySelector(".debt-no-btn");
+        if (getSetDebtPerson() === known) yesBtn.classList.add("active");
+        yesBtn.addEventListener("click", function () {
+          yesBtn.classList.add("active");
+          noBtn.classList.remove("active");
+          getSetDebtPerson(known);
+          if (onChange) onChange();
+        });
+        noBtn.addEventListener("click", function () {
+          noBtn.classList.add("active");
+          yesBtn.classList.remove("active");
+          getSetDebtPerson(null);
+          if (onChange) onChange();
+        });
+      } else if (isRepayment) {
+        // Can't usefully "name a new person" for a repayment — there's
+        // nothing to match it against, so no field at all here. The
+        // note still correctly hides Need/Want/Saving via isLendingNote.
+        debtFieldEl.innerHTML = "";
+        debtFieldEl.style.display = "none";
+        getSetDebtPerson(null);
+        if (onChange) onChange();
+      } else {
+        debtFieldEl.style.display = "";
+        debtFieldEl.innerHTML = `
+          <label>${escapeHtml(actionLabel)} — who's this?</label>
+          <input type="text" class="debt-person-input" placeholder="Their name">
+          <div class="type-toggle">
+            <button type="button" class="fe-btn debt-confirm-btn">Confirm</button>
+          </div>
+        `;
+        const input = debtFieldEl.querySelector(".debt-person-input");
+        const confirmBtn = debtFieldEl.querySelector(".debt-confirm-btn");
+        confirmBtn.addEventListener("click", function () {
+          const typed = input.value.trim();
+          if (!typed) return; // need a name — silently no-op, same as EMI/Investment naming
+          confirmBtn.classList.add("active");
+          getSetDebtPerson(typed);
+          if (onChange) onChange();
+        });
+      }
+    }
+
     // Hides the Need/Want/Saving toggle live if the note looks like a
     // loan/repayment or a saving (isSavingsNote — added 2026-08-10), OR
     // if a Financial Event (Rent/EMI/Investment) is currently selected
@@ -1975,6 +2098,13 @@
     // The full list from Apps Script (newest first), and how many we've shown so far.
     let allPending = [];
     let shownCount = 0;
+
+    // Every distinct person already in the Debts tab, refreshed by both
+    // getPending and getTransactionHistory — lets buildPendingItem/
+    // buildHistoryItem recognize "lent to Raj" again live, as you type,
+    // once Raj has been confirmed once before. See
+    // docs/features/financial-events.md's "Debts auto-linking" section.
+    let knownDebtPeople = [];
 
     // Every transaction "row" we already know about — including the whole
     // backlog from the very first load. Notifications only fire for rows
@@ -2231,6 +2361,7 @@
           .then(function (data) {
             if (!data.ok) return;
 
+            if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
             saveCache("pending", data.transactions);
 
             const newOnes = data.transactions.filter(function (t) {
@@ -2275,6 +2406,7 @@
           }
 
           allPending = data.transactions;
+          if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
           saveCache("pending", allPending);
 
           // Remember the ENTIRE backlog as "already known" right away,
@@ -2337,6 +2469,12 @@
 
       const counterpartyText = txn.counterparty ? " · " + escapeHtml(txn.counterparty) : "";
 
+      // See updateDebtField's comment — reads this straight off txn
+      // rather than a separate parameter, simplest way to thread the
+      // shared knownDebtPeople list through without restructuring every
+      // call site.
+      txn.knownDebtPeople = knownDebtPeople;
+
       // Money coming IN (credit) is never "spending," so there's nothing
       // to tag Need/Want/Saving — skip the whole control for those.
       // See docs/features/need-want-saving.md.
@@ -2383,6 +2521,7 @@
           <select class="category-select">${categoryOptionsHtml}</select>
         </div>
         ${feHtml}
+        <div class="field fe-field debt-field" style="display:none"></div>
         ${typeToggleHtml}
         <button type="button" class="save-btn">Save</button>
         <div class="pending-result"></div>
@@ -2391,6 +2530,7 @@
       const noteInput      = card.querySelector(".note-input");
       const categorySelect = card.querySelector(".category-select");
       const categoryField  = card.querySelector(".category-field");
+      const debtField      = card.querySelector(".debt-field");
       const saveButton     = card.querySelector(".save-btn");
       const resultEl       = card.querySelector(".pending-result");
 
@@ -2468,6 +2608,20 @@
       }
       updateCategoryVisibility(); // apply immediately in case a confident suggestion already pre-selected one
 
+      // Debts auto-linking (added 2026-08-10) — live, as you type, same
+      // as the lending/saving note checks above. selectedDebtPerson is
+      // read at save time via the getter/setter pair passed in; see
+      // updateDebtField's own comment for the full reasoning.
+      let selectedDebtPerson = null;
+      function debtPersonGetSet(value) {
+        if (value !== undefined) selectedDebtPerson = value;
+        return selectedDebtPerson;
+      }
+      noteInput.addEventListener("input", function () {
+        updateDebtField(debtField, noteInput, txn, debtPersonGetSet);
+      });
+      updateDebtField(debtField, noteInput, txn, debtPersonGetSet); // apply immediately, in case a starting note already qualifies
+
       // Optimistic save: the card disappears the instant you tap Save,
       // instead of waiting for Apps Script to confirm — makes plowing
       // through a big backlog feel instant. The actual save still happens
@@ -2489,6 +2643,7 @@
 
         const savedFinancialEvent     = financialEvent.type;
         const savedFinancialEventName = financialEvent.name;
+        const savedDebtPerson         = selectedDebtPerson;
 
         callAppsScript({
           action:       "saveNote",
@@ -2499,7 +2654,8 @@
           counterparty: txn.counterparty,
           type:         savedType,
           financialEvent:     savedFinancialEvent,
-          financialEventName: savedFinancialEventName
+          financialEventName: savedFinancialEventName,
+          debtPerson:         savedDebtPerson
         })
           .then(function (data) {
             if (!data.ok) {
@@ -2619,6 +2775,7 @@
         .then(function (data) {
           if (!data.ok) return; // stay quiet on errors during background checks
 
+          if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
           const newOnes = data.transactions.filter(function (t) {
             return !knownRows.has(t.row);
           });
@@ -4564,6 +4721,10 @@
         })
         .join("");
 
+      // See updateDebtField's comment in buildPendingItem — same reason
+      // for threading it through via txn rather than a parameter.
+      txn.knownDebtPeople = knownDebtPeople;
+
       // Investment dropped 2026-08-10 — see the matching comment in
       // buildPendingItem. A real investment is now caught earlier as
       // its own Financial Event, before this question is ever asked.
@@ -4608,6 +4769,7 @@
           <select class="history-category">${categoryOptionsHtml}</select>
         </div>
         ${feHtml}
+        <div class="field fe-field debt-field" style="display:none"></div>
         ${typeToggleHtml}
         <button type="button" class="history-save-btn">Save</button>
         <div class="pending-result"></div>
@@ -4632,6 +4794,7 @@
       const noteInput      = card.querySelector(".history-note");
       const categorySelect = card.querySelector(".history-category");
       const categoryField  = card.querySelector(".category-field");
+      const debtField      = card.querySelector(".debt-field");
       const amountInput    = card.querySelector(".history-amount");
       const saveButton     = card.querySelector(".history-save-btn");
       const resultEl       = card.querySelector(".pending-result");
@@ -4675,6 +4838,20 @@
       }
       updateCategoryVisibility();
 
+      // Debts auto-linking (added 2026-08-10) — see the matching
+      // comment in buildPendingItem for the full reasoning. History
+      // always has a note already, so this recognizes a known person
+      // immediately, not just once you start editing.
+      let selectedDebtPerson = null;
+      function debtPersonGetSet(value) {
+        if (value !== undefined) selectedDebtPerson = value;
+        return selectedDebtPerson;
+      }
+      noteInput.addEventListener("input", function () {
+        updateDebtField(debtField, noteInput, txn, debtPersonGetSet);
+      });
+      updateDebtField(debtField, noteInput, txn, debtPersonGetSet);
+
       saveButton.addEventListener("click", function () {
         resultEl.textContent = "Saving...";
 
@@ -4688,7 +4865,8 @@
           type:         selectedType,
           amount:       parseFloat(amountInput.value) || txn.amount,
           financialEvent:     financialEvent.type,
-          financialEventName: financialEvent.name
+          financialEventName: financialEvent.name,
+          debtPerson:         selectedDebtPerson
         })
           .then(function (data) {
             if (!data.ok) {
@@ -4732,6 +4910,7 @@
             return;
           }
 
+          if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
           data.transactions.forEach(function (txn) {
             historyListEl.appendChild(buildHistoryItem(txn));
           });

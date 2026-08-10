@@ -1,18 +1,20 @@
 # Financial Events (Rent, EMI, Investment, Saving) — Category/Type restructure
 
 **Status: live — Rent, EMI, Investment, and Saving all shipped
-2026-08-10.** Built after a long design discussion (see chat history /
-CLAUDE.md's "PROPOSED PLAN: Category/Type restructure" section for the
-reasoning that led here). Rent + Investment shipped first; EMI followed
-the same day once a real user example (see "EMI" section below) revealed
-it needed a genuinely different detection mechanism, not just a copy of
-Rent's. Phase 2 (cross-tab auto-linking — see CLAUDE.md's PROPOSED PLAN)
-followed the same day too: a confirmed Investment now auto-logs into the
-real Investments tab, and a note-detected Saving auto-logs into the real
-Savings tab — see "Auto-linking to Investments/Savings tabs" below.
-Lending stays handled separately (`isLendingTransfer` in
-`needWantSaving.js`) — not a Financial Event in the same sense, but now
-properly excluded from spend totals too (see "Lending" below).
+2026-08-10, plus full Phase 2 cross-tab auto-linking (Investments,
+Savings, AND Debts) the same day.** Built after a long design discussion
+(see chat history / CLAUDE.md's "PROPOSED PLAN: Category/Type
+restructure" section for the reasoning that led here). Rent + Investment
+shipped first; EMI followed the same day once a real user example (see
+"EMI" section below) revealed it needed a genuinely different detection
+mechanism, not just a copy of Rent's. A confirmed Investment auto-logs
+into the real Investments tab, a note-detected Saving auto-logs into the
+real Savings tab, and a lending/repayment note now auto-logs into the
+real Debts tab too — see "Auto-linking to Investments/Savings tabs" and
+"Debts auto-linking" below. Lending stays handled separately
+(`isLendingTransfer` in `needWantSaving.js`) — not a Financial Event in
+the schema sense, but now properly excluded from spend totals too (see
+"Lending" below), and now also cross-linked to Debts.
 
 **Fixed same day, caught by the user testing live:** the Category field
 was still showing (and still being saved) after confirming something as
@@ -376,6 +378,85 @@ immediately. Verified with a 14-case Node test (generalized matching,
 simulated sheet data) before shipping — sheet I/O itself can only be
 verified live, since `SpreadsheetApp` doesn't exist outside Apps Script.
 
+## Debts auto-linking (Phase 2, added 2026-08-10)
+
+**Why this one needed its own design pass, not a copy of Investment/
+Saving's:** those two just need a label or a split — errors are
+cosmetic. A Debt entry is fundamentally *about a specific person*, and
+we'd already proven Counterparty text isn't reliable enough to trust for
+that. Getting a person wrong is a real mistake (chasing the wrong
+person, or missing the right one), not a cosmetic one. Confirmed with
+the user through three scenario questions before writing any code: (1)
+always confirm a new person by name, don't try to auto-parse one from
+the note; (2) only auto-settle a repayment when there's exactly one
+matching open debt, otherwise leave it for the user; (3) show a quick
+confirm the first time per person, don't stay fully silent the way
+Lending's spend-exclusion already does.
+
+**Direction classification** — `classifyDebtDirection(txnType, note)`
+(`financialEvents.js`, mirrored client-side in `index.html` so the live
+UI and the server's own recompute at save time never disagree) works out
+whether a lending-flavored note is a NEW debt or a REPAYMENT, and which
+way money is flowing — something the plain `isLendingTransfer` (used
+just to exclude from spend) never needed to know:
+- `debit` + "lent"/"lend" → **newLent** (they now owe you)
+- `credit` + "borrowed" → **newBorrowed** (you now owe them)
+- `credit` + "paid back"/"gave back"/"returned" → **repayLent** (someone repaying what they owed you)
+- `debit` + "paid back"/"gave back"/"returned" → **repayBorrowed** (you repaying what you owed someone)
+- Any other combination (e.g. a `credit` with "lent" in the note) is
+  genuinely ambiguous → `null`, no auto-action, same as before this
+  feature existed.
+
+**Person recognition** — `getKnownDebtPeople()` returns every distinct
+person already in the `Debts` sheet, sent to the frontend alongside
+`getPending`/`getTransactionHistory` responses (as `knownDebtPeople`, a
+sibling field, not per-transaction) so `findKnownPersonInNote` can
+recognize "lent to Raj" **live, as you type** — no round-trip — once
+"Raj Kumar" has been confirmed once before (matches on the first word of
+a known name, e.g. "Raj" inside "Raj Kumar"). A NEW person (no match)
+shows a name-it text input instead — but only for a NEW lend/borrow, not
+a repayment: there's nothing sensible to match a repayment against if
+the person isn't already known, so that case shows nothing extra (the
+note still correctly hides Need/Want/Saving via the existing
+`isLendingNote` check either way).
+
+**Settle-matching** — `findSettleableDebtRow(person, expectedType,
+debtsData)` only auto-settles when there's **exactly one** open (non-
+"Settled") debt of the expected type for that person. Zero matches, or
+more than one, and it does nothing — falls back to the user settling it
+themselves in the Debts tab, rather than guessing which of several open
+debts a repayment closes.
+
+**Frontend** — `updateDebtField()` (`index.html`), wired to the note
+input's "input" event, same live pattern as the lending/saving checks.
+Unlike `buildFinancialEventHtml` (which renders once from a server-
+computed suggestion, since Rent/EMI/Investment can be judged before any
+note exists), this rebuilds its `.debt-field` container's content on
+every keystroke, since there's fundamentally no signal before a note is
+typed — same constraint Lending's own note-based detection already has.
+Renders one of three states: nothing (no lending-flavored note, or an
+unresolvable repayment), a name-it input (new person, new lend/borrow
+only), or a Yes/No confirm chip (known person, or a repayment matched to
+a real open debt).
+
+**Backend write path** — `saveTransactionNote` (`PWA.js`) takes a new
+`debtPerson` parameter. If present, it re-derives `txnType` from the
+row's own stored value (never trusts the frontend for this — same
+defense-in-depth pattern as everything else here) and calls
+`handleDebtAutoLink(txnType, note, debtPerson, amount)`
+(`financialEvents.js`), which classifies direction and either
+`autoCreateDebt` (new LENT/BORROWED entry, written exactly like a manual
+one via More → Debts would be) or `autoSettleDebt` (marks the matched
+row "Settled" with today's date, same as tapping Settle manually).
+Entirely separate from the Financial Event (Rent/EMI/Investment/Saving)
+block in the same function — Lending was never a Financial Event in the
+schema sense (see "Lending" section above).
+
+Verified with a 20-case Node test (direction classification, person
+matching, the exactly-one-match settle rule, and the full
+`handleDebtAutoLink` orchestration against simulated Debts sheet data)
+before shipping.
+
 ## Bugs fixed alongside this (in `category.js`, not part of Financial Events itself)
 
 Found during the same review that led to this feature, fixed in the same
@@ -405,10 +486,16 @@ shipping — same discipline as every other fix in this project.
 
 ## Open items / not yet built
 
-- **Lending auto-link to Debts** — user explicitly said keep this manual
-  for now (2026-08-10); Lending detection itself is unchanged (still
-  `isLendingTransfer`, note-based only). Spend-total exclusion is done
-  (see "Lending" section above) — the auto-link is the only piece left.
+- **Lending auto-link to Debts — done, 2026-08-10** (reversed the
+  earlier "keep this manual" decision after Investment/Saving
+  auto-linking worked well). See "Debts auto-linking" above. Two known
+  gaps left deliberately, not silently swept under: (1) the ambiguous
+  direction combos (`debit`+"borrowed", `credit`+"lent") never trigger
+  any auto-action, same as before this feature — genuinely can't tell
+  which way those mean without more context; (2) a repayment with more
+  than one matching open debt for that person never auto-settles either
+  — always falls back to manual, on purpose, rather than guessing which
+  one it closes.
 - **Investment number sourcing — resolved differently than first
   planned.** The `invested` figure on Analysis still sums confirmed
   Financial Event rows from `Transactions` directly (unchanged) — but

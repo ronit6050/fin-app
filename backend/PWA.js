@@ -43,11 +43,11 @@ function handlePwaRequest(data){
   }
 
   if(data.action === "getPending"){
-    return jsonResponse({ ok:true, transactions: getPendingTransactions() });
+    return jsonResponse({ ok:true, transactions: getPendingTransactions(), knownDebtPeople: getKnownDebtPeople() });
   }
 
   if(data.action === "saveNote"){
-    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent, data.financialEventName));
+    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent, data.financialEventName, data.debtPerson));
   }
 
   if(data.action === "getTodaySummary"){
@@ -139,7 +139,7 @@ function handlePwaRequest(data){
   }
 
   if(data.action === "getTransactionHistory"){
-    return jsonResponse({ ok:true, ...getTransactionHistory(data.offset, data.limit) });
+    return jsonResponse({ ok:true, ...getTransactionHistory(data.offset, data.limit), knownDebtPeople: getKnownDebtPeople() });
   }
 
   return jsonResponse({ ok:false, error:"Unknown action." });
@@ -1277,7 +1277,7 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
 // teach SmartMemory/TypeVotes exactly like a first-time correction does
 // (confirmed with the user 2026-08-08) — reusing this function is what
 // gets that for free instead of writing a second, parallel code path.
-function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName){
+function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName, debtPerson){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
 
@@ -1343,6 +1343,23 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       } else if(effectiveFinancialEvent === "Saving"){
         autoLogSaving(txnDateStr, feAmount, note);
       }
+    }
+
+    // Debts auto-linking (added 2026-08-10) — a lending-flavored note
+    // ("lent to Raj", "Raj paid back") with a confirmed person creates
+    // or settles a real entry in the Debts tab. Separate from the
+    // Financial Event block above — Lending isn't a Financial Event in
+    // that schema sense (see docs/features/financial-events.md's
+    // "Lending" section), it's handled entirely through
+    // isLendingTransfer/classifyDebtDirection instead. debtPerson only
+    // arrives when the frontend recognized (or the user confirmed) a
+    // specific person live as the note was typed — direction itself is
+    // always recomputed here server-side from the row's own Type and
+    // note, never trusted from the frontend.
+    if(debtPerson){
+      const savedTxnType = (sheet.getRange(row, 4).getValue() || "").toString().toLowerCase(); // column D
+      const debtAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F
+      handleDebtAutoLink(savedTxnType, note, debtPerson, debtAmount);
     }
 
     // Save the actual chosen type ON this transaction (column Q) whenever

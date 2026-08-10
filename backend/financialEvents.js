@@ -280,3 +280,120 @@ function autoLogSaving(dateStr, amount, note){
 
   return { logged: true };
 }
+
+// ===============================
+// AUTO-LOGGING — Debts tab (added 2026-08-10)
+// ===============================
+// Unlike Investment/Saving, a Debt entry is fundamentally ABOUT a
+// specific person — getting that wrong is a real mistake (chasing the
+// wrong person, or missing the right one), not a cosmetic one. So this
+// deliberately: (a) always confirms a NEW person by name before doing
+// anything (see index.html's live debt-field UI, wired to note typing
+// since — same as Lending generally — there's no reliable signal before
+// you've written something), and (b) only auto-settles a repayment when
+// there's EXACTLY ONE matching open debt for that person, falling back
+// to "do nothing, settle it yourself in Debts" otherwise rather than
+// guessing which of several debts a repayment closes.
+
+// Works out whether a lending-flavored transaction is a NEW debt or a
+// REPAYMENT of an existing one, and which direction — the plain
+// isLendingTransfer() (needWantSaving.js) only needs to know "is this
+// lending-flavored at all" to exclude it from spend, but auto-linking
+// to Debts needs to know a lot more. Returns one of:
+//   "newLent"       debit + "lent"/"lend"       -> they now owe you
+//   "newBorrowed"   credit + "borrowed"         -> you now owe them
+//   "repayLent"     credit + "paid back"/etc    -> someone repaying what they owed you
+//   "repayBorrowed" debit + "paid back"/etc     -> you repaying what you owed someone
+// Any other combination (e.g. a credit with "lent" in the note) is
+// genuinely ambiguous and returns null — no auto-action, same as before
+// this feature existed.
+function classifyDebtDirection(txnType, note){
+  var text = (note || "").toString().toLowerCase();
+  var isNewLendWord = /\blent\b/.test(text) || /\blend\b/.test(text);
+  var isBorrowWord  = /\bborrowed\b/.test(text);
+  var isRepayWord   = /\bpaid back\b/.test(text) || /\bgave back\b/.test(text) || /\breturned\b/.test(text);
+
+  if(txnType === "debit"  && isNewLendWord) return "newLent";
+  if(txnType === "credit" && isBorrowWord)  return "newBorrowed";
+  if(txnType === "credit" && isRepayWord)   return "repayLent";
+  if(txnType === "debit"  && isRepayWord)   return "repayBorrowed";
+  return null;
+}
+
+// Every distinct person already in the Debts sheet — sent to the
+// frontend so it can recognize "lent to Raj" again live, as you type,
+// without a round trip, once Raj has been confirmed once before.
+function getKnownDebtPeople(){
+  var debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+  if(!debtSheet) return [];
+  var data = debtSheet.getDataRange().getValues();
+  var seen = {};
+  var people = [];
+  for(var i = 1; i < data.length; i++){
+    var person = (data[i][1] || "").toString().trim();
+    if(!person || seen[person.toLowerCase()]) continue;
+    seen[person.toLowerCase()] = true;
+    people.push(person);
+  }
+  return people;
+}
+
+// For a repayment, finds the single Pending debt of the expected type
+// for that person. Returns the sheet row number, or null if there isn't
+// exactly one match (none, or more than one — either way, too
+// ambiguous to guess which one this repayment closes).
+function findSettleableDebtRow(person, expectedType, debtsData){
+  var matches = [];
+  for(var i = 1; i < debtsData.length; i++){
+    var p = (debtsData[i][1] || "").toString().trim();
+    var t = (debtsData[i][2] || "").toString().trim().toUpperCase();
+    var status = (debtsData[i][6] || "Pending").toString().trim();
+    if(p && p.toLowerCase() === person.toLowerCase() && t === expectedType && status !== "Settled"){
+      matches.push(i + 1);
+    }
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function autoCreateDebt(person, debtType, amount, note){
+  var debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+  if(!debtSheet) return { logged: false, reason: "no sheet" };
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  debtSheet.appendRow([today, person, debtType, Number(amount) || 0, note || "", "", "Pending", ""]);
+  return { logged: true };
+}
+
+function autoSettleDebt(row){
+  var debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+  if(!debtSheet || !row) return { logged: false, reason: "no sheet or row" };
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  debtSheet.getRange(row, 7).setValue("Settled");
+  debtSheet.getRange(row, 8).setValue(today);
+  return { logged: true };
+}
+
+// Orchestrates the whole thing — called from saveTransactionNote once a
+// debtPerson has been confirmed (either recognized live from the note,
+// or freshly typed) by the frontend. txnType/note are used to work out
+// direction server-side (not trusted from the frontend), same defense-
+// in-depth pattern as the rest of this project.
+function handleDebtAutoLink(txnType, note, person, amount){
+  if(!person) return { logged: false, reason: "no person" };
+  var direction = classifyDebtDirection(txnType, note);
+  if(!direction) return { logged: false, reason: "no clear direction" };
+
+  if(direction === "newLent")     return autoCreateDebt(person, "LENT", amount, note);
+  if(direction === "newBorrowed") return autoCreateDebt(person, "BORROWED", amount, note);
+
+  var debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+  var debtsData = debtSheet ? debtSheet.getDataRange().getValues() : [];
+  if(direction === "repayLent"){
+    var row1 = findSettleableDebtRow(person, "LENT", debtsData);
+    return row1 ? autoSettleDebt(row1) : { logged: false, reason: "ambiguous or no matching debt" };
+  }
+  if(direction === "repayBorrowed"){
+    var row2 = findSettleableDebtRow(person, "BORROWED", debtsData);
+    return row2 ? autoSettleDebt(row2) : { logged: false, reason: "ambiguous or no matching debt" };
+  }
+  return { logged: false, reason: "unreachable" };
+}
