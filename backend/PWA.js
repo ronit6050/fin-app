@@ -47,7 +47,7 @@ function handlePwaRequest(data){
   }
 
   if(data.action === "saveNote"){
-    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent));
+    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent, data.financialEventName));
   }
 
   if(data.action === "getTodaySummary"){
@@ -791,10 +791,9 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   let untaggedTotal = 0;
   let untaggedCount = 0;
 
-  // Rent + confirmed EMIs (EMI itself not built yet, but the bucket is
-  // named for both from the start) vs real Investments — see
-  // financialEvents.js / docs/features/financial-events.md. Kept apart
-  // from your day-to-day spend total entirely, not just re-labeled.
+  // Rent + confirmed EMIs vs real Investments — see financialEvents.js /
+  // docs/features/financial-events.md. Kept apart from your day-to-day
+  // spend total entirely, not just re-labeled.
   let fixedObligations = 0;
   let invested = 0;
 
@@ -815,9 +814,14 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
 
       if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
       if(type === "debit" && isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet — the real spend gets counted separately, below, as each wallet purchase happens
+      // A loan/repayment isn't spending either — you expect the money back.
+      // Skipped Need/Want/Saving already, but was never actually excluded
+      // from the spend total itself until now (gap flagged during the
+      // Financial Events design discussion, closed 2026-08-10).
+      if(type === "debit" && isLendingTransfer(counterparty, note)) continue;
 
       if(type === "debit" && financialEvent){
-        if(financialEvent === "Rent") fixedObligations += amount;
+        if(financialEvent === "Rent" || financialEvent === "EMI") fixedObligations += amount;
         else if(financialEvent === "Investment") invested += amount;
         continue; // not day-to-day spend — tracked as its own line, not blended into spend/category totals
       }
@@ -999,7 +1003,8 @@ function getTodaySummary(txnData, cashData){
       const financialEvent = (txnData[i][17] || "").toString().trim(); // column R
       if(isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
       if(isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet
-      if(financialEvent) continue; // Rent/Investment — not day-to-day spend, see financialEvents.js
+      if(isLendingTransfer(counterparty, note)) continue; // a loan/repayment isn't spending — see the matching comment in getMonthlyAnalysis
+      if(financialEvent) continue; // Rent/EMI/Investment — not day-to-day spend, see financialEvents.js
 
       const amount   = Number(txnData[i][5]) || 0;
       const category = txnData[i][13] || "Other";
@@ -1105,13 +1110,17 @@ function getPendingTransactions(txnData){
       // "nothing confident enough yet," and the PWA falls back to showing
       // the merchant name instead. See docs/features/note-memory.md.
       suggestedNote:     getSuggestedNote(counterparty, amount, noteMemoryData),
-      // Rent/Investment suggestion — see docs/features/financial-events.md.
-      // confident=true means "matched a remembered amount, safe for a
-      // single-tap confirm"; confident=false means "just a soft keyword
-      // hint, needs a full manual confirm."
-      financialEvent:          null, // never set yet — Pending is always unconfirmed by definition
-      suggestedFinancialEvent: feSuggestion ? feSuggestion.type : null,
-      financialEventConfident: feSuggestion ? feSuggestion.confident : false
+      // Rent/EMI/Investment suggestion — see docs/features/financial-events.md.
+      // confident=true means "matched a remembered amount or note, safe
+      // for a single-tap confirm"; confident=false means "just a soft
+      // keyword hint, needs a full manual confirm." suggestedFinancialEventName
+      // is only meaningful for EMI — null there means "looks like SOME
+      // EMI, but not one recognized yet — needs to be named."
+      financialEvent:              null, // never set yet — Pending is always unconfirmed by definition
+      financialEventName:          null,
+      suggestedFinancialEvent:     feSuggestion ? feSuggestion.type : null,
+      suggestedFinancialEventName: feSuggestion ? (feSuggestion.name || null) : null,
+      financialEventConfident:     feSuggestion ? feSuggestion.confident : false
     });
   }
 
@@ -1154,7 +1163,8 @@ function getTransactionHistory(offset, limit){
       note:         note,
       category:     data[i][13] || "Other",
       savedType:    (data[i][16] || "").toString().trim() || null, // column Q — what was actually chosen, if anything
-      financialEvent: (data[i][17] || "").toString().trim() || null // column R — already-confirmed Rent/Investment, if any
+      financialEvent:     (data[i][17] || "").toString().trim() || null, // column R — already-confirmed Rent/EMI/Investment, if any
+      financialEventName: (data[i][18] || "").toString().trim() || null  // column S — only meaningful when financialEvent is "EMI"
     });
   }
 
@@ -1184,6 +1194,7 @@ function getTransactionHistory(offset, limit){
       ? suggestFinancialEvent(t.counterparty, t.amount, financialEventsData, t.note)
       : null;
     t.suggestedFinancialEvent = feSuggestion ? feSuggestion.type : null;
+    t.suggestedFinancialEventName = feSuggestion ? (feSuggestion.name || null) : null;
     t.financialEventConfident = feSuggestion ? feSuggestion.confident : false;
   });
 
@@ -1238,7 +1249,7 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
 // teach SmartMemory/TypeVotes exactly like a first-time correction does
 // (confirmed with the user 2026-08-08) — reusing this function is what
 // gets that for free instead of writing a second, parallel code path.
-function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent){
+function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
 
@@ -1260,16 +1271,21 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       handleCategoryCorrection(counterparty, category, "Other");
     }
 
-    // Rent/Investment — see financialEvents.js. Written on the row
+    // Rent/EMI/Investment — see financialEvents.js. Written on the row
     // itself (so it's remembered exactly, never re-guessed later, same
     // reasoning as column Q below) and also recorded in the
-    // FinancialEvents memory sheet, so a future payment of a similar
-    // amount gets recognized with a one-tap confirm instead of starting
-    // from scratch.
+    // FinancialEvents memory sheet, so a future payment gets recognized
+    // with a one-tap confirm instead of starting from scratch.
+    // financialEventName (column S) only means something for EMI — more
+    // than one can exist, so each needs its own name (e.g. "Laptop
+    // EMI") to stay distinct from the others.
     if(financialEvent){
       sheet.getRange(row, 18).setValue(financialEvent); // column R
+      if(financialEvent === "EMI" && financialEventName){
+        sheet.getRange(row, 19).setValue(financialEventName); // column S
+      }
       const feAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
-      recordFinancialEvent(financialEvent, feAmount, counterparty);
+      recordFinancialEvent(financialEvent, feAmount, counterparty, financialEventName);
     }
 
     // Save the actual chosen type ON this transaction (column Q) whenever

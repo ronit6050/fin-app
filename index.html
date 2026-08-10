@@ -600,6 +600,7 @@
        swept up by the existing card.querySelectorAll(".type-btn") calls
        used for Need/Want/Saving. See docs/features/financial-events.md. */
     .fe-field label { color: var(--text-secondary); }
+    .fe-field .fe-emi-name-input { margin-bottom: 8px; }
     .fe-btn {
       flex: 1 1 auto;
       min-width: 72px;
@@ -1517,8 +1518,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-8";
-    const APP_CHANGELOG = "Fixed: marking a transaction as Rent/Investment now also hides the Category field, since \"what kind of spending\" doesn't apply once it's not spending at all.";
+    const APP_VERSION = "2026-08-10-9";
+    const APP_CHANGELOG = "New: EMI payments (you can have more than one, each named separately) can now be marked in Pending/History too — recognized by amount OR by your note wording, so an EMI with a varying amount (like paying a family member) still gets caught. Also fixed: a loan/repayment (lent/borrowed) is now actually left out of your spend total, not just the Need/Want/Saving question.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1797,6 +1798,104 @@
       noteInput.addEventListener("input", update);
       update(); // apply immediately, in case the starting note already qualifies
       return update;
+    }
+
+    // Builds the HTML for the Rent/EMI/Investment chip row. Three shapes:
+    // - Rent/Investment, or an EMI already recognized by name — a plain
+    //   Yes/No chip pair, same look as the Need/Want/Saving toggle.
+    // - A brand-new EMI (feType "EMI", feName null) — no name to offer
+    //   yet, so a text input + "Mark as this EMI" button instead, so the
+    //   user can name it (e.g. "Laptop EMI") the first time. See
+    //   docs/features/financial-events.md for why EMI needs this and
+    //   Rent/Investment don't (more than one EMI can exist).
+    // Returns "" (nothing rendered) when feType is null — an ordinary
+    // transaction's card looks exactly like it always has. alreadyConfirmed
+    // (History only — Pending can never have this true, nothing's
+    // confirmed yet by definition) shows a neutral "Financial Event"
+    // label instead of "Looks like X again," since this isn't a fresh
+    // suggestion, it's what was actually saved.
+    function buildFinancialEventHtml(feType, feName, confident, alreadyConfirmed) {
+      if (!feType) return "";
+
+      if (feType === "EMI" && !feName) {
+        return `
+          <div class="field fe-field">
+            <label>This looks like an EMI — which one? (e.g. "Laptop EMI")</label>
+            <input type="text" class="fe-emi-name-input" placeholder="Name this EMI">
+            <div class="type-toggle">
+              <button type="button" class="fe-emi-confirm-btn fe-btn">Mark as this EMI</button>
+              <button type="button" class="fe-btn" data-fe="">No, regular spend</button>
+            </div>
+          </div>
+        `;
+      }
+
+      const label = feType === "EMI" ? feName : feType;
+      const labelText = alreadyConfirmed
+        ? "Financial Event"
+        : (confident ? "Looks like " + label + " again — right?" : "This might be " + label + " — is that right?");
+      return `
+        <div class="field fe-field">
+          <label>${labelText}</label>
+          <div class="type-toggle">
+            <button type="button" class="fe-btn" data-fe="${feType}" data-fe-name="${escapeHtml(feName || "")}">Yes, ${escapeHtml(label)}</button>
+            <button type="button" class="fe-btn" data-fe="">No, regular spend</button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Wires up whatever buildFinancialEventHtml rendered into `card`.
+    // Returns a plain object — always read `.type`/`.name` from it at
+    // save time, don't cache the values, since they change as the user
+    // taps things. preselected is {type, name} or null/undefined.
+    // onChange fires after every selection change (including naming a
+    // new EMI), so the caller can re-run its Type/Category visibility
+    // checks — see wireLendingAwareToggle's own comment for why that
+    // has to be a single shared re-check rather than two independent
+    // show/hide mechanisms.
+    function setupFinancialEventField(card, preselected, onChange) {
+      const selected = { type: (preselected && preselected.type) || null, name: (preselected && preselected.name) || null };
+      const feField = card.querySelector(".fe-field");
+      if (!feField) return selected;
+
+      const feButtons = feField.querySelectorAll(".fe-btn");
+      const emiNameInput = feField.querySelector(".fe-emi-name-input");
+      const emiConfirmBtn = feField.querySelector(".fe-emi-confirm-btn");
+
+      function clearActive() {
+        feButtons.forEach(function (b) { b.classList.remove("active"); });
+      }
+
+      feButtons.forEach(function (btn) {
+        if (btn === emiConfirmBtn) return; // wired separately below
+        const btnType = btn.dataset.fe || null;
+        const btnName = btn.dataset.feName || null;
+        if (btnType && btnType === selected.type && (btnType !== "EMI" || btnName === selected.name)) {
+          btn.classList.add("active");
+        }
+        btn.addEventListener("click", function () {
+          clearActive();
+          btn.classList.add("active");
+          selected.type = btnType;
+          selected.name = btnType === "EMI" ? btnName : null;
+          if (onChange) onChange();
+        });
+      });
+
+      if (emiNameInput && emiConfirmBtn) {
+        emiConfirmBtn.addEventListener("click", function () {
+          const typed = emiNameInput.value.trim();
+          if (!typed) return; // need a name to confirm — silently no-op, same as tapping nothing
+          clearActive();
+          emiConfirmBtn.classList.add("active");
+          selected.type = "EMI";
+          selected.name = typed;
+          if (onChange) onChange();
+        });
+      }
+
+      return selected;
     }
 
     // ---------------------------------------------------------
@@ -2240,22 +2339,12 @@
         </div>
       ` : "";
 
-      // Rent/Investment suggestion — only shown when there's actually a
-      // signal (a keyword hint, or a remembered similar amount), so an
-      // ordinary transaction's card looks exactly like it always has.
-      // See docs/features/financial-events.md.
-      const feSuggestion = txn.suggestedFinancialEvent;
-      const feHtml = feSuggestion ? `
-        <div class="field fe-field">
-          <label>${txn.financialEventConfident
-            ? "Looks like " + feSuggestion + " again — right?"
-            : "This might be " + feSuggestion + " — is that right?"}</label>
-          <div class="type-toggle">
-            <button type="button" class="fe-btn" data-fe="${feSuggestion}">Yes, ${feSuggestion}</button>
-            <button type="button" class="fe-btn" data-fe="">No, regular spend</button>
-          </div>
-        </div>
-      ` : "";
+      // Rent/EMI/Investment suggestion — only shown when there's actually
+      // a signal (a keyword hint, a remembered similar amount, or a
+      // recognized note for an irregular-amount EMI), so an ordinary
+      // transaction's card looks exactly like it always has. See
+      // docs/features/financial-events.md.
+      const feHtml = buildFinancialEventHtml(txn.suggestedFinancialEvent, txn.suggestedFinancialEventName, txn.financialEventConfident);
 
       card.innerHTML = `
         <div class="pending-top">
@@ -2311,15 +2400,21 @@
         });
       }
 
-      // Rent/Investment — pre-selected only when the suggestion is
-      // confident (a remembered amount matched, so it's a safe one-tap
-      // confirm); a low-confidence hint is offered but never
-      // pre-selected, since it needs a real decision. See
+      // Rent/EMI/Investment — pre-selected only when the suggestion is
+      // confident (a remembered amount or note matched, so it's a safe
+      // one-tap confirm); a low-confidence hint is offered but never
+      // pre-selected, since it needs a real decision (and, for a
+      // brand-new EMI, a name). Declared before wireLendingAwareToggle
+      // below, which reads financialEvent.type synchronously the moment
+      // it's called — has to already exist by then. See
       // docs/features/financial-events.md.
-      let selectedFinancialEvent = null;
-      if (feSuggestion && txn.financialEventConfident) {
-        selectedFinancialEvent = feSuggestion;
-      }
+      const initialFe = (txn.suggestedFinancialEvent && txn.financialEventConfident)
+        ? { type: txn.suggestedFinancialEvent, name: txn.suggestedFinancialEventName }
+        : null;
+      const financialEvent = setupFinancialEventField(card, initialFe, function () {
+        updateTypeVisibility();
+        updateCategoryVisibility();
+      });
 
       // A loan/repayment, or a confirmed Financial Event, isn't spending
       // — hide the Need/Want/Saving question entirely for either one.
@@ -2328,7 +2423,7 @@
       const updateTypeVisibility = wireLendingAwareToggle(card, noteInput, function () {
         selectedType = null;
         card.querySelectorAll(".type-field .type-btn").forEach(function (b) { b.classList.remove("active"); });
-      }, function () { return !!selectedFinancialEvent; });
+      }, function () { return !!financialEvent.type; });
 
       // Category doesn't make sense either once this is a confirmed
       // Financial Event — "what kind of spending" isn't a meaningful
@@ -2341,7 +2436,7 @@
       // toggle above) — lending's own category handling is unchanged.
       function updateCategoryVisibility() {
         if (!categoryField) return;
-        if (selectedFinancialEvent) {
+        if (financialEvent.type) {
           categoryField.style.display = "none";
           categorySelect.value = "Financial";
         } else {
@@ -2350,23 +2445,6 @@
         }
       }
       updateCategoryVisibility(); // apply immediately in case a confident suggestion already pre-selected one
-
-      const feField = card.querySelector(".fe-field");
-      if (feField) {
-        const feButtons = feField.querySelectorAll(".fe-btn");
-        feButtons.forEach(function (btn) {
-          if (btn.dataset.fe && btn.dataset.fe === selectedFinancialEvent) {
-            btn.classList.add("active");
-          }
-          btn.addEventListener("click", function () {
-            feButtons.forEach(function (b) { b.classList.remove("active"); });
-            btn.classList.add("active");
-            selectedFinancialEvent = btn.dataset.fe || null;
-            updateTypeVisibility();
-            updateCategoryVisibility();
-          });
-        });
-      }
 
       // Optimistic save: the card disappears the instant you tap Save,
       // instead of waiting for Apps Script to confirm — makes plowing
@@ -2387,7 +2465,8 @@
         saveCache("pending", allPending);
         card.remove();
 
-        const savedFinancialEvent = selectedFinancialEvent;
+        const savedFinancialEvent     = financialEvent.type;
+        const savedFinancialEventName = financialEvent.name;
 
         callAppsScript({
           action:       "saveNote",
@@ -2397,7 +2476,8 @@
           category:     savedCategory,
           counterparty: txn.counterparty,
           type:         savedType,
-          financialEvent: savedFinancialEvent
+          financialEvent:     savedFinancialEvent,
+          financialEventName: savedFinancialEventName
         })
           .then(function (data) {
             if (!data.ok) {
@@ -4477,23 +4557,14 @@
         </div>
       ` : "";
 
-      // Rent/Investment — shows the already-confirmed value if this row
-      // has one, otherwise falls back to a suggestion (lets an older
+      // Rent/EMI/Investment — shows the already-confirmed value if this
+      // row has one, otherwise falls back to a suggestion (lets an older
       // transaction, noted before this feature existed, still get a
       // one-time confirm when you browse History). See
       // docs/features/financial-events.md.
-      const feValue = txn.financialEvent || txn.suggestedFinancialEvent;
-      const feHtml = feValue ? `
-        <div class="field fe-field">
-          <label>${txn.financialEvent
-            ? "Financial Event"
-            : (txn.financialEventConfident ? "Looks like " + feValue + " again — right?" : "This might be " + feValue + " — is that right?")}</label>
-          <div class="type-toggle">
-            <button type="button" class="fe-btn" data-fe="${feValue}">Yes, ${feValue}</button>
-            <button type="button" class="fe-btn" data-fe="">No, regular spend</button>
-          </div>
-        </div>
-      ` : "";
+      const feHtml = txn.financialEvent
+        ? buildFinancialEventHtml(txn.financialEvent, txn.financialEventName, true, true)
+        : buildFinancialEventHtml(txn.suggestedFinancialEvent, txn.suggestedFinancialEventName, txn.financialEventConfident, false);
 
       const noteValue = escapeHtml(txn.note || "");
       const counterpartyText = txn.counterparty ? " · " + escapeHtml(txn.counterparty) : "";
@@ -4547,22 +4618,30 @@
 
       // Pre-select whatever's already confirmed, or a confident
       // suggestion — a low-confidence hint is offered but never
-      // pre-selected. See buildPendingItem's matching comment.
-      let selectedFinancialEvent = txn.financialEvent || (txn.financialEventConfident ? txn.suggestedFinancialEvent : null);
+      // pre-selected. Declared before wireLendingAwareToggle below,
+      // which needs it to already exist. See buildPendingItem's
+      // matching comment.
+      const initialFe = txn.financialEvent
+        ? { type: txn.financialEvent, name: txn.financialEventName }
+        : (txn.financialEventConfident ? { type: txn.suggestedFinancialEvent, name: txn.suggestedFinancialEventName } : null);
+      const financialEvent = setupFinancialEventField(card, initialFe, function () {
+        updateTypeVisibility();
+        updateCategoryVisibility();
+      });
 
       // A loan/repayment, or a confirmed Financial Event, isn't spending
       // — hide the Need/Want/Saving question entirely for either one.
       const updateTypeVisibility = wireLendingAwareToggle(card, noteInput, function () {
         selectedType = null;
         card.querySelectorAll(".type-field .type-btn").forEach(function (b) { b.classList.remove("active"); });
-      }, function () { return !!selectedFinancialEvent; });
+      }, function () { return !!financialEvent.type; });
 
       // Category doesn't make sense either once this is a confirmed
       // Financial Event — see buildPendingItem's matching comment for
       // the full reasoning.
       function updateCategoryVisibility() {
         if (!categoryField) return;
-        if (selectedFinancialEvent) {
+        if (financialEvent.type) {
           categoryField.style.display = "none";
           categorySelect.value = "Financial";
         } else {
@@ -4571,23 +4650,6 @@
         }
       }
       updateCategoryVisibility();
-
-      const feField = card.querySelector(".fe-field");
-      if (feField) {
-        const feButtons = feField.querySelectorAll(".fe-btn");
-        feButtons.forEach(function (btn) {
-          if (btn.dataset.fe && btn.dataset.fe === selectedFinancialEvent) {
-            btn.classList.add("active");
-          }
-          btn.addEventListener("click", function () {
-            feButtons.forEach(function (b) { b.classList.remove("active"); });
-            btn.classList.add("active");
-            selectedFinancialEvent = btn.dataset.fe || null;
-            updateTypeVisibility();
-            updateCategoryVisibility();
-          });
-        });
-      }
 
       saveButton.addEventListener("click", function () {
         resultEl.textContent = "Saving...";
@@ -4601,7 +4663,8 @@
           counterparty: txn.counterparty,
           type:         selectedType,
           amount:       parseFloat(amountInput.value) || txn.amount,
-          financialEvent: selectedFinancialEvent
+          financialEvent:     financialEvent.type,
+          financialEventName: financialEvent.name
         })
           .then(function (data) {
             if (!data.ok) {

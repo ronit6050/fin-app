@@ -1,12 +1,14 @@
-# Financial Events (Rent + Investment) — first slice of the Category/Type restructure
+# Financial Events (Rent, EMI, Investment) — Category/Type restructure
 
-**Status: live, first slice only (Rent + Investment).** Built and deployed
-2026-08-10 after a long design discussion (see chat history / CLAUDE.md's
-"PROPOSED PLAN: Category/Type restructure" section for the reasoning that
-led here). EMI (which needs its own per-loan naming) and Lending (already
-handled separately, see `isLendingTransfer` in `needWantSaving.js`) are
-deliberately NOT part of this slice — same "one feature at a time" rule
-already used elsewhere in this project.
+**Status: live — Rent, EMI, and Investment all shipped 2026-08-10.** Built
+after a long design discussion (see chat history / CLAUDE.md's "PROPOSED
+PLAN: Category/Type restructure" section for the reasoning that led
+here). Rent + Investment shipped first; EMI followed the same day once a
+real user example (see "EMI" section below) revealed it needed a
+genuinely different detection mechanism, not just a copy of Rent's.
+Lending stays handled separately (`isLendingTransfer` in
+`needWantSaving.js`) — not a Financial Event in the same sense, but now
+properly excluded from spend totals too (see "Lending" below).
 
 **Fixed same day, caught by the user testing live:** the Category field
 was still showing (and still being saved) after confirming something as
@@ -68,11 +70,12 @@ around 2026-08-10 if this needs revisiting for the *why*, not just the
 
 ## What a "Financial Event" is
 
-A recognized, non-spending money movement. This slice only recognizes two:
-**Rent** and **Investment**. A confirmed one is:
+A recognized, non-spending money movement. Three types: **Rent**, **EMI**
+(you can have more than one — each gets its own name, e.g. "Laptop EMI"
+vs "Home Loan EMI"), and **Investment**. A confirmed one is:
 - Excluded entirely from `Total Spend` and the category breakdown.
 - Shown as its own line on Analysis instead — `Fixed obligations: ₹X`
-  (Rent, and EMI once that's built) and `Invested: ₹X` (Investment).
+  (Rent + all EMIs combined) and `Invested: ₹X` (Investment).
 - Never asked about in the Need/Want/Saving toggle — that question isn't
   meaningful for money that isn't being spent.
 
@@ -119,69 +122,159 @@ app** — Pending (for a still-unnoted transaction) or History (for one
 that already has a note, so an old transaction from before this feature
 existed can still get tagged retroactively).
 
+## EMI — needed its own detection mechanism, not a copy of Rent's
+
+Real example from the user that forced this: an EMI paid to their dad
+(an informal family arrangement, not a bank auto-debit). Most months it's
+₹4,000 — but one month the user deducted some home expenses first and
+paid ₹1,427 instead, noting "Laptop emi after deduction of home exp."
+Amount-matching (which works fine for Rent and a SIP mandate) would
+**never** connect ₹1,427 to ₹4,000 — they're nowhere near the 5%/₹50
+tolerance.
+
+**What actually stayed consistent: the user's own wording.** So EMI gets
+a second matching layer amount-matching doesn't have — `matchRecurringEmi`
+(`financialEvents.js`) tries, in order:
+1. **Amount match** against every previously-confirmed EMI (works fine
+   for a normal fixed-amount EMI, e.g. a real bank auto-debit).
+2. **Note-text match** — strips the word "emi" out of a previously-used
+   name (`emiKeywordFromName`: "Laptop EMI" → "laptop") and checks if
+   that word shows up in the new note. Catches the ₹1,427 case: "laptop"
+   is still in "Laptop emi after deduction of home exp," even though the
+   amount is completely different.
+
+**Multiple EMIs stay distinct** because each one only ever matches its
+*own* remembered amount/keyword — a ₹3,000 "Phone EMI" and a ₹4,000
+"Laptop EMI" (or an irregular ₹1,427 month for it) never get confused
+with each other, verified directly with both existing in memory at once.
+
+**Naming a brand-new EMI:** if the text just says "emi" somewhere (whole-
+word matched — `chemistry`, `premium` etc. don't false-positive) but
+doesn't match any specific EMI yet, there's no name to suggest. The UI
+(`buildFinancialEventHtml` in `index.html`) shows a text input instead of
+a Yes/No chip — "This looks like an EMI — which one?" — and only becomes
+a confirmed Financial Event once the user types something and taps
+"Mark as this EMI." Home loan EMI is the one exception: the specific
+phrase "home loan"/"housing loan" auto-names itself ("Home Loan EMI")
+even cold-start, same as it already did for the Need/Want/Saving guess.
+
+Verified with a 9-case Node test, including the exact real "laptop
+EMI, ₹1,427, note-matched not amount-matched" scenario, before shipping.
+
+## Lending — closed a gap flagged during design, not a new mechanism
+
+The original design discussion flagged this as a known gap, not yet
+fixed at the time: `isLendingTransfer` already correctly skipped the
+Need/Want/Saving question for a loan/repayment, but nothing ever
+excluded it from the **spend total** itself. Fixed alongside EMI (same
+change, since both came from finishing "all the pieces" of the original
+design discussion): `getTodaySummary`/`getMonthlyAnalysis` now also
+`continue` past a debit row where `isLendingTransfer(counterparty, note)`
+is true — same pattern as the credit-card-bill/wallet-top-up/Financial-
+Event exclusions already there. Lending itself is NOT a Financial Event
+in the schema sense (no `FinancialEvent` column value, no
+`FinancialEvents` memory row) — detection stays exactly as it was, note-
+based only, per the user's explicit choice to keep it that way rather
+than guess from raw SMS. Debts tab entry also stays manual, per that
+same discussion — no auto-linking.
+
 ## Frontend UI
 
-`buildPendingItem`/`buildHistoryItem` in `index.html`:
-- A new `.fe-field` chip row ("Yes, Rent" / "No, regular spend"), only
-  rendered when `suggestedFinancialEvent` (Pending) or `financialEvent ||
-  suggestedFinancialEvent` (History) is present.
-- Reuses the shared `wireLendingAwareToggle` helper, extended
-  (2026-08-10) to take an optional `isFinancialEventSelected` getter —
-  the Need/Want/Saving toggle now hides for EITHER a lending note OR a
-  selected Financial Event, through one shared `update()` function
-  instead of two independent show/hide mechanisms that could otherwise
-  fight each other (e.g. typing in the note field re-showing a toggle
-  that a Financial Event chip had just hidden).
-- The 4th Need/Want/Saving/Investment button ("Investment") was dropped
-  from `buildPendingItem`/`buildHistoryItem`'s type-toggle in this same
-  change — a real investment is now caught earlier as its own Financial
-  Event, so that option would never meaningfully get used from here
-  again. **Not yet applied to Reconciliation or Cash's toggle** — out of
-  scope for this slice, left as 4 buttons there for now.
+`buildFinancialEventHtml(feType, feName, confident, alreadyConfirmed)` and
+`setupFinancialEventField(card, preselected, onChange)` — two shared
+helpers (near `wireLendingAwareToggle` in `index.html`), used by both
+`buildPendingItem` and `buildHistoryItem` so the two never drift apart:
+- **Rent/Investment, or a recognized EMI (has a name)** — a plain Yes/No
+  chip pair. The Yes button carries `data-fe` (type) and `data-fe-name`
+  (EMI's name, blank otherwise).
+- **A brand-new EMI (type "EMI", name null)** — a text input + "Mark as
+  this EMI" button instead, since there's no name to offer yet.
+- Nothing rendered at all when there's no signal — an ordinary
+  transaction's card looks exactly like it always has.
+- `alreadyConfirmed` (History only) shows a neutral "Financial Event"
+  label instead of "Looks like X again," since it's not a fresh guess,
+  it's what was actually saved.
+
+`setupFinancialEventField` returns a plain object (`{type, name}`) that
+always reflects the current selection — read it at save time rather than
+caching, since taps change it. Reuses the shared `wireLendingAwareToggle`
+helper (extended 2026-08-10 to take an optional `isFinancialEventSelected`
+getter) so the Need/Want/Saving toggle hides for EITHER a lending note OR
+a selected Financial Event through one shared `update()` function —
+avoids two independent show/hide mechanisms fighting each other (e.g.
+typing in the note field re-showing a toggle a Financial Event chip had
+just hidden).
+
+The 4th Need/Want/Saving/Investment button ("Investment") was dropped
+from `buildPendingItem`/`buildHistoryItem`'s type-toggle — a real
+investment is now caught earlier as its own Financial Event, so that
+option would never meaningfully get used from here again. **Not yet
+applied to Reconciliation or Cash's toggle** — out of scope for this
+slice, left as 4 buttons there for now.
 
 ## Backend functions
 
-New file `financialEvents.js`:
+`financialEvents.js`:
 - `getFinancialEventsSheet()` — auto-creates the `FinancialEvents` sheet
   if missing, same pattern as `TypeVotes`/`NoteMemory`.
 - `amountsMatch(a, b)` — within 5% or ₹50, whichever is larger.
 - `matchRecurringFinancialEvent(type, amount, financialEventsData)` —
   true if any row of that Type in the memory sheet is a close amount
-  match.
-- `suggestFinancialEvent(counterparty, amount, financialEventsData)` —
-  returns `{type, confident}` or `null`. Amount-match layer first
-  (confident), falls back to the keyword hint (not confident), else null.
-- `recordFinancialEvent(type, amount, counterparty)` — appends a row
-  to `FinancialEvents` after a confirm, so the next similar-amount
-  payment gets recognized.
+  match. Used for Rent/Investment.
+- `emiKeywordFromName(name)` — strips the word "emi" out of a name
+  ("Laptop EMI" → "laptop") to get the word to look for in a future note.
+- `matchRecurringEmi(amount, note, financialEventsData)` — tries every
+  confirmed EMI's amount first, then every confirmed EMI's note keyword.
+  Returns `{name}` or `null` — see "EMI" section above for why it needs
+  two layers where Rent/Investment only need one.
+- `suggestFinancialEvent(counterparty, amount, financialEventsData, note)`
+  — returns `{type, name, confident}` or `null`. Tries Rent amount match,
+  Investment amount match, EMI amount/note match (all confident), then
+  falls back to `getFinancialSubtype` (Rent/Investment/home-loan-EMI
+  keyword hints, not confident) and a generic whole-word `\bemi\b` check
+  (EMI, name `null`, not confident — "some EMI, but which one isn't known
+  yet"). `note` is optional — Pending never has one yet, History always
+  does; matters much more for EMI/Rent than it used to (see the two
+  "Fixed same day" notes above and the EMI section).
+- `recordFinancialEvent(type, amount, counterparty, name)` — appends a
+  row to `FinancialEvents` after a confirm. `name` only meaningful for EMI.
 
 Changes in `PWA.js`:
-- `getPendingTransactions` / `getTransactionHistory` — both now read
+- `getPendingTransactions` / `getTransactionHistory` — both read
   `FinancialEvents` once (same "read outside the loop" performance
-  pattern as `SmartMemory`/`TypeVotes`) and attach `financialEvent`
-  (already-confirmed, History only), `suggestedFinancialEvent`, and
+  pattern as `SmartMemory`/`TypeVotes`) and attach `financialEvent` /
+  `financialEventName` (already-confirmed, History only),
+  `suggestedFinancialEvent` / `suggestedFinancialEventName`, and
   `financialEventConfident` to each transaction.
 - `saveTransactionNote(row, note, category, counterparty, type, amount,
-  financialEvent)` — new last parameter. When present: writes it to
-  `Transactions` column R, calls `recordFinancialEvent`, and skips
-  writing column Q (Need/Want/Saving) entirely — same exclusion
-  reasoning as `isLendingTransfer`, added to the same `if` condition.
+  financialEvent, financialEventName)` — two new parameters. When
+  `financialEvent` is present: writes it to `Transactions` column R
+  (and, if `financialEvent === "EMI"`, `financialEventName` to column S),
+  calls `recordFinancialEvent`, and skips writing column Q (Need/Want/
+  Saving) entirely — same exclusion reasoning as `isLendingTransfer`,
+  added to the same `if` condition.
 - `getTodaySummary` / `getMonthlyAnalysis` — a debit row with column R
-  set is excluded from spend totals (same `continue` pattern as
-  `isCreditCardBillPayment`/`isWalletTopUp`), and its amount is added to
-  a new `fixedObligations` (Rent) or `invested` (Investment) total,
-  returned alongside the existing fields. Cash entries are NOT covered by
-  this — Cash has no bank SMS to detect a Financial Event from, kept to
-  plain manual category/type entry as it always has been.
+  set to `"Rent"` or `"EMI"` is excluded from spend totals and added to
+  `fixedObligations`; `"Investment"` is excluded and added to `invested`
+  (same `continue` pattern as `isCreditCardBillPayment`/`isWalletTopUp`).
+  A lending transfer (`isLendingTransfer`) is now also excluded from
+  spend totals this same way (see "Lending" section above). Cash entries
+  are NOT covered by any of this — Cash has no bank SMS to detect a
+  Financial Event from, kept to plain manual category/type entry as it
+  always has been.
 
-## Transactions sheet — new column
+## Transactions sheet — new columns
 
 **Column R: `FinancialEvent`.** Blank = not a Financial Event (the
-default, unchanged behavior). `"Rent"` or `"Investment"` once confirmed.
-Written once, on confirm — never re-guessed later (same reasoning as
-column Q's `NeedWantSaving`, see that section of
+default, unchanged behavior). `"Rent"`, `"EMI"`, or `"Investment"` once
+confirmed. Written once, on confirm — never re-guessed later (same
+reasoning as column Q's `NeedWantSaving`, see that section of
 [need-want-saving.md](need-want-saving.md) for why a stored answer beats
 a live re-guess).
+
+**Column S: `FinancialEventName`.** Only meaningful when column R is
+`"EMI"` — e.g. `"Laptop EMI"`. Blank for Rent/Investment (only one of
+each can exist, so no name is needed to tell them apart).
 
 ## `FinancialEvents` sheet schema
 
@@ -190,10 +283,11 @@ appending only, nothing overwritten, same shape as `TypeVotes`:
 
 | Column | Meaning |
 |---|---|
-| Type | "Rent" or "Investment" |
+| Type | "Rent", "EMI", or "Investment" |
 | Amount | The confirmed amount, used for future matching |
 | Counterparty | Whatever was captured — reference only, not matched on |
 | Confirmed | Timestamp |
+| Name | Only meaningful for EMI (e.g. "Laptop EMI") — blank for Rent/Investment |
 
 ## Bugs fixed alongside this (in `category.js`, not part of Financial Events itself)
 
@@ -224,12 +318,10 @@ shipping — same discipline as every other fix in this project.
 
 ## Open items / not yet built
 
-- **EMI** — same underlying mechanism (amount-match memory) would work,
-  but needs per-loan naming (you can have more than one EMI) which Rent
-  and Investment don't. Next slice, once this one's proven on real data.
 - **Lending auto-link to Debts** — user explicitly said keep this manual
   for now (2026-08-10); Lending detection itself is unchanged (still
-  `isLendingTransfer`, note-based only).
+  `isLendingTransfer`, note-based only). Spend-total exclusion is done
+  (see "Lending" section above) — the auto-link is the only piece left.
 - **Investment number sourcing** — `invested` currently sums confirmed
   Financial Event rows directly from `Transactions`. Not yet cross-checked
   against the actual Investments tab/sheet in case the same SIP also gets
