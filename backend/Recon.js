@@ -327,7 +327,7 @@ function previewReconciliation(bankTxns){
         name:              sheetRow[7] || txn.name, // real Counterparty already on that row
         note:              txn.note,
         suggestedCategory: suggestedCategory,
-        suggestedType:     getSuggestedType(txn.type, suggestedCategory, txn.name, txn.amount, typeVotesData)
+        suggestedType:     getSuggestedType(txn.type, suggestedCategory, txn.name, txn.amount, typeVotesData, txn.note)
       });
 
       return;
@@ -345,7 +345,7 @@ function previewReconciliation(bankTxns){
       ref:               txn.ref,
       note:              txn.note || "",
       suggestedCategory: suggestedCategory,
-      suggestedType:     getSuggestedType(txn.type, suggestedCategory, txn.name, txn.amount, typeMemoryData)
+      suggestedType:     getSuggestedType(txn.type, suggestedCategory, txn.name, txn.amount, typeVotesData, txn.note)
     });
   });
 

@@ -520,8 +520,22 @@ that visibly drifted as you answered more transactions for the same
 merchant (an old "Want" started showing as "Need"). Fixed with a new
 `NeedWantSaving` column directly on `Transactions`; History now reads
 that stored value instead of re-guessing. Verified with a standalone
-Node test simulating the exact drift scenario before shipping. Full
-detail: [docs/features/need-want-saving.md](docs/features/need-want-saving.md).
+Node test simulating the exact drift scenario before shipping.
+
+**Lending exclusion actually fixed (2026-08-10).** User lent ₹100 to a
+friend, noted it "lent," and the app still asked Need/Want/Saving/
+Investment — the original exclusion rule checked `category === "Lent"`,
+but the visible category is always "Financial" (Lending was only ever an
+internal subcategory, never passed through). Fixed with real note-text
+detection (`isLendingTransfer`), enforced in three places: the
+suggestion itself, a server-side guard in `saveTransactionNote` (belt
+and braces even if the frontend sends a stale value), and the frontend
+toggle now hides live as you type a matching note, in all three screens.
+Also fixed in the same pass: a broken variable reference in `Recon.js`
+(`typeMemoryData`, a leftover from the earlier rename) that was silently
+breaking suggestions for half of Reconciliation — found by reviewing
+every call site while making this fix, not user-reported. Full detail:
+[docs/features/need-want-saving.md](docs/features/need-want-saving.md).
 
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as
 categories at all (a category should group *varied* things — breakfast,

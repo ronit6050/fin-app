@@ -50,6 +50,29 @@ function getFinancialSubtype(counterparty) {
   return null;
 }
 
+// Recognizes a person-to-person loan or repayment from the note (and
+// counterparty) text — e.g. "lent", "borrowed", "paid back". Unlike
+// getFinancialSubtype below, this is an UNCONDITIONAL exclusion, not a
+// cold-start guess: lending isn't spending at all (you expect the money
+// back), so it's excluded from Need/Want/Saving/Investment every time,
+// not just as a first guess.
+//
+// Replaces an old category-based exclusion rule that never actually
+// worked: the category engine only ever produces "Financial" as the
+// top-level category for a lending transaction — "Lending" was a more
+// specific sub-type computed internally but never passed through to
+// this function, so the old rule ("skip if category is Lent") could
+// never fire. Found 2026-08-09 when the user noticed the app still
+// asking Need/Want/Saving for a transaction they'd noted "lent".
+function isLendingTransfer(counterparty, note) {
+  var text = ((counterparty || "") + " " + (note || "")).toString().toLowerCase();
+  var keywords = ["lent", "lend", "borrowed", "paid back", "gave back", "returned"];
+  for (var i = 0; i < keywords.length; i++) {
+    if (text.indexOf(keywords[i]) !== -1) return true;
+  }
+  return false;
+}
+
 function getTypeVotesSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("TypeVotes");
@@ -70,14 +93,17 @@ function getTypeVotesSheet() {
 // re-reading it per transaction is what made getPending very slow once
 // there was a real backlog (see docs/features/need-want-saving.md). If
 // omitted, this reads the sheet itself — fine for a single one-off check.
-function getSuggestedType(txnType, category, counterparty, amount, typeVotesData) {
+// note is optional too — pass it whenever it's known (History,
+// Reconciliation) so isLendingTransfer can actually detect a loan/
+// repayment; Pending has no note yet at suggestion time, so this rule
+// simply won't fire there (not a regression — it never could before).
+function getSuggestedType(txnType, category, counterparty, amount, typeVotesData, note) {
   // Rule 1: money coming IN is never a spend.
   if (txnType === "credit") return null;
 
-  // Rule 2: money lent out (or other debt-settlement categories) isn't
-  // spending either — it's a transfer you expect back.
-  var excludedCategories = ["Lent"];
-  if (excludedCategories.indexOf(category) !== -1) return null;
+  // Rule 2: a person-to-person loan or repayment isn't spending either —
+  // it's a transfer you expect back, not consumption.
+  if (isLendingTransfer(counterparty, note)) return null;
 
   // Rule 3: the category engine itself couldn't recognize this
   // counterparty — likely an unrecognized personal transfer. Don't guess.
@@ -151,7 +177,10 @@ function recordTypeVote(counterparty, amount, chosenType) {
 // Uses "TEST ZEPTO" as a fake merchant name so it never mixes with real data.
 function testNeedWantSaving() {
   Logger.log("Test 1 (credit excluded, expect null): " + getSuggestedType("credit", "Income", "SALARY", 40000));
-  Logger.log("Test 2 (Lent excluded, expect null): " + getSuggestedType("credit", "Lent", "TEST FRIEND", 12000));
+  Logger.log("Test 2 (real-world lending scenario — category is just \"Financial\", note is \"lent\", expect null): " +
+    getSuggestedType("debit", "Financial", "TEST FRIEND", 100, null, "lent"));
+  Logger.log("Test 2b (borrowed FROM a friend, expect null): " +
+    getSuggestedType("debit", "Financial", "TEST FRIEND", 500, null, "borrowed from him"));
   Logger.log("Test 3 (Other excluded, expect null): " + getSuggestedType("debit", "Other", "TEST RANDOM PERSON", 500));
   Logger.log("Test 4 (cold start, no subtype match, expect Need): " + getSuggestedType("debit", "Food", "TEST ZEPTO", 274));
 

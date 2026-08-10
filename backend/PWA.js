@@ -825,7 +825,11 @@ function getPendingTransactions(txnData){
       // Need/Want/Saving guess — null means "don't show a default" (credit,
       // a debt-settlement category, or an unrecognized merchant). See
       // docs/features/need-want-saving.md.
-      suggestedType:     getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeVotesData),
+      // note is always empty here (Pending = unnoted transactions), so
+      // this can never catch a lending transfer before you've written a
+      // note — that's an inherent limit of asking before you've said
+      // anything, not a regression. Passed through anyway for correctness.
+      suggestedType:     getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeVotesData, note),
       // Remembered note for this merchant+amount — empty string means
       // "nothing confident enough yet," and the PWA falls back to showing
       // the merchant name instead. See docs/features/note-memory.md.
@@ -963,9 +967,14 @@ function saveTransactionNote(row, note, category, counterparty, type, amount){
 
     // Record a Need/Want/Saving vote too — only if a type was actually
     // confirmed/corrected. Some transactions never get a type suggestion
-    // at all (credit, a debt-settlement category, unrecognized merchant),
-    // so the PWA won't send one for those, and there's nothing to vote on.
-    if(counterparty && type){
+    // at all (credit, a debt-settlement category, unrecognized merchant,
+    // or — as of 2026-08-09 — a person-to-person loan/repayment), so the
+    // PWA won't send one for those, and there's nothing to vote on. The
+    // isLendingTransfer check here is a server-side safety net: even if
+    // the frontend's toggle was shown before a lending note was typed
+    // (Pending can't know until the note exists) and something got
+    // selected anyway, this makes sure it's never actually recorded.
+    if(counterparty && type && !isLendingTransfer(counterparty, note)){
       const voteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
       recordTypeVote(counterparty, voteAmount, type);
 

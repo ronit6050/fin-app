@@ -2,6 +2,46 @@
 
 **Status: live.** Built, tested, wired into `getPending`/`saveNote` in `PWA.js`, and shown in the Pending screen — confirmed working on the real app 2026-08-08. Backend is now clasp-synced (`D:\fin-app\backend`, see CLAUDE.md), so `needWantSaving.js` is real, current code, not just this description.
 
+**Fixed 2026-08-10 — lending was never actually excluded, despite looking
+like it was.** The original design (Rule 2, see "Rules, in order" below)
+was meant to skip asking Need/Want/Saving entirely for a person-to-person
+loan/repayment, by checking `category === "Lent"`. That check could never
+fire: the visible category dropdown only ever has the 10 broad top-level
+options (Food, Transport, **Financial**, ...) — "Lending" only ever
+existed as an internal *subcategory* under "Financial" in `category.js`'s
+pattern matching, and that detail was never passed through to
+`getSuggestedType`. So every lending transaction silently fell through to
+being asked like normal spending. User caught this for real: lent ₹100 to
+a friend, noted it "lent," and the app still asked Need/Want/Saving/
+Investment for it.
+
+Fixed with `isLendingTransfer(counterparty, note)` — checks the actual
+note/counterparty text for loan language ("lent", "borrowed", "paid
+back", "gave back", "returned") and excludes unconditionally (not just as
+a cold-start guess) when matched. Replaces the old dead category check.
+Applied in three places:
+- `getSuggestedType` itself — the question isn't suggested/asked in the
+  first place once a matching note exists (History, Reconciliation; note
+  is always empty in Pending at suggestion time, so this can't catch it
+  there before you've written anything — inherent to "ask before you've
+  said anything," not a regression).
+- `saveTransactionNote` — a server-side safety net: even if the frontend
+  somehow still sent a `type` (e.g. Pending's toggle was visible before a
+  lending note was typed), the backend now refuses to record a vote or
+  write the `NeedWantSaving` column for it.
+- Frontend (`index.html`) — `wireLendingAwareToggle()`, wired into all
+  three card builders (`buildPendingItem`, `buildHistoryItem`,
+  `buildReviewCardShell`), hides the toggle **live** as you type a
+  matching note, not just on initial render, and clears any selection
+  made before the note qualified so nothing stale gets sent.
+
+Also fixed in the same pass: a broken variable reference in `Recon.js`'s
+`previewReconciliation` (`typeMemoryData`, left over from the earlier
+`TypeVotes` rename, never actually declared) — this silently broke
+suggestions for the "missing transactions" half of Reconciliation only.
+Found by reviewing every `getSuggestedType` call site while making this
+fix, not reported by the user.
+
 **Fixed 2026-08-09 — the type you picked wasn't actually being saved per
 transaction.** `saveTransactionNote` only ever fed the choice into
 `TypeVotes` (a shared per-merchant pool used for future suggestions) —
