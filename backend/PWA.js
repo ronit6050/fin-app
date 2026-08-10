@@ -826,46 +826,50 @@ function getCCAdvisorData(txnData, cashData, fixedObligations){
   const daysUntilDue = Math.ceil((outstandingDueDate - today) / 86400000);
   const isOverdue = !outstandingPaid && outstandingSummary.total > 0 && daysUntilDue < 0;
 
+  // Shared numbers for every "can I afford this?" check below — your
+  // Cash balance, recent Income-tagged credits (no new setting needed),
+  // and this month's Rent+EMI (already tracked via Financial Events).
+  // Computed once, unconditionally, since both the outstanding bill
+  // AND the still-open current cycle need to be checked against them.
+  const cash = getCashData(cashData);
+  const cashBalance = cash.balance;
+
+  const since = new Date(today);
+  since.setDate(since.getDate() - 35); // a bit over one pay cycle, covers a salary date that shifts slightly
+  let recentIncome = 0;
+  for(let i = 1; i < data.length; i++){
+    const rawDate = data[i][0];
+    if(!rawDate) continue;
+    const d = new Date(rawDate);
+    if(d < since || d > today) continue;
+    const type = (data[i][3] || "").toString().toLowerCase();
+    const cat  = (data[i][13] || "").toString().trim();
+    if(type === "credit" && cat === "Income"){
+      recentIncome += Number(data[i][5]) || 0;
+    }
+  }
+
+  let fixedObl = fixedObligations;
+  if(fixedObl === undefined || fixedObl === null){
+    const now = new Date();
+    fixedObl = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, data, cashData).fixedObligations;
+  }
+
   // "Can you actually pay this without it eating into next month?" —
-  // only meaningful if there's a real, unpaid bill. Reuses data the app
-  // already has: your Cash balance, recent Income-tagged credits (no
-  // new setting needed), and this month's Rent+EMI (already tracked via
-  // Financial Events) alongside your existing Settings targets.
-  let affordability = null;
-  if(outstandingSummary.total > 0 && !outstandingPaid){
-    const cash = getCashData(cashData);
-    const cashBalance = cash.balance;
-
-    const since = new Date(today);
-    since.setDate(since.getDate() - 35); // a bit over one pay cycle, covers a salary date that shifts slightly
-    let recentIncome = 0;
-    for(let i = 1; i < data.length; i++){
-      const rawDate = data[i][0];
-      if(!rawDate) continue;
-      const d = new Date(rawDate);
-      if(d < since || d > today) continue;
-      const type = (data[i][3] || "").toString().toLowerCase();
-      const cat  = (data[i][13] || "").toString().trim();
-      if(type === "credit" && cat === "Income"){
-        recentIncome += Number(data[i][5]) || 0;
-      }
-    }
-
-    let fixedObl = fixedObligations;
-    if(fixedObl === undefined || fixedObl === null){
-      const now = new Date();
-      fixedObl = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, data, cashData).fixedObligations;
-    }
-
+  // same question, asked against whichever amount is passed in. Used
+  // three times below: the bill that's already closed (if unpaid), what
+  // the CURRENT cycle has cost so far, and what it's on track to cost
+  // by the time it closes — so the warning shows up while the cycle is
+  // still open, not only after the bill has already landed.
+  function computeAffordability(billAmount){
     const available = cashBalance + recentIncome;
-    const needed = outstandingSummary.total + settings.monthlyExpenses + fixedObl + settings.monthlySaveGoal;
+    const needed = billAmount + settings.monthlyExpenses + fixedObl + settings.monthlySaveGoal;
     const net = available - needed;
-
-    affordability = {
+    return {
       cashBalance: cashBalance,
       recentIncome: recentIncome,
       available: available,
-      billAmount: outstandingSummary.total,
+      billAmount: billAmount,
       monthlyExpenses: settings.monthlyExpenses,
       fixedObligations: fixedObl,
       savingsGoal: settings.monthlySaveGoal,
@@ -874,6 +878,10 @@ function getCCAdvisorData(txnData, cashData, fixedObligations){
       canAfford: net >= 0
     };
   }
+
+  const affordability = (outstandingSummary.total > 0 && !outstandingPaid)
+    ? computeAffordability(outstandingSummary.total)
+    : null;
 
   // Current, still-accumulating cycle — projection math unchanged from
   // before, just now clearly scoped to "not due yet" instead of being
@@ -915,7 +923,13 @@ function getCCAdvisorData(txnData, cashData, fixedObligations){
       projectedPct: projectedPct,
       daysLeft: daysLeft,
       usagePct: usagePct,
-      status: status
+      status: status,
+      // "If this cycle ended today" vs "at this pace, by close" — both
+      // checked against the same cash/income/expenses math as the
+      // outstanding bill, so a risky month shows up early instead of
+      // only after the bill has already landed. See computeAffordability above.
+      affordabilityNow: computeAffordability(currentSummary.total),
+      affordabilityProjected: computeAffordability(projected)
     },
 
     // Kept at the top level, same shape as before, so the Home

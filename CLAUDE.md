@@ -781,6 +781,20 @@ than new ones. Verified with an 8-case Node test (including the exact
 bug scenario and a year-rollover case) before shipping. Full detail:
 [docs/features/cc-advisor.md](docs/features/cc-advisor.md).
 
+**CC Advisor — same-day follow-up (2026-08-10): done.** User tried the
+rebuild live and pointed out the affordability check only covered the
+bill that had already closed — their real habit is spending on the
+card right after a new cycle starts, assuming next salary will cover
+it, with no running check on how big that's getting until it's too
+late. Added an early warning for the still-open cycle: same
+cash/income/expenses math as before, now also checked against
+spend-so-far and a pace-based projection, so a risky month shows up
+while there's still time to slow down. Considered and dropped a
+bigger idea (a typed-in "monthly investment" setting + "wants budget")
+per the user's own call to keep it simple. Verified with a 4-case Node
+test before shipping. See
+[docs/features/cc-advisor.md](docs/features/cc-advisor.md).
+
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as
 categories at all (a category should group *varied* things — breakfast,
 lunch, dinner all fit under Food; rent has nothing else "under" it) and

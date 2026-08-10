@@ -1,6 +1,12 @@
 # CC Advisor — rebuilt 2026-08-10
 
-**Status: live.** Rebuilt from a full read-through of the old code after
+**Status: live.** Two rounds the same day: the rebuild itself, then a
+same-day follow-up adding an early warning for the still-open cycle
+(see "Current-cycle early warning" near the bottom — added after the
+user tried the rebuild live and pointed out the original version only
+ever looked at bills that were already closed).
+
+Rebuilt from a full read-through of the old code after
 the user asked for "a drastic change to improve user experience" and
 specifically asked to double-check the math was sound first — good
 instinct, since that check turned up a real, previously-unknown bug
@@ -131,6 +137,56 @@ return shape:
 into `getCCAdvisorData` (both already computed there for other tabs) to
 avoid a redundant read/recompute — the standalone `getCCAdvisor` action
 still works alone, computing both itself when not provided.
+
+## Current-cycle early warning — same-day follow-up
+
+**Why:** the user tried the rebuild live and pointed out a real gap —
+the affordability check only ever looked at the bill that had already
+closed. Their actual habit: when a new cycle starts, they spend on the
+card assuming "I'll set that aside from next salary, like always" —
+but with no running check on how big that unbilled amount is getting,
+by the time the next salary lands the amount is sometimes bigger than
+expected, leaving too little for food/wants. They wanted a warning
+*while the cycle is still open*, not only after it closes and becomes
+the "outstanding" bill.
+
+An earlier idea (a separate typed-in "monthly investment amount" and a
+"wants budget" concept) was proposed and then deliberately dropped —
+the user said to keep it simple and stick with the original ask, so no
+new Settings field was added.
+
+**What it does:** reuses the exact same `computeAffordability()` check
+already built for the outstanding bill, applied to the current cycle's
+own numbers instead. Two amounts get checked against the same cash +
+recent income vs. expenses + Rent/EMI + savings goal formula:
+- **Spent so far this cycle** — the real, already-happened number.
+- **Projected full-cycle total** — spend-so-far ÷ days elapsed × days
+  in the cycle (same projection math the cycle progress bar already
+  used), i.e. "if you keep spending at this pace."
+
+The headline shown uses the **projected** verdict (the early warning —
+catches a risky pace before the cycle even closes), while the tap-open
+detail shows the real spent-so-far figure too, so the projection is
+never presented as if it were already a fact.
+
+**Implementation note:** `getCCAdvisorData` previously computed
+cash balance / recent income / fixed obligations only inside the
+`if(outstandingSummary.total > 0 && !outstandingPaid)` block, since
+only the outstanding-bill check needed them. Moved that computation out
+to run unconditionally, and extracted the affordability math itself
+into a small `computeAffordability(billAmount)` function so it can be
+called three times (outstanding bill, current spend-so-far, current
+projected) without repeating the formula. Returns two new fields on
+`current`: `affordabilityNow` and `affordabilityProjected`, same shape
+as the existing `affordability` field.
+
+Verified with a 4-case Node test reusing the mockup's own numbers (cash
+8,500 / income 42,000 / expenses 30,000 / obligations 14,000 / savings
+1,000): outstanding bill check unchanged from before, a spend-so-far
+case matching the user's own screenshot (₹6,152 → ₹652 short), a
+projected case (₹8,390 → ₹2,890 short), and a sanity check that the
+projected verdict is never rosier than the spend-so-far one for the
+same inputs. `APP_VERSION` bumped to `2026-08-10-15`.
 
 ## Open items / not yet done
 

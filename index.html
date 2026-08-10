@@ -1214,6 +1214,27 @@
             <p id="ccProjection" style="font-size:0.8rem; color:var(--text-secondary); margin:6px 0 0;"></p>
           </div>
 
+          <!-- Added 2026-08-10 — the same "will this hurt next month?"
+               check as the outstanding bill above, but for the cycle
+               that's still open right now. Shows up early, while there's
+               still time to slow down, instead of only after the bill
+               has already landed. See docs/features/cc-advisor.md. -->
+          <div class="category-row" id="ccCurrentAffordCard" style="display:none; margin-top:14px;">
+            <div class="category-top" id="ccCurrentAffordTop" style="cursor:pointer;">
+              <span id="ccCurrentAffordLabel"></span>
+            </div>
+            <div id="ccCurrentAffordDetail" style="display:none; margin-top:10px;">
+              <div class="category-txn-line"><span>Spent so far this cycle</span><span id="ccCurAffSoFar"></span></div>
+              <div class="category-txn-line"><span>Cash balance</span><span id="ccCurAffCash"></span></div>
+              <div class="category-txn-line"><span>Recent income</span><span id="ccCurAffIncome"></span></div>
+              <div class="category-txn-line" style="border-top:0.5px solid var(--border-hairline); padding-top:6px; margin-top:2px;"><span>Available</span><span id="ccCurAffAvailable"></span></div>
+              <div class="category-txn-line"><span>Projected cycle total</span><span id="ccCurAffProjected"></span></div>
+              <div class="category-txn-line"><span>Monthly expenses</span><span id="ccCurAffExpenses"></span></div>
+              <div class="category-txn-line"><span>Rent and EMI</span><span id="ccCurAffObligations"></span></div>
+              <div class="category-txn-line"><span>Savings goal</span><span id="ccCurAffSavings"></span></div>
+            </div>
+          </div>
+
           <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Where this bill went</h3>
           <div id="ccTopCategories"></div>
 
@@ -1537,8 +1558,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-14";
-    const APP_CHANGELOG = "Credit Card Advisor rebuilt: fixed a real bug where the payment due date shown was often two months out instead of the actual upcoming bill. New: a straight answer to \"can I actually pay this without it hurting next month\", and tap-to-expand category/card breakdowns.";
+    const APP_VERSION = "2026-08-10-15";
+    const APP_CHANGELOG = "CC Advisor: added an early warning for the card cycle that's still open (not yet billed) — shows if you're on track to be short by the time it closes, based on the same cash/income/expenses check as the paid-bill screen, so you see it while there's still time to slow down.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -3396,14 +3417,30 @@
     const ccCurrentAmountEl    = document.getElementById("ccCurrentAmount");
     const ccUsageBarEl         = document.getElementById("ccUsageBar");
     const ccProjectionEl       = document.getElementById("ccProjection");
+    const ccCurrentAffordCardEl   = document.getElementById("ccCurrentAffordCard");
+    const ccCurrentAffordTopEl    = document.getElementById("ccCurrentAffordTop");
+    const ccCurrentAffordLabelEl  = document.getElementById("ccCurrentAffordLabel");
+    const ccCurrentAffordDetailEl = document.getElementById("ccCurrentAffordDetail");
+    const ccCurAffSoFarEl      = document.getElementById("ccCurAffSoFar");
+    const ccCurAffCashEl       = document.getElementById("ccCurAffCash");
+    const ccCurAffIncomeEl     = document.getElementById("ccCurAffIncome");
+    const ccCurAffAvailableEl  = document.getElementById("ccCurAffAvailable");
+    const ccCurAffProjectedEl  = document.getElementById("ccCurAffProjected");
+    const ccCurAffExpensesEl   = document.getElementById("ccCurAffExpenses");
+    const ccCurAffObligationsEl = document.getElementById("ccCurAffObligations");
+    const ccCurAffSavingsEl    = document.getElementById("ccCurAffSavings");
     const ccCardBreakdownEl    = document.getElementById("ccCardBreakdown");
     const ccTopCategoriesEl    = document.getElementById("ccTopCategories");
 
-    // Static element, wired once — tap the affordability card to see
+    // Static elements, wired once — tap either affordability card to see
     // the full breakdown behind the verdict.
     ccAffordTopEl.addEventListener("click", function () {
       const open = ccAffordDetailEl.style.display === "block";
       ccAffordDetailEl.style.display = open ? "none" : "block";
+    });
+    ccCurrentAffordTopEl.addEventListener("click", function () {
+      const open = ccCurrentAffordDetailEl.style.display === "block";
+      ccCurrentAffordDetailEl.style.display = open ? "none" : "block";
     });
 
     function loadCCAdvisor() {
@@ -3493,6 +3530,31 @@
       ccProjectionEl.textContent = cur.cycleStart + " → " + cur.cycleEnd +
         "  ·  projected ₹" + cur.projected.toLocaleString("en-IN") + " (" + cur.projectedPct + "%)" +
         "  ·  " + cur.daysLeft + " day" + (cur.daysLeft === 1 ? "" : "s") + " left";
+
+      // "Will THIS still-open cycle hurt next month?" — headline uses the
+      // projected (at this pace, by close) verdict, since that's the
+      // early warning; the tap-open detail shows both the real
+      // spent-so-far number and the projected breakdown, so it's never
+      // just a guess presented as fact.
+      if (cur.affordabilityProjected) {
+        const now = cur.affordabilityNow;
+        const proj = cur.affordabilityProjected;
+        ccCurrentAffordCardEl.style.display = "";
+        ccCurrentAffordLabelEl.innerHTML = proj.canAfford
+          ? '<span class="status-pill success">On track</span> <span style="margin-left:8px;">₹' + proj.net.toLocaleString("en-IN") + ' spare if you keep this pace</span>'
+          : '<span class="status-pill danger">Would eat into next month</span> <span style="margin-left:8px;">₹' + Math.abs(proj.net).toLocaleString("en-IN") + ' short if you keep this pace</span>';
+        ccCurAffSoFarEl.textContent = "₹" + now.billAmount.toLocaleString("en-IN");
+        ccCurAffCashEl.textContent = "₹" + proj.cashBalance.toLocaleString("en-IN");
+        ccCurAffIncomeEl.textContent = "₹" + proj.recentIncome.toLocaleString("en-IN");
+        ccCurAffAvailableEl.textContent = "₹" + proj.available.toLocaleString("en-IN");
+        ccCurAffProjectedEl.textContent = "− ₹" + proj.billAmount.toLocaleString("en-IN");
+        ccCurAffExpensesEl.textContent = "− ₹" + proj.monthlyExpenses.toLocaleString("en-IN");
+        ccCurAffObligationsEl.textContent = "− ₹" + proj.fixedObligations.toLocaleString("en-IN");
+        ccCurAffSavingsEl.textContent = "− ₹" + proj.savingsGoal.toLocaleString("en-IN");
+      } else {
+        ccCurrentAffordCardEl.style.display = "none";
+        ccCurrentAffordDetailEl.style.display = "none";
+      }
 
       // Per-card breakdown — for the outstanding bill if there is one
       // (that's the amount you're actually being asked about), falling
