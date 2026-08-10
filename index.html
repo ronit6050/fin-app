@@ -595,6 +595,29 @@
     .type-btn[data-type="Saving"].active     { background: var(--saving-bg);     color: var(--saving-text); }
     .type-btn[data-type="Investment"].active { background: var(--investment-bg); color: var(--investment-text); }
 
+    /* ---------- Financial Event chips (Rent/Investment) ---------- */
+    /* Same shape as .type-btn, kept as its own class so it never gets
+       swept up by the existing card.querySelectorAll(".type-btn") calls
+       used for Need/Want/Saving. See docs/features/financial-events.md. */
+    .fe-field label { color: var(--text-secondary); }
+    .fe-btn {
+      flex: 1 1 auto;
+      min-width: 72px;
+      padding: 9px 0;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: var(--surface-inset);
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+    }
+    .fe-btn.active {
+      font-weight: 700;
+      border-color: transparent;
+      background: var(--investment-bg);
+      color: var(--investment-text);
+    }
+
     /* ---------- Today's Summary ---------- */
     .today-total-box {
       background-color: var(--surface-hero);
@@ -1078,6 +1101,7 @@
             <div class="today-total-label">Total Spent</div>
             <div class="today-total-amount" id="analysisTotalAmount">₹0</div>
             <div class="today-split" id="analysisSplit"></div>
+            <div class="today-split" id="analysisFinancialEvents"></div>
           </div>
           <div id="analysisCategories"></div>
 
@@ -1493,8 +1517,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-6";
-    const APP_CHANGELOG = "Fixed: adding money to a digital wallet (e.g. PayZapp) was being counted as spend AND every purchase from that wallet was also counted — the top-up itself no longer counts, so totals should be more accurate now.";
+    const APP_VERSION = "2026-08-10-7";
+    const APP_CHANGELOG = "New: Rent and Investment payments can now be marked as such in Pending/History — once confirmed, they're left out of your spend total and shown as their own \"Fixed obligations\"/\"Invested\" lines on Analysis instead.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1748,22 +1772,31 @@
       return LENDING_PATTERNS.some(function (p) { return p.test(t); });
     }
 
-    // Hides the Need/Want/Saving/Investment toggle live if the note looks
-    // like a loan/repayment. Wired on every card that has both a note
-    // field and the toggle (Pending, History, Reconciliation) so it
-    // behaves identically everywhere. onHide clears whatever was selected
-    // so a stale choice never gets sent once the toggle is hidden.
-    function wireLendingAwareToggle(card, noteInput, onHide) {
+    // Hides the Need/Want/Saving toggle live if the note looks like a
+    // loan/repayment, OR (new, 2026-08-10) if a Financial Event (Rent/
+    // Investment) is currently selected on this card — neither is real
+    // spending, so the question doesn't make sense for either one.
+    // isFinancialEventSelected is optional — only Pending/History pass
+    // it (see docs/features/financial-events.md); Reconciliation/Cash
+    // cards call this the old way, unaffected.
+    //
+    // Returns the internal `update` function so a caller can re-run the
+    // same check after something OTHER than typing in the note changes
+    // (e.g. tapping a Financial Event chip) — a second, separate
+    // show/hide mechanism would risk the two fighting each other (one
+    // hiding the toggle, the other un-hiding it right after).
+    function wireLendingAwareToggle(card, noteInput, onHide, isFinancialEventSelected) {
       const typeField = card.querySelector(".type-field");
-      if (!typeField || !noteInput) return;
+      if (!typeField || !noteInput) return function () {};
 
       function update() {
-        const hide = isLendingNote(noteInput.value);
+        const hide = isLendingNote(noteInput.value) || !!(isFinancialEventSelected && isFinancialEventSelected());
         typeField.style.display = hide ? "none" : "";
         if (hide && onHide) onHide();
       }
       noteInput.addEventListener("input", update);
       update(); // apply immediately, in case the starting note already qualifies
+      return update;
     }
 
     // ---------------------------------------------------------
@@ -2191,6 +2224,10 @@
       // Money coming IN (credit) is never "spending," so there's nothing
       // to tag Need/Want/Saving — skip the whole control for those.
       // See docs/features/need-want-saving.md.
+      // Investment dropped as an option here 2026-08-10: a real
+      // investment now gets caught earlier as its own Financial Event
+      // (below), before this question is ever asked — see
+      // docs/features/financial-events.md.
       const showTypeToggle = txn.type !== "credit";
       const typeToggleHtml = showTypeToggle ? `
         <div class="field type-field">
@@ -2199,7 +2236,23 @@
             <button type="button" class="type-btn" data-type="Need">Need</button>
             <button type="button" class="type-btn" data-type="Want">Want</button>
             <button type="button" class="type-btn" data-type="Saving">Saving</button>
-            <button type="button" class="type-btn" data-type="Investment">Investment</button>
+          </div>
+        </div>
+      ` : "";
+
+      // Rent/Investment suggestion — only shown when there's actually a
+      // signal (a keyword hint, or a remembered similar amount), so an
+      // ordinary transaction's card looks exactly like it always has.
+      // See docs/features/financial-events.md.
+      const feSuggestion = txn.suggestedFinancialEvent;
+      const feHtml = feSuggestion ? `
+        <div class="field fe-field">
+          <label>${txn.financialEventConfident
+            ? "Looks like " + feSuggestion + " again — right?"
+            : "This might be " + feSuggestion + " — is that right?"}</label>
+          <div class="type-toggle">
+            <button type="button" class="fe-btn" data-fe="${feSuggestion}">Yes, ${feSuggestion}</button>
+            <button type="button" class="fe-btn" data-fe="">No, regular spend</button>
           </div>
         </div>
       ` : "";
@@ -2218,6 +2271,7 @@
           <label>Category</label>
           <select class="category-select">${categoryOptionsHtml}</select>
         </div>
+        ${feHtml}
         ${typeToggleHtml}
         <button type="button" class="save-btn">Save</button>
         <div class="pending-result"></div>
@@ -2252,12 +2306,40 @@
         });
       }
 
-      // A loan/repayment isn't spending — hide the question entirely once
-      // the note says so, live as you type (see docs/features/need-want-saving.md).
-      wireLendingAwareToggle(card, noteInput, function () {
+      // Rent/Investment — pre-selected only when the suggestion is
+      // confident (a remembered amount matched, so it's a safe one-tap
+      // confirm); a low-confidence hint is offered but never
+      // pre-selected, since it needs a real decision. See
+      // docs/features/financial-events.md.
+      let selectedFinancialEvent = null;
+      if (feSuggestion && txn.financialEventConfident) {
+        selectedFinancialEvent = feSuggestion;
+      }
+
+      // A loan/repayment, or a confirmed Financial Event, isn't spending
+      // — hide the Need/Want/Saving question entirely for either one.
+      // See wireLendingAwareToggle's comment for why this returns a
+      // function instead of just running once.
+      const updateTypeVisibility = wireLendingAwareToggle(card, noteInput, function () {
         selectedType = null;
-        card.querySelectorAll(".type-btn").forEach(function (b) { b.classList.remove("active"); });
-      });
+        card.querySelectorAll(".type-field .type-btn").forEach(function (b) { b.classList.remove("active"); });
+      }, function () { return !!selectedFinancialEvent; });
+
+      const feField = card.querySelector(".fe-field");
+      if (feField) {
+        const feButtons = feField.querySelectorAll(".fe-btn");
+        feButtons.forEach(function (btn) {
+          if (btn.dataset.fe && btn.dataset.fe === selectedFinancialEvent) {
+            btn.classList.add("active");
+          }
+          btn.addEventListener("click", function () {
+            feButtons.forEach(function (b) { b.classList.remove("active"); });
+            btn.classList.add("active");
+            selectedFinancialEvent = btn.dataset.fe || null;
+            updateTypeVisibility();
+          });
+        });
+      }
 
       // Optimistic save: the card disappears the instant you tap Save,
       // instead of waiting for Apps Script to confirm — makes plowing
@@ -2278,6 +2360,8 @@
         saveCache("pending", allPending);
         card.remove();
 
+        const savedFinancialEvent = selectedFinancialEvent;
+
         callAppsScript({
           action:       "saveNote",
           idToken:      currentUser.idToken,
@@ -2285,13 +2369,14 @@
           note:         savedNote,
           category:     savedCategory,
           counterparty: txn.counterparty,
-          type:         savedType
+          type:         savedType,
+          financialEvent: savedFinancialEvent
         })
           .then(function (data) {
             if (!data.ok) {
               restoreAfterFailedSave("Couldn't save (" + data.error + ") — check your connection and tap Save again.");
             } else if (data.typeRequested && !data.typeSaved) {
-              // Note/category saved fine, but the Need/Want/Saving/Investment
+              // Note/category saved fine, but the Need/Want/Saving
               // pick specifically didn't (e.g. recognized as a loan/repayment
               // and correctly excluded) — treat as needing another look
               // rather than silently losing that half of what you picked.
@@ -2742,6 +2827,7 @@
     const analysisContentEl   = document.getElementById("analysisContent");
     const analysisTotalAmountEl = document.getElementById("analysisTotalAmount");
     const analysisSplitEl     = document.getElementById("analysisSplit");
+    const analysisFinancialEventsEl = document.getElementById("analysisFinancialEvents");
     const analysisCategoriesEl = document.getElementById("analysisCategories");
     const analysisNeedWantSavingEl = document.getElementById("analysisNeedWantSaving");
 
@@ -2894,6 +2980,16 @@
         "Income: ₹" + a.totalCredit.toLocaleString("en-IN") +
         "  ·  " + savingsText +
         "  ·  Avg/day: ₹" + a.avgDaily.toLocaleString("en-IN");
+
+      // Rent + confirmed EMIs, and real Investments — kept out of the
+      // total above entirely, shown here as their own line instead.
+      // Blank when there's nothing confirmed yet this month, rather
+      // than a "₹0" that looks like a real, checked number.
+      // See docs/features/financial-events.md.
+      const feParts = [];
+      if (a.fixedObligations) feParts.push("Fixed obligations: ₹" + a.fixedObligations.toLocaleString("en-IN"));
+      if (a.invested) feParts.push("Invested: ₹" + a.invested.toLocaleString("en-IN"));
+      analysisFinancialEventsEl.textContent = feParts.join("  ·  ");
 
       if (a.needWantSaving) renderNeedWantSavingChart(a.needWantSaving);
 
@@ -4339,6 +4435,9 @@
         })
         .join("");
 
+      // Investment dropped 2026-08-10 — see the matching comment in
+      // buildPendingItem. A real investment is now caught earlier as
+      // its own Financial Event, before this question is ever asked.
       const showTypeToggle = txn.type !== "credit";
       const typeToggleHtml = showTypeToggle ? `
         <div class="field type-field">
@@ -4347,7 +4446,24 @@
             <button type="button" class="type-btn" data-type="Need">Need</button>
             <button type="button" class="type-btn" data-type="Want">Want</button>
             <button type="button" class="type-btn" data-type="Saving">Saving</button>
-            <button type="button" class="type-btn" data-type="Investment">Investment</button>
+          </div>
+        </div>
+      ` : "";
+
+      // Rent/Investment — shows the already-confirmed value if this row
+      // has one, otherwise falls back to a suggestion (lets an older
+      // transaction, noted before this feature existed, still get a
+      // one-time confirm when you browse History). See
+      // docs/features/financial-events.md.
+      const feValue = txn.financialEvent || txn.suggestedFinancialEvent;
+      const feHtml = feValue ? `
+        <div class="field fe-field">
+          <label>${txn.financialEvent
+            ? "Financial Event"
+            : (txn.financialEventConfident ? "Looks like " + feValue + " again — right?" : "This might be " + feValue + " — is that right?")}</label>
+          <div class="type-toggle">
+            <button type="button" class="fe-btn" data-fe="${feValue}">Yes, ${feValue}</button>
+            <button type="button" class="fe-btn" data-fe="">No, regular spend</button>
           </div>
         </div>
       ` : "";
@@ -4369,6 +4485,7 @@
           <label>Category</label>
           <select class="history-category">${categoryOptionsHtml}</select>
         </div>
+        ${feHtml}
         ${typeToggleHtml}
         <button type="button" class="history-save-btn">Save</button>
         <div class="pending-result"></div>
@@ -4396,12 +4513,33 @@
       const saveButton     = card.querySelector(".history-save-btn");
       const resultEl       = card.querySelector(".pending-result");
 
-      // A loan/repayment isn't spending — hide the question entirely once
-      // the note says so, live as you edit it (see docs/features/need-want-saving.md).
-      wireLendingAwareToggle(card, noteInput, function () {
+      // Pre-select whatever's already confirmed, or a confident
+      // suggestion — a low-confidence hint is offered but never
+      // pre-selected. See buildPendingItem's matching comment.
+      let selectedFinancialEvent = txn.financialEvent || (txn.financialEventConfident ? txn.suggestedFinancialEvent : null);
+
+      // A loan/repayment, or a confirmed Financial Event, isn't spending
+      // — hide the Need/Want/Saving question entirely for either one.
+      const updateTypeVisibility = wireLendingAwareToggle(card, noteInput, function () {
         selectedType = null;
-        card.querySelectorAll(".type-btn").forEach(function (b) { b.classList.remove("active"); });
-      });
+        card.querySelectorAll(".type-field .type-btn").forEach(function (b) { b.classList.remove("active"); });
+      }, function () { return !!selectedFinancialEvent; });
+
+      const feField = card.querySelector(".fe-field");
+      if (feField) {
+        const feButtons = feField.querySelectorAll(".fe-btn");
+        feButtons.forEach(function (btn) {
+          if (btn.dataset.fe && btn.dataset.fe === selectedFinancialEvent) {
+            btn.classList.add("active");
+          }
+          btn.addEventListener("click", function () {
+            feButtons.forEach(function (b) { b.classList.remove("active"); });
+            btn.classList.add("active");
+            selectedFinancialEvent = btn.dataset.fe || null;
+            updateTypeVisibility();
+          });
+        });
+      }
 
       saveButton.addEventListener("click", function () {
         resultEl.textContent = "Saving...";
@@ -4414,7 +4552,8 @@
           category:     categorySelect.value,
           counterparty: txn.counterparty,
           type:         selectedType,
-          amount:       parseFloat(amountInput.value) || txn.amount
+          amount:       parseFloat(amountInput.value) || txn.amount,
+          financialEvent: selectedFinancialEvent
         })
           .then(function (data) {
             if (!data.ok) {

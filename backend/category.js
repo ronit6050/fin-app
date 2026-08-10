@@ -238,17 +238,20 @@ function matchByPattern(note, counterparty, amount, mode){
     { keywords:["school","college","university","fees","tuition","course","udemy","coursera","mba"],
       category:"Education", subcategory:"Fees", confidence:90 },
 
-    // Financial
-    { keywords:["emi","loan","insurance","mutual fund","sip","nps","ppf","fd","rd","investment","stock","zerodha","groww","hdfc","icici","axis","sbi"],
+    // Financial (real investment instruments only — EMI/loan/insurance
+    // removed 2026-08-10: those are a different kind of thing, not
+    // investing, and were getting mislabeled here. Bank names
+    // hdfc/icici/axis/sbi also removed 2026-08-10 — they used to sit in
+    // this same list, which meant ANY payment whose UPI ID happened to
+    // mention the receiver's bank, e.g. "someone@okhdfcbank", got
+    // wrongly stamped "Investment" — found during a full categorization
+    // review, unrelated to any specific bug report.)
+    { keywords:["mutual fund","sip","nps","ppf","fd","rd","investment","stock","zerodha","groww"],
       category:"Financial", subcategory:"Investment", confidence:85 },
 
     // Salary/income
     { keywords:["salary","stipend","payroll","income","ctc"],
       category:"Income", subcategory:"Salary", confidence:95 },
-
-    // Lending
-    { keywords:["lent","borrowed","returned","gave","paid back","sent to","transfer to"],
-      category:"Financial", subcategory:"Lending", confidence:75 },
   ];
 
   for(const pattern of patterns){
@@ -260,6 +263,22 @@ function matchByPattern(note, counterparty, amount, mode){
           confidence:  pattern.confidence
         };
       }
+    }
+  }
+
+  // Lending — kept separate from the array above and matched with whole
+  // words, not substrings. "sent to"/"transfer to" removed 2026-08-10:
+  // too generic, would have matched huge numbers of ordinary notes
+  // ("sent to office for lunch money"). The remaining words used to be
+  // plain substrings too, which is the exact bug class already found
+  // and fixed once in isLendingTransfer (needWantSaving.js) — "lent" as
+  // a bare substring also matches inside "excellent", "silent",
+  // "talent". Reusing whole-word matching here closes the same gap in
+  // this file, which never got the same fix.
+  const LENDING_WORD_PATTERNS = [/\blent\b/, /\bborrowed\b/, /\breturned\b/, /\bgave\b/, /\bpaid back\b/];
+  for(const p of LENDING_WORD_PATTERNS){
+    if(p.test(text)){
+      return { category:"Financial", subcategory:"Lending", confidence:75 };
     }
   }
 

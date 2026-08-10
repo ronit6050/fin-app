@@ -47,7 +47,7 @@ function handlePwaRequest(data){
   }
 
   if(data.action === "saveNote"){
-    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount));
+    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent));
   }
 
   if(data.action === "getTodaySummary"){
@@ -791,6 +791,13 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   let untaggedTotal = 0;
   let untaggedCount = 0;
 
+  // Rent + confirmed EMIs (EMI itself not built yet, but the bucket is
+  // named for both from the start) vs real Investments — see
+  // financialEvents.js / docs/features/financial-events.md. Kept apart
+  // from your day-to-day spend total entirely, not just re-labeled.
+  let fixedObligations = 0;
+  let invested = 0;
+
   for(let i = 1; i < txnData.length; i++){
     const rawDate = txnData[i][0];
     if(!rawDate) continue;
@@ -804,9 +811,16 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
       const mode     = txnData[i][4] || "";
       const reference = txnData[i][6] || "";
       const counterparty = txnData[i][7] || "";
+      const financialEvent = (txnData[i][17] || "").toString().trim(); // column R
 
       if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
       if(type === "debit" && isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet — the real spend gets counted separately, below, as each wallet purchase happens
+
+      if(type === "debit" && financialEvent){
+        if(financialEvent === "Rent") fixedObligations += amount;
+        else if(financialEvent === "Investment") invested += amount;
+        continue; // not day-to-day spend — tracked as its own line, not blended into spend/category totals
+      }
 
       if(type === "debit"){
         totalDebit += amount;
@@ -894,6 +908,8 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
     topAmount:   topAmount,
     topNote:     topNote,
     categories:  categories,
+    fixedObligations: fixedObligations,
+    invested:         invested,
     needWantSaving: {
       need:           typeTotals.Need,
       want:           typeTotals.Want,
@@ -980,8 +996,10 @@ function getTodaySummary(txnData, cashData){
       const reference = txnData[i][6] || "";
       const counterparty = txnData[i][7] || "";
       const note = txnData[i][12] || "";
+      const financialEvent = (txnData[i][17] || "").toString().trim(); // column R
       if(isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
       if(isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet
+      if(financialEvent) continue; // Rent/Investment — not day-to-day spend, see financialEvents.js
 
       const amount   = Number(txnData[i][5]) || 0;
       const category = txnData[i][13] || "Other";
@@ -1039,6 +1057,9 @@ function getPendingTransactions(txnData){
   const noteMemorySheet = ss.getSheetByName("NoteMemory");
   const noteMemoryData  = noteMemorySheet ? noteMemorySheet.getDataRange().getValues() : [];
 
+  const financialEventsSheet = ss.getSheetByName("FinancialEvents");
+  const financialEventsData  = financialEventsSheet ? financialEventsSheet.getDataRange().getValues() : [];
+
   for(let i = 1; i < data.length; i++){
     const processed = (data[i][15] || "").toString().trim(); // column P
     const note       = (data[i][12] || "").toString().trim(); // column M
@@ -1053,6 +1074,12 @@ function getPendingTransactions(txnData){
     const counterparty = data[i][7] || "";
 
     const suggestedCategory = getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
+
+    // Rent/Investment suggestion — see financialEvents.js. Only makes
+    // sense for a debit; a credit is never a Rent/Investment payment.
+    const feSuggestion = txnType === "debit"
+      ? suggestFinancialEvent(counterparty, amount, financialEventsData)
+      : null;
 
     pending.push({
       row:               i + 1,
@@ -1075,7 +1102,14 @@ function getPendingTransactions(txnData){
       // Remembered note for this merchant+amount — empty string means
       // "nothing confident enough yet," and the PWA falls back to showing
       // the merchant name instead. See docs/features/note-memory.md.
-      suggestedNote:     getSuggestedNote(counterparty, amount, noteMemoryData)
+      suggestedNote:     getSuggestedNote(counterparty, amount, noteMemoryData),
+      // Rent/Investment suggestion — see docs/features/financial-events.md.
+      // confident=true means "matched a remembered amount, safe for a
+      // single-tap confirm"; confident=false means "just a soft keyword
+      // hint, needs a full manual confirm."
+      financialEvent:          null, // never set yet — Pending is always unconfirmed by definition
+      suggestedFinancialEvent: feSuggestion ? feSuggestion.type : null,
+      financialEventConfident: feSuggestion ? feSuggestion.confident : false
     });
   }
 
@@ -1093,6 +1127,9 @@ function getTransactionHistory(offset, limit){
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("Transactions");
   const data  = sheet.getDataRange().getValues();
+
+  const financialEventsSheet = ss.getSheetByName("FinancialEvents");
+  const financialEventsData  = financialEventsSheet ? financialEventsSheet.getDataRange().getValues() : [];
 
   const noted = [];
 
@@ -1114,7 +1151,8 @@ function getTransactionHistory(offset, limit){
       counterparty: data[i][7] || "",
       note:         note,
       category:     data[i][13] || "Other",
-      savedType:    (data[i][16] || "").toString().trim() || null // column Q — what was actually chosen, if anything
+      savedType:    (data[i][16] || "").toString().trim() || null, // column Q — what was actually chosen, if anything
+      financialEvent: (data[i][17] || "").toString().trim() || null // column R — already-confirmed Rent/Investment, if any
     });
   }
 
@@ -1132,6 +1170,17 @@ function getTransactionHistory(offset, limit){
     // be worse than no suggestion at all.
     t.suggestedType = t.savedType;
     delete t.savedType;
+
+    // Rent/Investment suggestion — only relevant if this row hasn't
+    // already been confirmed one way or the other. Lets an older
+    // transaction (noted before this feature existed) still get caught
+    // and offered a one-time confirm when you browse History. See
+    // docs/features/financial-events.md.
+    const feSuggestion = (!t.financialEvent && t.type === "debit")
+      ? suggestFinancialEvent(t.counterparty, t.amount, financialEventsData)
+      : null;
+    t.suggestedFinancialEvent = feSuggestion ? feSuggestion.type : null;
+    t.financialEventConfident = feSuggestion ? feSuggestion.confident : false;
   });
 
   return {
@@ -1185,7 +1234,7 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
 // teach SmartMemory/TypeVotes exactly like a first-time correction does
 // (confirmed with the user 2026-08-08) — reusing this function is what
 // gets that for free instead of writing a second, parallel code path.
-function saveTransactionNote(row, note, category, counterparty, type, amount){
+function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
 
@@ -1205,6 +1254,18 @@ function saveTransactionNote(row, note, category, counterparty, type, amount){
 
     if(counterparty){
       handleCategoryCorrection(counterparty, category, "Other");
+    }
+
+    // Rent/Investment — see financialEvents.js. Written on the row
+    // itself (so it's remembered exactly, never re-guessed later, same
+    // reasoning as column Q below) and also recorded in the
+    // FinancialEvents memory sheet, so a future payment of a similar
+    // amount gets recognized with a one-tap confirm instead of starting
+    // from scratch.
+    if(financialEvent){
+      sheet.getRange(row, 18).setValue(financialEvent); // column R
+      const feAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
+      recordFinancialEvent(financialEvent, feAmount, counterparty);
     }
 
     // Save the actual chosen type ON this transaction (column Q) whenever
@@ -1227,8 +1288,13 @@ function saveTransactionNote(row, note, category, counterparty, type, amount){
     // choices were being silently dropped on ordinary transactions, while
     // note/category still saved fine and the response still said "ok").
     // Never trust a save as fully complete without checking this again.
+    //
+    // Also skipped when financialEvent is set — a confirmed Rent/
+    // Investment payment isn't spending at all, so Need/Want/Saving
+    // isn't a meaningful question for it (confirmed with the user
+    // 2026-08-10, as part of the wider Category/Financial Event design).
     let typeSaved = false;
-    if(type && !isLendingTransfer(counterparty, note)){
+    if(type && !isLendingTransfer(counterparty, note) && !financialEvent){
       sheet.getRange(row, 17).setValue(type); // column Q
       typeSaved = true;
 

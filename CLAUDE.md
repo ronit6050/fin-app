@@ -595,12 +595,34 @@ a future top-up to confirm before touching that logic.
 
 ## PROPOSED PLAN: Category/Type restructure + cross-tab linking (2026-08-09)
 
-**Status: this whole multi-phase restructure is still NOT approved/started.**
+**Status: Phase 1 now underway — first slice shipped 2026-08-10.**
 User pushed back 2026-08-09: not confident in a big phased plan, wants one
 feature perfected at a time instead, starting with Pending. User's
 explicit rule for this plan stands regardless: present it, get explicit
 approval on which phase/line to work on, before touching any code. Do not
 assume or build ahead. Stay in one-line-per-item format, no paragraphs.
+
+**Financial Events — Rent + Investment shipped 2026-08-10 (Phase 1,
+first slice only — EMI and Lending-auto-link deliberately NOT included
+yet, "one feature at a time").** Full scenario-by-scenario design
+discussion first (Rent, EMI, Investment, Need/Want/Saving, Lending, each
+confirmed separately), including a real course-correction: the original
+"remember by Counterparty" detection idea was proven wrong using the
+user's own sheet data (the exact same ₹1 test wallet deduction produced
+inconsistent Counterparty values twice), before any code was written.
+Rebuilt around amount-matching instead (Rent/SIP payments recur at
+close to the same amount every time — Counterparty doesn't reliably
+repeat, amount does). A confirmed Rent/Investment transaction is now
+excluded from spend totals and shown as its own "Fixed obligations"/
+"Invested" line on Analysis, and skips the Need/Want/Saving question
+entirely. Also fixed two real `category.js` bugs found along the way:
+bank names (HDFC/ICICI/AXIS/SBI) wrongly triggering "Investment", and
+"sent to"/"transfer to" wrongly triggering "Lending" as loose
+substrings (same bug class as an already-fixed one in
+`needWantSaving.js`, just never applied here). Full detail, including
+exactly why Counterparty-based detection was rejected and what replaced
+it: [docs/features/financial-events.md](docs/features/financial-events.md)
+— always check that file before touching this feature further.
 
 **What actually shipped instead (2026-08-09, Pending-only, NOT the same as
 Phase 1 below):** Need/Want/Saving gained a 4th tag, **Investment**
