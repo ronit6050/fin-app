@@ -1518,8 +1518,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-9";
-    const APP_CHANGELOG = "New: EMI payments (you can have more than one, each named separately) can now be marked in Pending/History too — recognized by amount OR by your note wording, so an EMI with a varying amount (like paying a family member) still gets caught. Also fixed: a loan/repayment (lent/borrowed) is now actually left out of your spend total, not just the Need/Want/Saving question.";
+    const APP_VERSION = "2026-08-10-10";
+    const APP_CHANGELOG = "Credit card bill payments and wallet top-ups no longer ask Need/Want/Saving — they were already left out of your spend total silently, so the question never actually did anything useful.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -2327,7 +2327,12 @@
       // investment now gets caught earlier as its own Financial Event
       // (below), before this question is ever asked — see
       // docs/features/financial-events.md.
-      const showTypeToggle = txn.type !== "credit";
+      // A credit card bill payment or wallet top-up also skips this
+      // entirely now (txn.isNonSpendTransfer, computed server-side) —
+      // decided with the user 2026-08-10: unlike Rent/EMI/Investment,
+      // these are already trusted enough to silently skip the spend
+      // total, so asking here adds no real safety net.
+      const showTypeToggle = txn.type !== "credit" && !txn.isNonSpendTransfer;
       const typeToggleHtml = showTypeToggle ? `
         <div class="field type-field">
           <label>Type</label>
@@ -4545,7 +4550,9 @@
       // Investment dropped 2026-08-10 — see the matching comment in
       // buildPendingItem. A real investment is now caught earlier as
       // its own Financial Event, before this question is ever asked.
-      const showTypeToggle = txn.type !== "credit";
+      // A CC bill payment/wallet top-up (txn.isNonSpendTransfer) skips
+      // this too now — see the matching comment in buildPendingItem.
+      const showTypeToggle = txn.type !== "credit" && !txn.isNonSpendTransfer;
       const typeToggleHtml = showTypeToggle ? `
         <div class="field type-field">
           <label>Type</label>

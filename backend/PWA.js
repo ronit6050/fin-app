@@ -1076,6 +1076,7 @@ function getPendingTransactions(txnData){
     const txnType     = data[i][3] || ""; // "debit" or "credit"
     const mode        = data[i][4] || "";
     const amount      = Number(data[i][5]) || 0;
+    const reference   = data[i][6] || "";
     const counterparty = data[i][7] || "";
 
     const suggestedCategory = getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
@@ -1087,6 +1088,18 @@ function getPendingTransactions(txnData){
     const feSuggestion = txnType === "debit"
       ? suggestFinancialEvent(counterparty, amount, financialEventsData, note)
       : null;
+
+    // A credit card bill payment or wallet top-up isn't spending — same
+    // reasoning as Lending/Financial Events, but these two are already
+    // trusted enough to silently skip the spend total (see
+    // isCreditCardBillPayment/isWalletTopUp), so there's no real safety
+    // benefit to still asking Need/Want/Saving about them: if the
+    // detection is wrong, the row is ALREADY hidden from every total
+    // regardless of what gets answered here. Decided with the user
+    // 2026-08-10 after this exact reasoning was double-checked against
+    // the actual code together.
+    const isNonSpendTransfer = txnType === "debit" &&
+      (isCreditCardBillPayment(mode, counterparty, note) || isWalletTopUp(counterparty, reference));
 
     pending.push({
       row:               i + 1,
@@ -1105,7 +1118,12 @@ function getPendingTransactions(txnData){
       // this can never catch a lending transfer before you've written a
       // note — that's an inherent limit of asking before you've said
       // anything, not a regression. Passed through anyway for correctness.
-      suggestedType:     getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeVotesData, note),
+      suggestedType:     isNonSpendTransfer ? null : getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeVotesData, note),
+      // See isNonSpendTransfer comment above — the frontend uses this to
+      // skip rendering the Need/Want/Saving toggle entirely for a CC
+      // bill payment or wallet top-up, same as it already does for a
+      // credit-type row.
+      isNonSpendTransfer: isNonSpendTransfer,
       // Remembered note for this merchant+amount — empty string means
       // "nothing confident enough yet," and the PWA falls back to showing
       // the merchant name instead. See docs/features/note-memory.md.
@@ -1159,6 +1177,7 @@ function getTransactionHistory(offset, limit){
       type:         data[i][3] || "",
       mode:         data[i][4] || "",
       amount:       Number(data[i][5]) || 0,
+      reference:    data[i][6] || "",
       counterparty: data[i][7] || "",
       note:         note,
       category:     data[i][13] || "Other",
@@ -1196,6 +1215,15 @@ function getTransactionHistory(offset, limit){
     t.suggestedFinancialEvent = feSuggestion ? feSuggestion.type : null;
     t.suggestedFinancialEventName = feSuggestion ? (feSuggestion.name || null) : null;
     t.financialEventConfident = feSuggestion ? feSuggestion.confident : false;
+
+    // See the matching comment in getPendingTransactions — a CC bill
+    // payment or wallet top-up never needs asking, so hide the toggle
+    // here too, even for an older row that has an old saved answer
+    // sitting in column Q from before this decision (harmless either
+    // way, since Analysis already ignores these rows entirely).
+    t.isNonSpendTransfer = t.type === "debit" &&
+      (isCreditCardBillPayment(t.mode, t.counterparty, t.note) || isWalletTopUp(t.counterparty, t.reference));
+    if(t.isNonSpendTransfer) t.suggestedType = null;
   });
 
   return {
@@ -1313,8 +1341,21 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     // Investment payment isn't spending at all, so Need/Want/Saving
     // isn't a meaningful question for it (confirmed with the user
     // 2026-08-10, as part of the wider Category/Financial Event design).
+    //
+    // Also skipped for a credit card bill payment or wallet top-up
+    // (checked here, server-side, from the row's own stored Mode/
+    // Reference rather than anything the frontend sends — same defense-
+    // in-depth reasoning as everything else in this function). Decided
+    // with the user 2026-08-10: unlike Rent/EMI/Investment, these two
+    // are already trusted enough to silently skip the spend total, so
+    // there's no real safety benefit to still asking about them — a
+    // wrong detection already hides the row from every total either way.
+    const savedMode = (sheet.getRange(row, 5).getValue() || "").toString(); // column E
+    const savedReference = (sheet.getRange(row, 7).getValue() || "").toString(); // column G
+    const isNonSpendTransfer = isCreditCardBillPayment(savedMode, counterparty, note) || isWalletTopUp(counterparty, savedReference);
+
     let typeSaved = false;
-    if(type && !isLendingTransfer(counterparty, note) && !financialEvent){
+    if(type && !isLendingTransfer(counterparty, note) && !financialEvent && !isNonSpendTransfer){
       sheet.getRange(row, 17).setValue(type); // column Q
       typeSaved = true;
 

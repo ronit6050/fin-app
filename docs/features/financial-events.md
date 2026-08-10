@@ -178,6 +178,41 @@ based only, per the user's explicit choice to keep it that way rather
 than guess from raw SMS. Debts tab entry also stays manual, per that
 same discussion — no auto-linking.
 
+## Credit Card bill payment / Wallet top-up — audited and closed 2026-08-10
+
+User asked for a full audit of everything excluded from spend, which
+surfaced a real inconsistency: `isCreditCardBillPayment`/`isWalletTopUp`
+(both pre-dating Financial Events) already silently excluded these from
+the spend total, but neither was excluded from the Need/Want/Saving
+question — unlike Rent/EMI/Investment/Lending, which all skip it. First
+instinct was to keep asking as a "safety net" in case the detection is
+wrong (the credit card one especially — it was flagged as "best-effort,
+needs a real-world check" when built, and that check never actually
+happened). On closer look at the actual code together with the user,
+that reasoning didn't hold: both checks already `continue` past the
+*entire* row before it reaches either the spend total OR the
+Need/Want/Saving total — so if the detection is wrong, the row is
+already hidden from both regardless of whether the question gets asked.
+Asking added no real protection, just an extra tap that went nowhere.
+
+Fixed: `getPendingTransactions`/`getTransactionHistory` (`PWA.js`) now
+compute `isNonSpendTransfer` (true for either check, debit rows only)
+and use it to suppress `suggestedType`; `index.html`'s `showTypeToggle`
+in both `buildPendingItem`/`buildHistoryItem` also checks it. Server-side
+guard in `saveTransactionNote` too (reads Mode/Reference straight from
+the row rather than trusting anything the frontend sends — same defense-
+in-depth pattern as the lending/Financial-Event guards). Category is
+UNCHANGED — only the Need/Want/Saving question is skipped, since
+Category still has some record-keeping value for these (unlike Rent/EMI/
+Investment, which have their own dedicated Analysis lines and skip
+Category too). Verified with a 6-case Node test using the user's actual
+real CRED/PayZapp rows from earlier in the same session.
+
+If the credit card detector's accuracy is ever worth double-checking
+(it still hasn't been, formally), the honest way is watching your
+Analysis total after a real bill payment — not through this question,
+which never told you anything about it either way.
+
 ## Frontend UI
 
 `buildFinancialEventHtml(feType, feName, confident, alreadyConfirmed)` and
