@@ -74,6 +74,10 @@ function handlePwaRequest(data){
     return jsonResponse(settleDebtRow(data.row));
   }
 
+  if(data.action === "recordDebtPayment"){
+    return jsonResponse(applyDebtPayment(data.row, data.amount));
+  }
+
   if(data.action === "getSavings"){
     return jsonResponse({ ok:true, savings: getSavingsData() });
   }
@@ -638,6 +642,45 @@ function settleDebtRow(row){
     debtSheet.getRange(row, 8).setValue(today);
 
     return { ok: true };
+  }catch(err){
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// Records a payment against a debt — added 2026-08-10, after the user
+// pointed out "Mark as Settled" only ever closes a debt fully, with no
+// way to record "I only paid part of it." Reduces the debt's stored
+// Amount by whatever was paid; if that would take it to zero or below
+// (a full payoff, or a slight overpay), settles it instead of leaving a
+// zero/negative amount sitting there. Shared by both this manual action
+// AND Debts auto-linking's repayment matching (handleDebtAutoLink in
+// financialEvents.js) — one function, so a partial repayment behaves
+// identically whether you typed it in here or it was recognized from a
+// transaction note.
+function applyDebtPayment(row, amount){
+  try{
+    const debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+
+    if(!Number.isInteger(row) || row < 2 || row > debtSheet.getLastRow()){
+      return { ok:false, error:"Invalid row." };
+    }
+    const paid = Number(amount);
+    if(!paid || paid <= 0){
+      return { ok:false, error:"Enter a valid amount." };
+    }
+
+    const currentAmount = Number(debtSheet.getRange(row, 4).getValue()) || 0; // column D
+    const remaining = currentAmount - paid;
+    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+    if(remaining <= 0){
+      debtSheet.getRange(row, 7).setValue("Settled"); // column G
+      debtSheet.getRange(row, 8).setValue(today);      // column H
+      return { ok: true, settled: true, remaining: 0 };
+    }
+
+    debtSheet.getRange(row, 4).setValue(remaining); // reduce in place, stays Pending
+    return { ok: true, settled: false, remaining: remaining };
   }catch(err){
     return { ok: false, error: err.toString() };
   }

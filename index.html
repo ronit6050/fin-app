@@ -1518,8 +1518,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-12";
-    const APP_CHANGELOG = "New: \"lent to Raj\"/\"Raj paid back\" style notes now auto-log into your Debts tab too — confirm who it is once per person, then it's recognized automatically. A repayment only auto-settles when there's exactly one matching open debt, so it never guesses wrong.";
+    const APP_VERSION = "2026-08-10-13";
+    const APP_CHANGELOG = "Debts can now be paid off partially — \"Record Payment\" reduces what's owed instead of only being able to mark the whole thing Settled. Works both manually in the Debts tab and through auto-linked repayment notes.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -3558,12 +3558,62 @@
           <span class="debt-amount">₹${entry.amount.toLocaleString("en-IN")}</span>
         </div>
         <div class="debt-meta">${formatDebtDueText(entry)}${noteText}</div>
-        <button type="button" class="settle-btn">Mark as Settled</button>
+        <div class="field">
+          <label>Record a payment (leave blank and tap Settled if paid in full)</label>
+          <input type="number" class="debt-payment-input" min="0" step="1" placeholder="Amount paid, e.g. 500">
+        </div>
+        <button type="button" class="record-payment-btn">Record Payment</button>
+        <button type="button" class="settle-btn">Mark as Settled (fully paid)</button>
         <div class="pending-result"></div>
       `;
 
-      const settleButton = card.querySelector(".settle-btn");
-      const resultEl      = card.querySelector(".pending-result");
+      const paymentInput       = card.querySelector(".debt-payment-input");
+      const recordPaymentBtn   = card.querySelector(".record-payment-btn");
+      const settleButton       = card.querySelector(".settle-btn");
+      const resultEl           = card.querySelector(".pending-result");
+      const amountEl           = card.querySelector(".debt-amount");
+
+      // Quietly refreshes the saved copy so a settled/reduced debt
+      // doesn't briefly show its old value next time the app opens.
+      function refreshDebtsCache() {
+        callAppsScript({ action: "getDebts", idToken: currentUser.idToken })
+          .then(function (fresh) { if (fresh.ok) saveCache("debts", fresh.debts); });
+      }
+
+      // Added 2026-08-10 — "Mark as Settled" was previously the only
+      // option, an all-or-nothing action. This records a specific
+      // amount instead, reducing what's owed rather than closing the
+      // whole debt (shares applyDebtPayment server-side with Debts
+      // auto-linking's own repayment handling, so a partial payment
+      // behaves identically whether typed here or recognized from a
+      // transaction note).
+      recordPaymentBtn.addEventListener("click", function () {
+        const paid = parseFloat(paymentInput.value);
+        if (!paid || paid <= 0) {
+          resultEl.textContent = "Enter a valid amount.";
+          return;
+        }
+        resultEl.textContent = "Saving...";
+
+        callAppsScript({ action: "recordDebtPayment", idToken: currentUser.idToken, row: entry.row, amount: paid })
+          .then(function (data) {
+            if (!data.ok) {
+              resultEl.textContent = data.error;
+              return;
+            }
+            if (data.settled) {
+              card.remove();
+            } else {
+              amountEl.textContent = "₹" + data.remaining.toLocaleString("en-IN");
+              paymentInput.value = "";
+              resultEl.textContent = "Recorded — ₹" + data.remaining.toLocaleString("en-IN") + " still due.";
+            }
+            refreshDebtsCache();
+          })
+          .catch(function (err) {
+            resultEl.textContent = err.message;
+          });
+      });
 
       settleButton.addEventListener("click", function () {
         resultEl.textContent = "Saving...";
@@ -3572,10 +3622,7 @@
           .then(function (data) {
             if (data.ok) {
               card.remove();
-              // Quietly refresh the saved copy so this settled debt doesn't
-              // briefly reappear next time the app opens
-              callAppsScript({ action: "getDebts", idToken: currentUser.idToken })
-                .then(function (fresh) { if (fresh.ok) saveCache("debts", fresh.debts); });
+              refreshDebtsCache();
             } else {
               resultEl.textContent = data.error;
             }

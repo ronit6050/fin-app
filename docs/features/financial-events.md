@@ -446,16 +446,37 @@ defense-in-depth pattern as everything else here) and calls
 `handleDebtAutoLink(txnType, note, debtPerson, amount)`
 (`financialEvents.js`), which classifies direction and either
 `autoCreateDebt` (new LENT/BORROWED entry, written exactly like a manual
-one via More → Debts would be) or `autoSettleDebt` (marks the matched
-row "Settled" with today's date, same as tapping Settle manually).
-Entirely separate from the Financial Event (Rent/EMI/Investment/Saving)
-block in the same function — Lending was never a Financial Event in the
-schema sense (see "Lending" section above).
+one via More → Debts would be) or `applyDebtPayment` (see "Partial
+repayments" below) for a repayment. Entirely separate from the Financial
+Event (Rent/EMI/Investment/Saving) block in the same function — Lending
+was never a Financial Event in the schema sense (see "Lending" section
+above).
 
 Verified with a 20-case Node test (direction classification, person
 matching, the exactly-one-match settle rule, and the full
 `handleDebtAutoLink` orchestration against simulated Debts sheet data)
 before shipping.
+
+### Partial repayments — fixed same day, caught by the user
+
+**First version always fully settled the matched debt, regardless of
+how much was actually paid.** User caught this with a concrete example:
+owe ₹1500 to Vaidehi, pay ₹500 — the first version would have marked the
+entire ₹1500 "Settled," making it look like nothing was owed anymore,
+when really ₹1000 should still be due. Also surfaced a *pre-existing*
+gap while fixing it: the manual "Mark as Settled" button in the Debts
+tab never supported partial payments either — always all-or-nothing,
+not something this feature introduced.
+
+Fixed with `applyDebtPayment(row, amount)` (`PWA.js`) — shared by BOTH
+the auto-link repayment path and a new manual "Record a payment" input
++ button on every Debts tab card (`buildDebtItem`, `index.html`,
+alongside the existing "Mark as Settled" button for the full-payoff
+case). Reduces the debt's stored `Amount` in place by whatever was
+paid; only marks it `Settled` once the remaining balance reaches zero
+or below (an exact payoff, or a slight overpay — never goes negative).
+New action `recordDebtPayment` in `doPost`. Verified with a 5-case Node
+test reproducing the exact ₹1500/₹500 scenario before shipping.
 
 ## Bugs fixed alongside this (in `category.js`, not part of Financial Events itself)
 

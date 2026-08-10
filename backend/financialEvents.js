@@ -363,20 +363,19 @@ function autoCreateDebt(person, debtType, amount, note){
   return { logged: true };
 }
 
-function autoSettleDebt(row){
-  var debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
-  if(!debtSheet || !row) return { logged: false, reason: "no sheet or row" };
-  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-  debtSheet.getRange(row, 7).setValue("Settled");
-  debtSheet.getRange(row, 8).setValue(today);
-  return { logged: true };
-}
-
 // Orchestrates the whole thing — called from saveTransactionNote once a
 // debtPerson has been confirmed (either recognized live from the note,
 // or freshly typed) by the frontend. txnType/note are used to work out
 // direction server-side (not trusted from the frontend), same defense-
 // in-depth pattern as the rest of this project.
+//
+// A repayment uses applyDebtPayment (PWA.js) — shared with the manual
+// "Record a payment" flow in the Debts tab — rather than always fully
+// settling. Found 2026-08-10: the first version always fully settled
+// the matched debt regardless of how much was actually paid, so a ₹500
+// payment against a ₹1500 debt would have wrongly closed the whole
+// thing instead of leaving ₹1000 still due. applyDebtPayment reduces
+// the amount in place and only settles once the balance reaches zero.
 function handleDebtAutoLink(txnType, note, person, amount){
   if(!person) return { logged: false, reason: "no person" };
   var direction = classifyDebtDirection(txnType, note);
@@ -389,11 +388,11 @@ function handleDebtAutoLink(txnType, note, person, amount){
   var debtsData = debtSheet ? debtSheet.getDataRange().getValues() : [];
   if(direction === "repayLent"){
     var row1 = findSettleableDebtRow(person, "LENT", debtsData);
-    return row1 ? autoSettleDebt(row1) : { logged: false, reason: "ambiguous or no matching debt" };
+    return row1 ? applyDebtPayment(row1, amount) : { logged: false, reason: "ambiguous or no matching debt" };
   }
   if(direction === "repayBorrowed"){
     var row2 = findSettleableDebtRow(person, "BORROWED", debtsData);
-    return row2 ? autoSettleDebt(row2) : { logged: false, reason: "ambiguous or no matching debt" };
+    return row2 ? applyDebtPayment(row2, amount) : { logged: false, reason: "ambiguous or no matching debt" };
   }
   return { logged: false, reason: "unreachable" };
 }
