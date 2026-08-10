@@ -30,13 +30,24 @@ var TYPE_VOTE_WINDOW = 5;
 // separate check). Used ONLY as a cold-start guess, never to override
 // real answer history — see getSuggestedType.
 //
+// Checks BOTH counterparty and note (fixed 2026-08-10): a real bank
+// counterparty rarely spells out "rent" in the raw text, but the user's
+// OWN note often does ("July rent") — found when a mutual fund
+// transaction correctly triggered the Investment suggestion (its
+// counterparty text happened to say "mutual funds") while an otherwise
+// identical rent transaction didn't, purely because "rent" only
+// appeared in the note, which this function never looked at. note is
+// optional — Pending has none yet (nothing typed until you save), so
+// this still only has counterparty to go on there; History always has
+// one, which is exactly where this fix matters.
+//
 // EMI is deliberately NOT included here (other than the specific "home
 // loan" phrasing). Unlike rent, an EMI's nature depends entirely on what
 // was financed — a TV EMI and a home loan EMI are not the same kind of
 // spend — so guessing would often be wrong. Left to normal per-lender
 // learning instead, same as any other merchant.
-function getFinancialSubtype(counterparty) {
-  var text = (counterparty || "").toString().toLowerCase();
+function getFinancialSubtype(counterparty, note) {
+  var text = ((counterparty || "") + " " + (note || "")).toString().toLowerCase();
 
   if (text.indexOf("home loan") !== -1 || text.indexOf("housing loan") !== -1) return "homeLoanEmi";
   if (text.indexOf("rent") !== -1 || text.indexOf("landlord") !== -1 || text.indexOf("house rent") !== -1) return "rent";
@@ -155,7 +166,7 @@ function getSuggestedType(txnType, category, counterparty, amount, typeVotesData
   // would repeat the exact mistake already fixed once for Need/Want/Saving
   // generally (see the sliding-window redesign note above/in the doc).
   if (matches.length === 0) {
-    var subtype = getFinancialSubtype(counterparty);
+    var subtype = getFinancialSubtype(counterparty, note);
     if (subtype === "rent" || subtype === "homeLoanEmi" || subtype === "insurance") return "Need";
     if (subtype === "saving") return "Saving";
     if (subtype === "investment") return "Investment";

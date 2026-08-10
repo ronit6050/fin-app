@@ -55,7 +55,15 @@ function matchRecurringFinancialEvent(type, amount, financialEventsData){
 // "Investment" for now — EMI (which needs its own name per loan) and
 // Lending (deliberately note-only, see isLendingTransfer in
 // needWantSaving.js) are separate, later pieces, not this one.
-function suggestFinancialEvent(counterparty, amount, financialEventsData){
+//
+// note is optional (fixed 2026-08-10) — Pending never has one yet, but
+// History always does, and a real bank Counterparty text rarely spells
+// out "rent" the way a user's own note ("July rent") does. Found live:
+// a mutual fund transaction correctly triggered because "mutual funds"
+// happened to be in its Counterparty text, while an otherwise identical
+// rent transaction didn't, purely because "rent" only ever appeared in
+// the note, which this function previously never looked at.
+function suggestFinancialEvent(counterparty, amount, financialEventsData, note){
   if(matchRecurringFinancialEvent("Rent", amount, financialEventsData)){
     return { type: "Rent", confident: true };
   }
@@ -63,7 +71,7 @@ function suggestFinancialEvent(counterparty, amount, financialEventsData){
     return { type: "Investment", confident: true };
   }
 
-  var subtype = getFinancialSubtype(counterparty); // from needWantSaving.js
+  var subtype = getFinancialSubtype(counterparty, note); // from needWantSaving.js
   if(subtype === "rent") return { type: "Rent", confident: false };
   if(subtype === "investment") return { type: "Investment", confident: false };
 

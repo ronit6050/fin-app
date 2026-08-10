@@ -23,6 +23,28 @@ function) — lending's own category handling was left unchanged, out of
 scope for this fix. Backend-unaffected (frontend-only change) — nothing
 to redeploy via clasp for this one.
 
+**Fixed same day — rent detection only ever looked at Counterparty,
+never the note.** User hit this live: a mutual fund transaction correctly
+triggered the Investment suggestion (its Counterparty text happened to
+contain "mutual funds"), but an otherwise identical rent transaction
+didn't — because the word "rent" only appeared in the user's own note
+("July rent"), and `getFinancialSubtype`/`suggestFinancialEvent` never
+looked at note text at all, only Counterparty. Real bank Counterparty
+text rarely spells out what a payment is *for*; the user's own note
+almost always does — same reasoning `isLendingTransfer` already uses.
+
+Fixed: `getFinancialSubtype(counterparty, note)` (`needWantSaving.js`)
+now checks both, combined — also improves the existing Need/Want/Saving
+cold-start guess for everyone, not just Financial Events, since that
+function is shared. `suggestFinancialEvent(counterparty, amount,
+financialEventsData, note)` (`financialEvents.js`) passes note through.
+`getTransactionHistory` (`PWA.js`) now passes `t.note` — the fix that
+actually matters, since History always has a note; `getPendingTransactions`
+passes its own `note` too for consistency, though it's always empty
+there (nothing typed yet). Verified with a 4-case Node test reproducing
+the exact "July rent" scenario before shipping. Pushed and redeployed
+live via clasp (pinned deployment @286).
+
 ## Why this exists
 
 User noticed `Investment` sitting as a subcategory under `Financial` — the

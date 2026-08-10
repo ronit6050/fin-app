@@ -1077,8 +1077,10 @@ function getPendingTransactions(txnData){
 
     // Rent/Investment suggestion — see financialEvents.js. Only makes
     // sense for a debit; a credit is never a Rent/Investment payment.
+    // note is always empty here (Pending = unnoted transactions) — passed
+    // through anyway for correctness, same reasoning as suggestedType above.
     const feSuggestion = txnType === "debit"
-      ? suggestFinancialEvent(counterparty, amount, financialEventsData)
+      ? suggestFinancialEvent(counterparty, amount, financialEventsData, note)
       : null;
 
     pending.push({
@@ -1174,10 +1176,12 @@ function getTransactionHistory(offset, limit){
     // Rent/Investment suggestion — only relevant if this row hasn't
     // already been confirmed one way or the other. Lets an older
     // transaction (noted before this feature existed) still get caught
-    // and offered a one-time confirm when you browse History. See
-    // docs/features/financial-events.md.
+    // and offered a one-time confirm when you browse History. Passing
+    // t.note matters a lot more here than in Pending — a real bank
+    // Counterparty rarely says "rent," but the user's own note often
+    // does (fixed 2026-08-10, see docs/features/financial-events.md).
     const feSuggestion = (!t.financialEvent && t.type === "debit")
-      ? suggestFinancialEvent(t.counterparty, t.amount, financialEventsData)
+      ? suggestFinancialEvent(t.counterparty, t.amount, financialEventsData, t.note)
       : null;
     t.suggestedFinancialEvent = feSuggestion ? feSuggestion.type : null;
     t.financialEventConfident = feSuggestion ? feSuggestion.confident : false;
