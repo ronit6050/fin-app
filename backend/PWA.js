@@ -775,6 +775,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   let totalDebit  = 0;
   let totalCredit = 0;
   let categoryTotals = {};
+  let categoryTxns   = {}; // category -> list of {note, amount, date}, so tapping a category on Analysis can show its actual top transactions
   let dailyTotals    = {};
   let topAmount = 0;
   let topNote   = "";
@@ -811,6 +812,13 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
         dailyTotals[day] = (dailyTotals[day] || 0) + amount;
         if(amount > topAmount){ topAmount = amount; topNote = note; }
 
+        if(!categoryTxns[category]) categoryTxns[category] = [];
+        categoryTxns[category].push({
+          note:   note || counterparty || "",
+          amount: amount,
+          date:   Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM")
+        });
+
         const savedType = (txnData[i][16] || "").toString().trim(); // column Q
         if(typeTotals.hasOwnProperty(savedType)){
           typeTotals[savedType] += amount;
@@ -840,6 +848,14 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
         dailyTotals[day] = (dailyTotals[day] || 0) + amount;
         if(amount > topAmount){ topAmount = amount; topNote = category || "Cash Spend"; }
 
+        const cashNote = (cashData[i][5] || "").toString().trim();
+        if(!categoryTxns[category]) categoryTxns[category] = [];
+        categoryTxns[category].push({
+          note:   cashNote || "Cash Spend",
+          amount: amount,
+          date:   Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM")
+        });
+
         const savedType = (cashData[i][10] || "").toString().trim(); // column K
         if(typeTotals.hasOwnProperty(savedType)){
           typeTotals[savedType] += amount;
@@ -859,7 +875,12 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
 
   const categories = Object.entries(categoryTotals)
     .sort(function(a, b){ return b[1] - a[1]; })
-    .map(function(entry){ return { category: entry[0], amount: entry[1] }; });
+    .map(function(entry){
+      const topTransactions = (categoryTxns[entry[0]] || [])
+        .sort(function(a, b){ return b.amount - a.amount; })
+        .slice(0, 5);
+      return { category: entry[0], amount: entry[1], topTransactions: topTransactions };
+    });
 
   const taggedTotal = typeTotals.Need + typeTotals.Want + typeTotals.Saving + typeTotals.Investment;
 

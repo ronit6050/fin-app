@@ -652,6 +652,29 @@
       border-radius: 6px;
     }
 
+    /* ---------- Category detail — top transactions shown when a
+       category row on Analysis is tapped ---------- */
+    .category-detail {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 0.5px solid var(--border-hairline);
+    }
+
+    .category-txn-line {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      padding: 4px 0;
+      gap: 10px;
+    }
+
+    .category-txn-line span:first-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     /* ---------- Category badge — icon + color chip, used wherever a
        category name is shown (replaces plain text) ---------- */
     .category-badge {
@@ -1435,8 +1458,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-4";
-    const APP_CHANGELOG = "Fixed a real bug: credit card bill payments were being counted as spend twice (once when you swiped, once when you paid the bill). Also, Cash and Investments entries can now be edited after saving, same as bank transactions already could.";
+    const APP_VERSION = "2026-08-10-5";
+    const APP_CHANGELOG = "Analysis: tap a category (Bills, Shopping, etc.) to see its top 5 transactions for the month — tapping another category swaps the list instead of stacking them up.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -2851,17 +2874,46 @@
       a.categories.forEach(function (entry) {
         const percentOfMax = maxAmount > 0 ? Math.round((entry.amount / maxAmount) * 100) : 0;
 
+        const topTxns = entry.topTransactions || [];
+        const detailHtml = topTxns.length > 0
+          ? topTxns.map(function (tx) {
+              return `
+                <div class="category-txn-line">
+                  <span>${escapeHtml(tx.note) || "(no note)"} · ${tx.date}</span>
+                  <span>₹${tx.amount.toLocaleString("en-IN")}</span>
+                </div>
+              `;
+            }).join("")
+          : `<p style="font-size:0.85rem; color:var(--text-secondary); margin:0;">No transactions found.</p>`;
+
         const row = document.createElement("div");
         row.className = "category-row";
         row.innerHTML = `
-          <div class="category-top">
+          <div class="category-top" style="cursor:pointer;">
             ${categoryBadgeHtml(entry.category)}
             <span>₹${entry.amount.toLocaleString("en-IN")}</span>
           </div>
           <div class="category-bar-track">
             <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
           </div>
+          <div class="category-detail" style="display:none;">
+            <p style="font-size:0.78rem; color:var(--text-secondary); margin:10px 0 6px;">Top ${topTxns.length} in ${entry.category}</p>
+            ${detailHtml}
+          </div>
         `;
+
+        // Tapping a category shows its top transactions below; tapping
+        // another category closes this one and opens that one instead —
+        // only one open at a time, like an accordion.
+        const detailEl = row.querySelector(".category-detail");
+        row.querySelector(".category-top").addEventListener("click", function () {
+          const alreadyOpen = detailEl.style.display !== "none";
+          analysisCategoriesEl.querySelectorAll(".category-detail").forEach(function (d) {
+            d.style.display = "none";
+          });
+          detailEl.style.display = alreadyOpen ? "none" : "block";
+        });
+
         analysisCategoriesEl.appendChild(row);
       });
 
