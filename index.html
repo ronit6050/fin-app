@@ -1493,8 +1493,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-5";
-    const APP_CHANGELOG = "Analysis: tap a category (Bills, Shopping, etc.) to see its top 5 transactions for the month — tapping another category swaps the list instead of stacking them up.";
+    const APP_VERSION = "2026-08-10-6";
+    const APP_CHANGELOG = "Fixed: adding money to a digital wallet (e.g. PayZapp) was being counted as spend AND every purchase from that wallet was also counted — the top-up itself no longer counts, so totals should be more accurate now.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");

@@ -805,6 +805,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
       const counterparty = txnData[i][7] || "";
 
       if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
+      if(type === "debit" && isWalletTopUp(mode, counterparty)) continue; // money moved into your own wallet, not spent yet — the real spend gets counted separately, below, as each wallet purchase happens
 
       if(type === "debit"){
         totalDebit += amount;
@@ -927,6 +928,31 @@ function isCreditCardBillPayment(mode, counterparty, note){
   return /\bcredit card\b/.test(text) || /\bcc bill\b/.test(text) || /\bcard bill\b/.test(text) || /\bcard payment\b/.test(text);
 }
 
+// Recognizes a transaction that's actually TOPPING UP a digital wallet
+// (e.g. PayZapp) — money moving from your bank account into a wallet
+// you already own, not being spent yet. Found 2026-08-10: nothing
+// excluded these, so every wallet top-up was counted as spend once when
+// the money moved in, then counted AGAIN as each small purchase was
+// later made from that same wallet balance.
+//
+// Verified against the user's real SMS: a wallet top-up ("Sent Rs.4625
+// From HDFC Bank A/C *8774 To PAYZAPP WALLET") gets parsed by the SMS
+// script with mode "wallet" (same as a real purchase — the parser sees
+// the word "wallet" either way) and Counterparty "payzapp wallet..." —
+// but a REAL purchase SMS ("Rs.49 Deducted From PayZapp Wallet") has no
+// "to/at/towards/for" wording for the parser to catch, so its
+// Counterparty always comes out blank. That gap — mode is "wallet" but
+// there's also a real counterparty mentioning the wallet — only happens
+// for a top-up, never a real purchase, so it's safe to use as the
+// signal here.
+function isWalletTopUp(mode, counterparty){
+  const m = (mode || "").toString().toLowerCase();
+  if(m !== "wallet") return false; // only wallet-mode debits can possibly be a top-up
+  const cp = (counterparty || "").toString().trim().toLowerCase();
+  if(!cp) return false; // a real purchase from the wallet never has a counterparty at all
+  return cp.includes("wallet") || cp.includes("payzapp");
+}
+
 // Adds up everything spent today, from both bank/UPI and cash, by category.
 // txnData/cashData are optional — see getCashData's comment, same reasoning.
 function getTodaySummary(txnData, cashData){
@@ -951,6 +977,7 @@ function getTodaySummary(txnData, cashData){
       const counterparty = txnData[i][7] || "";
       const note = txnData[i][12] || "";
       if(isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
+      if(isWalletTopUp(mode, counterparty)) continue; // money moved into your own wallet, not spent yet
 
       const amount   = Number(txnData[i][5]) || 0;
       const category = txnData[i][13] || "Other";

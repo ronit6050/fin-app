@@ -549,20 +549,27 @@ it and what to log.
   explicitly confirmed since the main project never hardcodes its own
   Sheet ID anywhere (it's container-bound, so no ID needed there).
 
-**This is also the actual root of the open "digital wallet double-
-counting" bug** (user flagged 2026-08-10, not yet fixed): topping up a
-wallet (e.g. PayZapp) and then spending from it both end up as separate
-debit rows, double-counting the same money. Root cause still being
-narrowed down here — `ruleParser`'s mode detection checks for the word
-"wallet"/"payzapp" *before* checking for "upi"/"vpa", so a bank-to-
-wallet top-up transfer (which is really a UPI payment) can get
-mislabeled `mode: "wallet"`, identical-looking to a genuine small
-in-wallet purchase — the real fix needs an actual sample of the top-up
-SMS's wording (not yet provided) before shipping anything, same
-"verify with real data first" discipline as every other fix in this
-project — see the "Automation phase" section's [need-want-saving.md]
-work and the lending-detection bugs for why guessing at this without a
-real sample has bitten this project before.
+**Digital wallet double-counting — fixed 2026-08-10.** Topping up a
+wallet (e.g. PayZapp) and then spending from it were both ending up as
+separate debit rows, double-counting the same money. Root cause: this
+SMS parser's `ruleParser` checks for the word "wallet"/"payzapp"
+*before* checking for "upi"/"vpa", so a bank-to-wallet top-up transfer
+(really just a UPI payment — real SMS: "Sent Rs.4625 From HDFC Bank A/C
+*8774 To PAYZAPP WALLET") gets `mode: "wallet"`, identical-looking to a
+genuine small in-wallet purchase (real SMS: "Rs.49 Deducted From
+PayZapp Wallet"). The one reliable difference: a top-up's SMS wording
+produces a real `Counterparty` value (mentioning "wallet"/"payzapp"),
+while a real purchase's SMS never matches the parser's "to/at/towards/
+for" counterparty pattern at all, so its `Counterparty` always comes out
+blank. New `isWalletTopUp(mode, counterparty)` in `PWA.js` uses exactly
+that gap — mode is "wallet" AND counterparty is non-blank and mentions
+"wallet"/"payzapp" — and both `getTodaySummary` and `getMonthlyAnalysis`
+now skip a debit row that matches it, same pattern as the credit-card-
+bill-payment fix. Verified against the user's real SMS text with a
+standalone Node test before shipping (all 4 cases passed) — same
+discipline as every other fix in this project. The top-up row still
+shows up in Pending for a note/category like any other transaction —
+it's excluded from spend totals only, not hidden.
 
 ## PROPOSED PLAN: Category/Type restructure + cross-tab linking (2026-08-09)
 
