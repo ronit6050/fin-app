@@ -171,7 +171,7 @@ function getDashboardData(){
   const today   = getTodaySummary(txnData, cashData);
   const month   = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, txnData, cashData);
   const cash    = getCashData(cashData);
-  const cc      = getCCAdvisorData(txnData);
+  const cc      = getCCAdvisorData(txnData, cashData, month.fixedObligations);
   const pending = getPendingTransactions(txnData);
 
   // Debts/Savings/Investments each read their own sheet(s) only once
@@ -691,118 +691,245 @@ function applyDebtPayment(row, amount){
 // the limit/warn/alert values from getSettings() (settings.js) instead
 // of CCAdvisor.js's hardcoded constants, so the Settings screen actually
 // affects this.
-// txnData is optional — see getCashData's comment, same reasoning.
-function getCCAdvisorData(txnData){
+//
+// Rebuilt 2026-08-10 — the old version only ever tracked ONE cycle,
+// whichever one "today" happens to fall inside, and called that cycle's
+// close-plus-3-weeks date "Payment due." That's wrong for most of the
+// month: once a cycle closes (past the 18th), the bill that's ACTUALLY
+// about to be due is the one that just closed — not the brand new cycle
+// that just started, whose own due date is two months away. Found while
+// tracing through the date math after the user asked to double-check it
+// was sound. Now tracks the "outstanding" bill (most recently closed
+// cycle, checked against isCreditCardBillPayment to see if it's already
+// been paid) separately from the "current," still-accumulating cycle.
+// See docs/features/cc-advisor.md.
+//
+// txnData/cashData/fixedObligations are optional — same batching
+// reasoning as getCashData's comment. fixedObligations (this month's
+// Rent+EMI total, from getMonthlyAnalysis) is passed in by
+// getDashboardData, which already computes it — recomputed here only
+// when called standalone (the "getCCAdvisor" action).
+function getCCAdvisorData(txnData, cashData, fixedObligations){
 
-  const today      = new Date();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const dayOfMonth = today.getDate();
-  const thisMonth  = today.getMonth();
-  const thisYear   = today.getFullYear();
 
-  let cycleStart, cycleEnd, dueDate;
-  if(dayOfMonth <= 18){
-    cycleStart = new Date(thisYear, thisMonth - 1, 19);
-    cycleEnd   = new Date(thisYear, thisMonth, 18);
-    dueDate    = new Date(thisYear, thisMonth + 1, 9);
-  } else {
-    cycleStart = new Date(thisYear, thisMonth, 19);
-    cycleEnd   = new Date(thisYear, thisMonth + 1, 18);
-    dueDate    = new Date(thisYear, thisMonth + 2, 9);
-  }
+  // The most recent bill-close date (18th) that is <= today.
+  const mostRecentClose = new Date(today.getFullYear(), today.getMonth() - (dayOfMonth < 18 ? 1 : 0), 18);
 
-  const daysLeft     = Math.ceil((cycleEnd - today) / 86400000);
-  const daysInCycle  = Math.ceil((cycleEnd - cycleStart) / 86400000);
-  const daysElapsed  = daysInCycle - daysLeft;
-  const daysUntilDue = Math.ceil((dueDate - today) / 86400000);
+  // The bill that closed on mostRecentClose — the one that's actually
+  // due soon (or already overdue), not a hypothetical future one.
+  const outstandingCycleStart = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() - 1, 19);
+  const outstandingCycleEnd   = mostRecentClose;
+  const outstandingDueDate    = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() + 1, 9);
+
+  // The cycle that's currently running, right after the one above.
+  const currentCycleStart = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth(), 19);
+  const currentCycleEnd   = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() + 1, 18);
 
   const data = txnData || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
 
-  const settings  = getSettings();
-  const ccLimit   = settings.ccLimit;
-  const ccWarnAmt = ccLimit * settings.ccWarnPct;
+  const settings   = getSettings();
+  const ccLimit    = settings.ccLimit;
+  const ccWarnAmt  = ccLimit * settings.ccWarnPct;
   const ccAlertAmt = ccLimit * settings.ccAlertPct;
-
-  let cycleSpend = 0;
-  let txnCount   = 0;
-  let categoryTotals = {};
-  let cardTotals     = {};
-  let recentCardTxns = []; // for the Home screen's "tap the CC widget" view — filled in below, formatted after the loop
-
-  for(let i = 1; i < data.length; i++){
-    const rawDate = data[i][0];
-    if(!rawDate) continue;
-    const d = new Date(rawDate);
-    if(d < cycleStart || d > today) continue;
-
-    const type   = (data[i][3] || "").toString().toLowerCase();
-    const mode   = (data[i][4] || "").toString().toLowerCase();
-    const amount = Number(data[i][5]) || 0;
-    const cat    = (data[i][13] || "Other").toString().trim();
-
-    if(type === "debit" && mode.startsWith("card") && amount > 0){
-      cycleSpend += amount;
-      txnCount++;
-      categoryTotals[cat] = (categoryTotals[cat] || 0) + amount;
-      cardTotals[mode]    = (cardTotals[mode] || 0) + amount;
-      recentCardTxns.push({
-        date: d,
-        counterparty: (data[i][7] || "").toString().trim(),
-        note: (data[i][12] || "").toString().trim(), // column M — what you actually wrote, shown instead of the raw UPI ID when present
-        amount: amount
-      });
-    }
-  }
-
-  const usagePct  = Math.round((cycleSpend / ccLimit) * 100);
-  const remaining = ccLimit - cycleSpend;
-  const dailyAvg  = daysElapsed > 0 ? cycleSpend / daysElapsed : 0;
-  const projected = Math.round(dailyAvg * daysInCycle);
-  const projectedPct = Math.round((projected / ccLimit) * 100);
-  const safeDaily = (daysLeft > 0 && cycleSpend < ccAlertAmt)
-    ? Math.round((ccAlertAmt - cycleSpend) / daysLeft)
-    : 0;
-
-  let status = "healthy";
-  if(cycleSpend >= ccAlertAmt) status = "alert";
-  else if(cycleSpend >= ccWarnAmt) status = "warning";
-
-  const cardBreakdown = Object.entries(cardTotals)
-    .sort(function(a, b){ return b[1] - a[1]; })
-    .map(function(e){ return { card: e[0].toUpperCase(), amount: e[1] }; });
-
-  const topCategories = Object.entries(categoryTotals)
-    .sort(function(a, b){ return b[1] - a[1]; })
-    .slice(0, 4)
-    .map(function(e){ return { category: e[0], amount: e[1] }; });
 
   const fmtDate = function(d){
     return Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM yyyy");
   };
 
-  // Newest first, last 5 only — enough for a quick glance on Home.
-  const recentCardTxnsFormatted = recentCardTxns
-    .sort(function(a, b){ return b.date - a.date; })
-    .slice(0, 5)
-    .map(function(t){ return { date: fmtDate(t.date), counterparty: t.counterparty, note: t.note, amount: t.amount }; });
+  // Sums card spend within [startDate, endDate] (inclusive), plus the
+  // category/card breakdowns and per-category transaction lists needed
+  // for the tap-to-expand view. Shared by both the outstanding bill and
+  // the current cycle so the two can never compute this differently.
+  function summarizeCardSpend(startDate, endDate){
+    let total = 0, txnCount = 0;
+    const categoryTotals = {};
+    const categoryTxns   = {};
+    const cardTotals     = {};
+    const allTxns        = [];
+
+    for(let i = 1; i < data.length; i++){
+      const rawDate = data[i][0];
+      if(!rawDate) continue;
+      const d = new Date(rawDate);
+      if(d < startDate || d > endDate) continue;
+
+      const type   = (data[i][3] || "").toString().toLowerCase();
+      const mode   = (data[i][4] || "").toString().toLowerCase();
+      const amount = Number(data[i][5]) || 0;
+      const cat    = (data[i][13] || "Other").toString().trim();
+
+      if(type === "debit" && mode.startsWith("card") && amount > 0){
+        total += amount;
+        txnCount++;
+        categoryTotals[cat] = (categoryTotals[cat] || 0) + amount;
+        cardTotals[mode]    = (cardTotals[mode] || 0) + amount;
+
+        const note = (data[i][12] || "").toString().trim();
+        const counterparty = (data[i][7] || "").toString().trim();
+        const txn = { date: d, counterparty: counterparty, note: note, amount: amount };
+
+        if(!categoryTxns[cat]) categoryTxns[cat] = [];
+        categoryTxns[cat].push({ note: note || counterparty || "", amount: amount, date: fmtDate(d) });
+
+        allTxns.push(txn);
+      }
+    }
+
+    const cardBreakdown = Object.entries(cardTotals)
+      .sort(function(a, b){ return b[1] - a[1]; })
+      .map(function(e){ return { card: e[0].toUpperCase(), amount: e[1] }; });
+
+    const topCategories = Object.entries(categoryTotals)
+      .sort(function(a, b){ return b[1] - a[1]; })
+      .slice(0, 6)
+      .map(function(e){
+        const topTxns = (categoryTxns[e[0]] || []).sort(function(a, b){ return b.amount - a.amount; }).slice(0, 5);
+        return { category: e[0], amount: e[1], topTransactions: topTxns };
+      });
+
+    const recentTxns = allTxns
+      .sort(function(a, b){ return b.date - a.date; })
+      .slice(0, 5)
+      .map(function(t){ return { date: fmtDate(t.date), counterparty: t.counterparty, note: t.note, amount: t.amount }; });
+
+    return { total: total, txnCount: txnCount, cardBreakdown: cardBreakdown, topCategories: topCategories, recentTxns: recentTxns };
+  }
+
+  const outstandingSummary = summarizeCardSpend(outstandingCycleStart, outstandingCycleEnd);
+  const currentSummary     = summarizeCardSpend(currentCycleStart, today);
+
+  // Has the outstanding bill already been paid? Look for a real
+  // credit-card-bill-payment transaction (same detector used to keep
+  // Analysis from double-counting it) any time after the bill closed.
+  let outstandingPaid = false;
+  if(outstandingSummary.total > 0){
+    for(let i = 1; i < data.length; i++){
+      const rawDate = data[i][0];
+      if(!rawDate) continue;
+      const d = new Date(rawDate);
+      if(d <= outstandingCycleEnd) continue;
+      const type = (data[i][3] || "").toString().toLowerCase();
+      if(type !== "debit") continue;
+      const mode = (data[i][4] || "").toString();
+      const counterparty = (data[i][7] || "").toString();
+      const note = (data[i][12] || "").toString();
+      if(isCreditCardBillPayment(mode, counterparty, note)){
+        outstandingPaid = true;
+        break;
+      }
+    }
+  }
+
+  const daysUntilDue = Math.ceil((outstandingDueDate - today) / 86400000);
+  const isOverdue = !outstandingPaid && outstandingSummary.total > 0 && daysUntilDue < 0;
+
+  // "Can you actually pay this without it eating into next month?" —
+  // only meaningful if there's a real, unpaid bill. Reuses data the app
+  // already has: your Cash balance, recent Income-tagged credits (no
+  // new setting needed), and this month's Rent+EMI (already tracked via
+  // Financial Events) alongside your existing Settings targets.
+  let affordability = null;
+  if(outstandingSummary.total > 0 && !outstandingPaid){
+    const cash = getCashData(cashData);
+    const cashBalance = cash.balance;
+
+    const since = new Date(today);
+    since.setDate(since.getDate() - 35); // a bit over one pay cycle, covers a salary date that shifts slightly
+    let recentIncome = 0;
+    for(let i = 1; i < data.length; i++){
+      const rawDate = data[i][0];
+      if(!rawDate) continue;
+      const d = new Date(rawDate);
+      if(d < since || d > today) continue;
+      const type = (data[i][3] || "").toString().toLowerCase();
+      const cat  = (data[i][13] || "").toString().trim();
+      if(type === "credit" && cat === "Income"){
+        recentIncome += Number(data[i][5]) || 0;
+      }
+    }
+
+    let fixedObl = fixedObligations;
+    if(fixedObl === undefined || fixedObl === null){
+      const now = new Date();
+      fixedObl = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, data, cashData).fixedObligations;
+    }
+
+    const available = cashBalance + recentIncome;
+    const needed = outstandingSummary.total + settings.monthlyExpenses + fixedObl + settings.monthlySaveGoal;
+    const net = available - needed;
+
+    affordability = {
+      cashBalance: cashBalance,
+      recentIncome: recentIncome,
+      available: available,
+      billAmount: outstandingSummary.total,
+      monthlyExpenses: settings.monthlyExpenses,
+      fixedObligations: fixedObl,
+      savingsGoal: settings.monthlySaveGoal,
+      needed: needed,
+      net: net,
+      canAfford: net >= 0
+    };
+  }
+
+  // Current, still-accumulating cycle — projection math unchanged from
+  // before, just now clearly scoped to "not due yet" instead of being
+  // confused with the outstanding bill.
+  const daysLeft    = Math.ceil((currentCycleEnd - today) / 86400000);
+  const daysInCycle = Math.ceil((currentCycleEnd - currentCycleStart) / 86400000);
+  const daysElapsed = daysInCycle - daysLeft;
+  const dailyAvg     = daysElapsed > 0 ? currentSummary.total / daysElapsed : 0;
+  const projected    = Math.round(dailyAvg * daysInCycle);
+  const projectedPct = Math.round((projected / ccLimit) * 100);
+
+  const usagePct  = Math.round((currentSummary.total / ccLimit) * 100);
+  let status = "healthy";
+  if(currentSummary.total >= ccAlertAmt) status = "alert";
+  else if(currentSummary.total >= ccWarnAmt) status = "warning";
 
   return {
-    cycleStart: fmtDate(cycleStart),
-    cycleEnd:   fmtDate(cycleEnd),
-    dueDate:    fmtDate(dueDate),
-    daysLeft: daysLeft,
-    daysUntilDue: daysUntilDue,
-    cycleSpend: cycleSpend,
     limit: ccLimit,
-    usagePct: usagePct,
-    remaining: remaining,
-    projected: projected,
-    projectedPct: projectedPct,
-    safeDaily: safeDaily,
-    status: status,
-    txnCount: txnCount,
-    cardBreakdown: cardBreakdown,
-    topCategories: topCategories,
-    recentCardTxns: recentCardTxnsFormatted
+
+    outstanding: {
+      amount: outstandingSummary.total,
+      cycleStart: fmtDate(outstandingCycleStart),
+      cycleEnd:   fmtDate(outstandingCycleEnd),
+      dueDate:    fmtDate(outstandingDueDate),
+      daysUntilDue: daysUntilDue,
+      isOverdue: isOverdue,
+      isPaid: outstandingPaid,
+      cardBreakdown: outstandingSummary.cardBreakdown,
+      topCategories: outstandingSummary.topCategories
+    },
+
+    affordability: affordability,
+
+    current: {
+      cycleStart: fmtDate(currentCycleStart),
+      cycleEnd:   fmtDate(currentCycleEnd),
+      spend: currentSummary.total,
+      projected: projected,
+      projectedPct: projectedPct,
+      daysLeft: daysLeft,
+      usagePct: usagePct,
+      status: status
+    },
+
+    // Kept at the top level, same shape as before, so the Home
+    // dashboard widget (which only ever cared about "this cycle,"
+    // never the due-bill distinction) keeps working unchanged.
+    cycleStart: fmtDate(currentCycleStart),
+    cycleEnd:   fmtDate(currentCycleEnd),
+    cycleSpend: currentSummary.total,
+    usagePct:   usagePct,
+    status:     status,
+    txnCount:   currentSummary.txnCount,
+    cardBreakdown: currentSummary.cardBreakdown,
+    topCategories: currentSummary.topCategories,
+    recentCardTxns: currentSummary.recentTxns
   };
 }
 

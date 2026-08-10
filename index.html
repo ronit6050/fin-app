@@ -1170,36 +1170,55 @@
       </div>
 
       <!-- ===== SUB-SCREEN: CC Advisor ===== -->
+      <!-- Rebuilt 2026-08-10 — see docs/features/cc-advisor.md. Now
+           distinguishes the real, awaiting-payment bill from the
+           still-running cycle (the old version conflated the two,
+           showing a due date up to two months out for most of the
+           month), and adds an affordability check against cash +
+           recent income + known obligations. -->
       <div id="view-cc" style="display:none">
         <button type="button" class="back-to-more">← Back</button>
         <h2 class="section-title">Credit Card Advisor</h2>
         <div id="ccStatus"><span class="spinner"></span>Loading...</div>
         <div id="ccContent" style="display:none">
-          <div class="today-total-box">
-            <div class="today-total-label">Spent This Cycle</div>
-            <div class="today-total-amount" id="ccSpendAmount">₹0</div>
-            <div class="today-split" id="ccCycleDates"></div>
+
+          <div class="today-total-box" id="ccOutstandingBox">
+            <div class="today-total-label" id="ccOutstandingLabel">Bill due</div>
+            <div class="today-total-amount" id="ccOutstandingAmount">₹0</div>
+            <div class="today-split" id="ccOutstandingMeta"></div>
+          </div>
+
+          <div class="category-row" id="ccAffordCard" style="display:none;">
+            <div class="category-top" id="ccAffordTop" style="cursor:pointer;">
+              <span id="ccAffordLabel"></span>
+            </div>
+            <div id="ccAffordDetail" style="display:none; margin-top:10px;">
+              <div class="category-txn-line"><span>Cash balance</span><span id="ccAffCash"></span></div>
+              <div class="category-txn-line"><span>Recent income</span><span id="ccAffIncome"></span></div>
+              <div class="category-txn-line" style="border-top:0.5px solid var(--border-hairline); padding-top:6px; margin-top:2px;"><span>Available</span><span id="ccAffAvailable"></span></div>
+              <div class="category-txn-line"><span>This bill</span><span id="ccAffBill"></span></div>
+              <div class="category-txn-line"><span>Monthly expenses</span><span id="ccAffExpenses"></span></div>
+              <div class="category-txn-line"><span>Rent and EMI</span><span id="ccAffObligations"></span></div>
+              <div class="category-txn-line"><span>Savings goal</span><span id="ccAffSavings"></span></div>
+            </div>
           </div>
 
           <div class="category-row">
             <div class="category-top">
-              <span id="ccUsageLabel">0%</span>
+              <span>This cycle so far</span>
+              <span id="ccCurrentAmount">₹0</span>
             </div>
             <div class="category-bar-track">
               <div class="category-bar-fill" id="ccUsageBar" style="width:0%"></div>
             </div>
+            <p id="ccProjection" style="font-size:0.8rem; color:var(--text-secondary); margin:6px 0 0;"></p>
           </div>
 
-          <p id="ccStatusMessage" style="font-size:0.9rem; margin:10px 0 4px 0;"></p>
-          <p id="ccDueInfo" style="font-size:0.85rem; color:var(--text-secondary); margin:2px 0;"></p>
-          <p id="ccProjection" style="font-size:0.85rem; color:var(--text-secondary); margin:2px 0;"></p>
-          <p id="ccSafeDaily" style="font-size:0.85rem; color:var(--text-secondary); margin:2px 0 14px 0;"></p>
-
-          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Per Card</h3>
-          <div id="ccCardBreakdown"></div>
-
-          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Top Categories</h3>
+          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Where this bill went</h3>
           <div id="ccTopCategories"></div>
+
+          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Per Card</h3>
+          <div id="ccCardBreakdown"></div>
         </div>
       </div>
 
@@ -1518,8 +1537,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-13";
-    const APP_CHANGELOG = "Debts can now be paid off partially — \"Record Payment\" reduces what's owed instead of only being able to mark the whole thing Settled. Works both manually in the Debts tab and through auto-linked repayment notes.";
+    const APP_VERSION = "2026-08-10-14";
+    const APP_CHANGELOG = "Credit Card Advisor rebuilt: fixed a real bug where the payment due date shown was often two months out instead of the actual upcoming bill. New: a straight answer to \"can I actually pay this without it hurting next month\", and tap-to-expand category/card breakdowns.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -3357,18 +3376,35 @@
     // ---------------------------------------------------------
     // CC ADVISOR
     // ---------------------------------------------------------
-    const ccStatusEl        = document.getElementById("ccStatus");
-    const ccContentEl       = document.getElementById("ccContent");
-    const ccSpendAmountEl   = document.getElementById("ccSpendAmount");
-    const ccCycleDatesEl    = document.getElementById("ccCycleDates");
-    const ccUsageLabelEl    = document.getElementById("ccUsageLabel");
-    const ccUsageBarEl      = document.getElementById("ccUsageBar");
-    const ccStatusMessageEl = document.getElementById("ccStatusMessage");
-    const ccDueInfoEl       = document.getElementById("ccDueInfo");
-    const ccProjectionEl    = document.getElementById("ccProjection");
-    const ccSafeDailyEl     = document.getElementById("ccSafeDaily");
-    const ccCardBreakdownEl = document.getElementById("ccCardBreakdown");
-    const ccTopCategoriesEl = document.getElementById("ccTopCategories");
+    const ccStatusEl           = document.getElementById("ccStatus");
+    const ccContentEl          = document.getElementById("ccContent");
+    const ccOutstandingBoxEl   = document.getElementById("ccOutstandingBox");
+    const ccOutstandingLabelEl = document.getElementById("ccOutstandingLabel");
+    const ccOutstandingAmountEl = document.getElementById("ccOutstandingAmount");
+    const ccOutstandingMetaEl  = document.getElementById("ccOutstandingMeta");
+    const ccAffordCardEl       = document.getElementById("ccAffordCard");
+    const ccAffordTopEl        = document.getElementById("ccAffordTop");
+    const ccAffordLabelEl      = document.getElementById("ccAffordLabel");
+    const ccAffordDetailEl     = document.getElementById("ccAffordDetail");
+    const ccAffCashEl          = document.getElementById("ccAffCash");
+    const ccAffIncomeEl        = document.getElementById("ccAffIncome");
+    const ccAffAvailableEl     = document.getElementById("ccAffAvailable");
+    const ccAffBillEl          = document.getElementById("ccAffBill");
+    const ccAffExpensesEl      = document.getElementById("ccAffExpenses");
+    const ccAffObligationsEl   = document.getElementById("ccAffObligations");
+    const ccAffSavingsEl       = document.getElementById("ccAffSavings");
+    const ccCurrentAmountEl    = document.getElementById("ccCurrentAmount");
+    const ccUsageBarEl         = document.getElementById("ccUsageBar");
+    const ccProjectionEl       = document.getElementById("ccProjection");
+    const ccCardBreakdownEl    = document.getElementById("ccCardBreakdown");
+    const ccTopCategoriesEl    = document.getElementById("ccTopCategories");
+
+    // Static element, wired once — tap the affordability card to see
+    // the full breakdown behind the verdict.
+    ccAffordTopEl.addEventListener("click", function () {
+      const open = ccAffordDetailEl.style.display === "block";
+      ccAffordDetailEl.style.display = open ? "none" : "block";
+    });
 
     function loadCCAdvisor() {
       const cached = loadCache("cc");
@@ -3403,49 +3439,70 @@
       ccStatusEl.textContent = "";
       ccContentEl.style.display = "block";
 
-      ccSpendAmountEl.textContent = "₹" + cc.cycleSpend.toLocaleString("en-IN");
-      ccCycleDatesEl.textContent = cc.cycleStart + " → " + cc.cycleEnd +
-        "  ·  " + cc.txnCount + " transaction" + (cc.txnCount === 1 ? "" : "s");
+      const out = cc.outstanding;
 
-      ccUsageLabelEl.textContent = cc.usagePct + "% of ₹" + cc.limit.toLocaleString("en-IN");
-      ccUsageBarEl.style.width = Math.min(cc.usagePct, 100) + "%";
-
-      // Colour and message depend on how close to the limit we are
-      let barColor = "var(--color-primary)";
-      let statusText = "Usage healthy";
-      let pillClass = "success";
-
-      if (cc.status === "alert") {
-        barColor = "var(--color-danger)";
-        statusText = "Alert: hit 30% of limit";
-        pillClass = "danger";
-      } else if (cc.status === "warning") {
-        barColor = "var(--color-warning)";
-        statusText = "Warning: crossed 25% of limit";
-        pillClass = "warning";
+      // Outstanding bill hero — three states: nothing owed yet, already
+      // paid, or awaiting payment (possibly overdue). This is the REAL
+      // due bill (the cycle that already closed), not a hypothetical
+      // future one — see the rebuild note above buildCCAdvisor's markup.
+      if (!out || out.amount === 0) {
+        ccOutstandingLabelEl.textContent = "Bill due";
+        ccOutstandingAmountEl.textContent = "₹0";
+        ccOutstandingMetaEl.textContent = "No card spend last cycle.";
+      } else if (out.isPaid) {
+        ccOutstandingLabelEl.textContent = "Last bill — paid";
+        ccOutstandingAmountEl.textContent = "₹" + out.amount.toLocaleString("en-IN");
+        ccOutstandingMetaEl.textContent = out.cycleStart + " → " + out.cycleEnd;
+      } else {
+        ccOutstandingLabelEl.textContent = out.isOverdue ? "Overdue" : "Bill due";
+        ccOutstandingAmountEl.textContent = "₹" + out.amount.toLocaleString("en-IN");
+        const dueText = out.isOverdue
+          ? Math.abs(out.daysUntilDue) + " day" + (Math.abs(out.daysUntilDue) === 1 ? "" : "s") + " overdue"
+          : out.daysUntilDue + " day" + (out.daysUntilDue === 1 ? "" : "s") + " left";
+        ccOutstandingMetaEl.textContent = "Closed " + out.cycleEnd + " · due " + out.dueDate + " (" + dueText + ")";
       }
 
-      ccUsageBarEl.style.background = barColor;
-      ccStatusMessageEl.innerHTML = `<span class="status-pill ${pillClass}">${statusText}</span>`;
-
-      ccDueInfoEl.textContent =
-        cc.daysLeft + " day" + (cc.daysLeft === 1 ? "" : "s") + " left in cycle · Due " +
-        cc.dueDate + " (" + cc.daysUntilDue + " days)";
-
-      ccProjectionEl.textContent =
-        "Projected: ₹" + cc.projected.toLocaleString("en-IN") + " (" + cc.projectedPct + "%)" +
-        "  ·  Remaining limit: ₹" + cc.remaining.toLocaleString("en-IN");
-
-      ccSafeDailyEl.textContent = cc.safeDaily > 0
-        ? "Safe to spend: ₹" + cc.safeDaily.toLocaleString("en-IN") + "/day to stay under 30%"
-        : "Avoid further card spending to stay under 30%";
-
-      // Per-card breakdown
-      ccCardBreakdownEl.innerHTML = "";
-      if (cc.cardBreakdown.length === 0) {
-        ccCardBreakdownEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💳</span><p>No card transactions this cycle.</p></div>";
+      // Affordability — only meaningful when there's a real, unpaid bill.
+      if (cc.affordability) {
+        const af = cc.affordability;
+        ccAffordCardEl.style.display = "";
+        ccAffordLabelEl.innerHTML = af.canAfford
+          ? '<span class="status-pill success">Yes, you can pay it</span> <span style="margin-left:8px;">₹' + af.net.toLocaleString("en-IN") + ' left after</span>'
+          : '<span class="status-pill danger">This would eat into next month</span> <span style="margin-left:8px;">₹' + Math.abs(af.net).toLocaleString("en-IN") + ' short</span>';
+        ccAffCashEl.textContent = "₹" + af.cashBalance.toLocaleString("en-IN");
+        ccAffIncomeEl.textContent = "₹" + af.recentIncome.toLocaleString("en-IN");
+        ccAffAvailableEl.textContent = "₹" + af.available.toLocaleString("en-IN");
+        ccAffBillEl.textContent = "− ₹" + af.billAmount.toLocaleString("en-IN");
+        ccAffExpensesEl.textContent = "− ₹" + af.monthlyExpenses.toLocaleString("en-IN");
+        ccAffObligationsEl.textContent = "− ₹" + af.fixedObligations.toLocaleString("en-IN");
+        ccAffSavingsEl.textContent = "− ₹" + af.savingsGoal.toLocaleString("en-IN");
       } else {
-        cc.cardBreakdown.forEach(function (entry) {
+        ccAffordCardEl.style.display = "none";
+        ccAffordDetailEl.style.display = "none";
+      }
+
+      // Current, still-accumulating cycle — not due yet, kept clearly
+      // separate from the outstanding bill above.
+      const cur = cc.current;
+      ccCurrentAmountEl.textContent = "₹" + cur.spend.toLocaleString("en-IN");
+      ccUsageBarEl.style.width = Math.min(cur.usagePct, 100) + "%";
+      let barColor = "var(--color-primary)";
+      if (cur.status === "alert") barColor = "var(--color-danger)";
+      else if (cur.status === "warning") barColor = "var(--color-warning)";
+      ccUsageBarEl.style.background = barColor;
+      ccProjectionEl.textContent = cur.cycleStart + " → " + cur.cycleEnd +
+        "  ·  projected ₹" + cur.projected.toLocaleString("en-IN") + " (" + cur.projectedPct + "%)" +
+        "  ·  " + cur.daysLeft + " day" + (cur.daysLeft === 1 ? "" : "s") + " left";
+
+      // Per-card breakdown — for the outstanding bill if there is one
+      // (that's the amount you're actually being asked about), falling
+      // back to the current cycle if not (e.g. very first use).
+      const cardData = (out && out.amount > 0) ? out.cardBreakdown : cc.cardBreakdown;
+      ccCardBreakdownEl.innerHTML = "";
+      if (!cardData || cardData.length === 0) {
+        ccCardBreakdownEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💳</span><p>No card transactions.</p></div>";
+      } else {
+        cardData.forEach(function (entry) {
           const row = document.createElement("div");
           row.className = "category-row";
           row.innerHTML = `
@@ -3458,25 +3515,52 @@
         });
       }
 
-      // Top categories, same bar style used elsewhere
+      // Top categories for the outstanding bill, tap-to-expand top
+      // transactions — same accordion pattern as Analysis's category
+      // list, reused rather than rebuilt.
+      const topCats = (out && out.amount > 0) ? out.topCategories : [];
       ccTopCategoriesEl.innerHTML = "";
-      if (cc.topCategories.length === 0) {
-        ccTopCategoriesEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💳</span><p>No card transactions yet.</p></div>";
+      if (topCats.length === 0) {
+        ccTopCategoriesEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💳</span><p>No card transactions in the last bill.</p></div>";
       } else {
-        const maxAmount = cc.topCategories[0].amount;
-        cc.topCategories.forEach(function (entry) {
+        const maxAmount = topCats[0].amount;
+        topCats.forEach(function (entry) {
           const percentOfMax = maxAmount > 0 ? Math.round((entry.amount / maxAmount) * 100) : 0;
+          const topTxns = entry.topTransactions || [];
+          const detailHtml = topTxns.length > 0
+            ? topTxns.map(function (tx) {
+                return `
+                  <div class="category-txn-line">
+                    <span>${escapeHtml(tx.note) || "(no note)"} · ${tx.date}</span>
+                    <span>₹${tx.amount.toLocaleString("en-IN")}</span>
+                  </div>
+                `;
+              }).join("")
+            : `<p style="font-size:0.85rem; color:var(--text-secondary); margin:0;">No transactions found.</p>`;
+
           const row = document.createElement("div");
           row.className = "category-row";
           row.innerHTML = `
-            <div class="category-top">
+            <div class="category-top" style="cursor:pointer;">
               ${categoryBadgeHtml(entry.category)}
               <span>₹${entry.amount.toLocaleString("en-IN")}</span>
             </div>
             <div class="category-bar-track">
               <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
             </div>
+            <div class="category-detail" style="display:none;">
+              <p style="font-size:0.78rem; color:var(--text-secondary); margin:10px 0 6px;">Top ${topTxns.length} in ${entry.category}</p>
+              ${detailHtml}
+            </div>
           `;
+
+          const detailEl = row.querySelector(".category-detail");
+          row.querySelector(".category-top").addEventListener("click", function () {
+            const alreadyOpen = detailEl.style.display !== "none";
+            ccTopCategoriesEl.querySelectorAll(".category-detail").forEach(function (d) { d.style.display = "none"; });
+            detailEl.style.display = alreadyOpen ? "none" : "block";
+          });
+
           ccTopCategoriesEl.appendChild(row);
         });
       }

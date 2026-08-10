@@ -761,6 +761,26 @@ important first:
 Verified everything with Node tests using known inputs before shipping,
 same rigor as every other fix today — not just a read-through.
 
+**CC Advisor rebuilt (2026-08-10): done.** User asked for a "drastic"
+UX improvement, with one condition: check the underlying math is sound
+first. That check found a real, previously-unknown bug — the old code
+only ever tracked ONE billing cycle (whichever one "today" falls
+inside), so for roughly 70% of any month (the 19th through the 9th of
+the next month) the "Payment due" date shown described a brand-new
+cycle two months away, not the bill that had actually just closed and
+was awaiting payment. Fixed by tracking an "outstanding" (most recently
+closed, real near-term bill) and a "current" (still running, not due
+yet) cycle separately, always. Also added the actual "drastic" part:
+an affordability check answering "can I pay this without hurting next
+month" directly — cash + recent income vs. bill + monthly expenses +
+this month's Rent/EMI + savings goal — using data the app already has,
+nothing new to enter. Shown as an interactive mockup first, per the
+"show before building" rule; the real build reused existing UI patterns
+(hero card, tap-to-expand accordion already built for Analysis) rather
+than new ones. Verified with an 8-case Node test (including the exact
+bug scenario and a year-rollover case) before shipping. Full detail:
+[docs/features/cc-advisor.md](docs/features/cc-advisor.md).
+
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as
 categories at all (a category should group *varied* things — breakfast,
 lunch, dinner all fit under Food; rent has nothing else "under" it) and
@@ -796,7 +816,11 @@ detected and routed, not picked from a category list.
 - Goal: one transaction, one place to see its full story.
 
 **Phase 5 — Reliability pass** (folds in an already-flagged, not-yet-started item)
-- Re-check CC Advisor's own math for accuracy.
+- ~~Re-check CC Advisor's own math for accuracy.~~ **Done 2026-08-10**,
+  see "CC Advisor rebuilt" note above — found and fixed a real due-date
+  bug, plus added the affordability check. Not done as part of "Phase
+  5" formally (done ahead, as its own standalone request), but closes
+  this line item.
 - Re-check AI Advisor / Gemini tips still make sense once category/type splits land.
 
 **Open questions for the user, not yet answered:**
