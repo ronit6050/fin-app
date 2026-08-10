@@ -551,25 +551,47 @@ it and what to log.
 
 **Digital wallet double-counting — fixed 2026-08-10.** Topping up a
 wallet (e.g. PayZapp) and then spending from it were both ending up as
-separate debit rows, double-counting the same money. Root cause: this
-SMS parser's `ruleParser` checks for the word "wallet"/"payzapp"
-*before* checking for "upi"/"vpa", so a bank-to-wallet top-up transfer
-(really just a UPI payment — real SMS: "Sent Rs.4625 From HDFC Bank A/C
-*8774 To PAYZAPP WALLET") gets `mode: "wallet"`, identical-looking to a
-genuine small in-wallet purchase (real SMS: "Rs.49 Deducted From
-PayZapp Wallet"). The one reliable difference: a top-up's SMS wording
-produces a real `Counterparty` value (mentioning "wallet"/"payzapp"),
-while a real purchase's SMS never matches the parser's "to/at/towards/
-for" counterparty pattern at all, so its `Counterparty` always comes out
-blank. New `isWalletTopUp(mode, counterparty)` in `PWA.js` uses exactly
-that gap — mode is "wallet" AND counterparty is non-blank and mentions
-"wallet"/"payzapp" — and both `getTodaySummary` and `getMonthlyAnalysis`
-now skip a debit row that matches it, same pattern as the credit-card-
-bill-payment fix. Verified against the user's real SMS text with a
-standalone Node test before shipping (all 4 cases passed) — same
-discipline as every other fix in this project. The top-up row still
-shows up in Pending for a note/category like any other transaction —
-it's excluded from spend totals only, not hidden.
+separate debit rows, double-counting the same money.
+
+First attempt used `Mode` ("wallet" vs "upi") to tell a top-up apart
+from a real purchase — wrong, caught by checking real rows in the
+user's actual sheet: an actual top-up (recovered later via a bank
+statement import, Channel "Import"/Source "Bank Statement", **not** the
+live SMS path) had `Mode: "upi"`, not `"wallet"`. Also, a genuine ₹1
+test purchase had its `Counterparty` filled in as "PayZapp Wallet" too
+(by the AI clean-up step, `verifyWithAI`/Gemini, in the SMS parser) —
+so neither `Mode` nor `Counterparty` alone can reliably tell the two
+apart.
+
+What actually holds up across every real row checked (3 real top-ups +
+6 real small purchases, amounts ₹1–₹8000): a top-up is a full bank-to-
+wallet transfer, so it always carries a real UPI **Reference** number
+(e.g. `963466680709`). Every genuine small in-wallet purchase had a
+**blank** Reference — the wallet just deducts from its own balance
+internally, no separate transfer reference gets generated. Final rule,
+`isWalletTopUp(counterparty, reference)` in `PWA.js`: Counterparty
+mentions "wallet"/"payzapp" AND Reference is non-blank = a top-up, skip
+it from spend. Wired into both `getTodaySummary` and
+`getMonthlyAnalysis`, same pattern as the credit-card-bill-payment fix.
+Verified against all 10 real cases with a standalone Node test before
+shipping (both attempts, first version caught as wrong before it did
+any damage since the user checked real sheet data before it needed a
+real-world wait-and-see). The top-up row still shows up in Pending for
+a note/category like any other transaction — it's excluded from spend
+totals only, not hidden.
+
+**Still an open, separate question, not investigated:** *why* did this
+particular top-up need to be recovered via a bank statement import in
+the first place, instead of being caught live by Tasker/the SMS parser
+like your everyday wallet purchases are? The SMS text itself
+("Sent Rs.4625 From HDFC Bank A/C *8774 To PAYZAPP WALLET") should pass
+`isTransactionSMS`'s checks fine on the *message body* — one real
+possibility is the SMS *sender ID* for this specific alert doesn't
+contain any of the hardcoded bank names (`isTransactionSMS` checks the
+sender against a fixed list: HDFC/FED/SBI/ICICI/AXIS/KOTAK/YES/PAYTM),
+which some UPI transfer confirmations use a generic sender for instead
+of the bank's own ID. Not fixed — would need the actual sender ID from
+a future top-up to confirm before touching that logic.
 
 ## PROPOSED PLAN: Category/Type restructure + cross-tab linking (2026-08-09)
 

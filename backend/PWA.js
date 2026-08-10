@@ -802,10 +802,11 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
       const note     = txnData[i][12] || "";
       const day      = d.getDate();
       const mode     = txnData[i][4] || "";
+      const reference = txnData[i][6] || "";
       const counterparty = txnData[i][7] || "";
 
       if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
-      if(type === "debit" && isWalletTopUp(mode, counterparty)) continue; // money moved into your own wallet, not spent yet — the real spend gets counted separately, below, as each wallet purchase happens
+      if(type === "debit" && isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet — the real spend gets counted separately, below, as each wallet purchase happens
 
       if(type === "debit"){
         totalDebit += amount;
@@ -935,22 +936,24 @@ function isCreditCardBillPayment(mode, counterparty, note){
 // the money moved in, then counted AGAIN as each small purchase was
 // later made from that same wallet balance.
 //
-// Verified against the user's real SMS: a wallet top-up ("Sent Rs.4625
-// From HDFC Bank A/C *8774 To PAYZAPP WALLET") gets parsed by the SMS
-// script with mode "wallet" (same as a real purchase — the parser sees
-// the word "wallet" either way) and Counterparty "payzapp wallet..." —
-// but a REAL purchase SMS ("Rs.49 Deducted From PayZapp Wallet") has no
-// "to/at/towards/for" wording for the parser to catch, so its
-// Counterparty always comes out blank. That gap — mode is "wallet" but
-// there's also a real counterparty mentioning the wallet — only happens
-// for a top-up, never a real purchase, so it's safe to use as the
-// signal here.
-function isWalletTopUp(mode, counterparty){
-  const m = (mode || "").toString().toLowerCase();
-  if(m !== "wallet") return false; // only wallet-mode debits can possibly be a top-up
+// First version of this check used Mode ("wallet" vs "upi"), but real
+// data proved that wrong: an actual top-up row (recovered via a bank
+// statement import) had Mode "upi", not "wallet", and a genuine small
+// real purchase had its Counterparty filled in as "PayZapp Wallet" too
+// (by the AI clean-up step) — so neither Mode nor Counterparty alone
+// can tell them apart.
+//
+// What's actually reliable across every real row checked: a top-up is
+// a full bank-to-wallet transfer, so it always carries a real UPI
+// Reference number. Every genuine small in-wallet purchase (₹49, ₹42,
+// ₹40, ₹404, ₹120, and a ₹1 test) had a BLANK Reference — the wallet
+// just deducts from its own balance, no separate transfer reference is
+// generated. So: mentions the wallet by name AND has a reference number
+// = a top-up. Mentions the wallet but has no reference = a real spend.
+function isWalletTopUp(counterparty, reference){
   const cp = (counterparty || "").toString().trim().toLowerCase();
-  if(!cp) return false; // a real purchase from the wallet never has a counterparty at all
-  return cp.includes("wallet") || cp.includes("payzapp");
+  if(!(cp.includes("wallet") || cp.includes("payzapp"))) return false; // not about a wallet at all
+  return (reference || "").toString().trim().length > 0;
 }
 
 // Adds up everything spent today, from both bank/UPI and cash, by category.
@@ -974,10 +977,11 @@ function getTodaySummary(txnData, cashData){
     const d = Utilities.formatDate(new Date(rawDate), Session.getScriptTimeZone(), "yyyy-MM-dd");
     if(d === today && (txnData[i][3] || "").toString().toLowerCase() === "debit"){
       const mode = txnData[i][4] || "";
+      const reference = txnData[i][6] || "";
       const counterparty = txnData[i][7] || "";
       const note = txnData[i][12] || "";
       if(isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
-      if(isWalletTopUp(mode, counterparty)) continue; // money moved into your own wallet, not spent yet
+      if(isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet
 
       const amount   = Number(txnData[i][5]) || 0;
       const category = txnData[i][13] || "Other";
