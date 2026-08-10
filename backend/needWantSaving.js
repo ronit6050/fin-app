@@ -64,11 +64,23 @@ function getFinancialSubtype(counterparty) {
 // this function, so the old rule ("skip if category is Lent") could
 // never fire. Found 2026-08-09 when the user noticed the app still
 // asking Need/Want/Saving for a transaction they'd noted "lent".
+//
+// Uses whole-word matching (\b...\b), NOT a plain substring check — a
+// plain substring check was shipped first and immediately caused a much
+// worse silent bug (found 2026-08-10): "lent" as a bare substring also
+// matches inside "exceLLENT", "siLENT", "taLENT", "caLENDar",
+// "spLENDid", etc. Since this function's result silently skips saving
+// the type (see the caller in PWA.js's saveTransactionNote) rather than
+// showing any error, real transactions with completely ordinary
+// merchant names or notes were having their Need/Want/Saving/Investment
+// choice silently dropped, while the save still reported success. Word
+// boundaries mean "lent" only matches as its own word, not buried
+// inside a longer one.
+var LENDING_PATTERNS = [/\blent\b/, /\blend\b/, /\bborrowed\b/, /\bpaid back\b/, /\bgave back\b/, /\breturned\b/];
 function isLendingTransfer(counterparty, note) {
   var text = ((counterparty || "") + " " + (note || "")).toString().toLowerCase();
-  var keywords = ["lent", "lend", "borrowed", "paid back", "gave back", "returned"];
-  for (var i = 0; i < keywords.length; i++) {
-    if (text.indexOf(keywords[i]) !== -1) return true;
+  for (var i = 0; i < LENDING_PATTERNS.length; i++) {
+    if (LENDING_PATTERNS[i].test(text)) return true;
   }
   return false;
 }
@@ -181,6 +193,15 @@ function testNeedWantSaving() {
     getSuggestedType("debit", "Financial", "TEST FRIEND", 100, null, "lent"));
   Logger.log("Test 2b (borrowed FROM a friend, expect null): " +
     getSuggestedType("debit", "Financial", "TEST FRIEND", 500, null, "borrowed from him"));
+  // Regression test for the 2026-08-10 false-positive bug: "lent" as a
+  // plain substring also matched inside these completely ordinary words.
+  // Must NOT be excluded — a real type should be suggested/allowed.
+  Logger.log("Test 2c (\"excellent\" in note, expect NOT null): " +
+    getSuggestedType("debit", "Food", "TEST RESTAURANT", 400, null, "excellent food"));
+  Logger.log("Test 2d (\"CALENDAR\" in counterparty, expect NOT null): " +
+    getSuggestedType("debit", "Shopping", "CALENDAR APP SUBSCRIPTION", 200, null, ""));
+  Logger.log("Test 2e (\"talent\" in note, expect NOT null): " +
+    getSuggestedType("debit", "Education", "TEST ACADEMY", 5000, null, "talent academy fees"));
   Logger.log("Test 3 (Other excluded, expect null): " + getSuggestedType("debit", "Other", "TEST RANDOM PERSON", 500));
   Logger.log("Test 4 (cold start, no subtype match, expect Need): " + getSuggestedType("debit", "Food", "TEST ZEPTO", 274));
 

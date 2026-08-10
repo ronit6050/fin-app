@@ -1423,8 +1423,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-1";
-    const APP_CHANGELOG = "Fixed: lending money to someone (or repaying a loan) no longer asks Need/Want/Saving/Investment — that question now correctly disappears the moment your note says \"lent\"/\"borrowed\", since it isn't spending in the first place.";
+    const APP_VERSION = "2026-08-10-2";
+    const APP_CHANGELOG = "Fixed a bug from the last update: ordinary transactions with words like \"excellent\" or \"calendar\" in the note were silently not saving their Need/Want/Saving/Investment tag, even though it said \"Saved.\" This is why your recent History edits didn't stick. Fixed, and the app will now clearly say if a type didn't save instead of staying silent.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1665,11 +1665,17 @@
     // frontend and Apps Script) so the toggle can hide itself instantly
     // as you type, without waiting on a server round-trip. The backend
     // enforces the real rule regardless of what this sends.
+    //
+    // Whole-word matching, NOT a plain substring check — a substring
+    // version shipped first and matched "lent" inside "excellent",
+    // "silent", "talent", "calendar", "splendid", etc., silently hiding
+    // (and, on the backend, silently not saving) the type for completely
+    // ordinary transactions. Fixed 2026-08-10 after the user's real save
+    // attempts across several days appeared to "vanish" on refresh.
+    const LENDING_PATTERNS = [/\blent\b/, /\blend\b/, /\bborrowed\b/, /\bpaid back\b/, /\bgave back\b/, /\breturned\b/];
     function isLendingNote(text) {
       const t = (text || "").toString().toLowerCase();
-      return ["lent", "lend", "borrowed", "paid back", "gave back", "returned"].some(function (kw) {
-        return t.indexOf(kw) !== -1;
-      });
+      return LENDING_PATTERNS.some(function (p) { return p.test(t); });
     }
 
     // Hides the Need/Want/Saving/Investment toggle live if the note looks
@@ -2197,21 +2203,29 @@
           type:         savedType
         })
           .then(function (data) {
-            if (!data.ok) restoreAfterFailedSave(data.error);
-            // success: nothing more to do, it's already off the screen
+            if (!data.ok) {
+              restoreAfterFailedSave("Couldn't save (" + data.error + ") — check your connection and tap Save again.");
+            } else if (data.typeRequested && !data.typeSaved) {
+              // Note/category saved fine, but the Need/Want/Saving/Investment
+              // pick specifically didn't (e.g. recognized as a loan/repayment
+              // and correctly excluded) — treat as needing another look
+              // rather than silently losing that half of what you picked.
+              restoreAfterFailedSave("Note & category saved, but the type wasn't (this looks like a loan/repayment) — check and re-save if that's wrong.");
+            }
+            // otherwise: fully saved, nothing more to do, it's already off the screen
           })
           .catch(function (err) {
-            restoreAfterFailedSave(err.message);
+            restoreAfterFailedSave("Couldn't save (" + err.message + ") — check your connection and tap Save again.");
           });
 
-        function restoreAfterFailedSave(errorMessage) {
+        function restoreAfterFailedSave(message) {
           allPending.unshift(txn);
           shownCount++;
           updatePendingStatusText();
           saveCache("pending", allPending);
 
           resultEl.style.color = "var(--color-danger)";
-          resultEl.textContent = "Couldn't save (" + errorMessage + ") — check your connection and tap Save again.";
+          resultEl.textContent = message;
           pendingListEl.insertBefore(card, pendingListEl.firstChild);
         }
       });
@@ -4009,7 +4023,16 @@
           amount:       parseFloat(amountInput.value) || txn.amount
         })
           .then(function (data) {
-            resultEl.textContent = data.ok ? "Saved." : data.error;
+            if (!data.ok) {
+              resultEl.textContent = data.error;
+            } else if (data.typeRequested && !data.typeSaved) {
+              // Note/category saved fine, but the type specifically didn't
+              // (e.g. recognized as a loan/repayment) — say so plainly
+              // rather than a generic "Saved." that would hide the gap.
+              resultEl.textContent = "Note & category saved, but the type wasn't (looks like a loan/repayment).";
+            } else {
+              resultEl.textContent = "Saved.";
+            }
           })
           .catch(function (err) {
             resultEl.textContent = err.message;

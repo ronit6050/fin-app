@@ -42,6 +42,43 @@ suggestions for the "missing transactions" half of Reconciliation only.
 Found by reviewing every `getSuggestedType` call site while making this
 fix, not reported by the user.
 
+**Fixed 2026-08-10 — the fix above shipped with a much worse bug of its
+own, caught the same day.** `isLendingTransfer`'s first version used a
+plain substring check (`text.indexOf("lent") !== -1`), which also matches
+"lent" buried inside completely ordinary words: **exceLLENT, siLENT,
+taLENT, caLENDar, spLENDid**, etc. Since a match here *silently* skips
+saving the type (by design — see above), real Need/Want/Saving/Investment
+choices on completely ordinary transactions were being dropped, while
+`saveTransactionNote` still returned `{ ok: true }` and the UI still said
+"Saved." User hit this directly: went through several days of History
+re-selecting types, tapped Save on each one, refreshed, and found the
+selections gone — caused by this, not by forgetting to tap Save (first
+suspected and ruled out by asking).
+
+Two-part fix:
+1. **Root cause** — `isLendingTransfer`/`isLendingNote` (frontend
+   mirror) now use whole-word regex matching (`\blent\b`, `\bborrowed\b`,
+   etc.) instead of plain substrings. Added a permanent regression test
+   for this exact class of bug (`testNeedWantSaving`'s Tests 2c-2e —
+   "excellent", "CALENDAR", "talent" must NOT be excluded).
+2. **Defense in depth, so a *future* silent-skip reason (there could be
+   others) is never invisible again** — `saveTransactionNote` now
+   returns `typeRequested`/`typeSaved` alongside `ok`. All three save
+   flows (`buildPendingItem`, `buildHistoryItem`,
+   `submitReconciledTransactions` → `insertReconciledTransactions`, which
+   gained the same `isLendingTransfer` guard `saveTransactionNote`
+   already had) now check this and show *"Note & category saved, but the
+   type wasn't"* instead of a generic "Saved." when the two diverge —
+   Pending's optimistic-save flow treats this the same as a failed save
+   (card returns to the top with that message) rather than silently
+   accepting a partial save.
+
+Verified end-to-end with a Node test that reproduces the exact scenario
+(save a transaction noted "excellent dinner", confirm the type is
+actually written to column Q, not silently dropped) before shipping —
+see `scripts`/session notes for the harness; not committed to this repo
+since it's a throwaway verification script, not a maintained test suite.
+
 **Fixed 2026-08-09 — the type you picked wasn't actually being saved per
 transaction.** `saveTransactionNote` only ever fed the choice into
 `TypeVotes` (a shared per-merchant pool used for future suggestions) —

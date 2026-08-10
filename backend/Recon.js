@@ -404,6 +404,12 @@ function insertReconciledTransactions(txns){
     let added = 0;
 
     txns.forEach(function(t){
+      // Same server-side safety net saveTransactionNote has — never
+      // record a Need/Want/Saving/Investment type for a recognized
+      // loan/repayment, even if one somehow came through.
+      const isLending = isLendingTransfer(t.name, t.note);
+      const typeToSave = isLending ? "" : (t.needWantSaving || "");
+
       sheet.appendRow([
         t.date,             // Date
         formattedTime,      // Time
@@ -421,15 +427,15 @@ function insertReconciledTransactions(txns){
         t.category || "",   // Category
         "",                 // TelegramMsg
         "YES",               // Processed
-        t.needWantSaving || "" // NeedWantSaving (column Q) — the actually-chosen type, same as saveTransactionNote now stores
+        typeToSave           // NeedWantSaving (column Q) — the actually-chosen type, same as saveTransactionNote now stores
       ]);
       added++;
 
       if(t.name && t.category){
         handleCategoryCorrection(t.name, t.category, "Other");
       }
-      if(t.name && t.needWantSaving){
-        recordTypeVote(t.name, Number(t.amount) || 0, t.needWantSaving);
+      if(t.name && typeToSave){
+        recordTypeVote(t.name, Number(t.amount) || 0, typeToSave);
       }
     });
 

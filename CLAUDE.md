@@ -534,7 +534,23 @@ toggle now hides live as you type a matching note, in all three screens.
 Also fixed in the same pass: a broken variable reference in `Recon.js`
 (`typeMemoryData`, a leftover from the earlier rename) that was silently
 breaking suggestions for half of Reconciliation — found by reviewing
-every call site while making this fix, not user-reported. Full detail:
+every call site while making this fix, not user-reported.
+
+**That same-day fix shipped a worse bug — caught and fixed within the
+hour (2026-08-10).** The word "lent" was matched as a plain substring,
+which also matches inside "exceLLENT", "siLENT", "taLENT", "caLENDar",
+"spLENDid" — so ordinary transactions were silently having their
+Need/Want/Saving/Investment choice dropped while still showing "Saved."
+User hit this directly: re-tagged several days of History, tapped Save
+each time, refreshed, found the selections gone. First suspected (and
+ruled out by asking) forgetting to tap Save. Fixed properly: whole-word
+matching (`\blent\b` etc, not substrings) plus a permanent regression
+test for this exact bug class; `saveTransactionNote` now also reports
+`typeRequested`/`typeSaved` separately so a *future* silent-skip reason
+can never look identical to success again — all three save flows show
+"saved, but the type wasn't" instead of a generic "Saved." when that
+happens. Verified end-to-end with a Node test reproducing the exact
+scenario before shipping. Full detail:
 [docs/features/need-want-saving.md](docs/features/need-want-saving.md).
 
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as

@@ -974,6 +974,14 @@ function saveTransactionNote(row, note, category, counterparty, type, amount){
     // the frontend's toggle was shown before a lending note was typed
     // (Pending can't know until the note exists) and something got
     // selected anyway, this makes sure it's never actually recorded.
+    //
+    // typeSaved is reported back below — a silent skip here once looked
+    // identical to success from the caller's side (found 2026-08-10: a
+    // false-positive bug in isLendingTransfer meant real Need/Want/Saving
+    // choices were being silently dropped on ordinary transactions, while
+    // note/category still saved fine and the response still said "ok").
+    // Never trust a save as fully complete without checking this again.
+    let typeSaved = false;
     if(counterparty && type && !isLendingTransfer(counterparty, note)){
       const voteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
       recordTypeVote(counterparty, voteAmount, type);
@@ -986,6 +994,7 @@ function saveTransactionNote(row, note, category, counterparty, type, amount){
       // same merchant. Found and fixed 2026-08-09 after the user noticed
       // old "Want" answers were showing as "Need" in History.
       sheet.getRange(row, 17).setValue(type); // column Q
+      typeSaved = true;
     }
 
     // Remember this note against the merchant (+ amount band) so it can be
@@ -995,7 +1004,7 @@ function saveTransactionNote(row, note, category, counterparty, type, amount){
       recordNoteUsage(counterparty, noteAmount, note);
     }
 
-    return { ok:true };
+    return { ok:true, typeRequested: !!type, typeSaved: typeSaved };
   }catch(err){
     return { ok:false, error: err.toString() };
   }
