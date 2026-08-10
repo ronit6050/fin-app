@@ -1199,6 +1199,7 @@
               <div class="category-txn-line"><span>This bill</span><span id="ccAffBill"></span></div>
               <div class="category-txn-line"><span>Monthly expenses</span><span id="ccAffExpenses"></span></div>
               <div class="category-txn-line"><span>Rent and EMI</span><span id="ccAffObligations"></span></div>
+              <div class="category-txn-line"><span>Invested this month</span><span id="ccAffInvested"></span></div>
               <div class="category-txn-line"><span>Savings goal</span><span id="ccAffSavings"></span></div>
             </div>
           </div>
@@ -1231,6 +1232,7 @@
               <div class="category-txn-line"><span>Projected cycle total</span><span id="ccCurAffProjected"></span></div>
               <div class="category-txn-line"><span>Monthly expenses</span><span id="ccCurAffExpenses"></span></div>
               <div class="category-txn-line"><span>Rent and EMI</span><span id="ccCurAffObligations"></span></div>
+              <div class="category-txn-line"><span>Invested this month</span><span id="ccCurAffInvested"></span></div>
               <div class="category-txn-line"><span>Savings goal</span><span id="ccCurAffSavings"></span></div>
             </div>
           </div>
@@ -1558,8 +1560,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-15";
-    const APP_CHANGELOG = "CC Advisor: added an early warning for the card cycle that's still open (not yet billed) — shows if you're on track to be short by the time it closes, based on the same cash/income/expenses check as the paid-bill screen, so you see it while there's still time to slow down.";
+    const APP_VERSION = "2026-08-10-16";
+    const APP_CHANGELOG = "CC Advisor: \"Invested this month\" is now its own line in the afford-this-bill checks, separate from your Savings goal, since those are different things.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -3413,6 +3415,7 @@
     const ccAffBillEl          = document.getElementById("ccAffBill");
     const ccAffExpensesEl      = document.getElementById("ccAffExpenses");
     const ccAffObligationsEl   = document.getElementById("ccAffObligations");
+    const ccAffInvestedEl      = document.getElementById("ccAffInvested");
     const ccAffSavingsEl       = document.getElementById("ccAffSavings");
     const ccCurrentAmountEl    = document.getElementById("ccCurrentAmount");
     const ccUsageBarEl         = document.getElementById("ccUsageBar");
@@ -3428,6 +3431,7 @@
     const ccCurAffProjectedEl  = document.getElementById("ccCurAffProjected");
     const ccCurAffExpensesEl   = document.getElementById("ccCurAffExpenses");
     const ccCurAffObligationsEl = document.getElementById("ccCurAffObligations");
+    const ccCurAffInvestedEl   = document.getElementById("ccCurAffInvested");
     const ccCurAffSavingsEl    = document.getElementById("ccCurAffSavings");
     const ccCardBreakdownEl    = document.getElementById("ccCardBreakdown");
     const ccTopCategoriesEl    = document.getElementById("ccTopCategories");
@@ -3512,6 +3516,7 @@
         ccAffBillEl.textContent = "− ₹" + af.billAmount.toLocaleString("en-IN");
         ccAffExpensesEl.textContent = "− ₹" + af.monthlyExpenses.toLocaleString("en-IN");
         ccAffObligationsEl.textContent = "− ₹" + af.fixedObligations.toLocaleString("en-IN");
+        ccAffInvestedEl.textContent = "− ₹" + af.invested.toLocaleString("en-IN");
         ccAffSavingsEl.textContent = "− ₹" + af.savingsGoal.toLocaleString("en-IN");
       } else {
         ccAffordCardEl.style.display = "none";
@@ -3550,6 +3555,7 @@
         ccCurAffProjectedEl.textContent = "− ₹" + proj.billAmount.toLocaleString("en-IN");
         ccCurAffExpensesEl.textContent = "− ₹" + proj.monthlyExpenses.toLocaleString("en-IN");
         ccCurAffObligationsEl.textContent = "− ₹" + proj.fixedObligations.toLocaleString("en-IN");
+        ccCurAffInvestedEl.textContent = "− ₹" + proj.invested.toLocaleString("en-IN");
         ccCurAffSavingsEl.textContent = "− ₹" + proj.savingsGoal.toLocaleString("en-IN");
       } else {
         ccCurrentAffordCardEl.style.display = "none";

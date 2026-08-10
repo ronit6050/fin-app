@@ -792,7 +792,10 @@ spend-so-far and a pace-based projection, so a risky month shows up
 while there's still time to slow down. Considered and dropped a
 bigger idea (a typed-in "monthly investment" setting + "wants budget")
 per the user's own call to keep it simple. Verified with a 4-case Node
-test before shipping. See
+test before shipping. Same day, user also caught that "Savings goal"
+and investing were being lumped together in the breakdown — added a
+separate "Invested this month" line (real amount, from Financial
+Events, no new setting) to both affordability cards. See
 [docs/features/cc-advisor.md](docs/features/cc-advisor.md).
 
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as

@@ -188,6 +188,38 @@ projected case (₹8,390 → ₹2,890 short), and a sanity check that the
 projected verdict is never rosier than the spend-so-far one for the
 same inputs. `APP_VERSION` bumped to `2026-08-10-15`.
 
+## Savings goal vs Invested — split into two lines (2026-08-10)
+
+User reviewed a real screenshot of the affordability breakdown and
+flagged that "Savings goal" and investing are two different things to
+them — same distinction the Savings and Investments tabs already keep
+separate in the rest of the app, but the affordability check had been
+lumping investment money in as if it didn't need to be accounted for
+at all (it wasn't in the "needed" total anywhere before this).
+
+Added an "Invested this month" line, kept separate from "Savings goal",
+in both the outstanding-bill card and the current-cycle card. Uses this
+month's REAL invested amount — the same `invested` figure
+`getMonthlyAnalysis` already computes from confirmed Investment
+Financial Events (see
+[financial-events.md](financial-events.md#auto-linking-to-investmentssavings-tabs-phase-2-added-2026-08-10))
+— not a typed-in target. Consistent with the user's own call earlier
+the same day to not add a new Settings field for this.
+
+`getCCAdvisorData`'s third parameter changed from a single
+`fixedObligations` number to the whole `monthTotals` object (i.e. the
+full return value of `getMonthlyAnalysis`, which already has both
+`fixedObligations` and `invested` on it) — `getDashboardData` now
+passes `month` directly instead of `month.fixedObligations`. When
+called standalone (`getCCAdvisor` action, no month data available yet),
+both values are recomputed together via one `getMonthlyAnalysis` call,
+same fallback pattern as before.
+
+Verified with a 2-case Node test: a real invested amount added on top
+of the existing screenshot numbers, and a zero-invested case confirming
+existing behavior is unchanged for anyone with nothing logged yet.
+`APP_VERSION` bumped to `2026-08-10-16`.
+
 ## Open items / not yet done
 
 - Recent-income estimation (35-day Income-category window) hasn't been

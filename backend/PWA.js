@@ -171,7 +171,7 @@ function getDashboardData(){
   const today   = getTodaySummary(txnData, cashData);
   const month   = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, txnData, cashData);
   const cash    = getCashData(cashData);
-  const cc      = getCCAdvisorData(txnData, cashData, month.fixedObligations);
+  const cc      = getCCAdvisorData(txnData, cashData, month);
   const pending = getPendingTransactions(txnData);
 
   // Debts/Savings/Investments each read their own sheet(s) only once
@@ -704,12 +704,12 @@ function applyDebtPayment(row, amount){
 // been paid) separately from the "current," still-accumulating cycle.
 // See docs/features/cc-advisor.md.
 //
-// txnData/cashData/fixedObligations are optional — same batching
-// reasoning as getCashData's comment. fixedObligations (this month's
-// Rent+EMI total, from getMonthlyAnalysis) is passed in by
-// getDashboardData, which already computes it — recomputed here only
-// when called standalone (the "getCCAdvisor" action).
-function getCCAdvisorData(txnData, cashData, fixedObligations){
+// txnData/cashData/monthTotals are optional — same batching reasoning
+// as getCashData's comment. monthTotals ({fixedObligations, invested},
+// from getMonthlyAnalysis) is passed in by getDashboardData, which
+// already computes both — recomputed here only when called standalone
+// (the "getCCAdvisor" action).
+function getCCAdvisorData(txnData, cashData, monthTotals){
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -849,10 +849,13 @@ function getCCAdvisorData(txnData, cashData, fixedObligations){
     }
   }
 
-  let fixedObl = fixedObligations;
+  let fixedObl = monthTotals ? monthTotals.fixedObligations : null;
+  let investedAmt = monthTotals ? monthTotals.invested : null;
   if(fixedObl === undefined || fixedObl === null){
     const now = new Date();
-    fixedObl = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, data, cashData).fixedObligations;
+    const m = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, data, cashData);
+    fixedObl = m.fixedObligations;
+    investedAmt = m.invested;
   }
 
   // "Can you actually pay this without it eating into next month?" —
@@ -861,9 +864,16 @@ function getCCAdvisorData(txnData, cashData, fixedObligations){
   // the CURRENT cycle has cost so far, and what it's on track to cost
   // by the time it closes — so the warning shows up while the cycle is
   // still open, not only after the bill has already landed.
+  //
+  // Savings goal and Invested this month are kept as two separate lines
+  // (not combined) — user flagged 2026-08-10 that they're different
+  // things to them, same distinction the Savings/Investments tabs
+  // already keep. "Invested" is this month's REAL amount already
+  // recognized via Financial Events (see financialEvents.js), not a
+  // typed-in target — no new Settings field needed.
   function computeAffordability(billAmount){
     const available = cashBalance + recentIncome;
-    const needed = billAmount + settings.monthlyExpenses + fixedObl + settings.monthlySaveGoal;
+    const needed = billAmount + settings.monthlyExpenses + fixedObl + investedAmt + settings.monthlySaveGoal;
     const net = available - needed;
     return {
       cashBalance: cashBalance,
@@ -872,6 +882,7 @@ function getCCAdvisorData(txnData, cashData, fixedObligations){
       billAmount: billAmount,
       monthlyExpenses: settings.monthlyExpenses,
       fixedObligations: fixedObl,
+      invested: investedAmt,
       savingsGoal: settings.monthlySaveGoal,
       needed: needed,
       net: net,
