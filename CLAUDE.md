@@ -488,6 +488,82 @@ now a second front door into the same backend, added alongside it.
 
 **Web App deployment settings:** deployed with `"access": "ANYONE_ANONYMOUS"` in `appsscript.json` (unauthenticated at the HTTP layer — this is normal/required for both Telegram webhooks and the PWA to reach it). Real security is entirely inside `doPost`/`verifyGoogleIdToken`, not at the deployment-access level.
 
+## SMS ingestion — a SECOND, separate Apps Script project (found + documented 2026-08-10)
+
+**This was a real gap: this whole project existed and was completely
+unknown/undocumented until 2026-08-10.** Everything above this section
+("finance-bot backend") is one Apps Script project (script ID starting
+`126C_...`, the one bound to the main Sheet). The very first step —
+**turning a raw bank SMS into a new row on the `Transactions` sheet in
+the first place** — turned out to live in a totally different, second
+Apps Script project that nobody had written down anywhere. Found by
+tracing backwards: no function anywhere in `D:\fin-app\backend` ever
+creates a *new* Transactions row from raw text (every function there
+only reads or edits rows that already exist) — so it had to be
+somewhere else. The user confirmed: Tasker forwards every SMS it
+receives to this second script, which decides on its own whether to log
+it and what to log.
+
+- **Local source**: `D:\fin-app\sms-parser-backend` (this repo), synced
+  via `clasp` the same way as `backend/`.
+- **Script ID**: `1q_WLqVdysdbSJGuWkqWYhRy5CONYFqiLVYfd57Dw4EvlZBirocfFMxgc`
+  — unnamed/default name in the Apps Script editor, only one file:
+  `Code.js`.
+- **Deliberately kept separate from the main project**, not merged —
+  decided 2026-08-10. Reasoning: this script is the single most
+  "can't-afford-to-break" path in the whole app (a bug here means a
+  transaction is silently never logged at all, with no error the user
+  would ever see — unlike a PWA bug, which is at least visibly broken
+  and fixable). Merging would also require re-pointing Tasker at a new
+  URL, risking a gap in logging during the switch, for a purely
+  organizational benefit that documenting both projects here already
+  gets us.
+- **What it does** (`Code.js`, `doPost(e)`): receives `{sms, sender,
+  timestamp}` from Tasker → `isTransactionSMS()` filters out OTPs/offers/
+  rewards/etc → `ruleParser()` extracts amount/type/mode/bank/reference/
+  counterparty via regex → if the parse looks shaky (`shouldUseAI()` —
+  no counterparty, counterparty looks like a raw UPI ID, or no
+  reference found), `verifyWithAI()` asks Gemini to double-check just
+  the counterparty/reference → `isDuplicate()` checks the reference
+  against existing rows → `saveTransaction()` appends the new row to
+  `Transactions`. Every step also logs to a separate `Logs` sheet
+  (`logWebhook`) — not the same as the main project's `AILogs`.
+- **Two deployments exist**, same gotcha as the main project: one
+  `@HEAD` (always latest), and one **pinned** version 9, labeled "SMS
+  Send to GS" — Tasker's HTTP task is pointed at whichever URL matches
+  the pinned one, not `@HEAD`. **After any `clasp push` here that should
+  reach Tasker, also run
+  `clasp deploy -i <that deployment id> -d "<what changed>"`** — a plain
+  push alone only updates the editor draft and `@HEAD`, exactly like the
+  main project's `TypeMemory` incident.
+- **Security fix (2026-08-10)**: `GEMINI_API_KEY` used to be hardcoded
+  as plain text directly in `Code.js` — a real, working key sitting in a
+  file about to be committed to a public GitHub repo. Moved to Script
+  Properties (`GEMINI_API_KEY`, set manually in the editor, same pattern
+  as the main project's `GEMINI_KEY`) before this folder was ever added
+  to git, so the old key value never touched git history.
+- **Not yet investigated**: whether the `SHEET_ID` hardcoded in `Code.js`
+  (`1_vlmbWEg6KkFhU7uUdmtPBfVRP_VWDmOjzcCJxF2ruw`) is the exact same
+  spreadsheet the main project is bound to — almost certainly yes (both
+  read/write the same `Transactions` sheet the PWA displays), but never
+  explicitly confirmed since the main project never hardcodes its own
+  Sheet ID anywhere (it's container-bound, so no ID needed there).
+
+**This is also the actual root of the open "digital wallet double-
+counting" bug** (user flagged 2026-08-10, not yet fixed): topping up a
+wallet (e.g. PayZapp) and then spending from it both end up as separate
+debit rows, double-counting the same money. Root cause still being
+narrowed down here — `ruleParser`'s mode detection checks for the word
+"wallet"/"payzapp" *before* checking for "upi"/"vpa", so a bank-to-
+wallet top-up transfer (which is really a UPI payment) can get
+mislabeled `mode: "wallet"`, identical-looking to a genuine small
+in-wallet purchase — the real fix needs an actual sample of the top-up
+SMS's wording (not yet provided) before shipping anything, same
+"verify with real data first" discipline as every other fix in this
+project — see the "Automation phase" section's [need-want-saving.md]
+work and the lending-detection bugs for why guessing at this without a
+real sample has bitten this project before.
+
 ## PROPOSED PLAN: Category/Type restructure + cross-tab linking (2026-08-09)
 
 **Status: this whole multi-phase restructure is still NOT approved/started.**
