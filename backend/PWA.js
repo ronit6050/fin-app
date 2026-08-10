@@ -89,7 +89,7 @@ function handlePwaRequest(data){
   }
 
   if(data.action === "addCashEntry"){
-    return jsonResponse(addCashEntryFromApp(data.type, data.amount, data.note, data.category));
+    return jsonResponse(addCashEntryFromApp(data.type, data.amount, data.note, data.category, data.needWantSaving));
   }
 
   if(data.action === "registerPushToken"){
@@ -210,6 +210,7 @@ function getCashData(cashData){
     const amount   = Number(data[i][4]) || 0;
     const note     = (data[i][5] || "").toString().trim();
     const rawDate  = data[i][1];
+    const needWantSaving = (data[i][10] || "").toString().trim() || null; // column K
 
     if(type === "debit")  balance -= amount;
     if(type === "credit") balance += amount;
@@ -220,10 +221,11 @@ function getCashData(cashData){
     }
 
     recent.push({
-      date:   rawDate ? Utilities.formatDate(new Date(rawDate), Session.getScriptTimeZone(), "dd MMM") : "",
-      type:   type,
-      amount: amount,
-      note:   note
+      date:           rawDate ? Utilities.formatDate(new Date(rawDate), Session.getScriptTimeZone(), "dd MMM") : "",
+      type:           type,
+      amount:         amount,
+      note:           note,
+      needWantSaving: needWantSaving
     });
   }
 
@@ -235,10 +237,23 @@ function getCashData(cashData){
 // Writes one cash entry directly (structured fields, not free-text parsing
 // like Telegram's processCashEntry — same reasoning as the other forms).
 // Source is "PWA" instead of "Telegram" so entries are still traceable.
-function addCashEntryFromApp(type, amount, note, category){
+//
+// needWantSaving (added 2026-08-10): cash has no bank-parsed counterparty
+// to key merchant learning on, unlike Transactions — so the cash NOTE
+// itself stands in for "counterparty" wherever TypeVotes needs a key
+// (e.g. writing "auto" every time for cash rickshaw rides behaves like a
+// recurring merchant would). This reuses isLendingTransfer/recordTypeVote
+// as-is, no parallel system needed. Column K (index 10) stores the
+// actual chosen type for this specific entry, same role Transactions'
+// column Q plays — never gated behind counterparty existing (see
+// docs/features/need-want-saving.md for why that was a real bug there).
+function addCashEntryFromApp(type, amount, note, category, needWantSaving){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Cash");
     const now = new Date();
+    const cleanNote = note || "";
+
+    const typeToSave = (needWantSaving && !isLendingTransfer(cleanNote, cleanNote)) ? needWantSaving : "";
 
     sheet.appendRow([
       "",
@@ -246,12 +261,17 @@ function addCashEntryFromApp(type, amount, note, category){
       now,
       type,
       amount,
-      note || "",
+      cleanNote,
       category || "",
       "PWA",
       "",
-      now
+      now,
+      typeToSave
     ]);
+
+    if(typeToSave && cleanNote){
+      recordTypeVote(cleanNote, Number(amount) || 0, typeToSave);
+    }
 
     return { ok: true };
   }catch(err){
@@ -659,6 +679,17 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   let topAmount = 0;
   let topNote   = "";
 
+  // Need/Want/Saving/Investment breakdown — combines Transactions' column Q
+  // and Cash's column K, both written the same way (see
+  // docs/features/need-want-saving.md). "Untagged" covers debit entries
+  // with nothing saved there yet (credit, Other-category, an unrecognized
+  // merchant, a loan/repayment, or simply not answered yet) — tracked
+  // openly rather than silently dropped, so the chart never overstates
+  // how much of the month is actually accounted for.
+  let typeTotals = { Need: 0, Want: 0, Saving: 0, Investment: 0 };
+  let untaggedTotal = 0;
+  let untaggedCount = 0;
+
   for(let i = 1; i < txnData.length; i++){
     const rawDate = txnData[i][0];
     if(!rawDate) continue;
@@ -675,6 +706,14 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
         categoryTotals[category] = (categoryTotals[category] || 0) + amount;
         dailyTotals[day] = (dailyTotals[day] || 0) + amount;
         if(amount > topAmount){ topAmount = amount; topNote = note; }
+
+        const savedType = (txnData[i][16] || "").toString().trim(); // column Q
+        if(typeTotals.hasOwnProperty(savedType)){
+          typeTotals[savedType] += amount;
+        } else {
+          untaggedTotal += amount;
+          untaggedCount++;
+        }
       } else if(type === "credit"){
         totalCredit += amount;
       }
@@ -696,6 +735,14 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
         categoryTotals[category] = (categoryTotals[category] || 0) + amount;
         dailyTotals[day] = (dailyTotals[day] || 0) + amount;
         if(amount > topAmount){ topAmount = amount; topNote = category || "Cash Spend"; }
+
+        const savedType = (cashData[i][10] || "").toString().trim(); // column K
+        if(typeTotals.hasOwnProperty(savedType)){
+          typeTotals[savedType] += amount;
+        } else {
+          untaggedTotal += amount;
+          untaggedCount++;
+        }
       } else if(type === "credit"){
         totalCredit += amount;
       }
@@ -710,6 +757,8 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
     .sort(function(a, b){ return b[1] - a[1]; })
     .map(function(entry){ return { category: entry[0], amount: entry[1] }; });
 
+  const taggedTotal = typeTotals.Need + typeTotals.Want + typeTotals.Saving + typeTotals.Investment;
+
   return {
     totalDebit:  totalDebit,
     totalCredit: totalCredit,
@@ -717,7 +766,16 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
     avgDaily:    avgDaily,
     topAmount:   topAmount,
     topNote:     topNote,
-    categories:  categories
+    categories:  categories,
+    needWantSaving: {
+      need:           typeTotals.Need,
+      want:           typeTotals.Want,
+      saving:         typeTotals.Saving,
+      investment:     typeTotals.Investment,
+      untagged:       untaggedTotal,
+      untaggedCount:  untaggedCount,
+      taggedTotal:    taggedTotal
+    }
   };
 }
 

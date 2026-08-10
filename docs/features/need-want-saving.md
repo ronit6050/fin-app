@@ -2,6 +2,41 @@
 
 **Status: live.** Built, tested, wired into `getPending`/`saveNote` in `PWA.js`, and shown in the Pending screen — confirmed working on the real app 2026-08-08. Backend is now clasp-synced (`D:\fin-app\backend`, see CLAUDE.md), so `needWantSaving.js` is real, current code, not just this description.
 
+**Extended to Cash, and a chart finally shows the breakdown (2026-08-10).**
+The "not yet built" note further down (a screen showing the actual
+50/30/20 breakdown) is now done, and Cash entries can carry the same tag
+Transactions always could.
+
+- **Cash tagging** (`addCashEntryFromApp`, `PWA.js`): Cash has no
+  bank-parsed counterparty to key merchant learning on, unlike
+  Transactions — so the cash *note itself* stands in for "counterparty"
+  wherever `TypeVotes`/`isLendingTransfer` need one (e.g. writing "auto"
+  every time for cash rickshaw rides behaves like a recurring merchant
+  would). No cold-start suggestion is attempted for cash though (unlike
+  Pending) — deliberately kept to a plain manual pick each save, since a
+  live per-keystroke backend suggestion round-trip wasn't worth building
+  for a single-entry form with no backlog to review. The toggle only
+  shows for "Spent" (not "Received"), and hides live for a lending-note,
+  same `wireLendingAwareToggle` used everywhere else. New `Cash` column K
+  stores the chosen type, same role `Transactions` column Q plays —
+  never gated behind the note existing, learning from the counterparty
+  gating bug fixed just above.
+- **Chart** (`getMonthlyAnalysis`, `PWA.js` + `renderNeedWantSavingChart`,
+  `index.html`): combines `Transactions` column Q and `Cash` column K for
+  the selected month into `{ need, want, saving, investment, untagged,
+  untaggedCount, taggedTotal }`, computed in the same loop that already
+  builds the category breakdown (no extra sheet reads). Rendered as a
+  hand-rolled SVG donut (stroke-dasharray technique, no chart library) on
+  the Analysis screen, using the exact same colors the type-toggle
+  buttons already use everywhere — same tag, same color, no new palette.
+  **Untagged is its own segment, not hidden** — the chart never implies
+  100% of spend is accounted for when some of it isn't tagged yet. The
+  50/30/20 guideline comparison line is computed against *tagged* spend
+  only (excluding Untagged), since including unknowns would understate
+  every percentage while a month is still being caught up on. Verified
+  the arc math directly (segment lengths sum exactly to the circle's
+  circumference, every percentage cross-checked) before shipping.
+
 **Fixed 2026-08-10 — saving a type was wrongly gated behind a
 counterparty existing at all, mislabeled as a lending false-positive.**
 User shared a screenshot: a ₹46 "wallet"-mode transaction (no merchant
@@ -144,7 +179,7 @@ SavingCount) is no longer read or written; a new `TypeVotes` sheet
 `TypeMemory` itself was left untouched on the Sheet — safe to rename or
 delete manually whenever, nothing reads it anymore.
 
-Not yet built: anywhere that actually *shows* the Need/Want/Saving breakdown (a 50/30/20 summary view). Right now this feature only collects the tag and the votes — nothing reads them back yet.
+~~Not yet built: anywhere that actually shows the Need/Want/Saving breakdown~~ — **done, see "Extended to Cash, and a chart finally shows the breakdown" above.**
 
 ## What this feature is
 

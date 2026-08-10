@@ -567,7 +567,22 @@ single row's own answer doesn't — but both were gated behind the same
 `counterparty` check. Split them apart; verified against the exact
 transaction from the screenshot before shipping. This is the value of
 yesterday's transparency fix working exactly as intended — a silent
-failure would have taken far longer to find. Full detail:
+failure would have taken far longer to find.
+
+**Need/Want/Saving/Investment extended to Cash + a chart on Analysis
+(2026-08-10): done.** User asked for a chart on the Analysis screen, then
+explicitly asked to extend tagging to Cash first so the chart would
+cover the whole picture, not just bank transactions. Cash entries now
+carry the same 4-way tag (its free-text note stands in for "counterparty"
+since cash has no bank-parsed merchant — no cold-start guess attempted
+there though, kept to a plain manual pick). `getMonthlyAnalysis` now also
+returns a combined Need/Want/Saving/Investment breakdown across
+Transactions + Cash, rendered as a hand-rolled SVG donut chart (no
+library) using the exact colors the type buttons already use. Untagged
+spend is its own visible segment, never hidden — the 50/30/20 guideline
+comparison is computed against tagged spend only, so untagged doesn't
+understate it. Verified the arc math and every percentage directly
+before shipping. Full detail:
 [docs/features/need-want-saving.md](docs/features/need-want-saving.md).
 
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as

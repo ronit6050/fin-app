@@ -1022,6 +1022,9 @@
             <div class="today-split" id="analysisSplit"></div>
           </div>
           <div id="analysisCategories"></div>
+
+          <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Need / Want / Saving / Investment</h3>
+          <div id="analysisNeedWantSaving"></div>
         </div>
       </section>
 
@@ -1314,6 +1317,15 @@
             <label>Category (for spend)</label>
             <select id="cashCategoryInput"></select>
           </div>
+          <div class="field type-field" id="cashTypeField">
+            <label>Type</label>
+            <div class="type-toggle">
+              <button type="button" class="type-btn" data-type="Need">Need</button>
+              <button type="button" class="type-btn" data-type="Want">Want</button>
+              <button type="button" class="type-btn" data-type="Saving">Saving</button>
+              <button type="button" class="type-btn" data-type="Investment">Investment</button>
+            </div>
+          </div>
           <button type="button" id="saveCashButton">Save</button>
           <div id="cashResult" class="pending-result"></div>
 
@@ -1423,8 +1435,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-2";
-    const APP_CHANGELOG = "Fixed a bug from the last update: ordinary transactions with words like \"excellent\" or \"calendar\" in the note were silently not saving their Need/Want/Saving/Investment tag, even though it said \"Saved.\" This is why your recent History edits didn't stick. Fixed, and the app will now clearly say if a type didn't save instead of staying silent.";
+    const APP_VERSION = "2026-08-10-3";
+    const APP_CHANGELOG = "Cash entries can now be tagged Need/Want/Saving/Investment too, and the Analysis screen has a new chart showing your month's breakdown across bank + cash, with a 50/30/20 guideline comparison.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1729,6 +1741,21 @@
     function categoryBadgeHtml(categoryName) {
       const style = CATEGORY_STYLES[categoryName] || CATEGORY_STYLES.Other;
       return `<span class="category-badge" style="background:var(--cat-${style.css}-bg); color:var(--cat-${style.css}-text);">${style.icon} ${escapeHtml(categoryName)}</span>`;
+    }
+
+    // Same pill style, for a Need/Want/Saving/Investment tag — reuses the
+    // exact colors the type-toggle buttons already use, so it reads as
+    // the same tag wherever it shows up.
+    const TYPE_BADGE_VARS = {
+      Need:       "--need-bg,--need-text",
+      Want:       "--want-bg,--want-text",
+      Saving:     "--saving-bg,--saving-text",
+      Investment: "--investment-bg,--investment-text"
+    };
+    function typeBadgeHtml(type) {
+      if (!type || !TYPE_BADGE_VARS[type]) return "";
+      const [bgVar, textVar] = TYPE_BADGE_VARS[type].split(",");
+      return `<span class="category-badge" style="background:var(${bgVar}); color:var(${textVar});">${escapeHtml(type)}</span>`;
     }
 
     const pendingStatusEl  = document.getElementById("pendingStatus");
@@ -2658,6 +2685,103 @@
     const analysisTotalAmountEl = document.getElementById("analysisTotalAmount");
     const analysisSplitEl     = document.getElementById("analysisSplit");
     const analysisCategoriesEl = document.getElementById("analysisCategories");
+    const analysisNeedWantSavingEl = document.getElementById("analysisNeedWantSaving");
+
+    // Same colors the Need/Want/Saving/Investment buttons already use
+    // everywhere else, so the chart reads as the same tag, not a new palette.
+    const NWS_CHART_COLORS = {
+      Need:       "var(--need-text)",
+      Want:       "var(--want-text)",
+      Saving:     "var(--saving-text)",
+      Investment: "var(--investment-text)",
+      Untagged:   "var(--text-muted)"
+    };
+
+    // Hand-rolled SVG donut chart (stroke-dasharray technique) — no chart
+    // library, same "no frameworks" approach as the rest of this app.
+    // Includes "Untagged" as its own gray segment on purpose: the chart
+    // should never silently imply 100% of spend is accounted for when
+    // some of it hasn't been tagged yet (see docs/features/need-want-saving.md).
+    function renderNeedWantSavingChart(nws) {
+      analysisNeedWantSavingEl.innerHTML = "";
+
+      const segments = [
+        { label: "Need",       amount: nws.need },
+        { label: "Want",       amount: nws.want },
+        { label: "Saving",     amount: nws.saving },
+        { label: "Investment", amount: nws.investment },
+        { label: "Untagged",   amount: nws.untagged }
+      ];
+      const grandTotal = nws.taggedTotal + nws.untagged;
+
+      if (grandTotal <= 0) {
+        analysisNeedWantSavingEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🏷️</span><p>No spending recorded this month.</p></div>";
+        return;
+      }
+
+      const r = 50, cx = 60, cy = 60, strokeWidth = 16;
+      const circumference = 2 * Math.PI * r;
+
+      let cumulative = 0;
+      let arcsSvg = "";
+      segments.forEach(function (seg) {
+        if (seg.amount <= 0) return;
+        const arcLen = (seg.amount / grandTotal) * circumference;
+        arcsSvg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${NWS_CHART_COLORS[seg.label]}" stroke-width="${strokeWidth}" stroke-dasharray="${arcLen} ${circumference - arcLen}" stroke-dashoffset="${-cumulative}"/>`;
+        cumulative += arcLen;
+      });
+
+      const legendRows = segments
+        .filter(function (seg) { return seg.amount > 0; })
+        .map(function (seg) {
+          const pct = Math.round((seg.amount / grandTotal) * 100);
+          return `
+            <div class="category-top" style="margin-bottom:6px;">
+              <span style="display:flex; align-items:center; gap:6px;">
+                <span style="width:10px; height:10px; border-radius:50%; background:${NWS_CHART_COLORS[seg.label]}; display:inline-block;"></span>
+                ${escapeHtml(seg.label)}
+              </span>
+              <span>₹${seg.amount.toLocaleString("en-IN")} (${pct}%)</span>
+            </div>
+          `;
+        })
+        .join("");
+
+      // Only meaningful against TAGGED spend — comparing against the
+      // grand total (including Untagged) would understate every
+      // percentage while you're still catching up on tagging.
+      let guidelineHtml = "";
+      if (nws.taggedTotal > 0) {
+        const needPct   = Math.round((nws.need / nws.taggedTotal) * 100);
+        const wantPct   = Math.round((nws.want / nws.taggedTotal) * 100);
+        const savePct   = Math.round(((nws.saving + nws.investment) / nws.taggedTotal) * 100);
+        guidelineHtml = `<p style="font-size:0.78rem; color:var(--text-muted); margin-top:10px;">Of tagged spend — Need ${needPct}% (guideline ~50%) · Want ${wantPct}% (guideline ~30%) · Saving+Investment ${savePct}% (guideline ~20%)</p>`;
+      }
+
+      const untaggedHtml = nws.untagged > 0
+        ? `<p style="font-size:0.8rem; color:var(--text-secondary); margin-top:8px;">₹${nws.untagged.toLocaleString("en-IN")} across ${nws.untaggedCount} transaction${nws.untaggedCount === 1 ? "" : "s"} isn't tagged yet.</p>`
+        : "";
+
+      analysisNeedWantSavingEl.innerHTML = `
+        <div class="category-row" style="text-align:center;">
+          <div style="position:relative; width:160px; height:160px; margin:0 auto;">
+            <svg viewBox="0 0 120 120" width="160" height="160">
+              <g transform="rotate(-90 ${cx} ${cy})">
+                <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-inset)" stroke-width="${strokeWidth}"/>
+                ${arcsSvg}
+              </g>
+            </svg>
+            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center;">
+              <div style="font-size:1.05rem; font-weight:700; color:var(--text-primary);">₹${grandTotal.toLocaleString("en-IN")}</div>
+              <div style="font-size:0.68rem; color:var(--text-muted);">this month</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:10px;">${legendRows}</div>
+        ${untaggedHtml}
+        ${guidelineHtml}
+      `;
+    }
 
     function loadMonthlyAnalysis() {
       monthLabelEl.textContent = MONTH_NAMES[analysisMonth - 1] + " " + analysisYear;
@@ -2712,6 +2836,8 @@
         "Income: ₹" + a.totalCredit.toLocaleString("en-IN") +
         "  ·  " + savingsText +
         "  ·  Avg/day: ₹" + a.avgDaily.toLocaleString("en-IN");
+
+      if (a.needWantSaving) renderNeedWantSavingChart(a.needWantSaving);
 
       analysisCategoriesEl.innerHTML = "";
 
@@ -3435,6 +3561,36 @@
     const saveCashButtonEl    = document.getElementById("saveCashButton");
     const cashResultEl        = document.getElementById("cashResult");
     const cashRecentEl        = document.getElementById("cashRecent");
+    const cashTypeFieldEl     = document.getElementById("cashTypeField");
+
+    // Need/Want/Saving/Investment for cash — same idea as Pending, but
+    // cash has no bank-parsed merchant to key learning on, so this stays
+    // a plain manual pick each time (no cold-start suggestion attempt).
+    // Only makes sense for money actually spent, not cash received, and
+    // — same as everywhere else — never for something that looks like a
+    // loan/repayment (see wireLendingAwareToggle).
+    let selectedCashType = null;
+    const cashTypeButtons = cashTypeFieldEl.querySelectorAll(".type-btn");
+    cashTypeButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        cashTypeButtons.forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        selectedCashType = btn.dataset.type;
+      });
+    });
+
+    function updateCashTypeVisibility() {
+      const isSpend = cashTypeInputEl.value === "debit";
+      const lending = isLendingNote(cashNoteInputEl.value);
+      cashTypeFieldEl.style.display = (isSpend && !lending) ? "" : "none";
+      if (!isSpend || lending) {
+        selectedCashType = null;
+        cashTypeButtons.forEach(function (b) { b.classList.remove("active"); });
+      }
+    }
+    cashTypeInputEl.addEventListener("change", updateCashTypeVisibility);
+    cashNoteInputEl.addEventListener("input", updateCashTypeVisibility);
+    updateCashTypeVisibility();
 
     // Reuse the same category list used for Pending Transactions —
     // one source of truth instead of writing the list out twice.
@@ -3487,9 +3643,10 @@
           row.className = "category-row";
           const sign = entry.type === "credit" ? "+" : "-";
           const noteText = entry.note ? " · " + escapeHtml(entry.note) : "";
+          const typeBadge = entry.needWantSaving ? " " + typeBadgeHtml(entry.needWantSaving) : "";
           row.innerHTML = `
             <div class="category-top">
-              <span>${entry.date}${noteText}</span>
+              <span>${entry.date}${noteText}${typeBadge}</span>
               <span>${sign}₹${entry.amount.toLocaleString("en-IN")}</span>
             </div>
           `;
@@ -3509,17 +3666,21 @@
       cashResultEl.textContent = "Saving...";
 
       callAppsScript({
-        action:   "addCashEntry",
-        idToken:  currentUser.idToken,
-        type:     cashTypeInputEl.value,
-        amount:   amount,
-        note:     cashNoteInputEl.value.trim(),
-        category: cashCategoryInputEl.value
+        action:         "addCashEntry",
+        idToken:        currentUser.idToken,
+        type:           cashTypeInputEl.value,
+        amount:         amount,
+        note:           cashNoteInputEl.value.trim(),
+        category:       cashCategoryInputEl.value,
+        needWantSaving: selectedCashType
       })
         .then(function (data) {
           if (data.ok) {
             cashAmountInputEl.value = "";
             cashNoteInputEl.value = "";
+            selectedCashType = null;
+            cashTypeButtons.forEach(function (b) { b.classList.remove("active"); });
+            updateCashTypeVisibility();
             cashResultEl.textContent = "Saved.";
             // Fetch fresh (not cache-first) since the cache is now stale
             callAppsScript({ action: "getCash", idToken: currentUser.idToken })
