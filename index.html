@@ -1435,8 +1435,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-3";
-    const APP_CHANGELOG = "Cash entries can now be tagged Need/Want/Saving/Investment too, and the Analysis screen has a new chart showing your month's breakdown across bank + cash, with a 50/30/20 guideline comparison.";
+    const APP_VERSION = "2026-08-10-4";
+    const APP_CHANGELOG = "Fixed a real bug: credit card bill payments were being counted as spend twice (once when you swiped, once when you paid the bill). Also, Cash and Investments entries can now be edited after saving, same as bank transactions already could.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -3436,6 +3436,56 @@
     const saveInvestmentButtonEl = document.getElementById("saveInvestmentButton");
     const logInvestmentResultEl = document.getElementById("logInvestmentResult");
 
+    // Lets you fix a past investment entry — added 2026-08-10. Investments
+    // previously had no way to correct a mistake short of editing the
+    // Sheet directly, unlike Transactions (which has History).
+    function buildInvestmentRecentItem(entry) {
+      const card = document.createElement("div");
+      card.className = "pending-item";
+      card.innerHTML = `
+        <div class="pending-top">
+          <span>₹<input type="number" class="invest-edit-amount" value="${entry.amount}" min="0" step="1" style="width:90px; font-size:1em; font-weight:bold; border:1px solid transparent; background:var(--surface-inset); color:var(--text-primary); border-radius:6px; padding:2px 4px;"></span>
+          <span>${escapeHtml(entry.date)}</span>
+        </div>
+        <div class="field">
+          <label>Type</label>
+          <input type="text" class="invest-edit-type" value="${escapeHtml(entry.type)}">
+        </div>
+        <button type="button" class="invest-edit-save-btn">Save</button>
+        <div class="pending-result"></div>
+      `;
+
+      const amountInput = card.querySelector(".invest-edit-amount");
+      const typeInput   = card.querySelector(".invest-edit-type");
+      const saveButton  = card.querySelector(".invest-edit-save-btn");
+      const resultEl    = card.querySelector(".pending-result");
+
+      saveButton.addEventListener("click", function () {
+        const amount = parseFloat(amountInput.value);
+        if (!amount || amount <= 0) {
+          resultEl.textContent = "Enter a valid amount.";
+          return;
+        }
+
+        resultEl.textContent = "Saving...";
+        callAppsScript({
+          action:  "updateInvestment",
+          idToken: currentUser.idToken,
+          row:     entry.row,
+          type:    typeInput.value.trim(),
+          amount:  amount
+        })
+          .then(function (data) {
+            resultEl.textContent = data.ok ? "Saved." : data.error;
+          })
+          .catch(function (err) {
+            resultEl.textContent = err.message;
+          });
+      });
+
+      return card;
+    }
+
     function loadInvestments() {
       const cached = loadCache("investments");
       if (cached) {
@@ -3498,15 +3548,7 @@
         investmentsRecentEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💹</span><p>None yet.</p></div>";
       } else {
         inv.recent.forEach(function (entry) {
-          const row = document.createElement("div");
-          row.className = "category-row";
-          row.innerHTML = `
-            <div class="category-top">
-              <span>${entry.date} — ${escapeHtml(entry.type)}</span>
-              <span>₹${entry.amount.toLocaleString("en-IN")}</span>
-            </div>
-          `;
-          investmentsRecentEl.appendChild(row);
+          investmentsRecentEl.appendChild(buildInvestmentRecentItem(entry));
         });
       }
     }
@@ -3598,6 +3640,121 @@
       .map(function (cat) { return `<option value="${cat}">${cat}</option>`; })
       .join("");
 
+    // Lets you fix a past cash entry — added 2026-08-10. Cash previously
+    // had no way to correct a mistake short of editing the Sheet
+    // directly, unlike Transactions (which has History). Same fields,
+    // same lending-aware toggle behavior as everywhere else — debit/
+    // credit itself isn't editable here, same as History doesn't let
+    // you flip a transaction's direction either.
+    function buildCashRecentItem(entry) {
+      const card = document.createElement("div");
+      card.className = "pending-item";
+
+      const categoryOptionsHtml = CATEGORY_OPTIONS
+        .map(function (cat) {
+          const selectedAttr = (cat === entry.category) ? " selected" : "";
+          return `<option value="${cat}"${selectedAttr}>${cat}</option>`;
+        })
+        .join("");
+
+      const showTypeToggle = entry.type !== "credit";
+      const typeToggleHtml = showTypeToggle ? `
+        <div class="field type-field">
+          <label>Type</label>
+          <div class="type-toggle">
+            <button type="button" class="type-btn" data-type="Need">Need</button>
+            <button type="button" class="type-btn" data-type="Want">Want</button>
+            <button type="button" class="type-btn" data-type="Saving">Saving</button>
+            <button type="button" class="type-btn" data-type="Investment">Investment</button>
+          </div>
+        </div>
+      ` : "";
+
+      const noteValue = escapeHtml(entry.note || "");
+      const sign = entry.type === "credit" ? "+" : "-";
+
+      card.innerHTML = `
+        <div class="pending-top">
+          <span>${sign}₹<input type="number" class="cash-edit-amount" value="${entry.amount}" min="0" step="1" style="width:90px; font-size:1em; font-weight:bold; border:1px solid transparent; background:var(--surface-inset); color:var(--text-primary); border-radius:6px; padding:2px 4px;"></span>
+          <span>${escapeHtml(entry.date)}</span>
+        </div>
+        <div class="field">
+          <label>Note</label>
+          <input type="text" class="cash-edit-note" value="${noteValue}">
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <select class="cash-edit-category">${categoryOptionsHtml}</select>
+        </div>
+        ${typeToggleHtml}
+        <button type="button" class="cash-edit-save-btn">Save</button>
+        <div class="pending-result"></div>
+      `;
+
+      let selectedType = null;
+      if (showTypeToggle) {
+        const typeButtons = card.querySelectorAll(".type-btn");
+        typeButtons.forEach(function (btn) {
+          if (entry.needWantSaving && btn.dataset.type === entry.needWantSaving) {
+            btn.classList.add("active");
+            selectedType = entry.needWantSaving;
+          }
+          btn.addEventListener("click", function () {
+            typeButtons.forEach(function (b) { b.classList.remove("active"); });
+            btn.classList.add("active");
+            selectedType = btn.dataset.type;
+          });
+        });
+      }
+
+      const amountInput    = card.querySelector(".cash-edit-amount");
+      const noteInput       = card.querySelector(".cash-edit-note");
+      const categorySelect  = card.querySelector(".cash-edit-category");
+      const saveButton      = card.querySelector(".cash-edit-save-btn");
+      const resultEl        = card.querySelector(".pending-result");
+
+      if (showTypeToggle) {
+        wireLendingAwareToggle(card, noteInput, function () {
+          selectedType = null;
+          card.querySelectorAll(".type-btn").forEach(function (b) { b.classList.remove("active"); });
+        });
+      }
+
+      saveButton.addEventListener("click", function () {
+        const amount = parseFloat(amountInput.value);
+        if (!amount || amount <= 0) {
+          resultEl.textContent = "Enter a valid amount.";
+          return;
+        }
+
+        resultEl.textContent = "Saving...";
+        callAppsScript({
+          action:         "updateCashEntry",
+          idToken:        currentUser.idToken,
+          row:            entry.row,
+          type:           entry.type,
+          amount:         amount,
+          note:           noteInput.value.trim(),
+          category:       categorySelect.value,
+          needWantSaving: selectedType
+        })
+          .then(function (data) {
+            if (!data.ok) {
+              resultEl.textContent = data.error;
+            } else if (data.typeRequested && !data.typeSaved) {
+              resultEl.textContent = "Saved, but the type wasn't (looks like a loan/repayment).";
+            } else {
+              resultEl.textContent = "Saved.";
+            }
+          })
+          .catch(function (err) {
+            resultEl.textContent = err.message;
+          });
+      });
+
+      return card;
+    }
+
     function loadCash() {
       const cached = loadCache("cash");
       if (cached) {
@@ -3639,18 +3796,7 @@
         cashRecentEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💵</span><p>No cash entries yet.</p></div>";
       } else {
         c.recent.forEach(function (entry) {
-          const row = document.createElement("div");
-          row.className = "category-row";
-          const sign = entry.type === "credit" ? "+" : "-";
-          const noteText = entry.note ? " · " + escapeHtml(entry.note) : "";
-          const typeBadge = entry.needWantSaving ? " " + typeBadgeHtml(entry.needWantSaving) : "";
-          row.innerHTML = `
-            <div class="category-top">
-              <span>${entry.date}${noteText}${typeBadge}</span>
-              <span>${sign}₹${entry.amount.toLocaleString("en-IN")}</span>
-            </div>
-          `;
-          cashRecentEl.appendChild(row);
+          cashRecentEl.appendChild(buildCashRecentItem(entry));
         });
       }
     }

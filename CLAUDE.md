@@ -585,6 +585,45 @@ understate it. Verified the arc math and every percentage directly
 before shipping. Full detail:
 [docs/features/need-want-saving.md](docs/features/need-want-saving.md).
 
+**Full-app gap review + fixes (2026-08-10): done.** User asked for a
+full pass over every backend file and the frontend to find gaps, ranked
+by importance — then asked to fix the most important ones, with "keep
+user experience in mind" as the guiding rule. Found and fixed, most
+important first:
+
+1. **Every "read" action (loads a screen) had zero error protection** —
+   only "write" actions (saveNote, addDebt, etc.) had their own
+   try/catch. If a read action ever hit something unexpected, the error
+   escaped all the way past `doPost`, returning Apps Script's raw error
+   page instead of this app's clean `{ok:false, error}` shape. Fixed
+   with ONE shared `try/catch` wrapping the entire action dispatch in
+   `handlePwaRequest` (`PWA.js`), instead of patching ten separate
+   functions — any action added later is protected automatically too.
+   Verified by forcing a real error (a missing sheet) and confirming it
+   comes back as a clean message instead of throwing.
+2. **Credit card double-counting, confirmed and fixed.** Raised as a
+   suspicion earlier, never actually checked until now: nothing excluded
+   a credit card BILL PAYMENT from spend totals, so money was being
+   counted twice for anyone paying by card — once at swipe time, once
+   again when the bill got paid off. New `isCreditCardBillPayment()`
+   (best-effort keyword match on bank narration — genuinely can't be
+   certain without seeing real statement wording, **needs a real-world
+   check**: watch your next card bill payment and confirm it's excluded
+   from Total Spend). CC Advisor itself was never affected — it always
+   only counted actual card swipes.
+3. **Cash and Investments had no way to correct a past entry** — unlike
+   Transactions (History), a typo in an amount/note/category/type meant
+   editing the Sheet directly, against the app's own "everything from
+   the app" rule. Both "Recent" lists are now editable cards (same
+   pattern as History/Pending), with the same lending-aware toggle
+   behavior. Savings was deliberately NOT included in this pass — one
+   "Log a Saving" splits into up to 3 separate rows across pots, and
+   editing that after the fact needs its own careful design, not a
+   rushed bolt-on; flagged as the next thing to tackle if it comes up.
+
+Verified everything with Node tests using known inputs before shipping,
+same rigor as every other fix today — not just a read-through.
+
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as
 categories at all (a category should group *varied* things — breakfast,
 lunch, dinner all fit under Food; rent has nothing else "under" it) and

@@ -23,6 +23,20 @@ function handlePwaRequest(data){
     return jsonResponse({ ok:false, error:"This account is not allowed." });
   }
 
+  // Every action below this point is wrapped in one shared safety net.
+  // The "write" actions (saveNote, addDebt, etc.) already had their own
+  // try/catch inside them, so this was mostly redundant for those — but
+  // the "read" actions that load a screen (getPending, getTodaySummary,
+  // getMonthlyAnalysis, getCCAdvisor, getDebts, getSavings, getInvestments,
+  // getCash, getDashboard, getTransactionHistory) had NONE. If any of
+  // those hit something unexpected, the error used to escape all the way
+  // up past doPost, returning Apps Script's own raw error page instead of
+  // this app's clean {ok:false, error} shape. Found during a full-app
+  // review 2026-08-10 — wrapping the whole dispatch here (once, centrally)
+  // instead of adding try/catch to ten separate functions means any
+  // action added later gets this protection automatically too.
+  try{
+
   // For today, just prove the check works.
   if(data.action === "ping"){
     return jsonResponse({ ok:true, message:"Hello " + verified.name + ", you're verified!" });
@@ -84,12 +98,20 @@ function handlePwaRequest(data){
     return jsonResponse(logInvestmentFromApp(data.amount, data.type));
   }
 
+  if(data.action === "updateInvestment"){
+    return jsonResponse(updateInvestmentEntry(data.row, data.type, data.amount));
+  }
+
   if(data.action === "getCash"){
     return jsonResponse({ ok:true, cash: getCashData() });
   }
 
   if(data.action === "addCashEntry"){
     return jsonResponse(addCashEntryFromApp(data.type, data.amount, data.note, data.category, data.needWantSaving));
+  }
+
+  if(data.action === "updateCashEntry"){
+    return jsonResponse(updateCashEntry(data.row, data.type, data.amount, data.note, data.category, data.needWantSaving));
   }
 
   if(data.action === "registerPushToken"){
@@ -121,6 +143,11 @@ function handlePwaRequest(data){
   }
 
   return jsonResponse({ ok:false, error:"Unknown action." });
+
+  }catch(err){
+    logAI("PWA_REQUEST_ERROR", (data.action || "unknown") + ": " + err.toString());
+    return jsonResponse({ ok:false, error: "Something went wrong loading this — try again in a moment. (" + err.toString() + ")" });
+  }
 }
 
 // Pulls one number from each existing screen's data — reuses those
@@ -209,6 +236,7 @@ function getCashData(cashData){
     const type     = (data[i][3] || "").toString().toLowerCase();
     const amount   = Number(data[i][4]) || 0;
     const note     = (data[i][5] || "").toString().trim();
+    const category = (data[i][6] || "").toString().trim();
     const rawDate  = data[i][1];
     const needWantSaving = (data[i][10] || "").toString().trim() || null; // column K
 
@@ -221,10 +249,12 @@ function getCashData(cashData){
     }
 
     recent.push({
+      row:            i + 1,
       date:           rawDate ? Utilities.formatDate(new Date(rawDate), Session.getScriptTimeZone(), "dd MMM") : "",
       type:           type,
       amount:         amount,
       note:           note,
+      category:       category,
       needWantSaving: needWantSaving
     });
   }
@@ -279,6 +309,43 @@ function addCashEntryFromApp(type, amount, note, category, needWantSaving){
   }
 }
 
+// Fixes a past cash entry — added 2026-08-10. Cash previously had no way
+// to correct a mistake (wrong amount, category, or type) short of
+// editing the Sheet directly, unlike Transactions (which has History).
+// Deliberately does NOT call handleCategoryCorrection — Cash has never
+// fed SmartMemory (category is always picked manually there, same rule
+// that already applies to first-time cash entries; see CLAUDE.md's
+// SmartMemory pollution incident for why that boundary matters).
+function updateCashEntry(row, type, amount, note, category, needWantSaving){
+  try{
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Cash");
+
+    if(!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()){
+      return { ok:false, error:"Invalid row." };
+    }
+    if(!amount || Number(amount) <= 0){
+      return { ok:false, error:"Enter a valid amount." };
+    }
+
+    const cleanNote = note || "";
+    const typeToSave = (needWantSaving && !isLendingTransfer(cleanNote, cleanNote)) ? needWantSaving : "";
+
+    sheet.getRange(row, 4).setValue(type);              // column D
+    sheet.getRange(row, 5).setValue(Number(amount));    // column E
+    sheet.getRange(row, 6).setValue(cleanNote);          // column F
+    sheet.getRange(row, 7).setValue(category || "");     // column G
+    sheet.getRange(row, 11).setValue(typeToSave);         // column K
+
+    if(typeToSave && cleanNote){
+      recordTypeVote(cleanNote, Number(amount) || 0, typeToSave);
+    }
+
+    return { ok: true, typeRequested: !!needWantSaving, typeSaved: !!typeToSave };
+  }catch(err){
+    return { ok: false, error: err.toString() };
+  }
+}
+
 // Same data as sendInvestmentDashboard() in SavingsAdvisor.js, returned
 // as plain data instead of a Telegram message.
 function getInvestmentsData(){
@@ -300,13 +367,23 @@ function getInvestmentsData(){
     .sort(function(a, b){ return b[1] - a[1]; })
     .map(function(e){ return { type: e[0], amount: e[1] }; });
 
-  const recent = data.slice(1)
-    .filter(function(r){ return r[0] && r[2]; })
-    .sort(function(a, b){ return new Date(b[0]) - new Date(a[0]); })
+  // row is tracked from the ORIGINAL sheet position, before the sort
+  // below reorders everything by date — without this, editing an entry
+  // later would have no reliable way to know which sheet row it came
+  // from. Found missing during a full-app review 2026-08-10.
+  const recent = data
+    .map(function(r, idx){ return { row: idx + 1, rawDate: r[0], type: r[1], amount: Number(r[2]) || 0 }; })
+    .slice(1)
+    .filter(function(r){ return r.rawDate && r.amount; })
+    .sort(function(a, b){ return new Date(b.rawDate) - new Date(a.rawDate); })
     .slice(0, 5)
     .map(function(r){
-      const dateLabel = Utilities.formatDate(new Date(r[0]), Session.getScriptTimeZone(), "dd MMM");
-      return { date: dateLabel, type: r[1], amount: Number(r[2]) || 0 };
+      return {
+        row:    r.row,
+        date:   Utilities.formatDate(new Date(r.rawDate), Session.getScriptTimeZone(), "dd MMM"),
+        type:   r.type,
+        amount: r.amount
+      };
     });
 
   return { total: total, breakdown: breakdown, recent: recent };
@@ -319,6 +396,29 @@ function logInvestmentFromApp(amount, type){
     const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
     investSheet.appendRow([today, type, amount, ""]);
+
+    return { ok: true };
+  }catch(err){
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// Fixes a past investment entry's type/amount — added 2026-08-10.
+// Investments previously had no way to correct a mistake short of
+// editing the Sheet directly, unlike Transactions (which has History).
+function updateInvestmentEntry(row, type, amount){
+  try{
+    const investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
+
+    if(!Number.isInteger(row) || row < 2 || row > investSheet.getLastRow()){
+      return { ok:false, error:"Invalid row." };
+    }
+    if(!amount || Number(amount) <= 0){
+      return { ok:false, error:"Enter a valid amount." };
+    }
+
+    investSheet.getRange(row, 2).setValue(type);          // column B
+    investSheet.getRange(row, 3).setValue(Number(amount)); // column C
 
     return { ok: true };
   }catch(err){
@@ -700,6 +800,10 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
       const category = txnData[i][13] || "Other";
       const note     = txnData[i][12] || "";
       const day      = d.getDate();
+      const mode     = txnData[i][4] || "";
+      const counterparty = txnData[i][7] || "";
+
+      if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
 
       if(type === "debit"){
         totalDebit += amount;
@@ -779,6 +883,29 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   };
 }
 
+// Recognizes a transaction that's actually a CREDIT CARD BILL PAYMENT —
+// money settling card swipes already counted as spend when they
+// happened, not new spending. Found during a full-app review 2026-08-10:
+// nothing anywhere excluded these, so every card swipe was silently
+// being counted twice in "Total Spend" — once at swipe time (mode
+// starts with "card"), once again when the bill got paid off (a
+// separate debit row, usually via UPI/NEFT to the card issuer).
+// CC Advisor itself was never affected (it only ever counted
+// mode-starts-with-"card" rows), just Today/Analysis's headline totals.
+//
+// This is a best-effort keyword match on the bank's own narration text
+// — genuinely can't be fully certain without seeing real statement
+// wording, so this needs a real-world check: watch your next card bill
+// payment and confirm it's excluded from Total Spend as expected (and
+// tell me if it isn't, or if it wrongly excludes something that wasn't
+// actually a card payment).
+function isCreditCardBillPayment(mode, counterparty, note){
+  const m = (mode || "").toString().toLowerCase();
+  if(m.startsWith("card")) return false; // an actual swipe, not a bill payment — never exclude these
+  const text = ((counterparty || "") + " " + (note || "")).toLowerCase();
+  return /\bcredit card\b/.test(text) || /\bcc bill\b/.test(text) || /\bcard bill\b/.test(text) || /\bcard payment\b/.test(text);
+}
+
 // Adds up everything spent today, from both bank/UPI and cash, by category.
 // txnData/cashData are optional — see getCashData's comment, same reasoning.
 function getTodaySummary(txnData, cashData){
@@ -799,6 +926,11 @@ function getTodaySummary(txnData, cashData){
     if(!rawDate) continue;
     const d = Utilities.formatDate(new Date(rawDate), Session.getScriptTimeZone(), "yyyy-MM-dd");
     if(d === today && (txnData[i][3] || "").toString().toLowerCase() === "debit"){
+      const mode = txnData[i][4] || "";
+      const counterparty = txnData[i][7] || "";
+      const note = txnData[i][12] || "";
+      if(isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
+
       const amount   = Number(txnData[i][5]) || 0;
       const category = txnData[i][13] || "Other";
       bankSpend += amount;
