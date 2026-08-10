@@ -2,6 +2,35 @@
 
 **Status: live.** Built, tested, wired into `getPending`/`saveNote` in `PWA.js`, and shown in the Pending screen — confirmed working on the real app 2026-08-08. Backend is now clasp-synced (`D:\fin-app\backend`, see CLAUDE.md), so `needWantSaving.js` is real, current code, not just this description.
 
+**Fixed 2026-08-10 — saving a type was wrongly gated behind a
+counterparty existing at all, mislabeled as a lending false-positive.**
+User shared a screenshot: a ₹46 "wallet"-mode transaction (no merchant
+identity at all — normal for a wallet-balance debit, unlike a UPI
+payment to a specific payee), note "Milk and vegetables", type "Need" —
+got "Note & category saved, but the type wasn't (looks like a
+loan/repayment)." That message was simply wrong: `isLendingTransfer`
+correctly returned `false` for this text (verified directly) — the real
+issue was `saveTransactionNote`'s condition,
+`if(counterparty && type && !isLendingTransfer(...))`, which required a
+truthy `counterparty` before EVEN CONSIDERING saving column Q — nothing
+to do with lending. Any transaction with no merchant identity (wallet
+debits, and potentially others) could never save a type, and the
+generic mismatch message always blamed lending regardless of the real
+reason.
+
+Root cause: column Q (`NeedWantSaving`, the per-transaction saved
+answer) and `recordTypeVote` (the per-merchant learning pool) are two
+different things with two different requirements — a vote genuinely
+needs a merchant to attribute itself to, but a single transaction's own
+answer doesn't need a merchant name to exist at all. They were
+incorrectly gated behind the same `counterparty` check. Fixed by
+splitting them: column Q now saves whenever `type` is present and
+`isLendingTransfer` doesn't match (counterparty no longer required);
+`recordTypeVote` still only fires when a counterparty exists, since an
+unattributed vote wouldn't mean anything. Verified against the exact
+transaction from the screenshot (wallet mode, blank counterparty, "Milk
+and vegetables", "Need") before shipping — now saves correctly.
+
 **Fixed 2026-08-10 — lending was never actually excluded, despite looking
 like it was.** The original design (Rule 2, see "Rules, in order" below)
 was meant to skip asking Need/Want/Saving entirely for a person-to-person

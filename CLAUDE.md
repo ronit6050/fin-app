@@ -550,7 +550,24 @@ test for this exact bug class; `saveTransactionNote` now also reports
 can never look identical to success again — all three save flows show
 "saved, but the type wasn't" instead of a generic "Saved." when that
 happens. Verified end-to-end with a Node test reproducing the exact
-scenario before shipping. Full detail:
+scenario before shipping.
+
+**A THIRD fix, same day, from that new transparency message actually
+working as designed.** User sent a screenshot: a real ₹46 "wallet"-mode
+transaction (no counterparty at all — normal for a wallet debit, unlike
+UPI) said "type wasn't saved (looks like a loan/repayment)" — but that
+message was wrong. `isLendingTransfer` correctly said `false` for this
+text; the real bug was that `saveTransactionNote` required a truthy
+`counterparty` before it would EVEN consider saving column Q — nothing
+to do with lending at all. Any transaction with no merchant identity
+could never save a type. Root cause: column Q (one transaction's own
+answer) and `recordTypeVote` (the per-merchant learning pool) have
+different requirements — a vote needs a merchant to attribute to, a
+single row's own answer doesn't — but both were gated behind the same
+`counterparty` check. Split them apart; verified against the exact
+transaction from the screenshot before shipping. This is the value of
+yesterday's transparency fix working exactly as intended — a silent
+failure would have taken far longer to find. Full detail:
 [docs/features/need-want-saving.md](docs/features/need-want-saving.md).
 
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as

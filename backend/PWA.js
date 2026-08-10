@@ -965,15 +965,19 @@ function saveTransactionNote(row, note, category, counterparty, type, amount){
       handleCategoryCorrection(counterparty, category, "Other");
     }
 
-    // Record a Need/Want/Saving vote too — only if a type was actually
-    // confirmed/corrected. Some transactions never get a type suggestion
-    // at all (credit, a debt-settlement category, unrecognized merchant,
-    // or — as of 2026-08-09 — a person-to-person loan/repayment), so the
-    // PWA won't send one for those, and there's nothing to vote on. The
-    // isLendingTransfer check here is a server-side safety net: even if
-    // the frontend's toggle was shown before a lending note was typed
-    // (Pending can't know until the note exists) and something got
-    // selected anyway, this makes sure it's never actually recorded.
+    // Save the actual chosen type ON this transaction (column Q) whenever
+    // one was sent and it isn't a recognized loan/repayment. This is
+    // separate from the vote below (which only feeds FUTURE suggestions
+    // for a merchant) — column Q is per-TRANSACTION, so it never needs a
+    // counterparty to exist. Found and fixed 2026-08-10: this used to be
+    // wrongly gated behind `counterparty` being present, which meant
+    // "wallet"-mode transactions (no merchant identity — common for
+    // wallet-balance debits, unlike UPI-to-merchant payments) could never
+    // save a type at all, and the error message wrongly blamed "looks
+    // like a loan/repayment" when the real reason was completely
+    // unrelated. Column Q's write no longer depends on counterparty;
+    // only the per-merchant vote below still does, since a vote without
+    // a merchant to attribute it to wouldn't mean anything.
     //
     // typeSaved is reported back below — a silent skip here once looked
     // identical to success from the caller's side (found 2026-08-10: a
@@ -982,19 +986,17 @@ function saveTransactionNote(row, note, category, counterparty, type, amount){
     // note/category still saved fine and the response still said "ok").
     // Never trust a save as fully complete without checking this again.
     let typeSaved = false;
-    if(counterparty && type && !isLendingTransfer(counterparty, note)){
-      const voteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
-      recordTypeVote(counterparty, voteAmount, type);
-
-      // Also save the actual chosen type ON this transaction (column Q) —
-      // separate from the vote above, which only feeds FUTURE suggestions.
-      // Without this, History had no way to show what was really picked
-      // for a specific transaction — it could only re-run today's
-      // suggestion, which drifts as you answer more transactions for the
-      // same merchant. Found and fixed 2026-08-09 after the user noticed
-      // old "Want" answers were showing as "Need" in History.
+    if(type && !isLendingTransfer(counterparty, note)){
       sheet.getRange(row, 17).setValue(type); // column Q
       typeSaved = true;
+
+      // The per-merchant learning pool genuinely needs a merchant name to
+      // attribute the vote to — skip it (but still keep the column Q
+      // save above) when there isn't one.
+      if(counterparty){
+        const voteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
+        recordTypeVote(counterparty, voteAmount, type);
+      }
     }
 
     // Remember this note against the merchant (+ amount band) so it can be
