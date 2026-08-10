@@ -513,8 +513,15 @@ categories, unlike what Phase 1 below describes). Initially shipped
 Pending-only, then corrected same day per user: "one feature at a time"
 means the tagging system is the feature, not one screen — History and
 Reconciliation show this same toggle too, so all three now have all 4
-buttons. Full detail:
-[docs/features/need-want-saving.md](docs/features/need-want-saving.md).
+buttons. A real bug was caught and fixed same day too: the type you
+picked was never actually saved per-transaction — only fed into the
+shared `TypeVotes` learning pool — so History displayed a live re-guess
+that visibly drifted as you answered more transactions for the same
+merchant (an old "Want" started showing as "Need"). Fixed with a new
+`NeedWantSaving` column directly on `Transactions`; History now reads
+that stored value instead of re-guessing. Verified with a standalone
+Node test simulating the exact drift scenario before shipping. Full
+detail: [docs/features/need-want-saving.md](docs/features/need-want-saving.md).
 
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as
 categories at all (a category should group *varied* things — breakfast,

@@ -2,6 +2,21 @@
 
 **Status: live**, shipped 2026-08-08.
 
+**Fixed 2026-08-09 — real bug, not cosmetic:** History was showing a
+freshly re-computed Need/Want/Saving/Investment *guess* for each
+transaction, not what was actually chosen for that specific row —
+because the chosen type was never durably saved anywhere, only fed into
+`TypeVotes` as one more vote in a shared per-merchant pool. User noticed
+old "Want" answers displaying as "Need" once later answers for the same
+merchant tipped that pool's balance. Fixed by adding a `NeedWantSaving`
+column (Q) to `Transactions`, written by `saveTransactionNote` alongside
+the vote, and read back by `getTransactionHistory` instead of calling
+`getSuggestedType` at all. Rows saved before this fix have nothing
+stored — shown with no type pre-selected (deliberately not guessed)
+until you next save/re-save that row. See
+[docs/features/need-want-saving.md](docs/features/need-want-saving.md)
+for the column and full reasoning.
+
 ## What this is
 
 Pending only ever shows transactions with no note yet — once noted, a
@@ -15,7 +30,7 @@ newest-first list of already-noted transactions, each editable in place.
 
 Confirmed with the user 2026-08-08: if you change a transaction's
 category or Need/Want/Saving tag later in History, that correction
-should update `SmartMemory`/`TypeMemory` exactly like correcting it the
+should update `SmartMemory`/`TypeVotes` exactly like correcting it the
 first time in Pending would — not just fix that one row silently.
 
 This is why History reuses `saveTransactionNote()` (the same function

@@ -420,7 +420,8 @@ function insertReconciledTransactions(txns){
         t.note || "",       // Note
         t.category || "",   // Category
         "",                 // TelegramMsg
-        "YES"                // Processed
+        "YES",               // Processed
+        t.needWantSaving || "" // NeedWantSaving (column Q) — the actually-chosen type, same as saveTransactionNote now stores
       ]);
       added++;
 

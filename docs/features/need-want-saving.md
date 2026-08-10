@@ -2,6 +2,23 @@
 
 **Status: live.** Built, tested, wired into `getPending`/`saveNote` in `PWA.js`, and shown in the Pending screen — confirmed working on the real app 2026-08-08. Backend is now clasp-synced (`D:\fin-app\backend`, see CLAUDE.md), so `needWantSaving.js` is real, current code, not just this description.
 
+**Fixed 2026-08-09 — the type you picked wasn't actually being saved per
+transaction.** `saveTransactionNote` only ever fed the choice into
+`TypeVotes` (a shared per-merchant pool used for future suggestions) —
+nothing recorded what was chosen *for that specific row*. History
+displayed a live re-guess instead, which visibly drifted over time as
+you answered more transactions for the same merchant (user caught this:
+an old "Want" was showing as "Need" once later answers tipped that
+merchant's vote balance). Fixed by adding a `NeedWantSaving` column
+(column Q) directly on `Transactions`, written whenever a type is saved.
+`getTransactionHistory` now reads that stored value instead of calling
+`getSuggestedType` — Pending is unaffected (it's correctly still a fresh
+guess there, since nothing has been decided yet for an unnoted
+transaction). Rows saved before this fix have nothing in that column —
+shown with no type pre-selected, not guessed, until next saved.
+`insertReconciledTransactions` (`Recon.js`) writes this column too now,
+for consistency.
+
 **Extended 2026-08-09** with a 4th tag, **Investment**, and smarter
 cold-start guessing — see "Investment as a 4th tag" below. Initially
 shipped Pending-only, then corrected the same day: the user clarified
@@ -82,6 +99,13 @@ Two layers, in order:
 **Why plain EMI is deliberately NOT in that recognized list** (only the specific phrase "home loan"/"housing loan" is): unlike rent, what an EMI is *for* varies completely — a TV EMI and a home loan EMI are not the same kind of spend, and guessing would often be wrong (user caught this exact mistake in an earlier draft of this plan, where "Rent/EMI = Need" was proposed as one rule). Plain EMI falls through to the flat Need default, then behaves exactly like everything else from there — see point 2 below.
 
 **Critical property: this guess is ONLY a starting point, never a permanent override.** Once there's real answer history for that specific merchant+band (`matches.length > 0` in `getSuggestedType`), the vote-count from actual answers is used instead, even if it disagrees with the subtype guess — e.g. an insurance policy you've personally tagged "Investment" twice will keep suggesting Investment, not snap back to Need. This was a deliberate design choice, not an oversight — a hard-coded rule immune to real behavior would repeat the exact mistake the sliding-window redesign (above) already fixed once for Need/Want/Saving generally. See `testNeedWantSaving()`'s Test 12 for this exact scenario, verified with a standalone Node run before shipping.
+
+## Two separate places the type lives — don't confuse them
+
+- **`Transactions` column Q (`NeedWantSaving`)** — the actual, committed answer for *one specific transaction*. What History/Pending/Reconciliation display and pre-select. Never used to compute a suggestion for anything else.
+- **`TypeVotes` sheet (below)** — a shared per-merchant+band *learning pool*, used only to guess a default for the *next* unanswered transaction from that merchant. Never displayed as-is; always fed through `getSuggestedType`'s recent-5 window first.
+
+Saving a type writes to both, for different reasons: column Q so that specific row remembers its own answer forever, `TypeVotes` so future transactions from that merchant get a better cold-start guess.
 
 ## `TypeVotes` sheet schema
 

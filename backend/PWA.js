@@ -867,24 +867,25 @@ function getTransactionHistory(offset, limit){
       amount:       Number(data[i][5]) || 0,
       counterparty: data[i][7] || "",
       note:         note,
-      category:     data[i][13] || "Other"
+      category:     data[i][13] || "Other",
+      savedType:    (data[i][16] || "").toString().trim() || null // column Q — what was actually chosen, if anything
     });
   }
 
   noted.reverse(); // newest first
   const page = noted.slice(offset, offset + limit);
 
-  // Only compute Need/Want/Saving guesses for the one page actually being
-  // returned, not the whole history — and batch-read TypeVotes once for
-  // that page instead of per row (same reasoning as getPendingTransactions).
-  const typeVotesSheet = ss.getSheetByName("TypeVotes");
-  const typeVotesData  = typeVotesSheet ? typeVotesSheet.getDataRange().getValues() : [];
-
   page.forEach(function(t){
-    // Uses the transaction's REAL stored category (not a fresh guess) —
-    // it may have been deliberately chosen differently than the category
-    // engine would suggest, and that choice should be respected here.
-    t.suggestedType = getSuggestedType(t.type, t.category, t.counterparty, t.amount, typeVotesData);
+    // Show what was ACTUALLY chosen for this specific transaction, not a
+    // fresh re-guess — a guess here would silently drift as you answer
+    // more transactions for the same merchant later (found 2026-08-09:
+    // an old "Want" answer was showing as "Need" once later answers for
+    // that merchant tipped the vote). Transactions saved before this
+    // column existed have nothing stored (null) — deliberately left
+    // blank rather than guessed, since a wrong-looking guess here would
+    // be worse than no suggestion at all.
+    t.suggestedType = t.savedType;
+    delete t.savedType;
   });
 
   return {
@@ -967,6 +968,15 @@ function saveTransactionNote(row, note, category, counterparty, type, amount){
     if(counterparty && type){
       const voteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
       recordTypeVote(counterparty, voteAmount, type);
+
+      // Also save the actual chosen type ON this transaction (column Q) —
+      // separate from the vote above, which only feeds FUTURE suggestions.
+      // Without this, History had no way to show what was really picked
+      // for a specific transaction — it could only re-run today's
+      // suggestion, which drifts as you answer more transactions for the
+      // same merchant. Found and fixed 2026-08-09 after the user noticed
+      // old "Want" answers were showing as "Need" in History.
+      sheet.getRange(row, 17).setValue(type); // column Q
     }
 
     // Remember this note against the merchant (+ amount band) so it can be
