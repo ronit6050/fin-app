@@ -725,6 +725,67 @@
 
     .status-pill.danger  { background: var(--bg-danger);  color: var(--color-danger); }
     .status-pill.warning { background: var(--bg-warning); color: var(--color-warning); }
+    .status-pill.info    { background: var(--cat-transport-bg); color: var(--cat-transport-text); }
+
+    /* ---------- Swipeable card carousel — Savings screen, 2026-08-11.
+       Generic enough to reuse anywhere the app stacks several summary
+       cards vertically (e.g. Home's stat grid, CC Advisor). ---------- */
+    .carousel-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      line-height: 1;
+      padding: 0;
+      cursor: pointer;
+      box-shadow: var(--shadow-card);
+    }
+    .carousel-dots {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin: 10px 0 16px;
+    }
+    .carousel-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--surface-inset);
+      cursor: pointer;
+    }
+    .carousel-dot.active {
+      width: 16px;
+      border-radius: var(--radius-pill);
+      background: var(--text-primary);
+    }
+    .goal-hero-card {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      padding: 18px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      box-sizing: border-box;
+    }
+    .goal-card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .goal-card-actions button {
+      padding: 10px;
+      font-size: 0.85rem;
+    }
+    .goal-card-actions .secondary {
+      background: transparent;
+      color: var(--text-primary);
+      border: 0.5px solid var(--border-hairline);
+    }
     .status-pill.success { background: var(--bg-success); color: var(--color-success); }
 
     /* ---------- Empty states — icon + friendly message, used instead
@@ -1297,110 +1358,101 @@
         </div>
       </div>
 
-      <!-- ===== SUB-SCREEN: Savings & Wish List ===== -->
+      <!-- ===== SUB-SCREEN: Savings & Goals ===== -->
+      <!-- Rebuilt 2026-08-11 — replaces the old fixed 4-pot layout with
+           Emergency (locked) + a flexible Goals list (one-time or
+           recurring) + Free Savings (no goal assigned yet). Emergency,
+           CC Buffer, every goal, and Free Savings are all just cards in
+           one swipeable deck now, instead of a long vertical stack — the
+           user's own idea, after the old page had gotten too long to be
+           useful. See docs/features/savings-v2.md. -->
       <div id="view-savings" style="display:none">
         <button type="button" class="back-to-more">← Back</button>
-        <h2 class="section-title">Savings &amp; Wish List</h2>
+        <h2 class="section-title">Savings &amp; Goals</h2>
         <div id="savingsStatus"><span class="spinner"></span>Loading...</div>
         <div id="savingsContent" style="display:none">
 
-          <div class="today-total-box">
-            <div class="today-total-label">Emergency fund</div>
-            <div class="today-total-amount" id="savingsEmergencyAmount">₹0</div>
-            <div class="today-split" id="savingsEmergencyTarget"></div>
-          </div>
-          <div class="category-row">
-            <div class="category-top">
-              <span id="savingsStageLabel"></span>
+          <div style="position:relative;">
+            <div id="savingsCarouselTrack" style="overflow:hidden; border-radius:var(--radius-lg); touch-action:pan-y;">
+              <div id="savingsCarouselInner" style="display:flex; transition:transform 0.25s ease;"></div>
             </div>
-            <div class="category-bar-track">
-              <div class="category-bar-fill" id="savingsEmergencyBar" style="width:0%"></div>
-            </div>
+            <button type="button" id="savingsCarouselPrev" class="carousel-arrow" style="left:-6px;" aria-label="Previous card">‹</button>
+            <button type="button" id="savingsCarouselNext" class="carousel-arrow" style="right:-6px;" aria-label="Next card">›</button>
           </div>
+          <div id="savingsCarouselDots" class="carousel-dots"></div>
 
-          <div class="category-row" style="margin-top:14px;">
-            <div class="category-top">
-              <span>Wish list pot</span>
-              <span id="savingsWishlistAmount">₹0</span>
-            </div>
-          </div>
-          <div class="category-row">
-            <div class="category-top">
-              <span>Free savings</span>
-              <span id="savingsFreeAmount">₹0</span>
-            </div>
-          </div>
-
-          <!-- Added 2026-08-10 — a 4th pot, separate from the 3 above.
-               Money here counts as real "available" money in CC
-               Advisor's afford-this-bill check (closes the blind spot
-               where reserved money was invisible to it). Only grows
-               when you add to it directly, below — never touched by
-               the auto-split "Log a Saving" section further down. See
-               docs/features/cc-advisor.md. -->
-          <div class="category-row">
-            <div class="category-top">
-              <span>CC Buffer</span>
-              <span id="savingsCCBufferAmount">₹0</span>
-            </div>
-            <p style="font-size:0.8rem; color:var(--text-secondary); margin:4px 0 0;">Set aside for your card bill — counts as available money in CC Advisor</p>
-          </div>
-
-          <p id="savingsSplitLine" style="font-size:0.85rem; color:var(--text-secondary); margin:10px 0 16px 0;"></p>
-
-          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Wish List Items</h3>
-          <div id="wishlistItems"></div>
-
-          <button type="button" id="addWishlistToggleButton" style="margin-top:12px;">+ Add Wish List Item</button>
-          <div id="addWishlistForm" style="display:none; margin-top:12px;">
+          <!-- Shared quick-action panel — used for both "Add to X" and
+               "Withdraw from X", opened from whichever card's button was
+               tapped (quickActionState below tracks which). Keeps this
+               to one form instead of one per card. -->
+          <div id="quickActionPanel" style="display:none; margin-bottom:12px;">
+            <p id="quickActionLabel" style="font-size:0.9rem; font-weight:600; margin:0 0 8px 0;"></p>
             <div class="field">
-              <label>Item</label>
-              <input type="text" id="wishItemInput" placeholder="e.g. New phone">
+              <label>Amount (₹)</label>
+              <input type="number" id="quickActionAmountInput" min="0" step="1" placeholder="0">
             </div>
             <div class="field">
-              <label>Price (₹)</label>
-              <input type="number" id="wishPriceInput" min="0" step="1" placeholder="0">
+              <label>Note (optional)</label>
+              <input type="text" id="quickActionNoteInput" placeholder="e.g. bonus, refund">
+            </div>
+            <button type="button" id="quickActionConfirmButton">Confirm</button>
+            <button type="button" id="quickActionCancelButton" style="background:transparent; color:var(--text-secondary); border:0.5px solid var(--border-hairline); margin-top:8px;">Cancel</button>
+            <div id="quickActionResult" class="pending-result"></div>
+          </div>
+
+          <button type="button" id="addGoalToggleButton">+ Add Goal</button>
+          <div id="addGoalForm" style="display:none; margin-top:12px;">
+            <div class="field">
+              <label>Goal name</label>
+              <input type="text" id="goalNameInput" placeholder="e.g. New phone">
             </div>
             <div class="field">
-              <label>Priority</label>
-              <select id="wishPriorityInput">
-                <option value="High">High</option>
-                <option value="Medium" selected>Medium</option>
-                <option value="Low">Low</option>
-              </select>
+              <label>Target amount (₹)</label>
+              <input type="number" id="goalTargetInput" min="0" step="1" placeholder="0">
             </div>
-            <button type="button" id="saveWishlistButton">Save</button>
-            <div id="addWishlistResult" class="pending-result"></div>
+            <button type="button" id="saveGoalButton">Save</button>
+            <div id="addGoalResult" class="pending-result"></div>
           </div>
 
-          <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Log a Saving</h3>
-          <div class="field">
-            <label>Amount (₹)</label>
-            <input type="number" id="savingAmountInput" min="0" step="1" placeholder="0">
-          </div>
-          <div class="field">
-            <label>Type</label>
-            <input type="text" id="savingTypeInput" placeholder="e.g. bank, cash, jupiter" value="bank">
-          </div>
-          <div class="field">
-            <label>Note (optional)</label>
-            <input type="text" id="savingNoteInput" placeholder="e.g. monthly saving">
-          </div>
-          <button type="button" id="saveSavingButton">Save</button>
-          <div id="logSavingResult" class="pending-result"></div>
+          <button type="button" id="logSavingToggleButton" style="margin-top:12px;">+ Log a Saving</button>
+          <div id="logSavingSheet" style="display:none; margin-top:12px;">
+            <div class="field">
+              <label>Amount (₹)</label>
+              <input type="number" id="logAmountInput" min="0" step="1" placeholder="0">
+            </div>
+            <div class="field">
+              <label>Note (optional)</label>
+              <input type="text" id="logNoteInput" placeholder="e.g. monthly saving">
+            </div>
 
-          <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Add to CC Buffer</h3>
-          <p style="font-size:0.85rem; color:var(--text-secondary); margin:0 0 10px 0;">Start with a small fixed amount you're comfortable with (e.g. ₹1,000) and raise it over time.</p>
-          <div class="field">
-            <label>Amount (₹)</label>
-            <input type="number" id="ccBufferAmountInput" min="0" step="1" placeholder="0">
+            <div class="type-toggle" id="splitModeToggle" style="margin-bottom:12px;">
+              <button type="button" class="type-btn active" data-mode="auto">Auto Split</button>
+              <button type="button" class="type-btn" data-mode="manual">Manual</button>
+            </div>
+
+            <div id="autoSplitPane">
+              <div id="autoSplitPreview" style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:10px;">Enter an amount to see the split.</div>
+              <button type="button" id="confirmAutoSplitButton">Confirm Split</button>
+              <div id="autoSplitResult" class="pending-result"></div>
+            </div>
+
+            <div id="manualSplitPane" style="display:none;">
+              <div id="manualSplitRows"></div>
+              <button type="button" id="addManualRowButton" style="margin-top:6px; background:var(--surface-inset); color:var(--text-primary);">+ Add Row</button>
+              <p id="manualSplitRemaining" style="font-size:0.8rem; color:var(--text-secondary); margin:8px 0;"></p>
+              <button type="button" id="saveManualSplitButton">Save Split</button>
+              <div id="manualSplitResult" class="pending-result"></div>
+            </div>
           </div>
-          <div class="field">
-            <label>Note (optional)</label>
-            <input type="text" id="ccBufferNoteInput" placeholder="e.g. this month's buffer">
+
+          <div class="category-row" style="margin-top:18px; cursor:pointer;" id="recentActivityHeader">
+            <div class="category-top">
+              <span>Recent Activity</span>
+              <span id="recentActivityChevron">▾</span>
+            </div>
           </div>
-          <button type="button" id="saveCCBufferButton">Add</button>
-          <div id="ccBufferResult" class="pending-result"></div>
+          <div id="recentActivityDetail" style="display:none;"></div>
+
         </div>
       </div>
 
@@ -2383,8 +2435,8 @@
       saveCache("debts", full.debts);
       if (!tabLoaded.debts) { renderDebts(full.debts); tabLoaded.debts = true; }
 
-      saveCache("savings", full.savings);
-      if (!tabLoaded.savings) { renderSavings(full.savings); tabLoaded.savings = true; }
+      saveCache("savingsGoals", full.savingsGoals);
+      if (!tabLoaded.savings) { renderSavingsGoals(full.savingsGoals); tabLoaded.savings = true; }
 
       saveCache("investments", full.investments);
       if (!tabLoaded.investments) { renderInvestments(full.investments); tabLoaded.investments = true; }
@@ -3916,49 +3968,81 @@
     });
 
     // ---------------------------------------------------------
-    // SAVINGS & WISH LIST
+    // SAVINGS & GOALS (rebuilt 2026-08-11 — see docs/features/savings-v2.md)
+    // Emergency (locked) + Goals (flexible list, one-time or recurring)
+    // + Free Savings (no goal picked yet). Emergency/CC Buffer/each
+    // goal/Free Savings all live in one swipeable card carousel now,
+    // instead of a long vertical stack.
     // ---------------------------------------------------------
-    const savingsStatusEl         = document.getElementById("savingsStatus");
-    const savingsContentEl        = document.getElementById("savingsContent");
-    const savingsEmergencyAmountEl = document.getElementById("savingsEmergencyAmount");
-    const savingsEmergencyTargetEl = document.getElementById("savingsEmergencyTarget");
-    const savingsEmergencyBarEl   = document.getElementById("savingsEmergencyBar");
-    const savingsStageLabelEl     = document.getElementById("savingsStageLabel");
-    const savingsWishlistAmountEl = document.getElementById("savingsWishlistAmount");
-    const savingsFreeAmountEl     = document.getElementById("savingsFreeAmount");
-    const savingsCCBufferAmountEl = document.getElementById("savingsCCBufferAmount");
-    const savingsSplitLineEl      = document.getElementById("savingsSplitLine");
-    const wishlistItemsEl         = document.getElementById("wishlistItems");
+    const savingsStatusEl  = document.getElementById("savingsStatus");
+    const savingsContentEl = document.getElementById("savingsContent");
 
-    const addWishlistToggleButtonEl = document.getElementById("addWishlistToggleButton");
-    const addWishlistFormEl   = document.getElementById("addWishlistForm");
-    const wishItemInputEl     = document.getElementById("wishItemInput");
-    const wishPriceInputEl    = document.getElementById("wishPriceInput");
-    const wishPriorityInputEl = document.getElementById("wishPriorityInput");
-    const saveWishlistButtonEl = document.getElementById("saveWishlistButton");
-    const addWishlistResultEl = document.getElementById("addWishlistResult");
+    const savingsCarouselInnerEl = document.getElementById("savingsCarouselInner");
+    const savingsCarouselTrackEl = document.getElementById("savingsCarouselTrack");
+    const savingsCarouselDotsEl  = document.getElementById("savingsCarouselDots");
+    const savingsCarouselPrevEl  = document.getElementById("savingsCarouselPrev");
+    const savingsCarouselNextEl  = document.getElementById("savingsCarouselNext");
 
-    const savingAmountInputEl = document.getElementById("savingAmountInput");
-    const savingTypeInputEl   = document.getElementById("savingTypeInput");
-    const savingNoteInputEl   = document.getElementById("savingNoteInput");
-    const saveSavingButtonEl  = document.getElementById("saveSavingButton");
-    const logSavingResultEl   = document.getElementById("logSavingResult");
+    const quickActionPanelEl        = document.getElementById("quickActionPanel");
+    const quickActionLabelEl        = document.getElementById("quickActionLabel");
+    const quickActionAmountInputEl  = document.getElementById("quickActionAmountInput");
+    const quickActionNoteInputEl    = document.getElementById("quickActionNoteInput");
+    const quickActionConfirmButtonEl = document.getElementById("quickActionConfirmButton");
+    const quickActionCancelButtonEl  = document.getElementById("quickActionCancelButton");
+    const quickActionResultEl        = document.getElementById("quickActionResult");
 
-    const ccBufferAmountInputEl = document.getElementById("ccBufferAmountInput");
-    const ccBufferNoteInputEl   = document.getElementById("ccBufferNoteInput");
-    const saveCCBufferButtonEl  = document.getElementById("saveCCBufferButton");
-    const ccBufferResultEl      = document.getElementById("ccBufferResult");
+    const addGoalToggleButtonEl = document.getElementById("addGoalToggleButton");
+    const addGoalFormEl     = document.getElementById("addGoalForm");
+    const goalNameInputEl   = document.getElementById("goalNameInput");
+    const goalTargetInputEl = document.getElementById("goalTargetInput");
+    const saveGoalButtonEl  = document.getElementById("saveGoalButton");
+    const addGoalResultEl   = document.getElementById("addGoalResult");
+
+    const logSavingToggleButtonEl = document.getElementById("logSavingToggleButton");
+    const logSavingSheetEl   = document.getElementById("logSavingSheet");
+    const logAmountInputEl   = document.getElementById("logAmountInput");
+    const logNoteInputEl     = document.getElementById("logNoteInput");
+    const splitModeToggleEl  = document.getElementById("splitModeToggle");
+    const autoSplitPaneEl    = document.getElementById("autoSplitPane");
+    const manualSplitPaneEl  = document.getElementById("manualSplitPane");
+    const autoSplitPreviewEl = document.getElementById("autoSplitPreview");
+    const confirmAutoSplitButtonEl = document.getElementById("confirmAutoSplitButton");
+    const autoSplitResultEl  = document.getElementById("autoSplitResult");
+    const manualSplitRowsEl  = document.getElementById("manualSplitRows");
+    const addManualRowButtonEl   = document.getElementById("addManualRowButton");
+    const manualSplitRemainingEl = document.getElementById("manualSplitRemaining");
+    const saveManualSplitButtonEl = document.getElementById("saveManualSplitButton");
+    const manualSplitResultEl = document.getElementById("manualSplitResult");
+
+    const recentActivityHeaderEl  = document.getElementById("recentActivityHeader");
+    const recentActivityDetailEl  = document.getElementById("recentActivityDetail");
+    const recentActivityChevronEl = document.getElementById("recentActivityChevron");
+
+    let savingsData    = null; // last loaded getSavingsGoals() result
+    let carouselIndex  = 0;
+    let quickActionState = null; // { mode: "add"|"withdraw", destination }
+
+    function fmtRs(n) { return "₹" + Math.round(n).toLocaleString("en-IN"); }
+
+    // Any save/withdraw/purchase can change CC Buffer's balance, which
+    // CC Advisor's affordability check depends on — same cache
+    // invalidation the old CC Buffer form used.
+    function clearSavingsRelatedCaches() {
+      localStorage.removeItem("cache_cc");
+      localStorage.removeItem("cache_dashboard");
+      tabLoaded.cc = false;
+    }
 
     function loadSavings() {
-      const cached = loadCache("savings");
+      const cached = loadCache("savingsGoals");
       if (cached) {
-        renderSavings(cached);
+        renderSavingsGoals(cached);
       } else {
         savingsStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
         savingsContentEl.style.display = "none";
       }
 
-      callAppsScript({ action: "getSavings", idToken: currentUser.idToken })
+      callAppsScript({ action: "getSavingsGoals", idToken: currentUser.idToken })
         .then(function (data) {
           if (!data.ok) {
             if (isAuthError(data.error)) {
@@ -3969,8 +4053,8 @@
             return;
           }
 
-          saveCache("savings", data.savings);
-          renderSavings(data.savings);
+          saveCache("savingsGoals", data.savings);
+          renderSavingsGoals(data.savings);
         })
         .catch(function (err) {
           if (cached) return;
@@ -3978,211 +4062,538 @@
         });
     }
 
-    // Fetches fresh (skips the cache) and updates the saved copy — used
-    // right after a save/purchase action, since the cache is now stale.
+    // Fetches fresh (skips the cache) — used after any save/withdraw/
+    // purchase action, since the cache is now stale.
     function refreshSavings() {
-      return callAppsScript({ action: "getSavings", idToken: currentUser.idToken })
+      return callAppsScript({ action: "getSavingsGoals", idToken: currentUser.idToken })
         .then(function (data) {
-          if (data.ok) { saveCache("savings", data.savings); renderSavings(data.savings); }
+          if (data.ok) { saveCache("savingsGoals", data.savings); renderSavingsGoals(data.savings); }
         });
     }
 
-    function renderSavings(s) {
+    function renderSavingsGoals(s) {
+      savingsData = s;
       savingsStatusEl.textContent = "";
       savingsContentEl.style.display = "block";
+      renderCarousel(s);
+      renderRecentActivity(s.recentEntries || []);
+    }
 
-      savingsEmergencyAmountEl.textContent = "₹" + s.emergency.toLocaleString("en-IN");
-      savingsEmergencyTargetEl.textContent = "of ₹" + s.emergencyTarget.toLocaleString("en-IN") + " target";
+    // ---------- Carousel: Emergency, CC Buffer, each goal, Free Savings ----------
 
-      const emergencyPct = s.emergencyTarget > 0
-        ? Math.min(Math.round((s.emergency / s.emergencyTarget) * 100), 100)
-        : 0;
-      savingsEmergencyBarEl.style.width = emergencyPct + "%";
-      savingsStageLabelEl.textContent = s.stageLabel + " · " + emergencyPct + "%";
+    function buildCarouselCards(s) {
+      const cards = [{ kind: "emergency", saved: s.emergency, target: s.emergencyTarget }];
+      s.goals
+        .filter(function (g) { return g.status === "Active"; })
+        .forEach(function (g) { cards.push({ kind: "goal", goal: g }); });
+      cards.push({ kind: "free", saved: s.free });
+      return cards;
+    }
 
-      savingsWishlistAmountEl.textContent = "₹" + s.wishlist.toLocaleString("en-IN");
-      savingsFreeAmountEl.textContent = "₹" + s.free.toLocaleString("en-IN");
-      savingsCCBufferAmountEl.textContent = "₹" + s.ccBuffer.toLocaleString("en-IN");
+    function renderCarousel(s) {
+      const cards = buildCarouselCards(s);
 
-      savingsSplitLineEl.textContent =
-        "This month's ₹" + s.monthlyGoal.toLocaleString("en-IN") + " split: " +
-        s.splitPct.emergency + "% Emergency · " + s.splitPct.wishlist + "% Wish List · " + s.splitPct.free + "% Free";
+      savingsCarouselInnerEl.innerHTML = "";
+      cards.forEach(function (c) { savingsCarouselInnerEl.appendChild(renderCarouselCard(c)); });
 
-      wishlistItemsEl.innerHTML = "";
-      if (s.wishItems.length === 0) {
-        wishlistItemsEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🎯</span><p>No active wish list items yet.</p></div>";
-      } else {
-        s.wishItems.forEach(function (entry) {
-          wishlistItemsEl.appendChild(buildWishlistItem(entry, s.wishlist));
+      savingsCarouselDotsEl.innerHTML = "";
+      cards.forEach(function (_, i) {
+        const dot = document.createElement("span");
+        dot.className = "carousel-dot" + (i === carouselIndex ? " active" : "");
+        dot.addEventListener("click", function () { goToCarouselCard(i); });
+        savingsCarouselDotsEl.appendChild(dot);
+      });
+
+      goToCarouselCard(Math.min(carouselIndex, cards.length - 1));
+    }
+
+    function goToCarouselCard(i) {
+      const count = savingsCarouselInnerEl.children.length;
+      carouselIndex = Math.max(0, Math.min(count - 1, i));
+      savingsCarouselInnerEl.style.transform = "translateX(calc(-" + carouselIndex + " * (100% + 10px)))";
+      Array.from(savingsCarouselDotsEl.children).forEach(function (d, idx) {
+        d.classList.toggle("active", idx === carouselIndex);
+      });
+    }
+
+    savingsCarouselPrevEl.addEventListener("click", function () { goToCarouselCard(carouselIndex - 1); });
+    savingsCarouselNextEl.addEventListener("click", function () { goToCarouselCard(carouselIndex + 1); });
+
+    let carouselStartX = null;
+    savingsCarouselTrackEl.addEventListener("pointerdown", function (e) { carouselStartX = e.clientX; });
+    savingsCarouselTrackEl.addEventListener("pointerup", function (e) {
+      if (carouselStartX === null) return;
+      const dx = e.clientX - carouselStartX;
+      if (dx > 40) goToCarouselCard(carouselIndex - 1);
+      else if (dx < -40) goToCarouselCard(carouselIndex + 1);
+      carouselStartX = null;
+    });
+
+    function renderCarouselCard(card) {
+      const el = document.createElement("div");
+      el.style.minWidth = "100%";
+      el.style.boxSizing = "border-box";
+      el.style.marginRight = "10px";
+
+      if (card.kind === "emergency") {
+        const pct = card.target > 0 ? Math.min(Math.round((card.saved / card.target) * 100), 100) : 0;
+        el.innerHTML = `
+          <div class="today-total-box">
+            <div class="today-total-label">Emergency Fund</div>
+            <div class="today-total-amount">${fmtRs(card.saved)}</div>
+            <div class="today-split">of ${fmtRs(card.target)} target &middot; locked, real emergencies only</div>
+            <div class="category-bar-track" style="background:rgba(255,255,255,0.15); margin-top:10px;">
+              <div class="category-bar-fill" style="background:var(--text-on-hero); width:${pct}%"></div>
+            </div>
+            <div class="goal-card-actions">
+              <button type="button" class="emergency-add-btn" style="background:var(--text-on-hero); color:var(--surface-hero);">Add to Emergency</button>
+              <button type="button" class="secondary emergency-withdraw-btn" style="border-color:var(--text-on-hero-muted); color:var(--text-on-hero);">Withdraw</button>
+            </div>
+          </div>
+        `;
+        el.querySelector(".emergency-add-btn").addEventListener("click", function () { openQuickAction("add", "Emergency", card.saved); });
+        el.querySelector(".emergency-withdraw-btn").addEventListener("click", function () { openQuickAction("withdraw", "Emergency", card.saved); });
+        return el;
+      }
+
+      if (card.kind === "free") {
+        el.innerHTML = `
+          <div class="goal-hero-card">
+            <div style="font-size:0.78rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.3px;">Free Savings</div>
+            <div style="font-size:1.9rem; font-weight:700; letter-spacing:-0.6px; margin:2px 0;">${fmtRs(card.saved)}</div>
+            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:10px;">No goal picked yet</div>
+            <div class="goal-card-actions">
+              <button type="button" class="free-add-btn">Add</button>
+              <button type="button" class="secondary free-withdraw-btn">Withdraw</button>
+            </div>
+          </div>
+        `;
+        el.querySelector(".free-add-btn").addEventListener("click", function () { openQuickAction("add", "Free", card.saved); });
+        el.querySelector(".free-withdraw-btn").addEventListener("click", function () { openQuickAction("withdraw", "Free", card.saved); });
+        return el;
+      }
+
+      // A goal — one-time (e.g. a phone) or recurring (CC Buffer)
+      const g = card.goal;
+      const pct = g.target > 0 ? Math.min(Math.round((g.saved / g.target) * 100), 100) : 0;
+      const isRecurring = g.type === "Recurring";
+      const badges =
+        (g.priority ? '<span class="status-pill success" style="margin-left:6px;">Priority</span>' : '') +
+        (isRecurring ? '<span class="status-pill info" style="margin-left:6px;">Recurring</span>' : '');
+      const primaryLabel = isRecurring ? "Add to Buffer" : (g.canAfford ? "Mark Purchased" : "Add to Goal");
+      const showPriorityBtn = !isRecurring && !g.priority;
+      const showWithdrawBtn = g.saved > 0;
+
+      el.innerHTML = `
+        <div class="goal-hero-card">
+          <div style="font-size:0.78rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.3px;">${escapeHtml(g.name)}${badges}</div>
+          <div style="font-size:1.9rem; font-weight:700; letter-spacing:-0.6px; margin:2px 0;">${fmtRs(g.saved)}</div>
+          <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:10px;">of ${fmtRs(g.target)}${isRecurring ? " (auto, from your average bill)" : ""}</div>
+          <div class="category-bar-track">
+            <div class="category-bar-fill" style="width:${pct}%"></div>
+          </div>
+          <div class="goal-card-actions">
+            <button type="button" class="goal-primary-btn">${primaryLabel}</button>
+            ${showPriorityBtn ? '<button type="button" class="secondary goal-priority-btn">Set Priority</button>' : ""}
+          </div>
+          ${showWithdrawBtn ? '<button type="button" class="secondary goal-withdraw-btn" style="width:100%; margin-top:8px;">Withdraw</button>' : ""}
+          <div class="pending-result goal-card-msg"></div>
+        </div>
+      `;
+
+      const msgEl = el.querySelector(".goal-card-msg");
+
+      el.querySelector(".goal-primary-btn").addEventListener("click", function () {
+        if (!isRecurring && g.canAfford) {
+          msgEl.textContent = "Saving...";
+          callAppsScript({ action: "purchaseSavingsGoal", idToken: currentUser.idToken, row: g.row, name: g.name, amount: g.saved })
+            .then(function (data) {
+              if (data.ok) { clearSavingsRelatedCaches(); refreshSavings(); }
+              else { msgEl.textContent = data.error; }
+            })
+            .catch(function (err) { msgEl.textContent = err.message; });
+        } else {
+          openQuickAction("add", g.name, g.saved);
+        }
+      });
+
+      const priorityBtn = el.querySelector(".goal-priority-btn");
+      if (priorityBtn) {
+        priorityBtn.addEventListener("click", function () {
+          msgEl.textContent = "Saving...";
+          callAppsScript({ action: "setPrioritySavingsGoal", idToken: currentUser.idToken, row: g.row })
+            .then(function (data) {
+              if (data.ok) { clearSavingsRelatedCaches(); refreshSavings(); }
+              else { msgEl.textContent = data.error; }
+            })
+            .catch(function (err) { msgEl.textContent = err.message; });
         });
+      }
+
+      const withdrawBtn = el.querySelector(".goal-withdraw-btn");
+      if (withdrawBtn) {
+        withdrawBtn.addEventListener("click", function () { openQuickAction("withdraw", g.name, g.saved); });
+      }
+
+      return el;
+    }
+
+    // ---------- Shared "Add to X" / "Withdraw from X" panel ----------
+
+    function openQuickAction(mode, destination, available) {
+      quickActionState = { mode: mode, destination: destination };
+      quickActionLabelEl.textContent = mode === "add"
+        ? "Add to " + destination
+        : "Withdraw from " + destination + " (" + fmtRs(available) + " available)";
+      quickActionAmountInputEl.value = "";
+      quickActionNoteInputEl.value = "";
+      quickActionResultEl.textContent = "";
+      quickActionPanelEl.style.display = "block";
+      quickActionPanelEl.scrollIntoView({ block: "nearest" });
+    }
+
+    quickActionCancelButtonEl.addEventListener("click", function () {
+      quickActionPanelEl.style.display = "none";
+      quickActionState = null;
+    });
+
+    quickActionConfirmButtonEl.addEventListener("click", function () {
+      if (!quickActionState) return;
+      const amount = parseFloat(quickActionAmountInputEl.value);
+      const note   = quickActionNoteInputEl.value.trim();
+
+      if (!amount || amount <= 0) {
+        quickActionResultEl.textContent = "Enter a valid amount.";
+        return;
+      }
+
+      quickActionResultEl.textContent = "Saving...";
+
+      const request = quickActionState.mode === "add"
+        ? { action: "saveSavingsManual", idToken: currentUser.idToken, amount: amount, rows: [{ destination: quickActionState.destination, amount: amount }], note: note }
+        : { action: "withdrawSavings", idToken: currentUser.idToken, bucket: quickActionState.destination, amount: amount, note: note };
+
+      callAppsScript(request)
+        .then(function (data) {
+          if (data.ok) {
+            quickActionPanelEl.style.display = "none";
+            quickActionState = null;
+            clearSavingsRelatedCaches();
+            refreshSavings();
+          } else {
+            quickActionResultEl.textContent = data.error;
+          }
+        })
+        .catch(function (err) {
+          quickActionResultEl.textContent = err.message;
+        });
+    });
+
+    // ---------- Add Goal ----------
+
+    addGoalToggleButtonEl.addEventListener("click", function () {
+      const isHidden = addGoalFormEl.style.display === "none";
+      addGoalFormEl.style.display = isHidden ? "block" : "none";
+    });
+
+    saveGoalButtonEl.addEventListener("click", function () {
+      const name   = goalNameInputEl.value.trim();
+      const target = parseFloat(goalTargetInputEl.value);
+
+      if (!name || !target || target <= 0) {
+        addGoalResultEl.textContent = "Enter a goal name and a valid target amount.";
+        return;
+      }
+
+      addGoalResultEl.textContent = "Saving...";
+
+      callAppsScript({ action: "addSavingsGoal", idToken: currentUser.idToken, name: name, type: "OneTime", target: target })
+        .then(function (data) {
+          if (data.ok) {
+            goalNameInputEl.value = "";
+            goalTargetInputEl.value = "";
+            addGoalResultEl.textContent = "";
+            addGoalFormEl.style.display = "none";
+            clearSavingsRelatedCaches();
+            refreshSavings();
+          } else {
+            addGoalResultEl.textContent = data.error;
+          }
+        })
+        .catch(function (err) {
+          addGoalResultEl.textContent = err.message;
+        });
+    });
+
+    // ---------- Log a Saving: Auto Split / Manual ----------
+
+    logSavingToggleButtonEl.addEventListener("click", function () {
+      const isHidden = logSavingSheetEl.style.display === "none";
+      logSavingSheetEl.style.display = isHidden ? "block" : "none";
+      if (isHidden) {
+        logAmountInputEl.value = "";
+        logNoteInputEl.value = "";
+        autoSplitResultEl.textContent = "";
+        manualSplitResultEl.textContent = "";
+        updateAutoPreview();
+        resetManualRows();
+      }
+    });
+
+    splitModeToggleEl.querySelectorAll(".type-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        splitModeToggleEl.querySelectorAll(".type-btn").forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        const mode = btn.dataset.mode;
+        autoSplitPaneEl.style.display   = mode === "auto"   ? "block" : "none";
+        manualSplitPaneEl.style.display = mode === "manual" ? "block" : "none";
+        if (mode === "manual") resetManualRows();
+      });
+    });
+
+    logAmountInputEl.addEventListener("input", function () {
+      updateAutoPreview();
+      updateManualRemaining();
+    });
+
+    function updateAutoPreview() {
+      const amount = parseFloat(logAmountInputEl.value);
+      if (!amount || amount <= 0) {
+        autoSplitPreviewEl.textContent = "Enter an amount to see the split.";
+        return;
+      }
+      callAppsScript({ action: "previewSavingsSplit", idToken: currentUser.idToken, amount: amount })
+        .then(function (data) {
+          if (!data.ok) { autoSplitPreviewEl.textContent = data.error; return; }
+          const b = data.breakdown;
+          const parts = [];
+          if (b.emergency > 0) parts.push("Emergency: " + fmtRs(b.emergency));
+          if (b.ccBuffer  > 0) parts.push("CC Buffer: " + fmtRs(b.ccBuffer));
+          if (b.goal > 0 && b.goalName) parts.push(b.goalName + ": " + fmtRs(b.goal));
+          if (b.free > 0) parts.push("Free Savings: " + fmtRs(b.free));
+          autoSplitPreviewEl.textContent = parts.length ? parts.join(" · ") : "Enter an amount to see the split.";
+        });
+    }
+
+    confirmAutoSplitButtonEl.addEventListener("click", function () {
+      const amount = parseFloat(logAmountInputEl.value);
+      const note   = logNoteInputEl.value.trim();
+
+      if (!amount || amount <= 0) {
+        autoSplitResultEl.textContent = "Enter a valid amount.";
+        return;
+      }
+
+      autoSplitResultEl.textContent = "Saving...";
+
+      callAppsScript({ action: "saveSavingsAuto", idToken: currentUser.idToken, amount: amount, note: note })
+        .then(function (data) {
+          if (data.ok) {
+            logSavingSheetEl.style.display = "none";
+            clearSavingsRelatedCaches();
+            refreshSavings();
+          } else {
+            autoSplitResultEl.textContent = data.error;
+          }
+        })
+        .catch(function (err) {
+          autoSplitResultEl.textContent = err.message;
+        });
+    });
+
+    // Manual rows — pick a destination + amount, add as many as needed.
+    // Leaving one row's amount blank auto-fills it with whatever's left.
+    function resetManualRows() {
+      manualSplitRowsEl.innerHTML = "";
+      addManualRow();
+      addManualRow();
+      updateManualRemaining();
+    }
+
+    function addManualRow() {
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.gap = "8px";
+      row.style.marginBottom = "8px";
+
+      const destinations = (savingsData && savingsData.destinations) || ["Emergency", "Free"];
+      const optionsHtml = destinations.map(function (d) {
+        return `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`;
+      }).join("");
+
+      row.innerHTML = `
+        <select class="manual-dest" style="flex:1; padding:9px; border-radius:10px; border:none; background:var(--surface-inset); color:var(--text-primary); font-size:0.85rem;">${optionsHtml}</select>
+        <input type="number" class="manual-amt" placeholder="leave blank for rest" min="0" step="1" style="width:110px; padding:9px; border-radius:10px; border:none; background:var(--surface-inset); color:var(--text-primary); font-size:0.85rem;">
+      `;
+      row.querySelector(".manual-amt").addEventListener("input", updateManualRemaining);
+      manualSplitRowsEl.appendChild(row);
+    }
+
+    addManualRowButtonEl.addEventListener("click", addManualRow);
+
+    function updateManualRemaining() {
+      const total = parseFloat(logAmountInputEl.value) || 0;
+      const amountInputs = manualSplitRowsEl.querySelectorAll(".manual-amt");
+      let enteredSum = 0, blankCount = 0;
+
+      amountInputs.forEach(function (input) {
+        if (input.value === "") { blankCount++; }
+        else { enteredSum += parseFloat(input.value) || 0; }
+      });
+
+      if (blankCount === 0) {
+        manualSplitRemainingEl.textContent = enteredSum === total
+          ? "Adds up to " + fmtRs(total) + "."
+          : "Adds up to " + fmtRs(enteredSum) + ", not " + fmtRs(total) + ".";
+      } else {
+        manualSplitRemainingEl.textContent = fmtRs(Math.max(total - enteredSum, 0)) + " will fill in the blank row.";
       }
     }
 
-    function buildWishlistItem(entry, wishlistTotal) {
+    saveManualSplitButtonEl.addEventListener("click", function () {
+      const total = parseFloat(logAmountInputEl.value);
+      const note  = logNoteInputEl.value.trim();
+
+      if (!total || total <= 0) {
+        manualSplitResultEl.textContent = "Enter a valid amount.";
+        return;
+      }
+
+      const rowEls = Array.from(manualSplitRowsEl.children);
+      const rows = [];
+      let enteredSum = 0;
+      let blankRow = null;
+
+      rowEls.forEach(function (rowEl) {
+        const destination = rowEl.querySelector(".manual-dest").value;
+        const amountInput = rowEl.querySelector(".manual-amt");
+        if (amountInput.value === "") {
+          if (!blankRow) blankRow = destination; // only the first blank row auto-fills
+        } else {
+          const amt = parseFloat(amountInput.value) || 0;
+          enteredSum += amt;
+          rows.push({ destination: destination, amount: amt });
+        }
+      });
+
+      if (blankRow) {
+        const remainder = total - enteredSum;
+        if (remainder <= 0) {
+          manualSplitResultEl.textContent = "The other rows already add up to " + fmtRs(enteredSum) + " — nothing left for the blank row.";
+          return;
+        }
+        rows.push({ destination: blankRow, amount: remainder });
+      }
+
+      if (rows.length === 0) {
+        manualSplitResultEl.textContent = "Add at least one row.";
+        return;
+      }
+
+      manualSplitResultEl.textContent = "Saving...";
+
+      callAppsScript({ action: "saveSavingsManual", idToken: currentUser.idToken, amount: total, rows: rows, note: note })
+        .then(function (data) {
+          if (data.ok) {
+            logSavingSheetEl.style.display = "none";
+            clearSavingsRelatedCaches();
+            refreshSavings();
+          } else {
+            manualSplitResultEl.textContent = data.error;
+          }
+        })
+        .catch(function (err) {
+          manualSplitResultEl.textContent = err.message;
+        });
+    });
+
+    // ---------- Recent Activity — collapsed, editable/deletable ----------
+
+    recentActivityHeaderEl.addEventListener("click", function () {
+      const isHidden = recentActivityDetailEl.style.display === "none";
+      recentActivityDetailEl.style.display = isHidden ? "block" : "none";
+      recentActivityChevronEl.textContent = isHidden ? "▴" : "▾";
+    });
+
+    function renderRecentActivity(entries) {
+      recentActivityDetailEl.innerHTML = "";
+      if (entries.length === 0) {
+        recentActivityDetailEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🗒️</span><p>No savings activity yet.</p></div>";
+        return;
+      }
+      entries.forEach(function (entry) {
+        recentActivityDetailEl.appendChild(buildSavingsEntryItem(entry));
+      });
+    }
+
+    function buildSavingsEntryItem(entry) {
       const card = document.createElement("div");
-      card.className = "category-row";
+      card.className = "pending-item";
 
-      const percentOfPrice = entry.price > 0
-        ? Math.min(Math.round((wishlistTotal / entry.price) * 100), 100)
-        : 0;
+      const destinations = (savingsData && savingsData.destinations) || [entry.destination];
+      const destOptionsHtml = destinations.map(function (d) {
+        return `<option value="${escapeHtml(d)}"${d === entry.destination ? " selected" : ""}>${escapeHtml(d)}</option>`;
+      }).join("");
 
-      const actionHtml = entry.canAfford
-        ? '<button type="button" class="settle-btn purchase-btn" style="margin-top:8px;">Mark Purchased</button><div class="pending-result"></div>'
-        : `<div style="font-size:0.8rem; color:var(--text-secondary); margin-top:6px;">Need ₹${entry.remaining.toLocaleString("en-IN")} more</div>`;
+      const isWithdrawal = entry.amount < 0;
 
       card.innerHTML = `
-        <div class="category-top">
-          <span>${escapeHtml(entry.item)} <span style="color:var(--text-muted); font-size:0.8rem;">[${escapeHtml(entry.priority)}]</span></span>
-          <span>₹${entry.price.toLocaleString("en-IN")}</span>
+        <div class="pending-top">
+          <span>${isWithdrawal ? "&minus;" : ""}₹<input type="number" class="entry-amount" value="${Math.abs(entry.amount)}" min="0" step="1" style="width:90px; font-size:1em; font-weight:bold; border:1px solid transparent; background:var(--surface-inset); color:var(--text-primary); border-radius:6px; padding:2px 4px;"></span>
+          <span>${escapeHtml(entry.date)}${isWithdrawal ? " · withdrawal" : ""}</span>
         </div>
-        <div class="category-bar-track">
-          <div class="category-bar-fill" style="width:${percentOfPrice}%"></div>
+        <div class="field">
+          <label>Destination</label>
+          <select class="entry-dest">${destOptionsHtml}</select>
         </div>
-        ${actionHtml}
+        <div class="field">
+          <label>Note</label>
+          <input type="text" class="entry-note" value="${escapeHtml(entry.note)}">
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="entry-save-btn">Save</button>
+          <button type="button" class="entry-delete-btn" style="background:transparent; color:var(--color-danger); border:0.5px solid var(--bg-danger);">Delete</button>
+        </div>
+        <div class="pending-result"></div>
       `;
 
-      const purchaseButton = card.querySelector(".purchase-btn");
-      if (purchaseButton) {
-        const resultEl = card.querySelector(".pending-result");
-        purchaseButton.addEventListener("click", function () {
-          resultEl.textContent = "Saving...";
+      const amountInput = card.querySelector(".entry-amount");
+      const destSelect  = card.querySelector(".entry-dest");
+      const noteInput   = card.querySelector(".entry-note");
+      const resultEl    = card.querySelector(".pending-result");
 
-          callAppsScript({
-            action:  "markWishlistPurchased",
-            idToken: currentUser.idToken,
-            row:     entry.row,
-            item:    entry.item,
-            price:   entry.price
+      card.querySelector(".entry-save-btn").addEventListener("click", function () {
+        const magnitude = parseFloat(amountInput.value);
+        if (!magnitude || magnitude <= 0) { resultEl.textContent = "Enter a valid amount."; return; }
+
+        resultEl.textContent = "Saving...";
+        callAppsScript({
+          action: "updateSavingsEntry",
+          idToken: currentUser.idToken,
+          row: entry.row,
+          amount: isWithdrawal ? -magnitude : magnitude,
+          note: noteInput.value.trim(),
+          destination: destSelect.value
+        })
+          .then(function (data) {
+            if (data.ok) { clearSavingsRelatedCaches(); refreshSavings(); }
+            else { resultEl.textContent = data.error; }
           })
-            .then(function (data) {
-              if (data.ok) {
-                refreshSavings(); // refresh everything — purchase changes pot totals too
-              } else {
-                resultEl.textContent = data.error;
-              }
-            })
-            .catch(function (err) {
-              resultEl.textContent = err.message;
-            });
-        });
-      }
+          .catch(function (err) { resultEl.textContent = err.message; });
+      });
+
+      card.querySelector(".entry-delete-btn").addEventListener("click", function () {
+        resultEl.textContent = "Deleting...";
+        callAppsScript({ action: "deleteSavingsEntry", idToken: currentUser.idToken, row: entry.row })
+          .then(function (data) {
+            if (data.ok) { clearSavingsRelatedCaches(); refreshSavings(); }
+            else { resultEl.textContent = data.error; }
+          })
+          .catch(function (err) { resultEl.textContent = err.message; });
+      });
 
       return card;
     }
-
-    // Shows/hides the "add a wish list item" form
-    addWishlistToggleButtonEl.addEventListener("click", function () {
-      const isHidden = addWishlistFormEl.style.display === "none";
-      addWishlistFormEl.style.display = isHidden ? "block" : "none";
-    });
-
-    saveWishlistButtonEl.addEventListener("click", function () {
-      const item  = wishItemInputEl.value.trim();
-      const price = parseFloat(wishPriceInputEl.value);
-
-      if (!item || !price || price <= 0) {
-        addWishlistResultEl.textContent = "Enter an item name and a valid price.";
-        return;
-      }
-
-      addWishlistResultEl.textContent = "Saving...";
-
-      callAppsScript({
-        action:   "addWishlistItem",
-        idToken:  currentUser.idToken,
-        item:     item,
-        price:    price,
-        priority: wishPriorityInputEl.value
-      })
-        .then(function (data) {
-          if (data.ok) {
-            wishItemInputEl.value = "";
-            wishPriceInputEl.value = "";
-            addWishlistResultEl.textContent = "";
-            addWishlistFormEl.style.display = "none";
-            refreshSavings();
-          } else {
-            addWishlistResultEl.textContent = data.error;
-          }
-        })
-        .catch(function (err) {
-          addWishlistResultEl.textContent = err.message;
-        });
-    });
-
-    saveSavingButtonEl.addEventListener("click", function () {
-      const amount = parseFloat(savingAmountInputEl.value);
-      const type   = savingTypeInputEl.value.trim() || "bank";
-      const note   = savingNoteInputEl.value.trim();
-
-      if (!amount || amount <= 0) {
-        logSavingResultEl.textContent = "Enter a valid amount.";
-        return;
-      }
-
-      logSavingResultEl.textContent = "Saving...";
-
-      callAppsScript({
-        action:  "logSaving",
-        idToken: currentUser.idToken,
-        amount:  amount,
-        type:    type,
-        note:    note
-      })
-        .then(function (data) {
-          if (data.ok) {
-            savingAmountInputEl.value = "";
-            savingNoteInputEl.value = "";
-            logSavingResultEl.textContent =
-              "Split — Emergency: ₹" + data.emergencyAmt.toLocaleString("en-IN") +
-              " · Wish List: ₹" + data.wishlistAmt.toLocaleString("en-IN") +
-              " · Free: ₹" + data.freeAmt.toLocaleString("en-IN");
-            refreshSavings(); // refresh totals
-          } else {
-            logSavingResultEl.textContent = data.error;
-          }
-        })
-        .catch(function (err) {
-          logSavingResultEl.textContent = err.message;
-        });
-    });
-
-    saveCCBufferButtonEl.addEventListener("click", function () {
-      const amount = parseFloat(ccBufferAmountInputEl.value);
-      const note   = ccBufferNoteInputEl.value.trim();
-
-      if (!amount || amount <= 0) {
-        ccBufferResultEl.textContent = "Enter a valid amount.";
-        return;
-      }
-
-      ccBufferResultEl.textContent = "Saving...";
-
-      callAppsScript({
-        action:  "logCCBuffer",
-        idToken: currentUser.idToken,
-        amount:  amount,
-        note:    note
-      })
-        .then(function (data) {
-          if (data.ok) {
-            ccBufferAmountInputEl.value = "";
-            ccBufferNoteInputEl.value = "";
-            ccBufferResultEl.textContent = "Added.";
-            // Feeds CC Advisor's affordability check — same cache
-            // invalidation as Settings save, since that number is now stale.
-            localStorage.removeItem("cache_cc");
-            localStorage.removeItem("cache_dashboard");
-            tabLoaded.cc = false;
-            refreshSavings();
-          } else {
-            ccBufferResultEl.textContent = data.error;
-          }
-        })
-        .catch(function (err) {
-          ccBufferResultEl.textContent = err.message;
-        });
-    });
 
     // ---------------------------------------------------------
     // INVESTMENTS

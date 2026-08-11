@@ -98,6 +98,56 @@ function handlePwaRequest(data){
     return jsonResponse(markWishlistPurchasedFromApp(data.row, data.item, data.price));
   }
 
+  // ── Savings v2 (Goals-based engine, backend/savingsGoals.js) ──
+  // New, alongside the old actions above (not replacing them yet) —
+  // the old Savings screen keeps working until the new one is built
+  // and the existing pot data has been reconciled into the new shape.
+  // See docs/features/savings-v2.md.
+
+  if(data.action === "getSavingsGoals"){
+    return jsonResponse({ ok:true, savings: getSavingsBreakdown() });
+  }
+
+  if(data.action === "previewSavingsSplit"){
+    return jsonResponse(previewAutoSplit(data.amount));
+  }
+
+  if(data.action === "saveSavingsAuto"){
+    return jsonResponse(saveAutoSplit(data.amount, data.note));
+  }
+
+  if(data.action === "saveSavingsManual"){
+    return jsonResponse(saveManualSplit(data.amount, data.rows, data.note));
+  }
+
+  if(data.action === "withdrawSavings"){
+    return jsonResponse(withdrawSaving(data.bucket, data.amount, data.note));
+  }
+
+  if(data.action === "updateSavingsEntry"){
+    return jsonResponse(updateSavingsEntry(data.row, data.amount, data.note, data.destination));
+  }
+
+  if(data.action === "deleteSavingsEntry"){
+    return jsonResponse(deleteSavingsEntry(data.row));
+  }
+
+  if(data.action === "addSavingsGoal"){
+    return jsonResponse(addGoal(data.name, data.type, data.target));
+  }
+
+  if(data.action === "setPrioritySavingsGoal"){
+    return jsonResponse(setPriorityGoal(data.row));
+  }
+
+  if(data.action === "markSavingsGoalDone"){
+    return jsonResponse(markGoalDone(data.row));
+  }
+
+  if(data.action === "purchaseSavingsGoal"){
+    return jsonResponse(purchaseGoal(data.row, data.name, data.amount));
+  }
+
   if(data.action === "getInvestments"){
     return jsonResponse({ ok:true, investments: getInvestmentsData() });
   }
@@ -185,7 +235,14 @@ function getDashboardData(){
   const savings     = getSavingsData();
   const investments = getInvestmentsData();
 
-  const cc      = getCCAdvisorData(txnData, cashData, month, savings.ccBuffer);
+  // CC Buffer now lives in the new Goals-based Savings engine (see
+  // savingsGoals.js / docs/features/savings-v2.md) — read once here and
+  // reused both for CC Advisor's affordability check and to seed the new
+  // Savings tab's own cache below (full.savingsGoals), same "read each
+  // sheet once" rule the rest of this function already follows.
+  const savingsGoalsData = getSavingsBreakdown();
+  const ccBufferGoal     = savingsGoalsData.ccBufferGoal;
+  const cc      = getCCAdvisorData(txnData, cashData, month, ccBufferGoal ? ccBufferGoal.saved : 0);
   const pending = getPendingTransactions(txnData);
 
   const recent = pending.slice(0, 3).map(function(t){
@@ -211,6 +268,7 @@ function getDashboardData(){
       cc:          cc,
       debts:       debts,
       savings:     savings,
+      savingsGoals: savingsGoalsData,
       investments: investments,
       pending:     pending
     }
@@ -887,8 +945,10 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
     investedActual = m.invested;
   }
 
+  // CC Buffer now lives in the new Goals-based Savings engine — see
+  // note at the getDashboardData() call site above.
   const ccBuffer = (ccBufferAmount === undefined || ccBufferAmount === null)
-    ? getSavingsData().ccBuffer
+    ? (function(){ const g = getSavingsBreakdown().ccBufferGoal; return g ? g.saved : 0; })()
     : ccBufferAmount;
 
   // Added 2026-08-10 — user's real example: invested ₹3,000 so far this
