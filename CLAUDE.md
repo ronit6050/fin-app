@@ -224,41 +224,116 @@ for recency instead of comparing dates. Verified with a standalone Node
 test before shipping, not just the in-app manual test function. See
 [docs/features/need-want-saving.md](docs/features/need-want-saving.md).
 
-**Known UI polish items, not yet done (flagged 2026-08-11, a
-look-and-suggest review — nothing here has been built yet, just
-recorded so it isn't lost between sessions):**
-- Inconsistent loading states: 8 screens (Today, Analysis, CC Advisor,
-  Debts, Savings, Investments, Cash, History) still show a plain spinner
-  + "Loading..." text while Home and Pending use proper skeleton
-  placeholder cards — the two styles sit right next to each other in the
-  More menu, so it reads as unfinished rather than deliberate.
-- No screen offers a "Retry" button when a load fails — a failed screen
-  currently just shows an error message with no obvious next step besides
-  leaving and coming back.
-- The "← Back" link on More's sub-screens is a small plain-text link, not
-  a proper tap target (undersized for a thumb) and not drawn in the same
-  hand-drawn SVG icon style used everywhere else in the app (nav bar,
-  More-menu icons).
-- The Settings screen's fields (CC limit/thresholds, monthly expenses,
-  savings goal, monthly investment amount) are laid out as one flat list
-  with no visual grouping by topic (CC-related vs. budget-related), so
-  it's harder to scan than it should be.
-- Some small style duplication instead of reusing shared classes: the
-  Savings manual-split row has its own one-off styling rather than
-  reusing an existing row pattern; `.fe-btn` duplicates `.type-btn`
-  instead of sharing one class; several inline `style="font-size:...;
-  margin:..."` subheadings (e.g. "Recent", "Log an Investment") are
-  repeated by hand in multiple places instead of one shared subheading
-  class; and there's some unused leftover CSS from earlier redesigns
-  still sitting in the stylesheet.
-- One stray emoji outside the agreed exceptions (nav icons, More-menu
-  icons, category badges, small empty-state icons): the "✨ Updated"
-  heading in the What's New popup.
-- CC Advisor's affordability breakdown (cash + income vs. bill +
-  expenses + Rent/EMI + savings/investment goal) is a plain list of
-  numbers with no color-coded visual hierarchy — a quick glance doesn't
-  tell you at once whether you're in a safe or risky spot the way, say,
-  the CC usage percentage bar already does elsewhere on the same screen.
+**Second visual redesign — Login, Home charts, Analysis, More tab,
+new palette, hand-drawn category icons (2026-08-11): done.** Built by
+the `ui-ux-expert` subagent after two rounds of interactive mockups
+(a soft pass, then a bolder one) were shown and approved — user's
+words: "works for now but we will improve later but for now good
+work," i.e. approved to ship, not required to be pixel-perfect.
+Frontend-only (`index.html`), same "hand-written CSS, no frameworks,
+reuse existing tokens/classes" rules as every past redesign here. What
+changed:
+- **Login screen** — was a bare Google button on empty space, now has
+  an app-mark icon, "Welcome back" heading, a one-line reassurance,
+  the Google button in a card, and a "Private — only your own Google
+  account can sign in" trust line. A subtle CSS-only drifting-blob
+  background sits behind the mark (transform-only animation, no
+  images/blur filters, respects `prefers-reduced-motion`, disabled
+  automatically for anyone with that OS setting on).
+- **Home tab** — two new small charts under the stat grid: a stacked
+  bar of this month's category spend (+ a chip row of the top 2-3
+  categories and amounts, "+N more"), and a Need/Want/Saving/Investment
+  snapshot bar reusing the app's existing 4-way tag colors. Both link
+  to the Analysis tab rather than duplicating its detail — kept
+  deliberately small, not a mini dashboard. Uses data the existing
+  `getDashboard` call already returns, no new backend call.
+- **Analysis tab** — every category's progress bar is now colored to
+  match that category's own badge color (was one uniform color
+  regardless of category). The old prev/next circular-arrow buttons
+  were replaced with a single pill-shaped month switcher (arrows only
+  show a background on press/hover, not by default) — user specifically
+  disliked the old filled-circle-arrow look.
+- **More tab** — regrouped into labeled sections (Daily / Advisors /
+  Tools) with each item as a rounded icon tile instead of a plain list
+  row, which is what actually fixes the "feels like a generic list, not
+  a native app" complaint. Folded in four already-tracked rough edges
+  from the 2026-08-11 look-and-suggest review below in the same pass:
+  the 8 screens that showed a plain spinner + "Loading..." now use the
+  same skeleton-card style Home/Pending already had; every failed load
+  now shows a proper error state with a "Retry" button that re-runs the
+  same load function instead of a dead end; the small plain-text
+  "← Back" link became a properly-sized tap target using the same
+  hand-drawn SVG chevron style as the rest of the app; and Settings'
+  fields are now grouped under Appearance / Credit card / Budget and
+  goals headings instead of one flat list.
+- **New color palette** — accent moved from a plain generic blue to a
+  richer indigo/violet; the signature high-contrast hero card (today's
+  spend, etc.) moved from near-black to a deep forest green in light
+  mode, so it now visually matches the vivid green already used for the
+  same element in dark mode (previously the two modes used unrelated
+  colors for what's meant to be the same signature surface). All
+  category / Need-Want-Saving-Investment colors were deliberately left
+  untouched — the user relies on those for meaning.
+- **Real contrast bug found and fixed during this pass, not by the
+  original mockup review**: the brighter dark-mode indigo needed for
+  links/icons to stay legible on a near-black page (`#8B80FF`) was also
+  being used as the SOLID FILL behind white button text on every plain
+  `<button>` (Save, Confirm, +Add Debt, etc.) and the new Retry button —
+  that specific pairing (light purple fill + white text) only reached
+  about 3.2:1 contrast, under the 4.5:1 minimum for normal-size text,
+  even though the same color read fine everywhere else (as text/an
+  icon/a border against a card or page background, which is a
+  different, much less strict pairing). Fixed with a new token,
+  `--button-fill` — same as `--color-primary` in light mode (already a
+  comfortable 5.6:1, unaffected), but the existing, already-defined
+  darker `--color-primary-dark` shade in dark mode (4.6:1, passes) —
+  confirmed by computing the WCAG contrast ratio for the actual hex
+  pairs, not a visual skim. This is exactly the class of bug flagged as
+  a risk for this redesign; catching it is the reason that check was
+  called out as a requirement.
+- **Category icons** — replaced the emoji category badges (🍕 Food, 🚗
+  Transport, etc.) with hand-drawn line-icon SVGs (`stroke="currentColor"`,
+  no fill), matching the exact style already used for the nav bar and
+  More-menu icons. All 10 categories in the app's real list (Food,
+  Transport, Bills, Shopping, Lifestyle, Financial, Income, Education,
+  Health, Other) have a finished custom icon — none were skipped.
+- **Tactile press effect** — a soft raised-edge shadow that collapses
+  flat + shifts down 3px on tap, applied only to the elements the user
+  asked for: the Home hero card, the More tab's icon tiles, the Retry
+  button, and the card holding the Google sign-in button (the actual
+  Google-rendered button lives in a cross-origin iframe, so its own
+  hover/press state can't be restyled directly — giving the card around
+  it the same raised depth is the closest equivalent without touching
+  Google's widget). Deliberately not used anywhere else, per the user's
+  explicit "not everywhere" instruction.
+- Verification note: the browser preview pane in this session never
+  composited a frame at all (every `screenshot`/`zoom` call timed out,
+  on both a `file://` open and a local dev server, before and after
+  code changes) — a broader version of this project's known preview
+  limitation, not just the already-documented "live theme toggle"
+  case. Checked instead via: full code/contrast review (including the
+  bug above), CSS brace-balance + JS syntax validation, the
+  accessibility-tree structure (`read_page`) in both a light and a
+  dark `prefers-color-scheme`, and the browser console (no errors in
+  either mode). Real on-device visual confirmation in both themes is
+  still owed to the user before considering this fully verified — flag
+  this the same way the past dark-mode repaint check was flagged,
+  rather than claiming a visual check that didn't actually happen.
+
+**Known UI polish items — status updated 2026-08-11 (originally flagged
+same day by a look-and-suggest review):**
+- ~~Inconsistent loading states~~ — **done**, see redesign entry above.
+- ~~No "Retry" button on a failed load~~ — **done**, see above.
+- ~~Undersized/inconsistent "← Back" link~~ — **done**, see above.
+- ~~Settings fields not grouped by topic~~ — **done**, see above.
+- Still open, NOT touched by this redesign pass: some small style
+  duplication instead of reusing shared classes (the Savings
+  manual-split row's one-off styling, `.fe-btn` duplicating `.type-btn`,
+  repeated inline `style="font-size:...; margin:..."` subheadings
+  instead of one shared class, some unused leftover CSS from earlier
+  redesigns); the one stray "✨ Updated" emoji in the What's New popup
+  heading; and CC Advisor's affordability breakdown still being a plain
+  list of numbers with no color-coded visual hierarchy.
 
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
@@ -447,7 +522,19 @@ changes:
 
 ## AI agents (subagents) set up for this project (added 2026-08-11)
 
-Three specialist agents exist under `.claude/agents/`, each scoped to a
+**No separate "manager" agent** — considered, but rejected same day:
+subagents can't call each other or call the user directly in this
+setup, they can only be called by the main chat session and report
+back to it. So the main chat session is already the manager — it
+decides which specialist to use and pulls results together. What *was*
+missing was a shared place for that "manager" (the main chat) to check
+"what's outstanding" without re-deriving it from old conversations —
+that's [docs/AGENT_BACKLOG.md](docs/AGENT_BACKLOG.md), added the
+same day. Any agent that finds something during a "weekly check" adds
+it there; ask "what should we prioritize" in any future session and
+that file (plus this one) is where to look first.
+
+Four specialist agents exist under `.claude/agents/`, each scoped to a
 real boundary already in this codebase — not an invented org chart:
 
 | Agent | Scope | File |
@@ -455,6 +542,35 @@ real boundary already in this codebase — not an invented org chart:
 | `ui-ux-expert` | `index.html` — all visual/UI work | `.claude/agents/ui-ux-expert.md` |
 | `backend-agent` | `backend/*.js` — the main Apps Script backend | `.claude/agents/backend-agent.md` |
 | `sms-parser-agent` | `sms-parser-backend/Code.js` only — kept separate, extra cautious, since it's the one file that fails silently (see "SMS ingestion" section) | `.claude/agents/sms-parser-agent.md` |
+| `change-reviewer` | Any change, whichever file it touches — reviews the diff right before it goes live | `.claude/agents/change-reviewer.md` |
+
+**`change-reviewer`, added 2026-08-11, is genuine redundancy, not
+another relay layer.** The user's concern: with the main chat session
+as the only point of contact for all three specialists, one agent's
+blind spot could go straight to the live app unchecked. Rather than
+adding a "deputy" agent that just relays tasks (rejected — it wouldn't
+reduce anything the main chat session is carrying, since a subagent's
+own work already happens in its own separate context, not the main
+session's), this adds a second, independent set of eyes that reviews
+a *finished* change before the risky step, not one that manages other
+agents. It didn't write the change, has no stake in defending it, and
+can't ship anything itself (read-only + can re-run saved tests, no
+Write/Edit, no `clasp`/`git push`). **Workflow going forward**: once
+`backend-agent` or `sms-parser-agent` says a fix is push-ready, run
+`change-reviewer` on the diff before asking the user for the actual
+`clasp deploy` go-ahead, and show the user both reports together. Same
+idea applies to a `ui-ux-expert` change before it's pushed to GitHub
+(which is what actually updates the live GitHub Pages site).
+
+**Security-review skill, added same day.** Claude Code has a
+pre-built `security-review` skill (a dedicated security-scanning
+procedure) — since this app handles real financial data, and a real
+security issue was already found and fixed by hand once before
+(2026-08-09), the main chat session now also runs that skill directly
+on any live-bound change, alongside `change-reviewer`'s general review,
+before asking for the deploy/push go-ahead. This is a second,
+security-focused pass, not a replacement for `change-reviewer`'s
+broader check.
 
 Each can be given a specific task, or asked to run a **"weekly check"** —
 scans its area for bugs/rough edges/next-feature ideas and reports a

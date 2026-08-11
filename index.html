@@ -44,8 +44,29 @@
        every one of them in one place instead of hunting through 600+
        lines of rules. */
     :root {
-      --color-primary: #2f6fed;
-      --color-primary-dark: #2559c4;
+      /* Colour refresh, 2026-08-11: was a plain generic blue (#2f6fed).
+         Moved to a richer indigo/violet — still reads as "trustworthy
+         blue family" (buttons, links, focus rings, the active progress
+         bar on Analysis) but less like a default framework color.
+         Confirmed via a real contrast check (not a visual skim) against
+         both white and dark cards before shipping — see
+         docs/features/ui-redesign-2026-08.md if present, or the mockup
+         review in chat history. */
+      --color-primary: #5B4FE9;
+      --color-primary-dark: #4638C9;
+      /* Fixed 2026-08-11 (this session) — a real contrast gap found while
+         double-checking the palette above: --color-primary reads fine as
+         TEXT/an icon/a border against a page or card background in both
+         themes, but a SOLID button filled with it and white text is a
+         different pairing — in dark mode the brighter #8B80FF value
+         (needed so links/icons stay legible on near-black) only gives
+         white text about 3.2:1 contrast, under the 4.5:1 minimum for
+         normal-size text. --button-fill is a separate token just for
+         "solid fill behind white button text": same as --color-primary
+         in light mode (already 5.6:1, no issue there), but the darker
+         --color-primary-dark shade in dark mode (4.6:1) — see both dark
+         blocks below. Used by the default `button` rule and `.retry-btn`. */
+      --button-fill: var(--color-primary);
       --color-danger: #d93025;
       --color-warning: #f29900;
       --color-success: #1e8e3e;
@@ -62,12 +83,16 @@
       --border-hairline: #ececee;
 
       /* The hero card (today's spend) and the active bottom-nav pill are
-         deliberately inverted — near-black on a light page — so they
-         read as the app's signature, high-contrast elements rather than
-         blending in with the rest of the light-blue-accent UI. */
-      --surface-hero: #111214;
+         deliberately inverted — a high-contrast signature surface rather
+         than blending in with the rest of the light-blue-accent UI.
+         Changed 2026-08-11 from flat near-black (#111214) to a deep
+         forest green, so the light-mode hero visually ties back to the
+         vivid green used for the exact same surface in dark mode below —
+         previously the two modes used unrelated colors (black vs green)
+         for what's meant to be the same "signature" element. */
+      --surface-hero: #0E2620;
       --text-on-hero: #ffffff;
-      --text-on-hero-muted: #9a9ca3;
+      --text-on-hero-muted: #9FC2B6;
 
       --text-primary: #111214;
       --text-secondary: #6b6c72;
@@ -79,6 +104,16 @@
       --text-muted: #6e7079;
 
       --shadow-card: 0 1px 2px rgba(17, 18, 20, 0.05), 0 1px 1px rgba(17, 18, 20, 0.03);
+
+      /* "Tactile" press effect — added 2026-08-11, deliberately only used
+         on a few elements (see .tactile below), not everywhere. A solid
+         "edge" shadow sits under the element like a raised button; on
+         press it collapses to flat and the element shifts down 3px, then
+         springs back — a physical button-press feel without a heavy
+         skeuomorphic look. */
+      --tac-edge:    rgba(17, 18, 20, 0.10);
+      --tac-ambient: rgba(17, 18, 20, 0.14);
+      --tac-flat:    rgba(17, 18, 20, 0.10);
 
       --radius-sm: 10px;
       --radius-md: 16px;
@@ -117,14 +152,34 @@
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]),
       :root[data-theme="dark"] {
+        /* Same indigo family as light mode, brightened so it stays
+           legible against the near-black dark card background — this
+           didn't have its own dark-mode value before (it silently reused
+           the light-mode hex), which happened to still be readable for
+           the old plain blue but is worth pinning explicitly now. */
+        --color-primary: #8B80FF;
+        --color-primary-dark: #6F63E0;
+        /* See the light-mode --button-fill comment above — solid button
+           fill needs the darker shade here so white button text stays
+           readable (4.6:1) instead of the brighter #8B80FF (3.2:1). */
+        --button-fill: var(--color-primary-dark);
+
         --bg-page:      #0b0b0c;
         --surface-card: #18191c;
         --surface-inset: #212226;
         --border-hairline: #232427;
 
         --surface-hero: #1d9e75;
-        --text-on-hero: #04342c;
-        --text-on-hero-muted: #0f6e56;
+        /* FIX 2026-08-11 — real, pre-existing readability bug found
+           during a contrast audit, not a new change: the old muted color
+           (#0f6e56) sat almost exactly as dark as the hero background
+           itself (#1d9e75), giving a contrast ratio of about 1.8:1 —
+           the "Spent today" label and the "this month" line under it
+           were very hard to read in dark mode. Both values below are
+           checked against the WCAG contrast formula and land at 4.8:1
+           and 5.5:1 (the accepted minimum for small text is 4.5:1). */
+        --text-on-hero: #021712;
+        --text-on-hero-muted: #03251E;
 
         --text-primary: #f2f2f3;
         --text-secondary: #9a9ca3;
@@ -154,17 +209,37 @@
         --want-bg:   #2e2308; --want-text:   #efc775;
         --saving-bg: #0f2033; --saving-text: #85b7eb;
         --investment-bg: #241633; --investment-text: #c79ef0;
+
+        /* Same tactile press effect as light mode, but the "edge" shadow
+           needs to be much darker to still show up against a near-black
+           page background — plain black at these opacities against a
+           near-white page is invisible against a near-black one, so this
+           uses a stronger opacity here rather than trying to share one
+           value across both themes. */
+        --tac-edge:    rgba(0, 0, 0, 0.55);
+        --tac-ambient: rgba(0, 0, 0, 0.45);
+        --tac-flat:    rgba(0, 0, 0, 0.30);
       }
     }
     :root[data-theme="dark"] {
+      /* Same indigo family as light mode / the manual dark block below —
+         kept in sync, same reasoning as the prefers-color-scheme block. */
+      --color-primary: #8B80FF;
+      --color-primary-dark: #6F63E0;
+      /* Same button-fill contrast fix as the prefers-color-scheme block
+         above — see that block's comment for the full "why". */
+      --button-fill: var(--color-primary-dark);
+
       --bg-page:      #0b0b0c;
       --surface-card: #18191c;
       --surface-inset: #212226;
       --border-hairline: #232427;
 
       --surface-hero: #1d9e75;
-      --text-on-hero: #04342c;
-      --text-on-hero-muted: #0f6e56;
+      /* Same contrast fix as the prefers-color-scheme block above — see
+         that block's comment for the full "why". */
+      --text-on-hero: #021712;
+      --text-on-hero-muted: #03251E;
 
       --text-primary: #f2f2f3;
       --text-secondary: #9a9ca3;
@@ -194,6 +269,11 @@
       --want-bg:   #2e2308; --want-text:   #efc775;
       --saving-bg: #0f2033; --saving-text: #85b7eb;
       --investment-bg: #241633; --investment-text: #c79ef0;
+
+      /* Same as the prefers-color-scheme dark block above. */
+      --tac-edge:    rgba(0, 0, 0, 0.55);
+      --tac-ambient: rgba(0, 0, 0, 0.45);
+      --tac-flat:    rgba(0, 0, 0, 0.30);
     }
 
     /* ---------- Basic page setup ---------- */
@@ -373,6 +453,35 @@
       color: var(--text-on-hero-muted);
     }
 
+    /* ---------- Tactile press effect ----------
+       Added 2026-08-11, deliberately selective — only on elements that
+       are genuinely tappable and benefit from feeling more "physical":
+       the Home hero card (it already switches the Recent list below on
+       tap) and the More-tab icon tiles (see further down). NOT used on
+       plain cards, list rows, or category rows, so it stays an accent
+       rather than the default everywhere. */
+    .tactile {
+      box-shadow: 0 3px 0 var(--tac-edge), 0 7px 14px -6px var(--tac-ambient);
+      transform: translateY(0);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .tactile:active {
+      transform: translateY(3px);
+      box-shadow: 0 0 0 rgba(0, 0, 0, 0), 0 2px 6px var(--tac-flat);
+    }
+    /* The hero card's own edge uses a darkened version of its own
+       surface color (via color-mix) instead of the generic neutral
+       shadow above — it's a colored surface, not a white/dark card, so
+       a plain black edge looked disconnected from it. Works in both
+       themes automatically since it derives from --surface-hero. */
+    .hero-card.tactile {
+      box-shadow: 0 3px 0 color-mix(in srgb, var(--surface-hero) 55%, black 45%), 0 8px 16px -6px rgba(0, 0, 0, 0.28);
+    }
+    .hero-card.tactile:active {
+      transform: translateY(3px);
+      box-shadow: 0 0 0 rgba(0, 0, 0, 0), 0 3px 8px rgba(0, 0, 0, 0.2);
+    }
+
     .stat-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -530,7 +639,7 @@
       font-size: 0.95rem;
       font-weight: 600;
       color: white;
-      background-color: var(--color-primary);
+      background-color: var(--button-fill);
       border: none;
       border-radius: var(--radius-pill);
       cursor: pointer;
@@ -538,7 +647,7 @@
     }
 
     button:hover {
-      background-color: var(--color-primary-dark);
+      background-color: color-mix(in srgb, var(--button-fill) 85%, black 15%);
     }
 
     /* A little "press" feedback so taps feel responsive */
@@ -546,16 +655,115 @@
       transform: scale(0.97);
     }
 
-    /* ---------- Sign-in area ---------- */
+    /* ---------- Sign-in area (redesigned 2026-08-11) ----------
+       Was just the bare Google button on empty space — now has a short
+       welcome moment above it (icon mark, heading, one line of text,
+       two soft slowly-drifting circles behind the mark) so the screen
+       feels designed rather than a placeholder waiting for content. */
+    .login-hero {
+      position: relative;
+      text-align: center;
+      padding: 30px 10px 14px;
+    }
+    .login-blob-wrap {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 260px;
+      height: 150px;
+      overflow: hidden;
+      border-radius: 50%;
+      z-index: 0;
+      pointer-events: none;
+    }
+    /* GPU-cheap on purpose — only `transform` is animated (no blur/
+       filter, no image/video assets), so this shouldn't have a
+       meaningful battery or load-time cost on a phone. */
+    .login-blob {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.4;
+      background: radial-gradient(circle, color-mix(in srgb, var(--surface-hero) 55%, transparent) 0%, transparent 72%);
+    }
+    .login-blob.blob-a {
+      width: 200px; height: 200px; top: -50px; left: -30px;
+      animation: login-drift-a 26s ease-in-out infinite;
+    }
+    .login-blob.blob-b {
+      width: 170px; height: 170px; top: 10px; right: -40px;
+      animation: login-drift-b 32s ease-in-out infinite;
+    }
+    @keyframes login-drift-a {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(26px, 16px); }
+    }
+    @keyframes login-drift-b {
+      0%, 100% { transform: translate(0, 0); }
+      50%      { transform: translate(-22px, 20px); }
+    }
+    /* Respect "reduce motion" — the circles just sit still instead. */
+    @media (prefers-reduced-motion: reduce) {
+      .login-blob { animation: none !important; }
+    }
+    .login-mark {
+      position: relative;
+      z-index: 1;
+      width: 64px;
+      height: 64px;
+      border-radius: 20px;
+      background: var(--surface-hero);
+      color: var(--text-on-hero);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .login-title {
+      position: relative;
+      z-index: 1;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0 0 8px;
+      letter-spacing: -0.3px;
+    }
+    .login-sub {
+      position: relative;
+      z-index: 1;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin: 0 0 4px;
+      padding: 0 10px;
+    }
+    .trust-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: center;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin: -6px 0 16px;
+    }
+
     .signin-box {
       background: var(--surface-card);
       border: 0.5px solid var(--border-hairline);
       padding: 18px;
       border-radius: var(--radius-md);
-      margin-bottom: 16px;
+      margin-bottom: 8px;
       box-shadow: var(--shadow-card);
       display: flex;
       justify-content: center;
+    }
+    /* Overrides the plain --shadow-card above with the tactile raised
+       edge — needs its own selector since ".signin-box" is declared
+       after the generic ".tactile" rule earlier in this stylesheet, and
+       same-specificity rules resolve by source order (the later one,
+       this one, would otherwise silently win and cancel the effect). */
+    .signin-box.tactile {
+      box-shadow: 0 3px 0 var(--tac-edge), 0 7px 14px -6px var(--tac-ambient);
     }
 
     .signout-link {
@@ -716,6 +924,24 @@
       margin-top: 4px;
     }
 
+    /* Fixed obligations / Invested — shown as small pills on the hero
+       surface instead of plain joined text, so they read as distinct,
+       tappable-looking facts rather than a run-on sentence. */
+    .fe-pills {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .fe-pill {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, 0.18);
+      color: var(--text-on-hero);
+    }
+
     .category-row {
       background: var(--surface-card);
       border: 0.5px solid var(--border-hairline);
@@ -726,10 +952,26 @@
 
     .category-row .category-top {
       display: flex;
-      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
       font-size: 0.9rem;
       margin-bottom: 8px;
       color: var(--text-primary);
+    }
+
+    .category-row .cat-amt {
+      margin-left: auto;
+      font-weight: 600;
+    }
+
+    .category-row .chev {
+      color: var(--text-muted);
+      flex-shrink: 0;
+      transition: transform 0.15s ease;
+    }
+
+    .category-row.open .chev {
+      transform: rotate(180deg);
     }
 
     .category-row .category-bar-track {
@@ -743,6 +985,79 @@
       background: var(--color-primary);
       height: 100%;
       border-radius: 6px;
+    }
+
+    /* ---------- Home charts (2026-08-11) ----------
+       Two small, compact charts under Home's stat grid — deliberately
+       simple (a single bar each, not a full breakdown) so they give an
+       at-a-glance read without repeating what Analysis already shows in
+       detail. Both link across to Analysis for the real breakdown. */
+    .chart-card {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow-card);
+    }
+    .chart-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+    }
+    .chart-link {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--color-primary);
+      cursor: pointer;
+    }
+    .stack-bar {
+      display: flex;
+      height: 9px;
+      border-radius: 5px;
+      overflow: hidden;
+      background: var(--surface-inset);
+    }
+    .stack-bar span {
+      display: block;
+      height: 100%;
+    }
+    .chip-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .mini-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 4px 9px;
+      border-radius: var(--radius-pill);
+    }
+    .mini-chip svg {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+    }
+    .mini-chip.muted {
+      color: var(--text-muted);
+      background: var(--surface-inset);
+      font-weight: 600;
+    }
+    .chart-note {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      margin: 9px 0 0;
+    }
+    .chart-note-muted {
+      color: var(--text-muted);
     }
 
     /* ---------- Category detail — top transactions shown when a
@@ -894,6 +1209,45 @@
       font-size: 0.9rem;
     }
 
+    /* ---------- Error state + Retry (2026-08-11) — shown instead of a
+       dead-end error message when a screen fails to load ---------- */
+    .error-state {
+      text-align: center;
+      padding: 22px 12px;
+    }
+    .error-state svg {
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .error-state p {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      margin: 0 0 14px;
+    }
+    .retry-btn {
+      width: auto;
+      padding: 10px 24px;
+      background: var(--button-fill);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-pill);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    /* Retry is one of the few buttons with the tactile press effect (see
+       ".tactile" above) — same reasoning as the hero card: it's a
+       colored surface (--button-fill), not a plain white/dark card, so
+       its own edge shadow is derived from its own background via
+       color-mix instead of the generic neutral one. */
+    .retry-btn.tactile {
+      box-shadow: 0 3px 0 color-mix(in srgb, var(--button-fill) 60%, black 40%), 0 6px 12px -5px rgba(0, 0, 0, 0.25);
+    }
+    .retry-btn.tactile:active {
+      transform: translateY(3px);
+      box-shadow: 0 0 0 rgba(0, 0, 0, 0), 0 2px 6px rgba(0, 0, 0, 0.18);
+    }
+
     /* ---------- Skeleton loading placeholders — shown instead of a
        spinner while a screen's real data is still loading ---------- */
     .skeleton-block {
@@ -939,28 +1293,61 @@
       margin-top: 4px;
     }
 
-    /* ---------- Monthly Analysis month picker ---------- */
+    /* ---------- Monthly Analysis month picker ----------
+       Redesigned 2026-08-11 — was a plain arrow-in-a-filled-circle button
+       on each side of the month label (looked like an afterthought). Now
+       one deliberate pill-shaped control (hairline border, no separate
+       button chrome) with the label centered inside it, closer to a
+       native calendar app's month switcher. */
     .month-nav {
       display: flex;
-      align-items: center;
       justify-content: center;
-      gap: 20px;
-      margin-bottom: 12px;
-      font-weight: 700;
-      color: var(--text-primary);
+      margin-bottom: 14px;
     }
 
-    .month-nav-btn {
-      width: auto;
-      padding: 6px 14px;
-      font-size: 1rem;
+    .month-switcher {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-pill);
+      padding: 4px;
+    }
+
+    .month-switcher span {
+      padding: 0 8px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      min-width: 112px;
+      text-align: center;
+    }
+
+    .month-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
       display: flex;
       align-items: center;
       justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      transition: background-color 0.15s ease, color 0.15s ease;
     }
-    .month-nav-btn svg {
-      width: 16px;
-      height: 16px;
+    .month-btn:hover {
+      background: var(--surface-inset);
+      color: var(--text-primary);
+    }
+    .month-btn:active {
+      transform: scale(0.88);
+    }
+    .month-btn svg {
+      width: 14px;
+      height: 14px;
     }
 
     /* ---------- Bottom tab bar ---------- */
@@ -1042,7 +1429,25 @@
       padding-bottom: 74px;
     }
 
-    /* ---------- "More" menu grid ---------- */
+    /* ---------- "More" menu grid ----------
+       Redesigned 2026-08-11: grouped under small labels (Daily/Advisors/
+       Tools) instead of one flat 9-item grid, and each icon now sits in
+       its own colored chip (like a phone's own home-screen app icons)
+       instead of floating bare above the label — this + the grouping is
+       what was making the screen feel like a plain button list instead
+       of a "real" native app section. */
+    .more-group-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--text-muted);
+      margin: 18px 2px 8px;
+    }
+    .more-group-label:first-child {
+      margin-top: 0;
+    }
+
     .more-menu {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1057,45 +1462,91 @@
       background: var(--surface-card);
       border: 0.5px solid var(--border-hairline);
       border-radius: var(--radius-md);
-      padding: 20px 8px;
-      box-shadow: var(--shadow-card);
+      padding: 18px 8px;
       color: var(--text-primary);
       font-size: 0.88rem;
       font-weight: 600;
       cursor: pointer;
       width: auto;
       text-align: center;
-      transition: transform 0.08s ease, box-shadow 0.15s ease;
     }
 
-    .more-menu-item:active {
-      transform: scale(0.96);
-    }
-
+    /* Press feedback here comes entirely from .tactile (translateY +
+       shadow collapse) — no separate scale/shadow rule needed, so
+       nothing fights with it. */
     .more-menu-item:hover {
-      background: var(--surface-inset);
+      border-color: var(--border-hairline);
     }
 
     .more-menu-icon {
       display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-md);
+      background: var(--surface-inset);
+      color: var(--color-primary);
     }
 
     .more-menu-icon svg {
-      width: 26px;
-      height: 26px;
+      width: 20px;
+      height: 20px;
     }
 
-    /* ---------- "Back" button on More's sub-screens ---------- */
+    /* ---------- Settings field grouping (2026-08-11) ----------
+       Was one flat list of fields — grouped into cards by topic
+       (Appearance / Credit card / Budget and goals) so it's scannable
+       instead of a wall of inputs. Reuses the same card look
+       (surface-card + hairline border + shadow) already used everywhere
+       else, just with a small uppercase title, rather than inventing a
+       new box style. */
+    .settings-group {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-card);
+    }
+    .settings-group-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    /* ---------- "Back" button on More's sub-screens ----------
+       Redesigned 2026-08-11 — was a small plain-text link ("← Back"),
+       undersized for a thumb and the one place in the app still using a
+       text arrow glyph instead of the hand-drawn SVG icon style used
+       everywhere else (nav bar, More-menu icons). Now a proper chip-
+       shaped tap target with the same chevron icon Analysis's month
+       switcher uses. */
     .back-to-more {
       width: auto;
-      background: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--surface-inset);
       border: none;
-      color: var(--color-primary);
-      font-size: 0.9rem;
+      color: var(--text-primary);
+      font-size: 0.85rem;
       font-weight: 600;
-      padding: 0;
-      margin-bottom: 12px;
+      padding: 9px 16px 9px 11px;
+      border-radius: var(--radius-pill);
+      margin-bottom: 14px;
       cursor: pointer;
+    }
+    .back-to-more svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+    .back-to-more:active {
+      transform: scale(0.96);
     }
 
     /* ---------- Laptop / desktop screens ---------- */
@@ -1164,9 +1615,35 @@
       </div>
     </div>
 
+    <!-- ===== Sign-in welcome (2026-08-11) — shown above the actual
+         Google button, hidden/shown together with it in JS. The two
+         slowly-drifting circles are pure CSS (transform-only animation,
+         no images/video, respects prefers-reduced-motion) — a small
+         "designed" touch instead of a bare button floating on empty
+         space. ===== -->
+    <div class="login-hero" id="loginHero" style="display:none">
+      <div class="login-blob-wrap" aria-hidden="true">
+        <div class="login-blob blob-a"></div>
+        <div class="login-blob blob-b"></div>
+      </div>
+      <div class="login-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="30" height="30"><path d="M6 8h11a3 3 0 0 1 3 3v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h9"/><circle cx="16" cy="13" r="1.4" fill="currentColor" stroke="none"/></svg>
+      </div>
+      <h3 class="login-title">Welcome back</h3>
+      <p class="login-sub">Sign in to see today's spend, pending transactions, and everything else in one place.</p>
+    </div>
+
     <!-- ===== Sign in with Google ===== -->
     <!-- The actual Google button gets drawn inside this box by Google's script. -->
-    <div class="signin-box" id="signInBox"></div>
+    <!-- tactile: the card holding Google's own button gets the same
+         raised-edge depth as the hero card/More tiles/Retry button — the
+         Google-rendered button itself lives inside a cross-origin iframe,
+         so its own hover/press state can't be restyled directly; giving
+         the card around it the same tactile treatment is the closest
+         equivalent while staying inside the "no hacking Google's widget"
+         boundary. -->
+    <div class="signin-box tactile" id="signInBox"></div>
+    <p class="trust-line" id="trustLine" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>Private — only your own Google account can sign in</p>
 
     <!-- ===== Shown if someone signs in with the WRONG account ===== -->
     <div class="signin-box" id="notAllowedBox" style="display:none">
@@ -1197,7 +1674,7 @@
         </div>
         <div id="homeContent" style="display:none">
 
-          <div class="hero-card" data-widget="today">
+          <div class="hero-card tactile" data-widget="today">
             <div class="hero-label">Spent today</div>
             <div class="hero-amount" id="homeTodaySpend">₹0</div>
             <div class="hero-sub" id="homeMonthSpend"></div>
@@ -1221,6 +1698,18 @@
               <div class="stat-label">Debts, net</div>
               <div class="stat-value" id="homeDebtsNet">₹0</div>
             </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-head"><span>Where it's going — this month</span><span class="chart-link" data-goto-tab="analysis">Analysis &#8594;</span></div>
+            <div class="stack-bar" id="homeCategoryStack"></div>
+            <div class="chip-row" id="homeCategoryChips"></div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-head"><span>Need / want / saving snapshot</span><span class="chart-link" data-goto-tab="analysis">Analysis &#8594;</span></div>
+            <div class="stack-bar" id="homeNwsStack"></div>
+            <p class="chart-note" id="homeNwsNote"></p>
           </div>
 
           <h3 style="font-size:0.95rem; margin:16px 0 8px 0;" id="homeRecentLabel">Recent Pending</h3>
@@ -1247,11 +1736,17 @@
       <section id="view-analysis" class="tab-view" style="display:none">
         <h2 class="section-title">Monthly Analysis</h2>
         <div class="month-nav">
-          <button type="button" id="prevMonthButton" class="month-nav-btn" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
-          <span id="monthLabel">—</span>
-          <button type="button" id="nextMonthButton" class="month-nav-btn" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+          <div class="month-switcher">
+            <button type="button" id="prevMonthButton" class="month-btn" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <span id="monthLabel">—</span>
+            <button type="button" id="nextMonthButton" class="month-btn" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+          </div>
         </div>
-        <div id="analysisStatus"><span class="spinner"></span>Loading...</div>
+        <div id="analysisStatus">
+          <div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div>
+          <div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>
+          <div class="skeleton-block" style="height:58px;"></div>
+        </div>
         <div id="analysisContent" style="display:none">
           <div class="today-total-box">
             <div class="today-total-label">Total Spent</div>
@@ -1269,51 +1764,71 @@
       <!-- ===== TAB: More — menu + less-frequent screens live inside here ===== -->
       <section id="view-more" class="tab-view" style="display:none">
 
-        <!-- Grid of buttons; tapping one hides this and shows that screen below -->
-        <div id="moreMenu" class="more-menu">
-          <button type="button" class="more-menu-item" data-target="today">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5"/><path d="M16 3v3.5"/><path d="M8 13.5l2 2 4-4.5"/></svg></span>
-            <span>Today's Summary</span>
-          </button>
-          <button type="button" class="more-menu-item" data-target="cash">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><circle cx="12" cy="12" r="2.7"/></svg></span>
-            <span>Cash</span>
-          </button>
-          <button type="button" class="more-menu-item" data-target="history">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
-            <span>History</span>
-          </button>
-          <button type="button" class="more-menu-item" data-target="investments">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></span>
-            <span>Investments</span>
-          </button>
-          <button type="button" class="more-menu-item" data-target="cc">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 9.5h19"/><path d="M6 14.5h4"/></svg></span>
-            <span>CC Advisor</span>
-          </button>
-          <button type="button" class="more-menu-item" data-target="debts">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3v12"/><path d="M13 11l4 4 4-4"/><path d="M7 21V9"/><path d="M11 13l-4-4-4 4"/></svg></span>
-            <span>Debts</span>
-          </button>
-          <button type="button" class="more-menu-item" data-target="savings">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg></span>
-            <span>Savings &amp; Wish List</span>
-          </button>
-          <button type="button" class="more-menu-item" data-target="settings">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.4M12 18.6V21M4.9 6.5l1.7 1.7M17.4 15.8l1.7 1.7M3 12h2.4M18.6 12H21M4.9 17.5l1.7-1.7M17.4 8.2l1.7-1.7"/></svg></span>
-            <span>Settings</span>
-          </button>
-          <button type="button" class="more-menu-item" data-target="reconcile">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5"/></svg></span>
-            <span>Reconcile</span>
-          </button>
+        <!-- Grouped grids of buttons (2026-08-11 — was one flat 9-item
+             grid, grouped now by how often each screen gets used so it
+             reads more like a native app's grouped settings/home screen
+             instead of a plain list of icons). Tapping one hides this and
+             shows that screen below. id="moreMenu" stays on the outer
+             wrapper — that's the id the show/hide JS toggles. -->
+        <div id="moreMenu">
+          <div class="more-group-label">Daily</div>
+          <div class="more-menu">
+            <button type="button" class="more-menu-item tactile" data-target="today">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5"/><path d="M16 3v3.5"/><path d="M8 13.5l2 2 4-4.5"/></svg></span>
+              <span>Today's Summary</span>
+            </button>
+            <button type="button" class="more-menu-item tactile" data-target="cash">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><circle cx="12" cy="12" r="2.7"/></svg></span>
+              <span>Cash</span>
+            </button>
+            <button type="button" class="more-menu-item tactile" data-target="history">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
+              <span>History</span>
+            </button>
+            <button type="button" class="more-menu-item tactile" data-target="investments">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></span>
+              <span>Investments</span>
+            </button>
+          </div>
+
+          <div class="more-group-label">Advisors</div>
+          <div class="more-menu">
+            <button type="button" class="more-menu-item tactile" data-target="cc">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 9.5h19"/><path d="M6 14.5h4"/></svg></span>
+              <span>CC Advisor</span>
+            </button>
+            <button type="button" class="more-menu-item tactile" data-target="debts">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3v12"/><path d="M13 11l4 4 4-4"/><path d="M7 21V9"/><path d="M11 13l-4-4-4 4"/></svg></span>
+              <span>Debts</span>
+            </button>
+            <button type="button" class="more-menu-item tactile" data-target="savings">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg></span>
+              <span>Savings &amp; Wish List</span>
+            </button>
+          </div>
+
+          <div class="more-group-label">Tools</div>
+          <div class="more-menu">
+            <button type="button" class="more-menu-item tactile" data-target="settings">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.4M12 18.6V21M4.9 6.5l1.7 1.7M17.4 15.8l1.7 1.7M3 12h2.4M18.6 12H21M4.9 17.5l1.7-1.7M17.4 8.2l1.7-1.7"/></svg></span>
+              <span>Settings</span>
+            </button>
+            <button type="button" class="more-menu-item tactile" data-target="reconcile">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5"/></svg></span>
+              <span>Reconcile</span>
+            </button>
+          </div>
         </div>
 
       <!-- ===== SUB-SCREEN: Today's Summary ===== -->
       <div id="view-today" style="display:none">
-        <button type="button" class="back-to-more">← Back</button>
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">Today's Summary</h2>
-        <div id="todayStatus"><span class="spinner"></span>Loading...</div>
+        <div id="todayStatus">
+          <div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div>
+          <div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>
+          <div class="skeleton-block" style="height:58px;"></div>
+        </div>
         <div id="todayContent" style="display:none">
           <div class="today-total-box">
             <div class="today-total-label">Spent Today</div>
@@ -1332,9 +1847,13 @@
            month), and adds an affordability check against cash +
            recent income + known obligations. -->
       <div id="view-cc" style="display:none">
-        <button type="button" class="back-to-more">← Back</button>
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">Credit Card Advisor</h2>
-        <div id="ccStatus"><span class="spinner"></span>Loading...</div>
+        <div id="ccStatus">
+          <div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div>
+          <div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>
+          <div class="skeleton-block" style="height:58px;"></div>
+        </div>
         <div id="ccContent" style="display:none">
 
           <div class="today-total-box" id="ccOutstandingBox">
@@ -1404,9 +1923,13 @@
 
       <!-- ===== SUB-SCREEN: Debts ===== -->
       <div id="view-debts" style="display:none">
-        <button type="button" class="back-to-more">← Back</button>
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">Debts</h2>
-        <div id="debtsStatus"><span class="spinner"></span>Loading...</div>
+        <div id="debtsStatus">
+          <div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div>
+          <div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>
+          <div class="skeleton-block" style="height:58px;"></div>
+        </div>
         <div id="debtsContent" style="display:none">
           <div class="today-total-box">
             <div class="today-total-label" id="debtsNetLabel">Net Position</div>
@@ -1461,9 +1984,13 @@
            user's own idea, after the old page had gotten too long to be
            useful. See docs/features/savings-v2.md. -->
       <div id="view-savings" style="display:none">
-        <button type="button" class="back-to-more">← Back</button>
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">Savings &amp; Goals</h2>
-        <div id="savingsStatus"><span class="spinner"></span>Loading...</div>
+        <div id="savingsStatus">
+          <div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div>
+          <div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>
+          <div class="skeleton-block" style="height:58px;"></div>
+        </div>
         <div id="savingsContent" style="display:none">
 
           <!-- Overview only — 3 swipeable cards (Emergency / CC Buffer /
@@ -1560,9 +2087,13 @@
       <!-- Separate from the Savings pots on purpose — not counted toward
            the emergency fund, same as in Telegram. -->
       <div id="view-investments" style="display:none">
-        <button type="button" class="back-to-more">← Back</button>
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">Investments</h2>
-        <div id="investmentsStatus"><span class="spinner"></span>Loading...</div>
+        <div id="investmentsStatus">
+          <div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div>
+          <div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>
+          <div class="skeleton-block" style="height:58px;"></div>
+        </div>
         <div id="investmentsContent" style="display:none">
 
           <div class="today-total-box">
@@ -1595,9 +2126,13 @@
 
       <!-- ===== SUB-SCREEN: Cash ===== -->
       <div id="view-cash" style="display:none">
-        <button type="button" class="back-to-more">← Back</button>
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">Cash</h2>
-        <div id="cashStatus"><span class="spinner"></span>Loading...</div>
+        <div id="cashStatus">
+          <div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div>
+          <div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>
+          <div class="skeleton-block" style="height:58px;"></div>
+        </div>
         <div id="cashContent" style="display:none">
 
           <div class="today-total-box">
@@ -1647,7 +2182,7 @@
 
       <!-- ===== SUB-SCREEN: Reconcile ===== -->
       <div id="view-reconcile" style="display:none">
-        <button type="button" class="back-to-more">← Back</button>
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">Reconcile</h2>
         <p class="pending-status">
           Upload your bank statement (.xls) to find transactions that
@@ -1670,43 +2205,53 @@
 
       <!-- ===== SUB-SCREEN: Settings ===== -->
       <div id="view-settings" style="display:none">
-        <button type="button" class="back-to-more">← Back</button>
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">Settings</h2>
 
-        <div class="field">
-          <label>Appearance</label>
-          <select id="settingsTheme">
-            <option value="system">Match my device</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
+        <div class="settings-group">
+          <div class="settings-group-title">Appearance</div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Theme</label>
+            <select id="settingsTheme">
+              <option value="system">Match my device</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
         </div>
 
-        <p class="pending-status">These control the CC Advisor and Savings screens.</p>
+        <div class="settings-group">
+          <div class="settings-group-title">Credit card</div>
+          <p class="pending-status" style="margin-top:-2px;">Used by the CC Advisor screen.</p>
+          <div class="field">
+            <label>Combined credit card limit (₹)</label>
+            <input type="number" id="settingsCcLimit" min="0" step="1">
+          </div>
+          <div class="field">
+            <label>CC warning threshold (% of limit)</label>
+            <input type="number" id="settingsCcWarnPct" min="0" max="100" step="1">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>CC alert threshold (% of limit)</label>
+            <input type="number" id="settingsCcAlertPct" min="0" max="100" step="1">
+          </div>
+        </div>
 
-        <div class="field">
-          <label>Combined credit card limit (₹)</label>
-          <input type="number" id="settingsCcLimit" min="0" step="1">
-        </div>
-        <div class="field">
-          <label>CC warning threshold (% of limit)</label>
-          <input type="number" id="settingsCcWarnPct" min="0" max="100" step="1">
-        </div>
-        <div class="field">
-          <label>CC alert threshold (% of limit)</label>
-          <input type="number" id="settingsCcAlertPct" min="0" max="100" step="1">
-        </div>
-        <div class="field">
-          <label>Monthly essential expenses (₹)</label>
-          <input type="number" id="settingsMonthlyExpenses" min="0" step="1">
-        </div>
-        <div class="field">
-          <label>Monthly savings goal (₹)</label>
-          <input type="number" id="settingsMonthlySaveGoal" min="0" step="1">
-        </div>
-        <div class="field">
-          <label>Monthly investment amount (₹)</label>
-          <input type="number" id="settingsMonthlyInvestmentGoal" min="0" step="1" placeholder="0 = not set">
+        <div class="settings-group">
+          <div class="settings-group-title">Budget and goals</div>
+          <p class="pending-status" style="margin-top:-2px;">Used by Savings, Investments and CC Advisor.</p>
+          <div class="field">
+            <label>Monthly essential expenses (₹)</label>
+            <input type="number" id="settingsMonthlyExpenses" min="0" step="1">
+          </div>
+          <div class="field">
+            <label>Monthly savings goal (₹)</label>
+            <input type="number" id="settingsMonthlySaveGoal" min="0" step="1">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Monthly investment amount (₹)</label>
+            <input type="number" id="settingsMonthlyInvestmentGoal" min="0" step="1" placeholder="0 = not set">
+          </div>
         </div>
 
         <button type="button" id="saveSettingsButton">Save</button>
@@ -1715,7 +2260,7 @@
 
       <!-- ===== SUB-SCREEN: History (edit past transactions) ===== -->
       <div id="view-history" style="display:none">
-        <button type="button" class="back-to-more">← Back</button>
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">History</h2>
         <div id="historyStatus" class="pending-status"></div>
         <div id="historyList"></div>
@@ -1754,10 +2299,15 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-11-02";
-    const APP_CHANGELOG = "Polish pass: settling a debt or marking a savings goal purchased now asks for a second tap first; easier-to-read gray text on dates/bank names; bigger Need/Want/Saving buttons; easier-to-tap Savings carousel dots with a peek of the next card; a styled file picker on Reconcile; proper arrow icons on Analysis' month switcher; a nicer \"all caught up\" message on Pending; and matching \"Show more\" wording everywhere. Also: the Cash and Investments screens now hide their entry forms behind a \"+ Log Cash\" / \"+ Log an Investment\" button, same as Debts and Savings, so they don't take up space every time you just want to check your recent activity.";
+    const APP_VERSION = "2026-08-11-03";
+    const APP_CHANGELOG = "Visual refresh: a richer accent color and a friendlier sign-in screen; two new charts on Home (where your money's going, and a Need/Want/Saving snapshot); hand-drawn icons for every spending category (replacing emoji); Analysis' category bars are now color-coded and its month switcher got a cleaner redesign; the More tab is now grouped (Daily/Advisors/Tools) with icon tiles, a proper Back button, grouped Settings, and skeleton loading + a Retry button on every screen that used to show a plain spinner or a dead-end error. Also fixed a real bug: the \"What's New\" popup (this message!) used to sometimes appear before you'd even signed in — it now only ever shows after a successful sign-in.";
 
-    (function checkWhatsNew() {
+    // NOTE: this used to run immediately here, before sign-in even happens —
+    // that was a real bug (it could pop up over the login screen, before you'd
+    // even proven who you are). Fixed: it's now a plain function, only called
+    // from showSignedInUI() below, so it can only ever appear right after a
+    // successful sign-in — never before or instead of the login screen.
+    function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
 
       // First-ever visit — nothing to compare against yet, just remember it.
@@ -1770,7 +2320,7 @@
         document.getElementById("whatsNewText").textContent = APP_CHANGELOG;
         document.getElementById("whatsNewOverlay").style.display = "flex";
       }
-    })();
+    }
 
     document.getElementById("whatsNewDismiss").addEventListener("click", function () {
       document.getElementById("whatsNewOverlay").style.display = "none";
@@ -1823,6 +2373,8 @@
 
     // Grab the sign-in related elements from the page
     const signInBox     = document.getElementById("signInBox");
+    const loginHero      = document.getElementById("loginHero");
+    const trustLine       = document.getElementById("trustLine");
     const notAllowedBox = document.getElementById("notAllowedBox");
     const tryAgainButton = document.getElementById("tryAgainButton");
     const avatarWrap     = document.getElementById("avatarWrap");
@@ -1840,12 +2392,19 @@
     // Shows the app and hides everything else
     function showSignedInUI(user) {
       signInBox.style.display = "none";
+      loginHero.style.display = "none";
+      trustLine.style.display = "none";
       notAllowedBox.style.display = "none";
       profileAvatarButton.textContent = user.email.charAt(0).toUpperCase();
       profileEmail.textContent = user.email;
       avatarWrap.style.display = "block";
       appContent.style.display = "block";
       tabBar.style.display = "flex";
+
+      // Only ever check for "What's New" once we know sign-in succeeded —
+      // covers both a fresh sign-in and a restored (remembered) session,
+      // since both paths call this same function.
+      checkWhatsNew();
     }
 
     // Shows the sign-in button and hides the app
@@ -1855,12 +2414,16 @@
       notAllowedBox.style.display = "none";
       appContent.style.display = "none";
       tabBar.style.display = "none";
+      loginHero.style.display = "block";
+      trustLine.style.display = "flex";
       signInBox.style.display = "flex";
     }
 
     // Shows the "wrong account" message and hides the app
     function showNotAllowedUI() {
       signInBox.style.display = "none";
+      loginHero.style.display = "none";
+      trustLine.style.display = "none";
       avatarWrap.style.display = "none";
       profilePopover.style.display = "none";
       appContent.style.display = "none";
@@ -2313,20 +2876,40 @@
       "Financial", "Income", "Education", "Health", "Other"
     ];
 
-    // One emoji + one color per category, matching the CSS variables
-    // defined in <style>. Used to build a consistent badge everywhere
-    // a category name is shown.
+    // One hand-drawn line icon + one color per category, matching the CSS
+    // variables defined in <style>. Used to build a consistent badge
+    // everywhere a category name is shown.
+    //
+    // Replaced emoji with inline SVG icons 2026-08-11 — same hand-drawn,
+    // stroke="currentColor" line-icon style already used for the nav bar
+    // and More-menu icons (no icon library, per this project's "no
+    // frameworks" rule). currentColor means each icon automatically
+    // picks up the category's own text color set via the badge's inline
+    // style below, in both light and dark mode, with no extra work.
+    const SVG_ICON_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13">';
+    const CATEGORY_ICON_PATHS = {
+      Food:       '<path d="M7.5 3v4.5a1.5 1.5 0 0 0 3 0V3"/><path d="M9 7.5V21"/><path d="M15.5 3c-1.5.4-2.5 2-2.5 4s1 3.6 2.5 4V21"/>',
+      Transport:  '<path d="M4 16.5V13l1.6-4.7A2 2 0 0 1 7.5 7h9a2 2 0 0 1 1.9 1.3L20 13v3.5"/><path d="M4 16.5h16"/><circle cx="7.5" cy="17" r="1.6"/><circle cx="16.5" cy="17" r="1.6"/>',
+      Bills:      '<path d="M6 3h12v17l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3V3z"/><path d="M9 8h6M9 12.5h6"/>',
+      Shopping:   '<path d="M6 8h12l-1 12.5H7L6 8z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+      Lifestyle:  '<path d="M4 8.5 5.3 5h13.4l1.3 3.5"/><path d="M4 8.5h16V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8.5z"/><path d="M7.2 5l1.5 3.5M12 5l1.5 3.5M16.8 5l1.3 3.5"/>',
+      Financial:  '<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>',
+      Income:     '<path d="M4 12.5v5.5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5.5"/><path d="M8 11l4 4 4-4"/><path d="M12 3v12"/>',
+      Education:  '<path d="M12 6.5c-1.8-1.3-4.2-2-6.5-2A2 2 0 0 0 4 6.4v11a1 1 0 0 0 1.4.9c1.9-.9 4.6-.5 6.6.8 2-1.3 4.7-1.7 6.6-.8A1 1 0 0 0 20 17.4v-11A2 2 0 0 0 18.5 4.5c-2.3 0-4.7.7-6.5 2z"/><path d="M12 6.5V19"/>',
+      Health:     '<path d="M3 12h4l2-6 4 12 2-6h6"/>',
+      Other:      '<path d="M3.5 8 12 4l8.5 4-8.5 4-8.5-4z"/><path d="M3.5 8v8l8.5 4 8.5-4V8"/><path d="M12 12v8"/>'
+    };
     const CATEGORY_STYLES = {
-      Food:       { icon: "🍔", css: "food" },
-      Transport:  { icon: "🚗", css: "transport" },
-      Bills:      { icon: "🧾", css: "bills" },
-      Shopping:   { icon: "🛍️", css: "shopping" },
-      Lifestyle:  { icon: "🎬", css: "lifestyle" },
-      Financial:  { icon: "💰", css: "financial" },
-      Income:     { icon: "💵", css: "income" },
-      Education:  { icon: "📚", css: "education" },
-      Health:     { icon: "🏥", css: "health" },
-      Other:      { icon: "📦", css: "other" }
+      Food:       { css: "food" },
+      Transport:  { css: "transport" },
+      Bills:      { css: "bills" },
+      Shopping:   { css: "shopping" },
+      Lifestyle:  { css: "lifestyle" },
+      Financial:  { css: "financial" },
+      Income:     { css: "income" },
+      Education:  { css: "education" },
+      Health:     { css: "health" },
+      Other:      { css: "other" }
     };
 
     // Builds a small colored pill for a category name — used instead of
@@ -2334,7 +2917,25 @@
     // categories, Pending items).
     function categoryBadgeHtml(categoryName) {
       const style = CATEGORY_STYLES[categoryName] || CATEGORY_STYLES.Other;
-      return `<span class="category-badge" style="background:var(--cat-${style.css}-bg); color:var(--cat-${style.css}-text);">${style.icon} ${escapeHtml(categoryName)}</span>`;
+      const iconPath = CATEGORY_ICON_PATHS[categoryName] || CATEGORY_ICON_PATHS.Other;
+      const icon = SVG_ICON_OPEN + iconPath + '</svg>';
+      return `<span class="category-badge" style="background:var(--cat-${style.css}-bg); color:var(--cat-${style.css}-text);">${icon}${escapeHtml(categoryName)}</span>`;
+    }
+
+    // Same category color, as a plain CSS color value (not a badge) — used
+    // to color-code the Analysis progress bar per category instead of
+    // every bar being the same generic accent color.
+    function categoryBarColor(categoryName) {
+      const style = CATEGORY_STYLES[categoryName] || CATEGORY_STYLES.Other;
+      return `var(--cat-${style.css}-text)`;
+    }
+
+    // The matching light background tint for a category — used behind
+    // an expanded category's transaction list on Analysis, so the
+    // expanded detail reads as clearly "belonging to" the row above it.
+    function categoryBadgeBg(categoryName) {
+      const style = CATEGORY_STYLES[categoryName] || CATEGORY_STYLES.Other;
+      return `var(--cat-${style.css}-bg)`;
     }
 
     // Same pill style, for a Need/Want/Saving/Investment tag — reuses the
@@ -2418,6 +3019,36 @@
     }
 
     // ---------------------------------------------------------
+    // SHARED LOADING / ERROR STATES (2026-08-11)
+    // ---------------------------------------------------------
+    // Fills a screen's status element with skeleton placeholder cards
+    // while its real data loads — same look Home/Pending already used,
+    // instead of the plain spinner + "Loading..." text 8 other screens
+    // (Today, Analysis, CC Advisor, Debts, Savings, Investments, Cash,
+    // History) used to show, which sat oddly next to Home/Pending's
+    // nicer version in the same app.
+    function showSkeletonStatus(el) {
+      el.innerHTML =
+        '<div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div>' +
+        '<div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>' +
+        '<div class="skeleton-block" style="height:58px;"></div>';
+    }
+
+    // Fills a status element with a friendly "couldn't load" message and
+    // a Retry button that re-runs whatever load function is passed in —
+    // every screen used to just show the raw error text with no obvious
+    // next step besides leaving and coming back.
+    function showLoadError(el, message, retryFn) {
+      el.innerHTML =
+        '<div class="error-state">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="26" height="26"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16.2v.1"/></svg>' +
+          '<p>' + escapeHtml(message) + '</p>' +
+          '<button type="button" class="retry-btn tactile">Retry</button>' +
+        '</div>';
+      el.querySelector(".retry-btn").addEventListener("click", retryFn);
+    }
+
+    // ---------------------------------------------------------
     // HOME DASHBOARD
     // ---------------------------------------------------------
     const homeStatusEl        = document.getElementById("homeStatus");
@@ -2445,6 +3076,16 @@
     document.querySelectorAll("[data-widget]").forEach(function (card) {
       card.addEventListener("click", function () {
         renderHomeRecentList(card.dataset.widget);
+      });
+    });
+
+    // The "Analysis →" links on Home's two chart cards jump straight to
+    // the Analysis tab for the full breakdown — switchTab is a function
+    // declaration further down, but declarations are hoisted, so it's
+    // safe to reference here even though it's defined later in the file.
+    document.querySelectorAll("[data-goto-tab]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        switchTab(el.dataset.gotoTab);
       });
     });
 
@@ -2599,6 +3240,90 @@
 
       dashboardFull = d.full || null;
       renderHomeRecentList(homeRecentMode);
+      renderHomeCharts(dashboardFull);
+    }
+
+    // ---------------------------------------------------------
+    // HOME CHARTS (2026-08-11) — two small, at-a-glance charts under the
+    // stat grid. Deliberately simple (one bar each, not a full
+    // breakdown) so they don't duplicate what Analysis already shows in
+    // detail — both link across to Analysis via the [data-goto-tab]
+    // wiring above. Both use data the dashboard call already returns
+    // (full.month.categories / full.month.needWantSaving, the same
+    // numbers Analysis's own charts are built from), so this needed no
+    // new backend call.
+    const homeCategoryStackEl = document.getElementById("homeCategoryStack");
+    const homeCategoryChipsEl = document.getElementById("homeCategoryChips");
+    const homeNwsStackEl      = document.getElementById("homeNwsStack");
+    const homeNwsNoteEl       = document.getElementById("homeNwsNote");
+
+    function renderHomeCharts(full) {
+      if (!full || !full.month) return;
+
+      // --- Chart 1: category mix, month-to-date ---
+      const cats = (full.month.categories || []).slice().sort(function (a, b) { return b.amount - a.amount; });
+      const catTotal = cats.reduce(function (sum, c) { return sum + c.amount; }, 0);
+
+      if (catTotal <= 0 || cats.length === 0) {
+        homeCategoryStackEl.style.display = "none";
+        homeCategoryChipsEl.innerHTML = '<span class="mini-chip muted">Nothing spent yet this month.</span>';
+      } else {
+        homeCategoryStackEl.style.display = "flex";
+        homeCategoryStackEl.innerHTML = cats.map(function (c) {
+          const pct = Math.round((c.amount / catTotal) * 100);
+          return `<span style="width:${pct}%; background:${categoryBarColor(c.category)};"></span>`;
+        }).join("");
+
+        const top = cats.slice(0, 2);
+        const rest = cats.slice(2);
+        let chipsHtml = top.map(function (c) {
+          const style = CATEGORY_STYLES[c.category] || CATEGORY_STYLES.Other;
+          const iconPath = CATEGORY_ICON_PATHS[c.category] || CATEGORY_ICON_PATHS.Other;
+          const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">' + iconPath + '</svg>';
+          return `<span class="mini-chip" style="background:var(--cat-${style.css}-bg); color:var(--cat-${style.css}-text);">${icon}${escapeHtml(c.category)} ₹${c.amount.toLocaleString("en-IN")}</span>`;
+        }).join("");
+        if (rest.length > 0) {
+          chipsHtml += `<span class="mini-chip muted">+${rest.length} more</span>`;
+        }
+        homeCategoryChipsEl.innerHTML = chipsHtml;
+      }
+
+      // --- Chart 2: Need / Want / Saving / Investment snapshot ---
+      const nws = full.month.needWantSaving;
+      if (!nws) return;
+      const grandTotal = (nws.taggedTotal || 0) + (nws.untagged || 0);
+
+      if (grandTotal <= 0) {
+        homeNwsStackEl.style.display = "none";
+        homeNwsNoteEl.textContent = "Nothing tagged yet this month.";
+        return;
+      }
+
+      homeNwsStackEl.style.display = "flex";
+      const segments = [
+        { amount: nws.need,       color: "var(--need-text)" },
+        { amount: nws.want,       color: "var(--want-text)" },
+        { amount: nws.saving,     color: "var(--saving-text)" },
+        { amount: nws.investment, color: "var(--investment-text)" },
+        { amount: nws.untagged,   color: "var(--text-muted)" }
+      ];
+      homeNwsStackEl.innerHTML = segments
+        .filter(function (s) { return s.amount > 0; })
+        .map(function (s) {
+          const pct = Math.round((s.amount / grandTotal) * 100);
+          return `<span style="width:${pct}%; background:${s.color};"></span>`;
+        }).join("");
+
+      if (nws.taggedTotal > 0) {
+        const needPct = Math.round((nws.need / nws.taggedTotal) * 100);
+        const wantPct = Math.round((nws.want / nws.taggedTotal) * 100);
+        const savePct = Math.round(((nws.saving + nws.investment) / nws.taggedTotal) * 100);
+        homeNwsNoteEl.innerHTML =
+          `Need ${needPct}% &middot; Want ${wantPct}% &middot; Saving+Invest ${savePct}% ` +
+          `<span class="chart-note-muted">(guideline 50/30/20)</span>`;
+      } else {
+        homeNwsNoteEl.textContent = "Nothing tagged yet this month.";
+      }
     }
 
     // Same icon + message treatment as every other empty state in the
@@ -3234,7 +3959,7 @@
       Object.keys(subViews).forEach(function (key) {
         subViews[key].style.display = "none";
       });
-      moreMenuEl.style.display = "grid";
+      moreMenuEl.style.display = "block";
       saveActiveTab("more", null);
     }
 
@@ -3302,7 +4027,7 @@
       if (cached) {
         renderTodaySummary(cached); // show instantly, refresh quietly below
       } else {
-        todayStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+        showSkeletonStatus(todayStatusEl);
         todayContentEl.style.display = "none";
       }
 
@@ -3312,7 +4037,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              todayStatusEl.textContent = data.error;
+              showLoadError(todayStatusEl, data.error, loadTodaySummary);
             }
             return;
           }
@@ -3322,7 +4047,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          todayStatusEl.textContent = "Couldn't load: " + err.message;
+          showLoadError(todayStatusEl, "Couldn't load: " + err.message, loadTodaySummary);
         });
     }
 
@@ -3357,7 +4082,7 @@
             <span>₹${entry.amount.toLocaleString("en-IN")}</span>
           </div>
           <div class="category-bar-track">
-            <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
+            <div class="category-bar-fill" style="width:${percentOfMax}%; background:${categoryBarColor(entry.category)};"></div>
           </div>
         `;
         todayCategoriesEl.appendChild(row);
@@ -3494,7 +4219,7 @@
       if (cached) {
         renderMonthlyAnalysis(cached);
       } else {
-        analysisStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+        showSkeletonStatus(analysisStatusEl);
         analysisContentEl.style.display = "none";
       }
 
@@ -3509,7 +4234,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              analysisStatusEl.textContent = data.error;
+              showLoadError(analysisStatusEl, data.error, loadMonthlyAnalysis);
             }
             return;
           }
@@ -3519,7 +4244,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          analysisStatusEl.textContent = "Couldn't load: " + err.message;
+          showLoadError(analysisStatusEl, "Couldn't load: " + err.message, loadMonthlyAnalysis);
         });
     }
 
@@ -3544,9 +4269,11 @@
       // than a "₹0" that looks like a real, checked number.
       // See docs/features/financial-events.md.
       const feParts = [];
-      if (a.fixedObligations) feParts.push("Fixed obligations: ₹" + a.fixedObligations.toLocaleString("en-IN"));
-      if (a.invested) feParts.push("Invested: ₹" + a.invested.toLocaleString("en-IN"));
-      analysisFinancialEventsEl.textContent = feParts.join("  ·  ");
+      if (a.fixedObligations) feParts.push("Fixed obligations ₹" + a.fixedObligations.toLocaleString("en-IN"));
+      if (a.invested) feParts.push("Invested ₹" + a.invested.toLocaleString("en-IN"));
+      analysisFinancialEventsEl.innerHTML = feParts.length
+        ? '<div class="fe-pills">' + feParts.map(function (p) { return '<span class="fe-pill">' + escapeHtml(p) + '</span>'; }).join("") + '</div>'
+        : "";
 
       if (a.needWantSaving) renderNeedWantSavingChart(a.needWantSaving);
 
@@ -3579,12 +4306,13 @@
         row.innerHTML = `
           <div class="category-top" style="cursor:pointer;">
             ${categoryBadgeHtml(entry.category)}
-            <span>₹${entry.amount.toLocaleString("en-IN")}</span>
+            <span class="cat-amt">₹${entry.amount.toLocaleString("en-IN")}</span>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M6 9l6 6 6-6"/></svg>
           </div>
           <div class="category-bar-track">
-            <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
+            <div class="category-bar-fill" style="width:${percentOfMax}%; background:${categoryBarColor(entry.category)};"></div>
           </div>
-          <div class="category-detail" style="display:none;">
+          <div class="category-detail" style="display:none; background:${categoryBadgeBg(entry.category)};">
             <p style="font-size:0.78rem; color:var(--text-secondary); margin:10px 0 6px;">Top ${topTxns.length} in ${entry.category}</p>
             ${detailHtml}
           </div>
@@ -3592,14 +4320,21 @@
 
         // Tapping a category shows its top transactions below; tapping
         // another category closes this one and opens that one instead —
-        // only one open at a time, like an accordion.
+        // only one open at a time, like an accordion. The chevron next
+        // to the amount rotates to show open/closed state, same idea as
+        // a native disclosure control instead of relying purely on tap
+        // with no visual hint.
         const detailEl = row.querySelector(".category-detail");
         row.querySelector(".category-top").addEventListener("click", function () {
           const alreadyOpen = detailEl.style.display !== "none";
           analysisCategoriesEl.querySelectorAll(".category-detail").forEach(function (d) {
             d.style.display = "none";
           });
+          analysisCategoriesEl.querySelectorAll(".category-row").forEach(function (r) {
+            r.classList.remove("open");
+          });
           detailEl.style.display = alreadyOpen ? "none" : "block";
+          row.classList.toggle("open", !alreadyOpen);
         });
 
         analysisCategoriesEl.appendChild(row);
@@ -3683,7 +4418,7 @@
       if (cached) {
         renderCCAdvisor(cached);
       } else {
-        ccStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+        showSkeletonStatus(ccStatusEl);
         ccContentEl.style.display = "none";
       }
 
@@ -3693,7 +4428,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              ccStatusEl.textContent = data.error;
+              showLoadError(ccStatusEl, data.error, loadCCAdvisor);
             }
             return;
           }
@@ -3703,7 +4438,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          ccStatusEl.textContent = "Couldn't load: " + err.message;
+          showLoadError(ccStatusEl, "Couldn't load: " + err.message, loadCCAdvisor);
         });
     }
 
@@ -3859,7 +4594,7 @@
               <span>₹${entry.amount.toLocaleString("en-IN")}</span>
             </div>
             <div class="category-bar-track">
-              <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
+              <div class="category-bar-fill" style="width:${percentOfMax}%; background:${categoryBarColor(entry.category)};"></div>
             </div>
             <div class="category-detail" style="display:none;">
               <p style="font-size:0.78rem; color:var(--text-secondary); margin:10px 0 6px;">Top ${topTxns.length} in ${entry.category}</p>
@@ -3905,7 +4640,7 @@
       if (cached) {
         renderDebts(cached);
       } else {
-        debtsStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+        showSkeletonStatus(debtsStatusEl);
         debtsContentEl.style.display = "none";
       }
 
@@ -3915,7 +4650,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              debtsStatusEl.textContent = data.error;
+              showLoadError(debtsStatusEl, data.error, loadDebts);
             }
             return;
           }
@@ -3925,7 +4660,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          debtsStatusEl.textContent = "Couldn't load: " + err.message;
+          showLoadError(debtsStatusEl, "Couldn't load: " + err.message, loadDebts);
         });
     }
 
@@ -4182,7 +4917,7 @@
       if (cached) {
         renderSavingsGoals(cached);
       } else {
-        savingsStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+        showSkeletonStatus(savingsStatusEl);
         savingsContentEl.style.display = "none";
       }
 
@@ -4192,7 +4927,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              savingsStatusEl.textContent = data.error;
+              showLoadError(savingsStatusEl, data.error, loadSavings);
             }
             return;
           }
@@ -4202,7 +4937,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          savingsStatusEl.textContent = "Couldn't load: " + err.message;
+          showLoadError(savingsStatusEl, "Couldn't load: " + err.message, loadSavings);
         });
     }
 
@@ -4885,7 +5620,7 @@
       if (cached) {
         renderInvestments(cached);
       } else {
-        investmentsStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+        showSkeletonStatus(investmentsStatusEl);
         investmentsContentEl.style.display = "none";
       }
 
@@ -4895,7 +5630,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              investmentsStatusEl.textContent = data.error;
+              showLoadError(investmentsStatusEl, data.error, loadInvestments);
             }
             return;
           }
@@ -4905,7 +5640,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          investmentsStatusEl.textContent = "Couldn't load: " + err.message;
+          showLoadError(investmentsStatusEl, "Couldn't load: " + err.message, loadInvestments);
         });
     }
 
@@ -5164,7 +5899,7 @@
       if (cached) {
         renderCash(cached);
       } else {
-        cashStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+        showSkeletonStatus(cashStatusEl);
         cashContentEl.style.display = "none";
       }
 
@@ -5174,7 +5909,7 @@
             if (isAuthError(data.error)) {
               handleSessionExpired();
             } else if (!cached) {
-              cashStatusEl.textContent = data.error;
+              showLoadError(cashStatusEl, data.error, loadCash);
             }
             return;
           }
@@ -5184,7 +5919,7 @@
         })
         .catch(function (err) {
           if (cached) return;
-          cashStatusEl.textContent = "Couldn't load: " + err.message;
+          showLoadError(cashStatusEl, "Couldn't load: " + err.message, loadCash);
         });
     }
 
@@ -5846,13 +6581,18 @@
 
     function loadHistory() {
       historyOffset = 0;
-      historyListEl.innerHTML = "";
-      historyStatusEl.innerHTML = '<span class="spinner"></span>Loading...';
+      showSkeletonStatus(historyListEl);
+      historyStatusEl.textContent = "";
       historyShowMoreEl.style.display = "none";
       loadMoreHistory();
     }
 
     function loadMoreHistory() {
+      // historyOffset is still the PRE-request value here (0 on a fresh
+      // load, N on a "show more" continuation) — used below to tell
+      // which case an error/success belongs to.
+      const isFirstPage = historyOffset === 0;
+
       callAppsScript({
         action:  "getTransactionHistory",
         idToken: currentUser.idToken,
@@ -5862,9 +6602,18 @@
         .then(function (data) {
           if (!data.ok) {
             if (isAuthError(data.error)) { handleSessionExpired(); return; }
-            historyStatusEl.textContent = data.error;
+            // A fresh-load failure replaces the skeleton with a full
+            // retry state; a "show more" failure leaves the list alone
+            // and just shows a small retry next to it instead.
+            if (isFirstPage) {
+              showLoadError(historyListEl, data.error, loadHistory);
+            } else {
+              showLoadError(historyStatusEl, data.error, loadMoreHistory);
+            }
             return;
           }
+
+          if (isFirstPage) historyListEl.innerHTML = ""; // clear the skeleton
 
           if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
           data.transactions.forEach(function (txn) {
@@ -5879,7 +6628,11 @@
           historyShowMoreEl.style.display = (historyOffset < data.total) ? "block" : "none";
         })
         .catch(function (err) {
-          historyStatusEl.textContent = "Couldn't load: " + err.message;
+          if (isFirstPage) {
+            showLoadError(historyListEl, "Couldn't load: " + err.message, loadHistory);
+          } else {
+            showLoadError(historyStatusEl, "Couldn't load: " + err.message, loadMoreHistory);
+          }
         });
     }
 
