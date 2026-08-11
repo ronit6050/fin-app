@@ -1182,7 +1182,19 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
 
       if(type === "debit" && financialEvent){
         if(financialEvent === "Rent" || financialEvent === "EMI") fixedObligations += amount;
-        else if(financialEvent === "Investment") invested += amount;
+        else if(financialEvent === "Investment"){
+          invested += amount;
+          // Also counts toward the Need/Want/Saving/Investment snapshot's
+          // "Investment" slice — fixed 2026-08-11. Before this, a confirmed
+          // SIP/Investment Financial Event was `continue`d past entirely,
+          // so it added to `invested` (the separate CC Advisor/Analysis
+          // "Invested this month" figure) but never to `typeTotals`, which
+          // is what the Home/Analysis Need/Want/Saving bar actually reads.
+          // Real example that caught this: a ₹3,000 SIP confirmed this
+          // month, "Invested" correctly showed ₹3,000 elsewhere, but the
+          // snapshot bar still showed Saving+Invest 0%.
+          typeTotals.Investment += amount;
+        }
         continue; // not day-to-day spend — tracked as its own line, not blended into spend/category totals
       }
 
