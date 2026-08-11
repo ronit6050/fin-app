@@ -1372,14 +1372,20 @@
         <div id="savingsStatus"><span class="spinner"></span>Loading...</div>
         <div id="savingsContent" style="display:none">
 
+          <!-- Overview only — 3 swipeable cards (Emergency / CC Buffer /
+               Wish List), no buttons inside them and no visible arrows,
+               swipe or tap a dot to move between them. All actions live
+               in the detail list below instead, per the user's own call
+               2026-08-11: "widget just gives an overview, detailed view
+               I get under the widget." -->
           <div style="position:relative;">
             <div id="savingsCarouselTrack" style="overflow:hidden; border-radius:var(--radius-lg); touch-action:pan-y;">
               <div id="savingsCarouselInner" style="display:flex; transition:transform 0.25s ease;"></div>
             </div>
-            <button type="button" id="savingsCarouselPrev" class="carousel-arrow" style="left:-6px;" aria-label="Previous card">‹</button>
-            <button type="button" id="savingsCarouselNext" class="carousel-arrow" style="right:-6px;" aria-label="Next card">›</button>
           </div>
           <div id="savingsCarouselDots" class="carousel-dots"></div>
+
+          <div id="savingsDetailList"></div>
 
           <!-- Shared quick-action panel — used for both "Add to X" and
                "Withdraw from X", opened from whichever card's button was
@@ -1400,10 +1406,10 @@
             <div id="quickActionResult" class="pending-result"></div>
           </div>
 
-          <button type="button" id="addGoalToggleButton">+ Add Goal</button>
+          <button type="button" id="addGoalToggleButton">+ Add to Wish List</button>
           <div id="addGoalForm" style="display:none; margin-top:12px;">
             <div class="field">
-              <label>Goal name</label>
+              <label>Item name</label>
               <input type="text" id="goalNameInput" placeholder="e.g. New phone">
             </div>
             <div class="field">
@@ -3980,8 +3986,7 @@
     const savingsCarouselInnerEl = document.getElementById("savingsCarouselInner");
     const savingsCarouselTrackEl = document.getElementById("savingsCarouselTrack");
     const savingsCarouselDotsEl  = document.getElementById("savingsCarouselDots");
-    const savingsCarouselPrevEl  = document.getElementById("savingsCarouselPrev");
-    const savingsCarouselNextEl  = document.getElementById("savingsCarouselNext");
+    const savingsDetailListEl    = document.getElementById("savingsDetailList");
 
     const quickActionPanelEl        = document.getElementById("quickActionPanel");
     const quickActionLabelEl        = document.getElementById("quickActionLabel");
@@ -4076,25 +4081,48 @@
       savingsStatusEl.textContent = "";
       savingsContentEl.style.display = "block";
       renderCarousel(s);
+      renderSavingsDetailList(s);
       renderRecentActivity(s.recentEntries || []);
     }
 
-    // ---------- Carousel: Emergency, CC Buffer, each goal, Free Savings ----------
+    // ---------- Carousel — overview only, 3 cards (Emergency / CC Buffer /
+    // Wish List), swipe or tap a dot to move, no buttons and no visible
+    // arrows inside it. Detail + actions live below, in the list. ----------
 
-    function buildCarouselCards(s) {
-      const cards = [{ kind: "emergency", saved: s.emergency, target: s.emergencyTarget }];
-      s.goals
-        .filter(function (g) { return g.status === "Active"; })
-        .forEach(function (g) { cards.push({ kind: "goal", goal: g }); });
-      cards.push({ kind: "free", saved: s.free });
-      return cards;
+    function buildOverviewCards(s) {
+      const wishGoals = s.goals.filter(function (g) { return g.status === "Active" && g.type === "OneTime"; });
+      const wishSaved  = wishGoals.reduce(function (sum, g) { return sum + g.saved; }, 0);
+      const wishTarget = wishGoals.reduce(function (sum, g) { return sum + g.target; }, 0);
+
+      return [
+        { label: "Emergency Fund", saved: s.emergency, target: s.emergencyTarget, note: "locked, real emergencies only" },
+        { label: "CC Buffer",      saved: s.ccBufferGoal ? s.ccBufferGoal.saved : 0, target: s.ccBufferGoal ? s.ccBufferGoal.target : 0, note: "auto, from your average bill" },
+        { label: "Wish List",      saved: wishSaved, target: wishTarget, note: wishGoals.length + " item" + (wishGoals.length === 1 ? "" : "s") }
+      ];
     }
 
     function renderCarousel(s) {
-      const cards = buildCarouselCards(s);
+      const cards = buildOverviewCards(s);
 
       savingsCarouselInnerEl.innerHTML = "";
-      cards.forEach(function (c) { savingsCarouselInnerEl.appendChild(renderCarouselCard(c)); });
+      cards.forEach(function (c) {
+        const pct = c.target > 0 ? Math.min(Math.round((c.saved / c.target) * 100), 100) : 0;
+        const el = document.createElement("div");
+        el.style.minWidth = "100%";
+        el.style.boxSizing = "border-box";
+        el.style.marginRight = "10px";
+        el.innerHTML = `
+          <div class="today-total-box">
+            <div class="today-total-label">${c.label}</div>
+            <div class="today-total-amount">${fmtRs(c.saved)}</div>
+            <div class="today-split">of ${fmtRs(c.target)} &middot; ${c.note}</div>
+            <div class="category-bar-track" style="background:rgba(255,255,255,0.15); margin-top:10px;">
+              <div class="category-bar-fill" style="background:var(--text-on-hero); width:${pct}%"></div>
+            </div>
+          </div>
+        `;
+        savingsCarouselInnerEl.appendChild(el);
+      });
 
       savingsCarouselDotsEl.innerHTML = "";
       cards.forEach(function (_, i) {
@@ -4116,9 +4144,8 @@
       });
     }
 
-    savingsCarouselPrevEl.addEventListener("click", function () { goToCarouselCard(carouselIndex - 1); });
-    savingsCarouselNextEl.addEventListener("click", function () { goToCarouselCard(carouselIndex + 1); });
-
+    // Swipe gesture only — no visible prev/next buttons, per the user's
+    // own call 2026-08-11.
     let carouselStartX = null;
     savingsCarouselTrackEl.addEventListener("pointerdown", function (e) { carouselStartX = e.clientX; });
     savingsCarouselTrackEl.addEventListener("pointerup", function (e) {
@@ -4129,97 +4156,95 @@
       carouselStartX = null;
     });
 
-    function renderCarouselCard(card) {
-      const el = document.createElement("div");
-      el.style.minWidth = "100%";
-      el.style.boxSizing = "border-box";
-      el.style.marginRight = "10px";
+    // ---------- Detail list — Emergency / CC Buffer / each Wish List item /
+    // Free Savings, each a tap-to-expand row (same accordion pattern as
+    // Analysis/CC Advisor's category list) with its real actions. ----------
 
-      if (card.kind === "emergency") {
-        const pct = card.target > 0 ? Math.min(Math.round((card.saved / card.target) * 100), 100) : 0;
-        el.innerHTML = `
-          <div class="today-total-box">
-            <div class="today-total-label">Emergency Fund</div>
-            <div class="today-total-amount">${fmtRs(card.saved)}</div>
-            <div class="today-split">of ${fmtRs(card.target)} target &middot; locked, real emergencies only</div>
-            <div class="category-bar-track" style="background:rgba(255,255,255,0.15); margin-top:10px;">
-              <div class="category-bar-fill" style="background:var(--text-on-hero); width:${pct}%"></div>
-            </div>
-            <div class="goal-card-actions">
-              <button type="button" class="emergency-add-btn" style="background:var(--text-on-hero); color:var(--surface-hero);">Add to Emergency</button>
-              <button type="button" class="secondary emergency-withdraw-btn" style="border-color:var(--text-on-hero-muted); color:var(--text-on-hero);">Withdraw</button>
-            </div>
+    function closeAllSavingsDetails_(exceptEl) {
+      savingsDetailListEl.querySelectorAll(".category-detail").forEach(function (d) {
+        if (d !== exceptEl) d.style.display = "none";
+      });
+    }
+
+    function buildSimpleDetailRow(label, saved, target, note, destination, extraBadgesHtml, onPrimaryAction, primaryLabel) {
+      const row = document.createElement("div");
+      row.className = "category-row";
+      const pct = target > 0 ? Math.min(Math.round((saved / target) * 100), 100) : 0;
+
+      row.innerHTML = `
+        <div class="category-top">
+          <span>${label}${extraBadgesHtml || ""}</span>
+          <span>${fmtRs(saved)}</span>
+        </div>
+        ${target > 0 ? `<div class="category-bar-track"><div class="category-bar-fill" style="width:${pct}%"></div></div>` : ""}
+        ${note ? `<div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">${note}</div>` : ""}
+        <div class="category-detail" style="display:none;">
+          <div class="goal-card-actions" style="margin-top:0;">
+            <button type="button" class="detail-primary-btn">${primaryLabel || "Add"}</button>
+            ${saved > 0 ? '<button type="button" class="secondary detail-withdraw-btn">Withdraw</button>' : ""}
           </div>
-        `;
-        el.querySelector(".emergency-add-btn").addEventListener("click", function () { openQuickAction("add", "Emergency", card.saved); });
-        el.querySelector(".emergency-withdraw-btn").addEventListener("click", function () { openQuickAction("withdraw", "Emergency", card.saved); });
-        return el;
+          <div class="pending-result detail-msg"></div>
+        </div>
+      `;
+
+      const detailEl = row.querySelector(".category-detail");
+      row.querySelector(".category-top").addEventListener("click", function () {
+        const alreadyOpen = detailEl.style.display !== "none";
+        closeAllSavingsDetails_(detailEl);
+        detailEl.style.display = alreadyOpen ? "none" : "block";
+      });
+
+      row.querySelector(".detail-primary-btn").addEventListener("click", function () {
+        if (onPrimaryAction) onPrimaryAction(row.querySelector(".detail-msg"));
+        else openQuickAction("add", destination, saved);
+      });
+
+      const withdrawBtn = row.querySelector(".detail-withdraw-btn");
+      if (withdrawBtn) {
+        withdrawBtn.addEventListener("click", function () { openQuickAction("withdraw", destination, saved); });
       }
 
-      if (card.kind === "free") {
-        el.innerHTML = `
-          <div class="goal-hero-card">
-            <div style="font-size:0.78rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.3px;">Free Savings</div>
-            <div style="font-size:1.9rem; font-weight:700; letter-spacing:-0.6px; margin:2px 0;">${fmtRs(card.saved)}</div>
-            <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:10px;">No goal picked yet</div>
-            <div class="goal-card-actions">
-              <button type="button" class="free-add-btn">Add</button>
-              <button type="button" class="secondary free-withdraw-btn">Withdraw</button>
-            </div>
-          </div>
-        `;
-        el.querySelector(".free-add-btn").addEventListener("click", function () { openQuickAction("add", "Free", card.saved); });
-        el.querySelector(".free-withdraw-btn").addEventListener("click", function () { openQuickAction("withdraw", "Free", card.saved); });
-        return el;
-      }
+      return row;
+    }
 
-      // A goal — one-time (e.g. a phone) or recurring (CC Buffer)
-      const g = card.goal;
-      const pct = g.target > 0 ? Math.min(Math.round((g.saved / g.target) * 100), 100) : 0;
+    function buildGoalDetailRow(g) {
       const isRecurring = g.type === "Recurring";
       const badges =
         (g.priority ? '<span class="status-pill success" style="margin-left:6px;">Priority</span>' : '') +
         (isRecurring ? '<span class="status-pill info" style="margin-left:6px;">Recurring</span>' : '');
-      const primaryLabel = isRecurring ? "Add to Buffer" : (g.canAfford ? "Mark Purchased" : "Add to Goal");
-      const showPriorityBtn = !isRecurring && !g.priority;
-      const showWithdrawBtn = g.saved > 0;
+      const primaryLabel = g.canAfford ? "Mark Purchased" : "Add to Goal";
 
-      el.innerHTML = `
-        <div class="goal-hero-card">
-          <div style="font-size:0.78rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.3px;">${escapeHtml(g.name)}${badges}</div>
-          <div style="font-size:1.9rem; font-weight:700; letter-spacing:-0.6px; margin:2px 0;">${fmtRs(g.saved)}</div>
-          <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:10px;">of ${fmtRs(g.target)}${isRecurring ? " (auto, from your average bill)" : ""}</div>
-          <div class="category-bar-track">
-            <div class="category-bar-fill" style="width:${pct}%"></div>
-          </div>
-          <div class="goal-card-actions">
-            <button type="button" class="goal-primary-btn">${primaryLabel}</button>
-            ${showPriorityBtn ? '<button type="button" class="secondary goal-priority-btn">Set Priority</button>' : ""}
-          </div>
-          ${showWithdrawBtn ? '<button type="button" class="secondary goal-withdraw-btn" style="width:100%; margin-top:8px;">Withdraw</button>' : ""}
-          <div class="pending-result goal-card-msg"></div>
-        </div>
-      `;
+      const row = buildSimpleDetailRow(
+        escapeHtml(g.name), g.saved, g.target,
+        isRecurring ? "auto, from your average bill" : null,
+        g.name, badges,
+        function (msgEl) {
+          if (g.canAfford) {
+            msgEl.textContent = "Saving...";
+            callAppsScript({ action: "purchaseSavingsGoal", idToken: currentUser.idToken, row: g.row, name: g.name, amount: g.saved })
+              .then(function (data) {
+                if (data.ok) { clearSavingsRelatedCaches(); refreshSavings(); }
+                else { msgEl.textContent = data.error; }
+              })
+              .catch(function (err) { msgEl.textContent = err.message; });
+          } else {
+            openQuickAction("add", g.name, g.saved);
+          }
+        },
+        primaryLabel
+      );
 
-      const msgEl = el.querySelector(".goal-card-msg");
-
-      el.querySelector(".goal-primary-btn").addEventListener("click", function () {
-        if (!isRecurring && g.canAfford) {
-          msgEl.textContent = "Saving...";
-          callAppsScript({ action: "purchaseSavingsGoal", idToken: currentUser.idToken, row: g.row, name: g.name, amount: g.saved })
-            .then(function (data) {
-              if (data.ok) { clearSavingsRelatedCaches(); refreshSavings(); }
-              else { msgEl.textContent = data.error; }
-            })
-            .catch(function (err) { msgEl.textContent = err.message; });
-        } else {
-          openQuickAction("add", g.name, g.saved);
-        }
-      });
-
-      const priorityBtn = el.querySelector(".goal-priority-btn");
-      if (priorityBtn) {
+      // Priority goals don't need a "make this the priority" button —
+      // add it as an extra action alongside the ones buildSimpleDetailRow
+      // already wired up.
+      if (!g.priority) {
+        const actionsEl = row.querySelector(".goal-card-actions");
+        const priorityBtn = document.createElement("button");
+        priorityBtn.type = "button";
+        priorityBtn.className = "secondary";
+        priorityBtn.textContent = "Set Priority";
         priorityBtn.addEventListener("click", function () {
+          const msgEl = row.querySelector(".detail-msg");
           msgEl.textContent = "Saving...";
           callAppsScript({ action: "setPrioritySavingsGoal", idToken: currentUser.idToken, row: g.row })
             .then(function (data) {
@@ -4228,14 +4253,43 @@
             })
             .catch(function (err) { msgEl.textContent = err.message; });
         });
+        actionsEl.appendChild(priorityBtn);
       }
 
-      const withdrawBtn = el.querySelector(".goal-withdraw-btn");
-      if (withdrawBtn) {
-        withdrawBtn.addEventListener("click", function () { openQuickAction("withdraw", g.name, g.saved); });
+      return row;
+    }
+
+    function renderSavingsDetailList(s) {
+      savingsDetailListEl.innerHTML = "";
+
+      savingsDetailListEl.appendChild(
+        buildSimpleDetailRow("Emergency Fund", s.emergency, s.emergencyTarget, "locked, real emergencies only", "Emergency", "", null, "Add to Emergency")
+      );
+
+      if (s.ccBufferGoal) {
+        savingsDetailListEl.appendChild(
+          buildSimpleDetailRow("CC Buffer", s.ccBufferGoal.saved, s.ccBufferGoal.target, "auto, from your average bill", s.ccBufferGoal.name, '<span class="status-pill info" style="margin-left:6px;">Recurring</span>', null, "Add to Buffer")
+        );
       }
 
-      return el;
+      const wishHeader = document.createElement("h3");
+      wishHeader.style.cssText = "font-size:0.95rem; margin:16px 0 8px 0;";
+      wishHeader.textContent = "Wish List";
+      savingsDetailListEl.appendChild(wishHeader);
+
+      const wishGoals = s.goals.filter(function (g) { return g.status === "Active" && g.type === "OneTime"; });
+      if (wishGoals.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty-state";
+        empty.innerHTML = '<span class="empty-icon">🎯</span><p>No wish list items yet.</p>';
+        savingsDetailListEl.appendChild(empty);
+      } else {
+        wishGoals.forEach(function (g) { savingsDetailListEl.appendChild(buildGoalDetailRow(g)); });
+      }
+
+      savingsDetailListEl.appendChild(
+        buildSimpleDetailRow("Free Savings", s.free, 0, "no goal picked yet", "Free", "", null, "Add")
+      );
     }
 
     // ---------- Shared "Add to X" / "Withdraw from X" panel ----------
