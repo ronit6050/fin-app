@@ -850,13 +850,24 @@ function getCCAdvisorData(txnData, cashData, monthTotals){
   }
 
   let fixedObl = monthTotals ? monthTotals.fixedObligations : null;
-  let investedAmt = monthTotals ? monthTotals.invested : null;
+  let investedActual = monthTotals ? monthTotals.invested : null;
   if(fixedObl === undefined || fixedObl === null){
     const now = new Date();
     const m = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, data, cashData);
     fixedObl = m.fixedObligations;
-    investedAmt = m.invested;
+    investedActual = m.invested;
   }
+
+  // Added 2026-08-10 — user's real example: invested ₹3,000 so far this
+  // month, but their fixed monthly commitment is ₹9,000 (the rest comes
+  // later in the month). Using only the REAL amount-so-far understated
+  // what's actually committed, making the affordability check look
+  // rosier than reality early in the month. Fixed by treating whichever
+  // is bigger — the fixed target, or the real amount if it ever runs
+  // ahead of the target (a genuine extra top-up should never be
+  // undercounted either) — as "committed" for the needed-money math.
+  const investedTarget = settings.monthlyInvestmentGoal;
+  const investedCommitted = Math.max(investedActual, investedTarget);
 
   // "Can you actually pay this without it eating into next month?" —
   // same question, asked against whichever amount is passed in. Used
@@ -868,12 +879,10 @@ function getCCAdvisorData(txnData, cashData, monthTotals){
   // Savings goal and Invested this month are kept as two separate lines
   // (not combined) — user flagged 2026-08-10 that they're different
   // things to them, same distinction the Savings/Investments tabs
-  // already keep. "Invested" is this month's REAL amount already
-  // recognized via Financial Events (see financialEvents.js), not a
-  // typed-in target — no new Settings field needed.
+  // already keep.
   function computeAffordability(billAmount){
     const available = cashBalance + recentIncome;
-    const needed = billAmount + settings.monthlyExpenses + fixedObl + investedAmt + settings.monthlySaveGoal;
+    const needed = billAmount + settings.monthlyExpenses + fixedObl + investedCommitted + settings.monthlySaveGoal;
     const net = available - needed;
     return {
       cashBalance: cashBalance,
@@ -882,7 +891,9 @@ function getCCAdvisorData(txnData, cashData, monthTotals){
       billAmount: billAmount,
       monthlyExpenses: settings.monthlyExpenses,
       fixedObligations: fixedObl,
-      invested: investedAmt,
+      invested: investedCommitted,
+      investedActual: investedActual,
+      investedTarget: investedTarget,
       savingsGoal: settings.monthlySaveGoal,
       needed: needed,
       net: net,

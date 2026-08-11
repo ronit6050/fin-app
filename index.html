@@ -1514,6 +1514,10 @@
           <label>Monthly savings goal (₹)</label>
           <input type="number" id="settingsMonthlySaveGoal" min="0" step="1">
         </div>
+        <div class="field">
+          <label>Monthly investment amount (₹)</label>
+          <input type="number" id="settingsMonthlyInvestmentGoal" min="0" step="1" placeholder="0 = not set">
+        </div>
 
         <button type="button" id="saveSettingsButton">Save</button>
         <div id="settingsResult" class="pending-result"></div>
@@ -1560,8 +1564,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-16";
-    const APP_CHANGELOG = "CC Advisor: \"Invested this month\" is now its own line in the afford-this-bill checks, separate from your Savings goal, since those are different things.";
+    const APP_VERSION = "2026-08-10-17";
+    const APP_CHANGELOG = "New Settings field: Monthly investment amount. CC Advisor now treats your fixed monthly investment as committed money even before the transaction happens, instead of understating it early in the month.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -3476,6 +3480,18 @@
         });
     }
 
+    // Shows the real invested-so-far amount alongside the fixed monthly
+    // target when one's set in Settings (e.g. "₹3,000 of ₹9,000") so it's
+    // clear at a glance whether this month's investment still needs to
+    // happen — falls back to just the amount when no target is set.
+    function formatInvestedLine(af) {
+      if (af.investedTarget > 0) {
+        return "− ₹" + af.invested.toLocaleString("en-IN") +
+          " (₹" + af.investedActual.toLocaleString("en-IN") + " of ₹" + af.investedTarget.toLocaleString("en-IN") + ")";
+      }
+      return "− ₹" + af.invested.toLocaleString("en-IN");
+    }
+
     function renderCCAdvisor(cc) {
       ccStatusEl.textContent = "";
       ccContentEl.style.display = "block";
@@ -3516,7 +3532,7 @@
         ccAffBillEl.textContent = "− ₹" + af.billAmount.toLocaleString("en-IN");
         ccAffExpensesEl.textContent = "− ₹" + af.monthlyExpenses.toLocaleString("en-IN");
         ccAffObligationsEl.textContent = "− ₹" + af.fixedObligations.toLocaleString("en-IN");
-        ccAffInvestedEl.textContent = "− ₹" + af.invested.toLocaleString("en-IN");
+        ccAffInvestedEl.textContent = formatInvestedLine(af);
         ccAffSavingsEl.textContent = "− ₹" + af.savingsGoal.toLocaleString("en-IN");
       } else {
         ccAffordCardEl.style.display = "none";
@@ -3555,7 +3571,7 @@
         ccCurAffProjectedEl.textContent = "− ₹" + proj.billAmount.toLocaleString("en-IN");
         ccCurAffExpensesEl.textContent = "− ₹" + proj.monthlyExpenses.toLocaleString("en-IN");
         ccCurAffObligationsEl.textContent = "− ₹" + proj.fixedObligations.toLocaleString("en-IN");
-        ccCurAffInvestedEl.textContent = "− ₹" + proj.invested.toLocaleString("en-IN");
+        ccCurAffInvestedEl.textContent = formatInvestedLine(proj);
         ccCurAffSavingsEl.textContent = "− ₹" + proj.savingsGoal.toLocaleString("en-IN");
       } else {
         ccCurrentAffordCardEl.style.display = "none";
@@ -4817,6 +4833,7 @@
     const settingsCcAlertPctEl      = document.getElementById("settingsCcAlertPct");
     const settingsMonthlyExpensesEl = document.getElementById("settingsMonthlyExpenses");
     const settingsMonthlySaveGoalEl = document.getElementById("settingsMonthlySaveGoal");
+    const settingsMonthlyInvestmentGoalEl = document.getElementById("settingsMonthlyInvestmentGoal");
     const saveSettingsButtonEl      = document.getElementById("saveSettingsButton");
     const settingsResultEl          = document.getElementById("settingsResult");
 
@@ -4862,6 +4879,7 @@
       settingsCcAlertPctEl.value      = Math.round(s.ccAlertPct * 100);
       settingsMonthlyExpensesEl.value = s.monthlyExpenses;
       settingsMonthlySaveGoalEl.value = s.monthlySaveGoal;
+      settingsMonthlyInvestmentGoalEl.value = s.monthlyInvestmentGoal;
     }
 
     saveSettingsButtonEl.addEventListener("click", function () {
@@ -4875,7 +4893,8 @@
           ccWarnPct:       (parseFloat(settingsCcWarnPctEl.value) || 0) / 100,
           ccAlertPct:      (parseFloat(settingsCcAlertPctEl.value) || 0) / 100,
           monthlyExpenses: parseFloat(settingsMonthlyExpensesEl.value) || 0,
-          monthlySaveGoal: parseFloat(settingsMonthlySaveGoalEl.value) || 0
+          monthlySaveGoal: parseFloat(settingsMonthlySaveGoalEl.value) || 0,
+          monthlyInvestmentGoal: parseFloat(settingsMonthlyInvestmentGoalEl.value) || 0
         }
       })
         .then(function (data) {

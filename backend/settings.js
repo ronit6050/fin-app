@@ -23,7 +23,13 @@ function getSettings(){
     ccWarnPct:       Number(props.getProperty("SETTING_CC_WARN_PCT"))       || 0.25,
     ccAlertPct:      Number(props.getProperty("SETTING_CC_ALERT_PCT"))      || 0.30,
     monthlyExpenses: Number(props.getProperty("SETTING_MONTHLY_EXPENSES"))  || 30000,
-    monthlySaveGoal: Number(props.getProperty("SETTING_MONTHLY_SAVE_GOAL")) || 1000
+    monthlySaveGoal: Number(props.getProperty("SETTING_MONTHLY_SAVE_GOAL")) || 1000,
+    // Added 2026-08-10 — a fixed amount you always invest each month, so
+    // CC Advisor's affordability check can treat it as committed even
+    // before the matching transaction happens (or if you invest in
+    // installments across the month). 0 default = feature is a no-op
+    // for anyone who hasn't set it.
+    monthlyInvestmentGoal: Number(props.getProperty("SETTING_MONTHLY_INVESTMENT_GOAL")) || 0
   };
 }
 
@@ -38,6 +44,8 @@ function updateSettings(newSettings){
     if(newSettings.ccAlertPct)      props.setProperty("SETTING_CC_ALERT_PCT", String(newSettings.ccAlertPct));
     if(newSettings.monthlyExpenses) props.setProperty("SETTING_MONTHLY_EXPENSES", String(newSettings.monthlyExpenses));
     if(newSettings.monthlySaveGoal) props.setProperty("SETTING_MONTHLY_SAVE_GOAL", String(newSettings.monthlySaveGoal));
+    if(newSettings.monthlyInvestmentGoal !== undefined && newSettings.monthlyInvestmentGoal !== null && newSettings.monthlyInvestmentGoal !== "")
+      props.setProperty("SETTING_MONTHLY_INVESTMENT_GOAL", String(newSettings.monthlyInvestmentGoal));
 
     return { ok: true };
   }catch(err){

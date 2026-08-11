@@ -220,6 +220,39 @@ of the existing screenshot numbers, and a zero-invested case confirming
 existing behavior is unchanged for anyone with nothing logged yet.
 `APP_VERSION` bumped to `2026-08-10-16`.
 
+## Monthly investment amount — Settings field added (2026-08-10)
+
+User caught this with a real example: invested ₹3,000 so far this
+month, but their actual fixed monthly commitment is ₹9,000 (spread
+across the month, not one lump sum). The "Invested this month" line
+added just above only ever showed the REAL amount-so-far — early in the
+month, or between installments, that understates what's actually
+committed, making the affordability check look falsely comfortable.
+
+**Fix:** new Settings field, `monthlyInvestmentGoal` (Script Property
+`SETTING_MONTHLY_INVESTMENT_GOAL`, default 0 — a no-op for anyone who
+hasn't set it, same pattern as every other Settings field). In the
+`needed` math, `computeAffordability` now uses
+**`Math.max(investedActual, investedTarget)`** — whichever is bigger:
+- Early in the month, before any matching transaction exists:
+  `investedActual` is 0, so the fixed target is used — the commitment
+  counts even before it's happened.
+- If a genuine extra top-up ever exceeds the fixed target in a given
+  month, the real (bigger) number is used instead — never undercounted.
+
+Each affordability object now carries `investedActual` and
+`investedTarget` alongside the existing `invested` (the resolved,
+bigger one — used in the actual math). The frontend's
+`formatInvestedLine()` shows both together when a target is set (e.g.
+**"₹9,000 (₹3,000 of ₹9,000)"**), or just the plain amount when no
+target has been entered yet.
+
+Verified with a 3-case Node test: the user's own numbers (3,000
+actual / 9,000 target → uses 9,000), an over-target top-up (12,000
+actual / 9,000 target → uses 12,000), and a no-target case confirming
+it behaves exactly as before for anyone who hasn't set one.
+`APP_VERSION` bumped to `2026-08-10-17`.
+
 ## Open items / not yet done
 
 - Recent-income estimation (35-day Income-category window) hasn't been

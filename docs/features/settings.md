@@ -1,13 +1,16 @@
 # Settings
 
-**Status: live**, shipped 2026-08-08.
+**Status: live**, shipped 2026-08-08. Monthly investment amount field
+added 2026-08-10 — see [cc-advisor.md](cc-advisor.md#monthly-investment-amount--settings-field-added-2026-08-10).
 
 ## What this is
 
 Lets you edit the limits/goals that used to be hardcoded constants only a
 code change could touch: CC combined limit, CC warning/alert thresholds
 (as %), monthly essential expenses (drives the emergency fund target),
-and the monthly savings goal. Lives under More → Settings.
+the monthly savings goal, and (added 2026-08-10) a fixed monthly
+investment amount used by CC Advisor's affordability check. Lives under
+More → Settings.
 
 ## Why Script Properties, not a Sheet
 
@@ -44,20 +47,26 @@ was unnecessary risk for a beginner-run project. Instead:
 ## Functions
 
 - **`settings.js`** (new file) — `getSettings()` returns
-  `{ ccLimit, ccWarnPct, ccAlertPct, monthlyExpenses, monthlySaveGoal }`,
-  reading each from its own Script Property (`SETTING_CC_LIMIT` etc.),
-  falling back to the original hardcoded defaults (50000 / 0.25 / 0.30 /
-  30000 / 1000) if never customized. `updateSettings(newSettings)` only
-  overwrites keys actually present in the object passed in — saving a
-  partially-filled form can't wipe out the other settings.
+  `{ ccLimit, ccWarnPct, ccAlertPct, monthlyExpenses, monthlySaveGoal,
+  monthlyInvestmentGoal }`, reading each from its own Script Property
+  (`SETTING_CC_LIMIT` etc.), falling back to the original hardcoded
+  defaults (50000 / 0.25 / 0.30 / 30000 / 1000 / **0**) if never
+  customized — `monthlyInvestmentGoal` defaults to 0, meaning "not set,"
+  which keeps CC Advisor's math unchanged for anyone who hasn't entered
+  one. `updateSettings(newSettings)` only overwrites keys actually
+  present in the object passed in — saving a partially-filled form can't
+  wipe out the other settings. `monthlyInvestmentGoal` is the one field
+  that explicitly allows saving `0` (checked for `undefined`/`null`/`""`
+  rather than truthiness like the others), so it can be intentionally
+  cleared back to "not set."
 - New PWA actions: `getSettings`, `updateSettings`.
 
 ## UI
 
-Five number fields (CC limit, CC warn %, CC alert %, monthly expenses,
-monthly savings goal) and a Save button. Percentages are stored as 0-1
-in the backend but shown/edited as 0-100 in the UI — converted both ways
-in `renderSettings()`/the save handler. Saving clears the `cc`/
-`savings`/`dashboard` caches and resets their `tabLoaded` flags, since
-those screens' numbers depend on these values and would otherwise show
-stale data until manually refreshed.
+Six number fields (CC limit, CC warn %, CC alert %, monthly expenses,
+monthly savings goal, monthly investment amount) and a Save button.
+Percentages are stored as 0-1 in the backend but shown/edited as 0-100
+in the UI — converted both ways in `renderSettings()`/the save handler.
+Saving clears the `cc`/`savings`/`dashboard` caches and resets their
+`tabLoaded` flags, since those screens' numbers depend on these values
+and would otherwise show stale data until manually refreshed.

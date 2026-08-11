@@ -795,8 +795,17 @@ per the user's own call to keep it simple. Verified with a 4-case Node
 test before shipping. Same day, user also caught that "Savings goal"
 and investing were being lumped together in the breakdown — added a
 separate "Invested this month" line (real amount, from Financial
-Events, no new setting) to both affordability cards. See
-[docs/features/cc-advisor.md](docs/features/cc-advisor.md).
+Events, no new setting) to both affordability cards. Then, once real
+numbers were in front of the user, a further catch: the real
+amount-so-far understates a fixed monthly investment commitment early
+in the month (their example: ₹3,000 invested so far against a real
+₹9,000/month commitment) — added a new Settings field, "Monthly
+investment amount," and the affordability math now uses whichever is
+bigger, the fixed target or the real amount, so a commitment counts
+even before its transaction happens, and a genuine over-target top-up
+is still never undercounted. See
+[docs/features/cc-advisor.md](docs/features/cc-advisor.md) and
+[docs/features/settings.md](docs/features/settings.md).
 
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as
 categories at all (a category should group *varied* things — breakfast,
