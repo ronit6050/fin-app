@@ -253,6 +253,68 @@ actual / 9,000 target → uses 12,000), and a no-target case confirming
 it behaves exactly as before for anyone who hasn't set one.
 `APP_VERSION` bumped to `2026-08-10-17`.
 
+## CC Buffer — a sinking fund for the card bill (2026-08-10)
+
+**Why:** the user asked a bigger question after using the rebuilt
+screen for a while: "I always pay in full, but at the cost of next
+month's salary or my wants — how do I actually fix that?" Researched
+general, well-established personal-finance practice (not personalized
+advice — see chat for sources): paying in full every cycle is already
+the single most important habit (it's what keeps the interest-free
+grace period alive), and the standard answer to "irregular costs keep
+raiding next month's money" is a **sinking fund** — a small, fixed
+amount set aside regularly, specifically earmarked for a known
+upcoming cost. That's exactly the habit the user already does manually
+(moving the unbilled amount to a separate account) — the goal here is
+to bring that habit *into* the app instead of leaving it invisible to
+it, which is what caused the "the app doesn't know about my reserved
+money" gap flagged a few turns earlier.
+
+**Design, confirmed with the user before building (3 questions):**
+1. **Where it lives** — a new 4th Savings pot (`CCBuffer`), alongside
+   the existing Emergency / WishList / FreeSavings pots, rather than a
+   separate standalone tracker. Reuses the whole Savings screen instead
+   of teaching a new one.
+2. **How it grows** — manual only, via its own "Add to CC Buffer" form
+   (Savings screen) — deliberately NOT part of `logSavingFromApp`'s
+   existing auto-split (which only ever divides across the original 3
+   pots). Kept manual on purpose while it's a new habit, same reasoning
+   as `monthlyInvestmentGoal` starting at a safe no-op default.
+3. **Does it count in the afford-this-bill math** — yes. This is the
+   whole point: it closes the blind spot where the app could only see
+   recent salary and wallet cash, never money already reserved.
+
+**Implementation:**
+- `getSavingsTotals` (`SavingsAdvisor.js`) gained a 4th bucket,
+  `ccBuffer`, for rows where column E (pot) is `"CCBuffer"` — previously
+  anything that wasn't `"Emergency"`/`"WishList"` fell into `"free"` by
+  default, so this needed its own explicit branch to avoid silently
+  merging into Free Savings.
+- New PWA action, `logCCBuffer` → `logCCBufferSaving(amount, note)`,
+  appends directly to the `Savings` sheet with pot `"CCBuffer"` —
+  deliberately separate from `logSavingFromApp`'s split logic.
+- `getCCAdvisorData` gained a 4th parameter, `ccBufferAmount` (optional,
+  same fallback pattern as the others — recomputed via `getSavingsData()`
+  when not provided). `computeAffordability`'s `available` is now
+  `cashBalance + recentIncome + ccBuffer`.
+- `getDashboardData` now computes `savings` *before* `cc` (previously
+  the other order) so `savings.ccBuffer` can be passed straight into
+  `getCCAdvisorData` — no extra sheet read.
+- Frontend: a new pot card + "Add to CC Buffer" mini-form on the
+  Savings screen; a new "CC Buffer" line (shown as a positive
+  contributor, right above "Available") in both the outstanding-bill
+  and current-cycle affordability cards. Saving to the buffer clears
+  the `cc`/`dashboard` caches, same pattern as a Settings save, since
+  it changes CC Advisor's numbers.
+
+Verified with a 3-case Node test: the new pot buckets correctly and
+doesn't leak into Free Savings, adding a buffer balance raises
+"available" by exactly that amount (re-using the exact numbers from the
+user's own screenshot — a buffer of ₹2,500 flips their real "₹935
+short" result to "₹1,565 spare"), and a zero-buffer case confirming no
+regression for anyone who hasn't started one yet. `APP_VERSION` bumped
+to `2026-08-10-18`.
+
 ## Open items / not yet done
 
 - Recent-income estimation (35-day Income-category window) hasn't been

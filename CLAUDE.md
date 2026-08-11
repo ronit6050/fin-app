@@ -803,8 +803,14 @@ in the month (their example: ₹3,000 invested so far against a real
 investment amount," and the affordability math now uses whichever is
 bigger, the fixed target or the real amount, so a commitment counts
 even before its transaction happens, and a genuine over-target top-up
-is still never undercounted. See
-[docs/features/cc-advisor.md](docs/features/cc-advisor.md) and
+is still never undercounted. Finally, the user asked a bigger-picture
+question — how to actually stop CC bills from raiding next month's
+salary at all — which led (after checking general, well-established
+credit-card practice, not personalized advice) to a **CC Buffer**: a
+4th Savings pot, added to manually, that CC Advisor now counts as real
+available money in the afford-this-bill check — closing the blind spot
+where money the user had already reserved was invisible to the app.
+See [docs/features/cc-advisor.md](docs/features/cc-advisor.md) and
 [docs/features/settings.md](docs/features/settings.md).
 
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as

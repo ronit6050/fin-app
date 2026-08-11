@@ -726,17 +726,25 @@ function getSavingsTotals(savSheet){
   let emergency  = 0;
   let wishlist   = 0;
   let free       = 0;
+  // CC Buffer — added 2026-08-10, a 4th pot separate from the other
+  // three. Unlike them, it's never auto-split into by logSavingFromApp;
+  // it's only ever added to directly, via its own "Add to CC Buffer"
+  // action (kept deliberate/manual per the user's own call, so growing
+  // it stays a conscious habit while it's still new). See
+  // docs/features/cc-advisor.md.
+  let ccBuffer   = 0;
 
   for(let i = 1; i < data.length; i++){
     const amount = Number(data[i][1]) || 0;
     const pot    = (data[i][4] || "FreeSavings").toString().trim();
 
-    if(pot === "Emergency")   emergency += amount;
-    else if(pot === "WishList") wishlist += amount;
-    else                       free     += amount;
+    if(pot === "Emergency")     emergency += amount;
+    else if(pot === "WishList") wishlist  += amount;
+    else if(pot === "CCBuffer") ccBuffer  += amount;
+    else                        free      += amount;
   }
 
-  return { emergency, wishlist, free, total: emergency + wishlist + free };
+  return { emergency, wishlist, free, ccBuffer, total: emergency + wishlist + free + ccBuffer };
 }
 
 

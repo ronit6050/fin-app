@@ -86,6 +86,10 @@ function handlePwaRequest(data){
     return jsonResponse(logSavingFromApp(data.amount, data.type, data.note));
   }
 
+  if(data.action === "logCCBuffer"){
+    return jsonResponse(logCCBufferSaving(data.amount, data.note));
+  }
+
   if(data.action === "addWishlistItem"){
     return jsonResponse(addWishlistItemFromApp(data.item, data.price, data.priority));
   }
@@ -171,14 +175,18 @@ function getDashboardData(){
   const today   = getTodaySummary(txnData, cashData);
   const month   = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, txnData, cashData);
   const cash    = getCashData(cashData);
-  const cc      = getCCAdvisorData(txnData, cashData, month);
-  const pending = getPendingTransactions(txnData);
 
   // Debts/Savings/Investments each read their own sheet(s) only once
   // already — no duplication to fix there, just reusing their results.
+  // Savings computed before CC Advisor now, since CC Advisor's
+  // affordability check needs the CC Buffer pot's balance (see
+  // docs/features/cc-advisor.md).
   const debts       = getDebtsData();
   const savings     = getSavingsData();
   const investments = getInvestmentsData();
+
+  const cc      = getCCAdvisorData(txnData, cashData, month, savings.ccBuffer);
+  const pending = getPendingTransactions(txnData);
 
   const recent = pending.slice(0, 3).map(function(t){
     return { label: t.counterparty || t.bank, amount: t.amount };
@@ -473,6 +481,7 @@ function getSavingsData(){
     emergencyTarget: emergencyTarget,
     wishlist: totals.wishlist,
     free: totals.free,
+    ccBuffer: totals.ccBuffer,
     stageLabel: stageLabel,
     splitPct: {
       emergency: Math.round(split.emergency * 100),
@@ -505,6 +514,21 @@ function logSavingFromApp(amount, type, note){
     if(freeAmt      > 0) savSheet.appendRow([today, freeAmt, type, note, "FreeSavings"]);
 
     return { ok: true, emergencyAmt: emergencyAmt, wishlistAmt: wishlistAmt, freeAmt: freeAmt };
+  }catch(err){
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// Adds straight to the CC Buffer pot — deliberately separate from
+// logSavingFromApp above, which auto-splits across the other 3 pots.
+// The buffer only grows when you decide to add to it, kept manual on
+// purpose while it's a new habit. See docs/features/cc-advisor.md.
+function logCCBufferSaving(amount, note){
+  try{
+    const savSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Savings");
+    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+    savSheet.appendRow([today, amount, "CC Buffer", note || "", "CCBuffer"]);
+    return { ok: true };
   }catch(err){
     return { ok: false, error: err.toString() };
   }
@@ -708,8 +732,13 @@ function applyDebtPayment(row, amount){
 // as getCashData's comment. monthTotals ({fixedObligations, invested},
 // from getMonthlyAnalysis) is passed in by getDashboardData, which
 // already computes both — recomputed here only when called standalone
-// (the "getCCAdvisor" action).
-function getCCAdvisorData(txnData, cashData, monthTotals){
+// (the "getCCAdvisor" action). ccBufferAmount (added 2026-08-10, the
+// user's own sinking-fund idea for this exact bill) is the CC Buffer
+// Savings pot's balance — real money genuinely set aside for the card,
+// so it counts as "available" money in the affordability check, closing
+// the blind spot where the app couldn't see money you'd already
+// reserved. Also optional, same fallback pattern.
+function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -858,6 +887,10 @@ function getCCAdvisorData(txnData, cashData, monthTotals){
     investedActual = m.invested;
   }
 
+  const ccBuffer = (ccBufferAmount === undefined || ccBufferAmount === null)
+    ? getSavingsData().ccBuffer
+    : ccBufferAmount;
+
   // Added 2026-08-10 — user's real example: invested ₹3,000 so far this
   // month, but their fixed monthly commitment is ₹9,000 (the rest comes
   // later in the month). Using only the REAL amount-so-far understated
@@ -881,12 +914,13 @@ function getCCAdvisorData(txnData, cashData, monthTotals){
   // things to them, same distinction the Savings/Investments tabs
   // already keep.
   function computeAffordability(billAmount){
-    const available = cashBalance + recentIncome;
+    const available = cashBalance + recentIncome + ccBuffer;
     const needed = billAmount + settings.monthlyExpenses + fixedObl + investedCommitted + settings.monthlySaveGoal;
     const net = available - needed;
     return {
       cashBalance: cashBalance,
       recentIncome: recentIncome,
+      ccBuffer: ccBuffer,
       available: available,
       billAmount: billAmount,
       monthlyExpenses: settings.monthlyExpenses,

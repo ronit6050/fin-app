@@ -1195,6 +1195,7 @@
             <div id="ccAffordDetail" style="display:none; margin-top:10px;">
               <div class="category-txn-line"><span>Cash balance</span><span id="ccAffCash"></span></div>
               <div class="category-txn-line"><span>Recent income</span><span id="ccAffIncome"></span></div>
+              <div class="category-txn-line"><span>CC Buffer</span><span id="ccAffBuffer"></span></div>
               <div class="category-txn-line" style="border-top:0.5px solid var(--border-hairline); padding-top:6px; margin-top:2px;"><span>Available</span><span id="ccAffAvailable"></span></div>
               <div class="category-txn-line"><span>This bill</span><span id="ccAffBill"></span></div>
               <div class="category-txn-line"><span>Monthly expenses</span><span id="ccAffExpenses"></span></div>
@@ -1228,6 +1229,7 @@
               <div class="category-txn-line"><span>Spent so far this cycle</span><span id="ccCurAffSoFar"></span></div>
               <div class="category-txn-line"><span>Cash balance</span><span id="ccCurAffCash"></span></div>
               <div class="category-txn-line"><span>Recent income</span><span id="ccCurAffIncome"></span></div>
+              <div class="category-txn-line"><span>CC Buffer</span><span id="ccCurAffBuffer"></span></div>
               <div class="category-txn-line" style="border-top:0.5px solid var(--border-hairline); padding-top:6px; margin-top:2px;"><span>Available</span><span id="ccCurAffAvailable"></span></div>
               <div class="category-txn-line"><span>Projected cycle total</span><span id="ccCurAffProjected"></span></div>
               <div class="category-txn-line"><span>Monthly expenses</span><span id="ccCurAffExpenses"></span></div>
@@ -1329,6 +1331,21 @@
             </div>
           </div>
 
+          <!-- Added 2026-08-10 — a 4th pot, separate from the 3 above.
+               Money here counts as real "available" money in CC
+               Advisor's afford-this-bill check (closes the blind spot
+               where reserved money was invisible to it). Only grows
+               when you add to it directly, below — never touched by
+               the auto-split "Log a Saving" section further down. See
+               docs/features/cc-advisor.md. -->
+          <div class="category-row">
+            <div class="category-top">
+              <span>CC Buffer</span>
+              <span id="savingsCCBufferAmount">₹0</span>
+            </div>
+            <p style="font-size:0.8rem; color:var(--text-secondary); margin:4px 0 0;">Set aside for your card bill — counts as available money in CC Advisor</p>
+          </div>
+
           <p id="savingsSplitLine" style="font-size:0.85rem; color:var(--text-secondary); margin:10px 0 16px 0;"></p>
 
           <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Wish List Items</h3>
@@ -1371,6 +1388,19 @@
           </div>
           <button type="button" id="saveSavingButton">Save</button>
           <div id="logSavingResult" class="pending-result"></div>
+
+          <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Add to CC Buffer</h3>
+          <p style="font-size:0.85rem; color:var(--text-secondary); margin:0 0 10px 0;">Start with a small fixed amount you're comfortable with (e.g. ₹1,000) and raise it over time.</p>
+          <div class="field">
+            <label>Amount (₹)</label>
+            <input type="number" id="ccBufferAmountInput" min="0" step="1" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Note (optional)</label>
+            <input type="text" id="ccBufferNoteInput" placeholder="e.g. this month's buffer">
+          </div>
+          <button type="button" id="saveCCBufferButton">Add</button>
+          <div id="ccBufferResult" class="pending-result"></div>
         </div>
       </div>
 
@@ -1564,8 +1594,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-17";
-    const APP_CHANGELOG = "New Settings field: Monthly investment amount. CC Advisor now treats your fixed monthly investment as committed money even before the transaction happens, instead of understating it early in the month.";
+    const APP_VERSION = "2026-08-10-18";
+    const APP_CHANGELOG = "New: CC Buffer, a 4th Savings pot for money you set aside specifically for your card bill. Add to it under Savings → Add to CC Buffer — CC Advisor now counts it as real available money, closing the gap where reserved money was invisible to it.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -3415,6 +3445,7 @@
     const ccAffordDetailEl     = document.getElementById("ccAffordDetail");
     const ccAffCashEl          = document.getElementById("ccAffCash");
     const ccAffIncomeEl        = document.getElementById("ccAffIncome");
+    const ccAffBufferEl        = document.getElementById("ccAffBuffer");
     const ccAffAvailableEl     = document.getElementById("ccAffAvailable");
     const ccAffBillEl          = document.getElementById("ccAffBill");
     const ccAffExpensesEl      = document.getElementById("ccAffExpenses");
@@ -3431,6 +3462,7 @@
     const ccCurAffSoFarEl      = document.getElementById("ccCurAffSoFar");
     const ccCurAffCashEl       = document.getElementById("ccCurAffCash");
     const ccCurAffIncomeEl     = document.getElementById("ccCurAffIncome");
+    const ccCurAffBufferEl     = document.getElementById("ccCurAffBuffer");
     const ccCurAffAvailableEl  = document.getElementById("ccCurAffAvailable");
     const ccCurAffProjectedEl  = document.getElementById("ccCurAffProjected");
     const ccCurAffExpensesEl   = document.getElementById("ccCurAffExpenses");
@@ -3528,6 +3560,7 @@
           : '<span class="status-pill danger">This would eat into next month</span> <span style="margin-left:8px;">₹' + Math.abs(af.net).toLocaleString("en-IN") + ' short</span>';
         ccAffCashEl.textContent = "₹" + af.cashBalance.toLocaleString("en-IN");
         ccAffIncomeEl.textContent = "₹" + af.recentIncome.toLocaleString("en-IN");
+        ccAffBufferEl.textContent = "₹" + af.ccBuffer.toLocaleString("en-IN");
         ccAffAvailableEl.textContent = "₹" + af.available.toLocaleString("en-IN");
         ccAffBillEl.textContent = "− ₹" + af.billAmount.toLocaleString("en-IN");
         ccAffExpensesEl.textContent = "− ₹" + af.monthlyExpenses.toLocaleString("en-IN");
@@ -3567,6 +3600,7 @@
         ccCurAffSoFarEl.textContent = "₹" + now.billAmount.toLocaleString("en-IN");
         ccCurAffCashEl.textContent = "₹" + proj.cashBalance.toLocaleString("en-IN");
         ccCurAffIncomeEl.textContent = "₹" + proj.recentIncome.toLocaleString("en-IN");
+        ccCurAffBufferEl.textContent = "₹" + proj.ccBuffer.toLocaleString("en-IN");
         ccCurAffAvailableEl.textContent = "₹" + proj.available.toLocaleString("en-IN");
         ccCurAffProjectedEl.textContent = "− ₹" + proj.billAmount.toLocaleString("en-IN");
         ccCurAffExpensesEl.textContent = "− ₹" + proj.monthlyExpenses.toLocaleString("en-IN");
@@ -3892,6 +3926,7 @@
     const savingsStageLabelEl     = document.getElementById("savingsStageLabel");
     const savingsWishlistAmountEl = document.getElementById("savingsWishlistAmount");
     const savingsFreeAmountEl     = document.getElementById("savingsFreeAmount");
+    const savingsCCBufferAmountEl = document.getElementById("savingsCCBufferAmount");
     const savingsSplitLineEl      = document.getElementById("savingsSplitLine");
     const wishlistItemsEl         = document.getElementById("wishlistItems");
 
@@ -3908,6 +3943,11 @@
     const savingNoteInputEl   = document.getElementById("savingNoteInput");
     const saveSavingButtonEl  = document.getElementById("saveSavingButton");
     const logSavingResultEl   = document.getElementById("logSavingResult");
+
+    const ccBufferAmountInputEl = document.getElementById("ccBufferAmountInput");
+    const ccBufferNoteInputEl   = document.getElementById("ccBufferNoteInput");
+    const saveCCBufferButtonEl  = document.getElementById("saveCCBufferButton");
+    const ccBufferResultEl      = document.getElementById("ccBufferResult");
 
     function loadSavings() {
       const cached = loadCache("savings");
@@ -3962,6 +4002,7 @@
 
       savingsWishlistAmountEl.textContent = "₹" + s.wishlist.toLocaleString("en-IN");
       savingsFreeAmountEl.textContent = "₹" + s.free.toLocaleString("en-IN");
+      savingsCCBufferAmountEl.textContent = "₹" + s.ccBuffer.toLocaleString("en-IN");
 
       savingsSplitLineEl.textContent =
         "This month's ₹" + s.monthlyGoal.toLocaleString("en-IN") + " split: " +
@@ -4103,6 +4144,43 @@
         })
         .catch(function (err) {
           logSavingResultEl.textContent = err.message;
+        });
+    });
+
+    saveCCBufferButtonEl.addEventListener("click", function () {
+      const amount = parseFloat(ccBufferAmountInputEl.value);
+      const note   = ccBufferNoteInputEl.value.trim();
+
+      if (!amount || amount <= 0) {
+        ccBufferResultEl.textContent = "Enter a valid amount.";
+        return;
+      }
+
+      ccBufferResultEl.textContent = "Saving...";
+
+      callAppsScript({
+        action:  "logCCBuffer",
+        idToken: currentUser.idToken,
+        amount:  amount,
+        note:    note
+      })
+        .then(function (data) {
+          if (data.ok) {
+            ccBufferAmountInputEl.value = "";
+            ccBufferNoteInputEl.value = "";
+            ccBufferResultEl.textContent = "Added.";
+            // Feeds CC Advisor's affordability check — same cache
+            // invalidation as Settings save, since that number is now stale.
+            localStorage.removeItem("cache_cc");
+            localStorage.removeItem("cache_dashboard");
+            tabLoaded.cc = false;
+            refreshSavings();
+          } else {
+            ccBufferResultEl.textContent = data.error;
+          }
+        })
+        .catch(function (err) {
+          ccBufferResultEl.textContent = err.message;
         });
     });
 
