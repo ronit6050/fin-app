@@ -71,7 +71,12 @@
 
       --text-primary: #111214;
       --text-secondary: #6b6c72;
-      --text-muted: #9a9ca3;
+      /* Was #9a9ca3 — too pale to read comfortably (dates/times/bank
+         names on every Pending/History card use this). Darkened
+         2026-08-11 to read clearly on both white cards and the page's
+         soft-tint background, while staying visibly lighter than
+         --text-secondary. */
+      --text-muted: #6e7079;
 
       --shadow-card: 0 1px 2px rgba(17, 18, 20, 0.05), 0 1px 1px rgba(17, 18, 20, 0.03);
 
@@ -123,7 +128,10 @@
 
         --text-primary: #f2f2f3;
         --text-secondary: #9a9ca3;
-        --text-muted: #6b6c72;
+        /* Was #6b6c72 — too dark to read against the near-black dark
+           card background. Lightened 2026-08-11 for the same reason as
+           the light-mode value above. */
+        --text-muted: #84868d;
 
         --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
 
@@ -160,7 +168,10 @@
 
       --text-primary: #f2f2f3;
       --text-secondary: #9a9ca3;
-      --text-muted: #6b6c72;
+      /* Same lighten as the prefers-color-scheme block above, kept in
+         sync since this is the manual "Dark" theme choice's copy of the
+         same tokens. */
+      --text-muted: #84868d;
 
       --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
 
@@ -461,6 +472,58 @@
       background: var(--surface-card);
     }
 
+    /* ---------- File upload (Reconcile's statement picker) ----------
+       A raw <input type="file"> can't be restyled directly — every
+       browser draws its own button chrome. Standard trick: hide the
+       real input (still fully functional, still opens the file picker
+       and holds the chosen file) and use a <label for="..."> styled
+       like the app's other filled inputs as the visible control. */
+    .file-input-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .file-input-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 12px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: var(--surface-inset);
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background-color 0.15s ease, transform 0.08s ease;
+    }
+    .file-input-label:active {
+      transform: scale(0.98);
+    }
+    .file-input-label svg {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      color: var(--text-secondary);
+    }
+    /* Once a file is actually picked, the label reads like filled-in
+       text rather than a placeholder (matches other inputs going from
+       empty -> filled). */
+    .file-input-label.has-file {
+      color: var(--text-primary);
+      background: var(--surface-card);
+      border-color: var(--border-hairline);
+    }
+    .file-input-label.has-file svg {
+      color: var(--color-primary);
+    }
+
     button {
       width: 100%;
       padding: 13px;
@@ -576,7 +639,11 @@
     .type-btn {
       flex: 1 1 auto;
       min-width: 72px;
-      padding: 9px 0;
+      /* Was 9px — too short a tap target (~34px tall) for the single
+         most-tapped control in the app (appears on nearly every
+         Pending card, History edit, Cash entry). Taller padding
+         2026-08-11 brings it to a comfortable ~44px. */
+      padding: 13px 0;
       font-size: 0.85rem;
       font-weight: 500;
       color: var(--text-secondary);
@@ -604,7 +671,9 @@
     .fe-btn {
       flex: 1 1 auto;
       min-width: 72px;
-      padding: 9px 0;
+      /* Kept in sync with .type-btn's padding above — the comment
+         right above this class already promises "same shape". */
+      padding: 13px 0;
       font-size: 0.85rem;
       font-weight: 500;
       color: var(--text-secondary);
@@ -749,17 +818,31 @@
     .carousel-dots {
       display: flex;
       justify-content: center;
-      gap: 6px;
+      gap: 2px;
       margin: 10px 0 16px;
     }
+    /* The dot you actually tap is bigger than the dot you actually SEE —
+       a 6px circle is much too small/fiddly to hit precisely on a
+       phone. The visible dot stays small (drawn with ::after); this
+       element itself is just the invisible ~24px tap area around it. */
     .carousel-dot {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      cursor: pointer;
+    }
+    .carousel-dot::after {
+      content: "";
       width: 6px;
       height: 6px;
       border-radius: 50%;
       background: var(--surface-inset);
-      cursor: pointer;
+      transition: width 0.15s ease, background-color 0.15s ease;
     }
-    .carousel-dot.active {
+    .carousel-dot.active::after {
       width: 16px;
       border-radius: var(--radius-pill);
       background: var(--text-primary);
@@ -781,7 +864,11 @@
       padding: 10px;
       font-size: 0.85rem;
     }
-    .goal-card-actions .secondary {
+    /* Outline style for reversible/secondary actions, used wherever a
+       screen also has a primary (filled) action next to it — e.g.
+       Withdraw/Set Priority here, and Debts' "Mark as Settled" so the
+       irreversible action doesn't look as loud as "Record Payment". */
+    .secondary {
       background: transparent;
       color: var(--text-primary);
       border: 0.5px solid var(--border-hairline);
@@ -867,6 +954,13 @@
       width: auto;
       padding: 6px 14px;
       font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .month-nav-btn svg {
+      width: 16px;
+      height: 16px;
     }
 
     /* ---------- Bottom tab bar ---------- */
@@ -1153,9 +1247,9 @@
       <section id="view-analysis" class="tab-view" style="display:none">
         <h2 class="section-title">Monthly Analysis</h2>
         <div class="month-nav">
-          <button type="button" id="prevMonthButton" class="month-nav-btn">◀</button>
+          <button type="button" id="prevMonthButton" class="month-nav-btn" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
           <span id="monthLabel">—</span>
-          <button type="button" id="nextMonthButton" class="month-nav-btn">▶</button>
+          <button type="button" id="nextMonthButton" class="month-nav-btn" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
         </div>
         <div id="analysisStatus"><span class="spinner"></span>Loading...</div>
         <div id="analysisContent" style="display:none">
@@ -1558,7 +1652,11 @@
         </p>
 
         <div class="field">
-          <input type="file" id="reconFileInput" accept=".xls,.xlsx">
+          <label for="reconFileInput" class="file-input-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+            <span id="reconFileLabelText">Choose bank statement (.xls)</span>
+          </label>
+          <input type="file" id="reconFileInput" class="file-input-hidden" accept=".xls,.xlsx">
         </div>
         <button type="button" id="reconUploadButton">Check Statement</button>
 
@@ -1617,7 +1715,7 @@
         <h2 class="section-title">History</h2>
         <div id="historyStatus" class="pending-status"></div>
         <div id="historyList"></div>
-        <button type="button" id="historyShowMore" style="display:none">Show More</button>
+        <button type="button" id="historyShowMore" style="display:none">Show more</button>
       </div>
 
       </section>
@@ -1652,8 +1750,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-10-18";
-    const APP_CHANGELOG = "New: CC Buffer, a 4th Savings pot for money you set aside specifically for your card bill. Add to it under Savings → Add to CC Buffer — CC Advisor now counts it as real available money, closing the gap where reserved money was invisible to it.";
+    const APP_VERSION = "2026-08-11-01";
+    const APP_CHANGELOG = "Polish pass: settling a debt or marking a savings goal purchased now asks for a second tap first; easier-to-read gray text on dates/bank names; bigger Need/Want/Saving buttons; easier-to-tap Savings carousel dots with a peek of the next card; a styled file picker on Reconcile; proper arrow icons on Analysis' month switcher; a nicer \"all caught up\" message on Pending; and matching \"Show more\" wording everywhere.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -1885,6 +1983,34 @@
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+    }
+
+    // Shared "tap again to confirm" pattern for actions that can't be
+    // undone (settling a debt, marking a savings goal purchased). Rather
+    // than a browser confirm() popup (looks out of place next to the
+    // rest of the app), the button itself asks again: the first tap
+    // swaps its label to "Tap again to confirm" for a few seconds; a
+    // second tap in that window runs the real action, otherwise it
+    // quietly reverts and nothing happens. Added 2026-08-11.
+    function bindConfirmAction(button, handler) {
+      const originalText = button.textContent;
+      let revertTimer = null;
+
+      button.addEventListener("click", function (e) {
+        if (button.dataset.confirming === "1") {
+          clearTimeout(revertTimer);
+          button.dataset.confirming = "";
+          button.textContent = originalText;
+          handler(e);
+        } else {
+          button.dataset.confirming = "1";
+          button.textContent = "Tap again to confirm";
+          revertTimer = setTimeout(function () {
+            button.dataset.confirming = "";
+            button.textContent = originalText;
+          }, 3000);
+        }
+      });
     }
 
     // Mirrors isLendingTransfer() in backend/needWantSaving.js — a
@@ -2471,6 +2597,13 @@
       renderHomeRecentList(homeRecentMode);
     }
 
+    // Same icon + message treatment as every other empty state in the
+    // app (Debts "None — you're clean!", Home "Nothing here", etc.) —
+    // was plain text here before, the odd one out. 2026-08-11.
+    function showPendingCaughtUp() {
+      pendingStatusEl.innerHTML = '<div class="empty-state"><span class="empty-icon">✅</span><p>All caught up — nothing pending.</p></div>';
+    }
+
     function loadPendingTransactions() {
       const cached = loadCache("pending");
 
@@ -2482,7 +2615,7 @@
         pendingListEl.innerHTML = "";
 
         if (allPending.length === 0) {
-          pendingStatusEl.textContent = "All caught up — nothing pending.";
+          showPendingCaughtUp();
         } else {
           showNextBatch();
         }
@@ -2550,7 +2683,7 @@
           pendingListEl.innerHTML = ""; // clear the skeleton placeholders
 
           if (allPending.length === 0) {
-            pendingStatusEl.textContent = "All caught up — nothing pending.";
+            showPendingCaughtUp();
             return;
           }
 
@@ -2575,7 +2708,7 @@
     // Keeps the "Showing X of Y" text and the Show More button in sync
     function updatePendingStatusText() {
       if (allPending.length === 0) {
-        pendingStatusEl.textContent = "All caught up — nothing pending.";
+        showPendingCaughtUp();
         showMoreButtonEl.style.display = "none";
         return;
       }
@@ -3823,7 +3956,7 @@
           <input type="number" class="debt-payment-input" min="0" step="1" placeholder="Amount paid, e.g. 500">
         </div>
         <button type="button" class="record-payment-btn">Record Payment</button>
-        <button type="button" class="settle-btn">Mark as Settled (fully paid)</button>
+        <button type="button" class="settle-btn secondary">Mark as Settled (fully paid)</button>
         <div class="pending-result"></div>
       `;
 
@@ -3875,7 +4008,9 @@
           });
       });
 
-      settleButton.addEventListener("click", function () {
+      // Settling a debt can't be undone from here, so this needs a real
+      // second tap first — see bindConfirmAction above.
+      bindConfirmAction(settleButton, function () {
         resultEl.textContent = "Saving...";
 
         callAppsScript({ action: "settleDebt", idToken: currentUser.idToken, row: entry.row })
@@ -4108,7 +4243,13 @@
       cards.forEach(function (c) {
         const pct = c.target > 0 ? Math.min(Math.round((c.saved / c.target) * 100), 100) : 0;
         const el = document.createElement("div");
-        el.style.minWidth = "100%";
+        // Was 100% (no hint at all that there was anything to swipe to).
+        // Leaving each card a little narrower than the full width lets a
+        // sliver of the next card peek in on the right — a small, common
+        // carousel convention that hints "there's more here" without any
+        // extra label or animation. goToCarouselCard()'s translateX step
+        // below is widened to match this same width.
+        el.style.minWidth = "calc(100% - 30px)";
         el.style.boxSizing = "border-box";
         el.style.marginRight = "10px";
         el.innerHTML = `
@@ -4138,7 +4279,9 @@
     function goToCarouselCard(i) {
       const count = savingsCarouselInnerEl.children.length;
       carouselIndex = Math.max(0, Math.min(count - 1, i));
-      savingsCarouselInnerEl.style.transform = "translateX(calc(-" + carouselIndex + " * (100% + 10px)))";
+      // Step size = one card's width (100% - 30px) + the 10px gap after
+      // it, matching the narrower card width set in renderCarousel above.
+      savingsCarouselInnerEl.style.transform = "translateX(calc(-" + carouselIndex + " * (100% - 20px)))";
       Array.from(savingsCarouselDotsEl.children).forEach(function (d, idx) {
         d.classList.toggle("active", idx === carouselIndex);
       });
@@ -4166,7 +4309,7 @@
       });
     }
 
-    function buildSimpleDetailRow(label, saved, target, note, destination, extraBadgesHtml, onPrimaryAction, primaryLabel) {
+    function buildSimpleDetailRow(label, saved, target, note, destination, extraBadgesHtml, onPrimaryAction, primaryLabel, requireConfirm) {
       const row = document.createElement("div");
       row.className = "category-row";
       const pct = target > 0 ? Math.min(Math.round((saved / target) * 100), 100) : 0;
@@ -4194,10 +4337,19 @@
         detailEl.style.display = alreadyOpen ? "none" : "block";
       });
 
-      row.querySelector(".detail-primary-btn").addEventListener("click", function () {
+      const primaryBtn = row.querySelector(".detail-primary-btn");
+      const runPrimaryAction = function () {
         if (onPrimaryAction) onPrimaryAction(row.querySelector(".detail-msg"));
         else openQuickAction("add", destination, saved);
-      });
+      };
+      // "Mark Purchased" closes out a goal for good — needs a real
+      // second tap. "Add to Goal"/"Add to Emergency" etc. are just
+      // adding money, always safe, so those fire right away.
+      if (requireConfirm) {
+        bindConfirmAction(primaryBtn, runPrimaryAction);
+      } else {
+        primaryBtn.addEventListener("click", runPrimaryAction);
+      }
 
       const withdrawBtn = row.querySelector(".detail-withdraw-btn");
       if (withdrawBtn) {
@@ -4231,7 +4383,8 @@
             openQuickAction("add", g.name, g.saved);
           }
         },
-        primaryLabel
+        primaryLabel,
+        g.canAfford // only "Mark Purchased" needs the tap-again confirm
       );
 
       // Priority goals don't need a "make this the priority" button —
@@ -5076,9 +5229,26 @@
     // ---------------------------------------------------------
 
     const reconFileInputEl    = document.getElementById("reconFileInput");
+    const reconFileLabelEl    = document.querySelector('label[for="reconFileInput"]');
+    const reconFileLabelTextEl = document.getElementById("reconFileLabelText");
+    const reconFileLabelDefaultText = reconFileLabelTextEl.textContent;
     const reconUploadButtonEl = document.getElementById("reconUploadButton");
     const reconStatusEl       = document.getElementById("reconStatus");
     const reconResultsEl      = document.getElementById("reconResults");
+
+    // Reflects the picked file's name on the styled label standing in
+    // for the real (hidden) file input — see the .file-input-label CSS.
+    function updateReconFileLabel() {
+      const file = reconFileInputEl.files[0];
+      if (file) {
+        reconFileLabelTextEl.textContent = file.name;
+        reconFileLabelEl.classList.add("has-file");
+      } else {
+        reconFileLabelTextEl.textContent = reconFileLabelDefaultText;
+        reconFileLabelEl.classList.remove("has-file");
+      }
+    }
+    reconFileInputEl.addEventListener("change", updateReconFileLabel);
 
     // Builds one review card for a missing transaction — same look and
     // interaction as a Pending card (note, category, optional
@@ -5319,6 +5489,7 @@
           reconStatusEl.textContent = "Added " + data.added + " transaction(s).";
           reconResultsEl.innerHTML = "";
           reconFileInputEl.value = "";
+          updateReconFileLabel();
         })
         .catch(function (err) {
           reconStatusEl.textContent = "Couldn't add: " + err.message;
