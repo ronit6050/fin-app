@@ -315,6 +315,23 @@ short" result to "₹1,565 spare"), and a zero-buffer case confirming no
 regression for anyone who hasn't started one yet. `APP_VERSION` bumped
 to `2026-08-10-18`.
 
+## Correction — CC Buffer sourcing changed under this feature (2026-08-11)
+
+The "CC Buffer" section above (written 2026-08-10) says
+`getCCAdvisorData`'s `ccBufferAmount` falls back to reading
+`getSavingsData()` when not provided, and that CC Buffer is "a new 4th
+Savings pot." Both are now out of date: the 2026-08-11 Savings rebuild
+(see [savings-v2.md](savings-v2.md)) replaced the 4-pot system with a
+Goals list, and CC Buffer became a **Recurring Goal** instead of a
+pot. `getCCAdvisorData` was updated at the same time — it now falls
+back to `getSavingsBreakdown().ccBufferGoal.saved` (`savingsGoals.js`),
+not `getSavingsData()`. The actual behavior (CC Buffer's balance counts
+as available money in the affordability check) is unchanged — only
+where that balance is read from changed. Left the original section
+above as-is (historical record of that day's design) rather than
+rewriting it, per this project's usual "append a dated correction"
+convention.
+
 ## Open items / not yet done
 
 - Recent-income estimation (35-day Income-category window) hasn't been

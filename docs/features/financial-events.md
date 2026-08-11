@@ -355,10 +355,11 @@ an `effectiveFinancialEvent` that's the explicit chip selection if one
 was sent, otherwise falls back to `"Saving"` if `isSavingsNote(note)` —
 so an explicit Rent/EMI/Investment choice always wins if you somehow
 also typed "saving." Once detected, `autoLogSaving(date, amount, note)`
-reuses `getSavingsTotals`/`getSplitRule` from `SavingsAdvisor.js` — the
-exact same 3-pot (Emergency/WishList/Free) split logic manual "Log a
-Saving" already uses — and writes up to 3 rows to the `Savings` sheet,
-so an auto-logged saving behaves identically to a hand-typed one.
+writes one row straight into `"Free"` (the Savings v2 system's own
+"no specific goal yet" bucket, see [savings-v2.md](savings-v2.md)) —
+**fixed 2026-08-11**, see that file's "Fixed 2026-08-11" note for what
+was wrong before and why "Free" was chosen as the landing spot instead
+of running the full Emergency/Goal waterfall.
 Frontend mirror `isSavingsNote()` (`index.html`) hides the Need/Want/
 Saving toggle live as you type "saving," same UX as lending.
 
@@ -504,6 +505,31 @@ Verified with a standalone Node test (17 cases: the Financial Event
 suggestion logic including the exact ₹1-test-row Counterparty
 inconsistency scenario, plus all the `category.js` bug fixes above) before
 shipping — same discipline as every other fix in this project.
+
+## Fixed 2026-08-11 — `autoLogSaving` was writing the OLD pot names
+
+**Found in a documentation pass, fixed the same day.** When a note
+containing "saving"/"savings" auto-logged a Financial Event,
+`autoLogSaving` used to split the amount using `SavingsAdvisor.js`'s
+old `getSavingsTotals`/`getSplitRule` and appended rows with
+`Destination` = `"Emergency"`, `"WishList"`, or `"FreeSavings"` (exact
+old 3-pot naming). The new Savings screen (`savingsGoals.js`, see
+[savings-v2.md](savings-v2.md)) only ever sums rows whose `Destination`
+exactly matches `"Emergency"`, `"Free"`, or a real `Goals`-sheet name —
+so `"WishList"`/`"FreeSavings"` rows were being written to the sheet
+(money wasn't lost) but never counted in the app's real Savings totals.
+
+**Fix:** `autoLogSaving` now writes the whole amount as a single row
+with `Destination: "Free"` — the current system's own "no specific goal
+picked yet" bucket — instead of splitting across the old pots. See
+[savings-v2.md](savings-v2.md#fixed-2026-08-11--autologsaving-now-writes-to-the-real-savings-system)
+for the full reasoning behind landing everything in Free Savings rather
+than running the Emergency/Goal waterfall. The user confirmed no real
+transaction had gone through the buggy path yet (only a one-time manual
+migration had run since the Savings v2 rebuild), so there was no bad
+historical data in the sheet to repair — this was a forward-looking
+code fix only. Verified with a Node test,
+`backend/tests/autoLogSaving.test.js`.
 
 ## Open items / not yet built
 

@@ -251,32 +251,44 @@ function hasLikelyDuplicateSaving(dateStr, amount){
   return false;
 }
 
-// Auto-logs a note-detected saving into the real Savings tab, split
-// across the same 3 pots (Emergency/WishList/Free) the manual "Log a
-// Saving" flow already uses (getSavingsTotals/getSplitRule from
-// SavingsAdvisor.js) — reuses that exact logic rather than a second
-// copy, so the split behaves identically either way. Skipped if a
-// likely-duplicate manual entry already exists nearby (see
-// hasLikelyDuplicateSaving above) — same reasoning as Investment.
+// Auto-logs a note-detected saving into the real Savings tab.
+//
+// Fixed 2026-08-11 — this used to split the amount using the OLD 4-pot
+// system (SavingsAdvisor.js's getSavingsTotals/getSplitRule) and wrote
+// Destination values ("Emergency"/"WishList"/"FreeSavings") from that
+// retired system. The new Savings v2 engine (savingsGoals.js, see
+// docs/features/savings-v2.md) only recognizes "Emergency", "Free", or
+// an exact Goals-sheet name — so "WishList"/"FreeSavings" rows were
+// silently invisible in the app's real Savings totals (money still sat
+// in the sheet, just uncounted). See CLAUDE.md's 2026-08-11 fix note.
+//
+// This can't know which specific named Goal the user meant (a note
+// just says "saving", not "saving for New Phone") and deliberately does
+// NOT run the full priority waterfall either (computeAutoSplitFromBreakdown_
+// would silently route some of it into locked Emergency or a Goal the
+// user never chose, which is too much to assume from an offhand note
+// word) — so the whole amount goes to Free Savings, the new system's
+// own "no specific goal picked yet" bucket. That's a product-intent
+// judgment call (see docs/features/savings-v2.md for detail); a human
+// can always move it from Free to a specific goal afterwards via a
+// Withdraw + Manual Split, same as any other Free Savings money.
+//
+// Still skipped if a likely-duplicate manual entry already exists
+// nearby (see hasLikelyDuplicateSaving above) — same reasoning as
+// Investment, unaffected by this fix.
 function autoLogSaving(dateStr, amount, note){
   if(hasLikelyDuplicateSaving(dateStr, amount)) return { logged: false, reason: "duplicate" };
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var savSheet = ss.getSheetByName("Savings");
+  var savSheet = getSavingsSheet_(); // savingsGoals.js — the same "Savings" sheet the new system reads
   if(!savSheet) return { logged: false, reason: "no sheet" };
 
-  var settings = getSettings(); // settings.js
-  var totals = getSavingsTotals(savSheet); // SavingsAdvisor.js
-  var split = getSplitRule(totals.emergency, settings.monthlyExpenses, settings.monthlyExpenses * 3); // SavingsAdvisor.js
+  var cleanAmount = Number(amount) || 0;
+  if(cleanAmount <= 0) return { logged: false, reason: "invalid amount" };
 
-  var emergencyAmt = Math.round(amount * split.emergency);
-  var wishlistAmt  = Math.round(amount * split.wishlist);
-  var freeAmt      = amount - emergencyAmt - wishlistAmt;
-  var type = "bank"; // source label, matches the free-text "type" column manual entries use
-
-  if(emergencyAmt > 0) savSheet.appendRow([dateStr, emergencyAmt, type, note || "saving", "Emergency"]);
-  if(wishlistAmt  > 0) savSheet.appendRow([dateStr, wishlistAmt, type, note || "saving", "WishList"]);
-  if(freeAmt      > 0) savSheet.appendRow([dateStr, freeAmt, type, note || "saving", "FreeSavings"]);
+  // [Date, Amount, Type, Note, Destination] — exact shape saveAutoSplit/
+  // saveManualSplit (savingsGoals.js) already use, so this row reads
+  // identically to a hand-entered one everywhere in the app.
+  savSheet.appendRow([dateStr, cleanAmount, "auto", note || "saving", "Free"]);
 
   return { logged: true };
 }

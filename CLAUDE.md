@@ -224,6 +224,42 @@ for recency instead of comparing dates. Verified with a standalone Node
 test before shipping, not just the in-app manual test function. See
 [docs/features/need-want-saving.md](docs/features/need-want-saving.md).
 
+**Known UI polish items, not yet done (flagged 2026-08-11, a
+look-and-suggest review — nothing here has been built yet, just
+recorded so it isn't lost between sessions):**
+- Inconsistent loading states: 8 screens (Today, Analysis, CC Advisor,
+  Debts, Savings, Investments, Cash, History) still show a plain spinner
+  + "Loading..." text while Home and Pending use proper skeleton
+  placeholder cards — the two styles sit right next to each other in the
+  More menu, so it reads as unfinished rather than deliberate.
+- No screen offers a "Retry" button when a load fails — a failed screen
+  currently just shows an error message with no obvious next step besides
+  leaving and coming back.
+- The "← Back" link on More's sub-screens is a small plain-text link, not
+  a proper tap target (undersized for a thumb) and not drawn in the same
+  hand-drawn SVG icon style used everywhere else in the app (nav bar,
+  More-menu icons).
+- The Settings screen's fields (CC limit/thresholds, monthly expenses,
+  savings goal, monthly investment amount) are laid out as one flat list
+  with no visual grouping by topic (CC-related vs. budget-related), so
+  it's harder to scan than it should be.
+- Some small style duplication instead of reusing shared classes: the
+  Savings manual-split row has its own one-off styling rather than
+  reusing an existing row pattern; `.fe-btn` duplicates `.type-btn`
+  instead of sharing one class; several inline `style="font-size:...;
+  margin:..."` subheadings (e.g. "Recent", "Log an Investment") are
+  repeated by hand in multiple places instead of one shared subheading
+  class; and there's some unused leftover CSS from earlier redesigns
+  still sitting in the stylesheet.
+- One stray emoji outside the agreed exceptions (nav icons, More-menu
+  icons, category badges, small empty-state icons): the "✨ Updated"
+  heading in the What's New popup.
+- CC Advisor's affordability breakdown (cash + income vs. bill +
+  expenses + Rent/EMI + savings/investment goal) is a plain list of
+  numbers with no color-coded visual hierarchy — a quick glance doesn't
+  tell you at once whether you're in a safe or risky spot the way, say,
+  the CC usage percentage bar already does elsewhere on the same screen.
+
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
 never need to ask for a category, and ALL routine interaction must happen
@@ -396,9 +432,56 @@ changes:
 - Backend/brain: Google Apps Script + Google Sheets. As of 2026-08-08, the backend source lives in `D:\fin-app\backend` (this repo) and is kept in sync with the live Apps Script project via `clasp` — see "finance-bot backend — current state" below. The original `ronit6050/finance-bot` GitHub repo is old/stale and no longer used.
 
 ## How to work with me
-- One step at a time.
+- One step at a time for anything that needs my judgment or that I'm
+  actually going to use/experience — this hasn't changed.
+- **Refined 2026-08-11**: "one step at a time" was about me being the one
+  experiencing the app, not a rule against automation in general.
+  Repetitive or discovery work (finding UI rough edges, scanning for
+  backend bugs, suggesting next features) can be handed to a specialist
+  agent that reports back with findings/mockups for me to approve —
+  see "AI agents (subagents)" below. Nothing ships without my OK either
+  way; the difference is I no longer have to be the one who notices/asks
+  first.
 - Clear comments in the code.
 - Plain, simple explanations.
+
+## AI agents (subagents) set up for this project (added 2026-08-11)
+
+Three specialist agents exist under `.claude/agents/`, each scoped to a
+real boundary already in this codebase — not an invented org chart:
+
+| Agent | Scope | File |
+|---|---|---|
+| `ui-ux-expert` | `index.html` — all visual/UI work | `.claude/agents/ui-ux-expert.md` |
+| `backend-agent` | `backend/*.js` — the main Apps Script backend | `.claude/agents/backend-agent.md` |
+| `sms-parser-agent` | `sms-parser-backend/Code.js` only — kept separate, extra cautious, since it's the one file that fails silently (see "SMS ingestion" section) | `.claude/agents/sms-parser-agent.md` |
+
+Each can be given a specific task, or asked to run a **"weekly check"** —
+scans its area for bugs/rough edges/next-feature ideas and reports a
+short list back for approval. Nothing gets built or deployed in that
+mode without explicit go-ahead.
+
+**Deliberately NOT on an automatic schedule.** Considered making the
+weekly checks run on their own (a scheduled cloud routine), but paused
+it: that would use Claude usage in the background on a recurring basis,
+and I couldn't confirm from inside the tool whether that's actually free
+on the user's plan — which conflicts with this project's own "no cost"
+rule. Decided (2026-08-11) to keep it fully manual instead: the user
+just asks for the weekly check whenever they want it, which costs
+exactly the same as any other question and never runs without them
+asking. Revisit if the user confirms their plan covers it.
+
+**Live-app safety, baked into both new agents' instructions**: neither
+`backend-agent` nor `sms-parser-agent` will run `clasp deploy` (the step
+that actually updates what the live app/Tasker calls) without the user
+explicitly confirming in that same conversation — `clasp push` alone
+(editor draft only) doesn't reach the live app, so it's safe without
+asking, but deploy does and always needs a yes first. Both agents are
+also instructed to save verification test scripts (under `backend/tests/`
+or `sms-parser-backend/tests/`) instead of writing-and-discarding them
+like past sessions did, and to keep this file and `docs/features/`
+updated after any real change — same continuity habit as the rest of
+this file.
 
 ## finance-bot backend — current state (updated 2026-08-08)
 
@@ -439,6 +522,18 @@ truth for "what."
 - Local edits should also get `git add`/`git commit`/`git push` in the main
   `fin-app` repo like any other change, so history is preserved — clasp
   only handles the Apps Script <-> local sync, not git.
+- **`backend/tests/` (added 2026-08-11) holds Node.js verification
+  scripts** — real, saved test files (not one-off scripts run once and
+  discarded), one per feature fix, run with plain `node
+  backend/tests/<name>.test.js`. **`backend/.claspignore` (added same
+  day) excludes this folder from `clasp push`** — this matters, not just
+  tidiness: these test files use Node-only things (`require`, `fs`,
+  `vm`) that don't exist in Apps Script's runtime, and Apps Script runs
+  every file's top-level code on each execution (all files share one
+  global scope) — so pushing a test file in would have broken every
+  single live backend action with a `require is not defined` error the
+  next time anything ran. Always keep new test files under `tests/` (or
+  otherwise `.claspignore`d) for this reason.
 - `.clasp.json` (in `backend/`) holds the script ID — safe to commit, not
   sensitive. The actual Google OAuth credential clasp uses lives outside
   this repo (`~/.clasprc.json`, machine-specific, never committed).
@@ -453,9 +548,21 @@ now a second front door into the same backend, added alongside it.
 - `Cash` — manual cash spend/receive entries (now written by the PWA's Cash tab, category picked manually — does NOT feed SmartMemory)
 - `Credit_Card` — parsed credit card statement uploads
 - `Debts` — lent/borrowed money, due dates, settlement status
-- `Savings` — savings entries split into 3 pots (Emergency/WishList/Free)
+- `Savings` — savings entries. **Rebuilt 2026-08-11**: the `Destination`
+  column now points at `Emergency`, `Free`, or the exact name of a row in
+  the new `Goals` sheet below (was a fixed 4-value set —
+  `Emergency`/`WishList`/`Free`/`CCBuffer` — before). See "Savings
+  rebuilt" note further down and
+  [docs/features/savings-v2.md](docs/features/savings-v2.md).
+- `Goals` (new sheet, 2026-08-11) — one row per savings goal, one-time
+  (a fixed ₹ target, e.g. a wish-list item) or recurring (target
+  computed live, e.g. CC Buffer). Replaces `WishList` as the real
+  source of truth for goals.
 - `Investments` — investment logs
-- `WishList` — savings goals
+- `WishList` — the old savings-goals sheet. **As of 2026-08-11, nothing
+  live reads or writes it anymore** (superseded by `Goals` above) —
+  not deleted, only used once by the one-time migration script that
+  moved existing items into `Goals`.
 - `SmartMemory` — learned merchant → category mappings. **Rebuilt clean on 2026-08-08** after the original was found ~90% polluted by generic cash-note words from an old migration; old sheet renamed `SmartMemory_old_...` (or similar, user did this manually), new `SmartMemory` seeded with only the few trustworthy rows (confidence 100 / used multiple times). See "Automation phase" section above for full diagnosis.
 - `CategoryMemory` — old legacy pre-SmartMemory table, superseded, not actively used
 - `AILogs` — error/event log — useful for debugging (e.g. `PUSH_SENT`/`PUSH_ERROR`/`PUSH_TOKEN_ERROR` entries when push notifications misbehave)
@@ -467,7 +574,7 @@ now a second front door into the same backend, added alongside it.
 - `Credit Card.js` — credit card statement import/parsing (untouched)
 - `CCAdvisor.js` — CC usage vs ₹50,000 combined limit, 18th→18th billing cycle, 25%/30% alerts. Its constants (`CC_LIMIT`, `CC_WARN_AMT`, `CC_ALERT_AMT`) are reused directly by `PWA.js`'s CC function — do not redeclare these elsewhere, Apps Script shares one global scope across all files and it will collide.
 - `DebtAdvisor.js` — lent/borrowed tracking, due-date reminders, settlements, AI repayment plans (untouched, its logic is reused by PWA.js's debt functions)
-- `SavingsAdvisor.js` — 3-pot auto-split savings, wishlist affordability tracking. Its `getSavingsTotals()`, `getSplitRule()`, `getStageLabel()`, and constants (`EMERGENCY_TARGET`, `MONTHLY_SAVE_GOAL`) are reused directly by PWA.js — same global-scope reuse pattern.
+- `SavingsAdvisor.js` — original 3-pot auto-split savings, wishlist affordability tracking (Telegram-era). Its `getSavingsTotals()`, `getSplitRule()`, `getStageLabel()`, and constants (`EMERGENCY_TARGET`, `MONTHLY_SAVE_GOAL`) used to be reused directly by PWA.js's live Savings code — **as of the 2026-08-11 Savings rebuild, that's no longer true**: the live Savings screen now runs entirely on `backend/savingsGoals.js` instead. `getSavingsTotals()` etc. are still called, but only by the old `PWA.js` functions (`getSavingsData`, `logSavingFromApp`) that nothing in `index.html` calls anymore — see "Savings rebuilt" note below and [docs/features/savings-v2.md](docs/features/savings-v2.md#old-system--not-deleted-dead-code-flagged-2026-08-11).
 - `Analysis.js` / `Summary.js` — original Telegram-triggered monthly/daily spend breakdowns with charts + Gemini insight text (untouched, still Telegram-only; the PWA's Today/Analysis screens use separate lighter functions in PWA.js, not these)
 - `Recon.js` — reconciliation. Original Telegram-only functions (`runReconciliation`, `insertConfirmed`, etc.) untouched and still dormant. **Added 2026-08-08**: `extractNoteFromNarration()`, `previewReconciliation()`, `reconcileStatementPreview()`, `insertReconciledTransactions()` — the PWA-facing preview-then-approve flow, see [docs/features/reconciliation.md](docs/features/reconciliation.md). Note: the old `insertConfirmed()` has a pre-existing off-by-one bug (17 values for a 16-column sheet) — harmless since it's dormant, not fixed since nothing calls it anymore.
 - `AIAdvisor.js` — Gemini reaction after each transaction note (untouched, Telegram-only path, dormant since Telegram is off)
@@ -476,10 +583,12 @@ now a second front door into the same backend, added alongside it.
 
 **Files added for the PWA (real filenames, confirmed via `clasp clone` 2026-08-08):**
 - `main.js` **modified**: `doPost(e)` now branches — if the incoming JSON has an `action` field, routes to `handlePwaRequest(data)`; otherwise falls through to the original `handleTelegramUpdate(e)` unchanged. This is the single shared entry point both Telegram and the PWA hit.
-- **`PWA.js`** — everything the PWA talks to, one action per `data.action` value routed inside `handlePwaRequest(data)`. Every action first calls `verifyGoogleIdToken(data.idToken)` (checks the token against Google's tokeninfo endpoint, then checks `PWA_ALLOWED_EMAIL`) before doing anything. Actions implemented: `ping`, `getPending` (includes `suggestedCategory` + `suggestedType` per item, fast layers only, no Gemini), `saveNote` (writes note/category/optional amount, calls `handleCategoryCorrection` + `recordTypeVote` — same function backs both Pending's first note AND History's edits), `getTodaySummary`, `getMonthlyAnalysis`, `getCCAdvisor`, `getDebts`/`addDebt`/`settleDebt`, `getSavings`/`logSaving`/`addWishlistItem`/`markWishlistPurchased`, `getInvestments`/`logInvestment`, `getCash`/`addCashEntry`, `registerPushToken`, `getDashboard` (aggregates most of the above into one call for the Home screen, `getDashboardData` reads `Transactions`/`Cash` once and passes them through — see Responsiveness pass notes above), `getSettings`/`updateSettings`, `getTransactionHistory`, `reconcileStatement`/`insertReconciledTransactions`.
+- **`PWA.js`** — everything the PWA talks to, one action per `data.action` value routed inside `handlePwaRequest(data)`. Every action first calls `verifyGoogleIdToken(data.idToken)` (checks the token against Google's tokeninfo endpoint, then checks `PWA_ALLOWED_EMAIL`) before doing anything. Actions implemented: `ping`, `getPending` (includes `suggestedCategory` + `suggestedType` per item, fast layers only, no Gemini), `saveNote` (writes note/category/optional amount, calls `handleCategoryCorrection` + `recordTypeVote` — same function backs both Pending's first note AND History's edits), `getTodaySummary`, `getMonthlyAnalysis`, `getCCAdvisor`, `getDebts`/`addDebt`/`settleDebt`/`recordDebtPayment` (partial debt payments, added 2026-08-10 — see the "PROPOSED PLAN" section's Financial Events note), `getInvestments`/`logInvestment`, `getCash`/`addCashEntry`, `registerPushToken`, `getDashboard` (aggregates most of the above into one call for the Home screen, `getDashboardData` reads `Transactions`/`Cash` once and passes them through — see Responsiveness pass notes above), `getSettings`/`updateSettings`, `getTransactionHistory`, `reconcileStatement`/`insertReconciledTransactions`. **Savings actions, updated 2026-08-11**: the live app only ever calls the new Goals-based set — `getSavingsGoals`, `previewSavingsSplit`, `saveSavingsAuto`, `saveSavingsManual`, `withdrawSavings`, `updateSavingsEntry`, `deleteSavingsEntry`, `addSavingsGoal`, `setPrioritySavingsGoal`, `markSavingsGoalDone`, `purchaseSavingsGoal` (all in `savingsGoals.js`, see below). The older `getSavings`/`logSaving`/`logCCBuffer`/`addWishlistItem`/`markWishlistPurchased` actions still exist and still route to working code, but nothing in `index.html` calls them anymore — dead code, not yet deleted, see [docs/features/savings-v2.md](docs/features/savings-v2.md#old-system--not-deleted-dead-code-flagged-2026-08-11).
 - **`push.js`** — real background push via Firebase Cloud Messaging. `sendPushNotification(title, body)` reads the saved device token from Script Properties (`PWA_PUSH_TOKEN`) and a service account key (`FIREBASE_SERVICE_ACCOUNT`, also Script Properties — sensitive, never in any file/repo) to sign a JWT (`getFirebaseAccessToken()`) and call FCM's HTTP v1 API directly. `testPushNotification()` is a manual-run test helper.
 - **`needWantSaving.js`** — Need/Want/Saving suggestion engine, see [docs/features/need-want-saving.md](docs/features/need-want-saving.md). Wired into `PWA.js`'s `getPendingTransactions`/`saveTransactionNote`/`getTransactionHistory`, live since 2026-08-08.
 - **`settings.js`** (new file, 2026-08-08) — user-editable CC limit/thresholds and savings targets, backed by Script Properties. See [docs/features/settings.md](docs/features/settings.md).
+- **`financialEvents.js`** (new file, 2026-08-10 — missing from this list until this 2026-08-11 documentation pass caught it) — Rent/EMI/Investment detection + matching, plus the Phase 2 auto-linking into Investments/Savings/Debts. See [docs/features/financial-events.md](docs/features/financial-events.md).
+- **`savingsGoals.js`** (new file, 2026-08-11) — the Goals-based Savings engine (Emergency/Goals/Free) that replaced the old 4-pot system. See "Savings rebuilt" note below and [docs/features/savings-v2.md](docs/features/savings-v2.md).
 
 **Script Properties** (Project Settings in the Apps Script editor — not in any file):
 - `BOT_TOKEN`, `CHAT_ID`, `GEMINI_KEY` — pre-existing, for Telegram/Gemini
@@ -548,6 +657,63 @@ it and what to log.
   read/write the same `Transactions` sheet the PWA displays), but never
   explicitly confirmed since the main project never hardcodes its own
   Sheet ID anywhere (it's container-bound, so no ID needed there).
+
+**Known open items, not yet fixed (found during a 2026-08-11 weekly
+check of `Code.js`) — these are things worth watching/investigating,
+NOT confirmed bugs, and none of them were changed this round:**
+- `isTransactionSMS()` accepts "withdrawn" or "deposited" in the
+  message as proof a text is a real transaction, but `ruleParser()`'s
+  own debit/credit labeling (the code that sets column D, `Type`) never
+  checks those same two words — only "debited"/"spent"/"deducted"/
+  "sent"/"txn" for debit and "credited"/"received"/"refund" for credit.
+  A real SMS that only used the word "withdrawn" or "deposited" would
+  get logged, but with a blank `Type`. Would need a real example SMS
+  using one of those two words to confirm this actually happens.
+- Any bank message containing the word "emi" anywhere in it is
+  filtered out completely, before it's even checked for being a real
+  transaction — this was meant to block promotional "get an EMI on
+  your purchase" spam, but as written it would also block a genuine
+  "Your EMI of Rs.4000 has been debited" alert from ever being logged.
+  Not confirmed either way — would need to see whether the user's bank
+  actually sends EMI *debit* confirmations by SMS, and if so, whether
+  any have gone missing.
+- The reward/points/offer/cashback spam filter is a plain keyword
+  match anywhere in the message — a genuine transaction confirmation
+  that happens to mention "reward points" (some banks add a line like
+  "earn X reward points on this purchase" to an otherwise real debit
+  SMS) could get thrown out along with actual spam. Not confirmed to
+  have happened, just a shape of bug this kind of filter can produce.
+- The "block future-dated alerts" check (meant to catch messages like
+  "will be debited on the 15th" so a reminder doesn't get logged as if
+  money already moved) can never actually run: the debit-word check
+  earlier in the same function already matches "debited" as a
+  substring of "will be debited" and returns true before the code ever
+  reaches the future-dated check below it. So this safety check is
+  currently dead code — right now nothing is stopping a future-dated
+  reminder SMS from being logged as if it already happened, if it also
+  contains one of the debit/credit keywords (which "will be debited"
+  does).
+- Reference numbers are only recognized if they're pure digits
+  (`\d{6,}`, six or more digits in a row). A bank that formats its
+  reference/UTR number with letters mixed in would never get a
+  reference captured at all, which weakens duplicate-detection
+  (`isDuplicate()` matches on reference) and also connects to the
+  wallet top-up detection logic above, which depends on a reference
+  being present to tell a top-up apart from a purchase.
+- The recognized bank sender-ID list (`HDFC`, `FED`, `SBI`, `ICICI`,
+  `AXIS`, `KOTAK`, `YES`, `PAYTM`) may not cover every account/bank the
+  user actually has — any SMS from a sender ID outside this list is
+  silently ignored at the very first check, with no log entry
+  explaining why (well, it does log "NOT TRANSACTION" to the `Logs`
+  sheet, but nothing surfaces that to the user). Worth checking against
+  the sender IDs of all the user's real accounts at some point.
+- The saved date/time on each row is formatted using the timezone
+  name `"IST"` (`Utilities.formatDate(date,"IST",...)`), which is a
+  short, ambiguous label — a few other regions also use "IST" for
+  their own time zones. Google Apps Script may resolve it correctly in
+  practice, but the unambiguous form would be `"Asia/Kolkata"`
+  instead, which says exactly which timezone is meant with no room for
+  misreading.
 
 **Digital wallet double-counting — fixed 2026-08-10.** Topping up a
 wallet (e.g. PayZapp) and then spending from it were both ending up as
@@ -813,6 +979,105 @@ where money the user had already reserved was invisible to the app.
 See [docs/features/cc-advisor.md](docs/features/cc-advisor.md) and
 [docs/features/settings.md](docs/features/settings.md).
 
+**Savings rebuilt — Emergency / Goals / Free Savings replaces the
+4-pot system (2026-08-11): done.** The CC Buffer note just above (from
+the day before) described CC Buffer as "a 4th Savings pot" — that's now
+out of date. Wish List used to be **one pooled total** for every
+wish-list item, which meant two items saved for at once could both show
+"ready to buy" off the same shared money — a real bug, not just a
+naming gripe. Rebuilt around a `Goals` list instead (see the `Goals`
+sheet above): each goal — one-time (a fixed ₹ target, e.g. a wish-list
+item) or recurring (target computed live, e.g. CC Buffer, from your
+average recent card bill) — gets its own real balance. Also added,
+none of which existed before: **Auto Split** (a priority waterfall —
+Emergency → CC Buffer → your priority goal → Free — previewed before
+you save), **Manual Split** (pick your own destinations, validated to
+add up exactly), a generic **Withdraw** action, and **edit/delete** for
+past Savings entries. `getCCAdvisorData` (CC Advisor's affordability
+check) now reads the CC Buffer balance from this new system
+(`getSavingsBreakdown().ccBufferGoal.saved`), not from the old 4-pot
+read. Same-day UI follow-ups: the Savings screen's swipeable carousel
+became overview-only (3 read-only cards — Emergency/CC Buffer/Wish
+List — swipe or tap-a-dot, no buttons), with every action (add,
+withdraw, mark purchased, set priority) moved into a tap-to-expand
+detail list below it, reusing the same accordion pattern Analysis/CC
+Advisor already use. **Full design doc, including exactly what's dead
+code now and what's still open:**
+[docs/features/savings-v2.md](docs/features/savings-v2.md) — always
+check that file before touching Savings further.
+
+**Known, tracked, not-yet-fixed cleanup item (flagged 2026-08-11):**
+the old 4-pot Savings functions (`getSavingsData`, `logSavingFromApp`,
+`logCCBufferSaving`, `addWishlistItemFromApp`,
+`markWishlistPurchasedFromApp` in `PWA.js`, plus the `SavingsAdvisor.js`
+functions they call) are **still present in the backend and still
+routed** (`getSavings`/`logSaving`/`logCCBuffer`/`addWishlistItem`/
+`markWishlistPurchased` actions) — nothing deletes them, they still
+work if called directly, and their pot math uses the old, now-stale
+`Emergency`/`WishList`/`Free`/`CCBuffer` 4-value `Destination` set.
+Nothing in `index.html` calls them anymore (confirmed by checking every
+`action:` string it sends), so this is low-risk dead code, not a live
+bug — but it should be deleted once that's double-checked, same way
+the old `SmartMemory`/`TypeMemory` sheet was left renamed-but-not-
+deleted after a past rebuild instead of cleaned up immediately.
+
+**Bug found and FIXED same day (2026-08-11):** `autoLogSaving`
+(`financialEvents.js` — the Phase 2 auto-link that fires when a bank
+transaction's note says "saving"/"savings") was never updated for the
+Savings rebuild above — it was still splitting money using the OLD
+3-pot logic and writing `Destination` values
+`"Emergency"`/`"WishList"`/`"FreeSavings"`. Only `"Emergency"` still
+matched the new system; `"WishList"` and `"FreeSavings"` rows were
+written to the Sheet (nothing was ever lost) but the new Savings screen
+never counted them — that money silently disappeared from the Savings
+totals shown in the app, even though it was really sitting in the
+Sheet. Manual "Log a Saving" was never affected (it already went
+through the new system as part of the same-day rebuild) — only the
+automatic, note-detected path had this gap, and the user confirmed no
+real transaction had actually gone through it yet (only the one-time
+manual migration had run), so there was no bad historical data to
+clean up.
+
+**Fix:** `autoLogSaving` now writes the whole amount straight into
+`"Free"` (the new system's own "no specific goal picked yet" bucket,
+same shape `saveAutoSplit`/`saveManualSplit` already write) instead of
+splitting across the old pots. **Judgment call worth flagging:** since
+a bare note word like "saving" can't say which Goal was meant, this
+deliberately does NOT run the fuller Emergency/Goal priority split
+either — it always lands the whole amount in Free Savings, moveable by
+hand afterwards if you want it somewhere specific. Verified with a new
+Node test, `backend/tests/autoLogSaving.test.js` (checks the row lands
+on `"Free"` not the old names, and that the real Savings screen's own
+totals function then actually counts it). Pushed to the Apps Script
+editor (`clasp push`) on 2026-08-11 — **not yet deployed live**, needs
+the user's go-ahead for `clasp deploy`. Full detail:
+[docs/features/savings-v2.md](docs/features/savings-v2.md#fixed-2026-08-11--autologsaving-now-writes-to-the-real-savings-system)
+and
+[docs/features/financial-events.md](docs/features/financial-events.md#fixed-2026-08-11--autologsaving-was-writing-the-old-pot-names).
+
+**Minor UI polish, same day, not otherwise documented (2026-08-11,
+`0a5dcf5` + `b7bd568`):** tap-again-to-confirm before settling a debt or
+marking a savings goal purchased (safer destructive actions); darker/
+lighter muted text for readability in both themes; bigger Need/Want/
+Saving buttons; a wider tap area (with a small visible-dot animation)
+around the now-overview-only Savings carousel's dots, plus a deliberate
+sliver of the next card peeking in on the right as a "there's more to
+swipe" hint; a styled Reconcile file picker (a real `<input
+type="file">` can't be restyled directly in any browser, so it's
+visually hidden and a styled `<label>` stands in as the clickable
+control); SVG icons for Analysis's month-nav arrows (replacing plain
+◀/▶ text glyphs); Pending's empty state ("all caught up") switched to
+the same icon+message treatment every other empty state already uses,
+instead of being the one plain-text outlier; "Show More" → "Show more"
+wording made consistent with the rest of the app; and the More menu
+reordered so daily-use screens (Cash, History, Investments) sit near
+the top instead of after less-frequent ones, with Cash/Investments'
+entry forms collapsed behind a "+ Log..." toggle (matching the pattern
+Debts/Savings already used) so those screens don't show a form every
+time you just want to check recent activity. All frontend-only
+(`index.html`), no backend changes, no `docs/features/` file since
+these are small polish items rather than a feature.
+
 **Why this exists:** user flagged that "Rent"/"EMI" don't belong as
 categories at all (a category should group *varied* things — breakfast,
 lunch, dinner all fit under Food; rent has nothing else "under" it) and
@@ -832,7 +1097,7 @@ detected and routed, not picked from a category list.
 
 **Phase 2 — Auto-link across tabs (no manual re-entry)**
 - ~~SIP/mutual fund/stock payment detected → auto-logged in Investments.~~ — **done 2026-08-10.** You name each investment once (e.g. "Mutual Fund"), confirmed ones auto-log into the real Investments tab, skips if a likely-duplicate manual entry already exists nearby in time. See [docs/features/financial-events.md](docs/features/financial-events.md).
-- ~~A "saving" note auto-logged into Savings~~ — **done 2026-08-10, not originally planned this way.** Your own idea: if the note says "saving"/"savings," auto-log it, split across the same 3 pots manual entries use. Same duplicate-avoidance as Investment.
+- ~~A "saving" note auto-logged into Savings~~ — **done 2026-08-10, not originally planned this way.** Your own idea: if the note says "saving"/"savings," auto-log it, split across the same 3 pots manual entries used **at the time**. Same duplicate-avoidance as Investment. **Now out of date as of the 2026-08-11 Savings rebuild** — manual entries moved to the new Goals system, this auto-log path didn't, which is a real bug (see the "Real, not-yet-fixed bug" note further down, under "Savings rebuilt").
 - ~~Money sent to a person (not a business) → auto-logged in Debts as Lent.~~ — **done 2026-08-10** (earlier "keep manual" decision reversed the same day). Confirm the person's name once, remembered after that — a wrong person would be a real mistake here (unlike a cosmetic label), so this always confirms rather than guessing, see Financial Events doc's "Debts auto-linking" section.
 - ~~Money received from a person → auto-logged in Debts as Borrowed.~~ — **done 2026-08-10**, same mechanism, direction-aware.
 - ~~A repayment ("Raj paid back") settles the matching debt automatically.~~ — **done 2026-08-10**, but ONLY when there's exactly one matching open debt for that person — falls back to manual if none or several, deliberately never guesses which one.
