@@ -1275,6 +1275,18 @@
             <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5"/><path d="M16 3v3.5"/><path d="M8 13.5l2 2 4-4.5"/></svg></span>
             <span>Today's Summary</span>
           </button>
+          <button type="button" class="more-menu-item" data-target="cash">
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><circle cx="12" cy="12" r="2.7"/></svg></span>
+            <span>Cash</span>
+          </button>
+          <button type="button" class="more-menu-item" data-target="history">
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
+            <span>History</span>
+          </button>
+          <button type="button" class="more-menu-item" data-target="investments">
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></span>
+            <span>Investments</span>
+          </button>
           <button type="button" class="more-menu-item" data-target="cc">
             <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 9.5h19"/><path d="M6 14.5h4"/></svg></span>
             <span>CC Advisor</span>
@@ -1287,25 +1299,13 @@
             <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg></span>
             <span>Savings &amp; Wish List</span>
           </button>
-          <button type="button" class="more-menu-item" data-target="investments">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></span>
-            <span>Investments</span>
-          </button>
-          <button type="button" class="more-menu-item" data-target="cash">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><circle cx="12" cy="12" r="2.7"/></svg></span>
-            <span>Cash</span>
-          </button>
-          <button type="button" class="more-menu-item" data-target="reconcile">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5"/></svg></span>
-            <span>Reconcile</span>
-          </button>
           <button type="button" class="more-menu-item" data-target="settings">
             <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.4M12 18.6V21M4.9 6.5l1.7 1.7M17.4 15.8l1.7 1.7M3 12h2.4M18.6 12H21M4.9 17.5l1.7-1.7M17.4 8.2l1.7-1.7"/></svg></span>
             <span>Settings</span>
           </button>
-          <button type="button" class="more-menu-item" data-target="history">
-            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
-            <span>History</span>
+          <button type="button" class="more-menu-item" data-target="reconcile">
+            <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5"/></svg></span>
+            <span>Reconcile</span>
           </button>
         </div>
 
@@ -1577,17 +1577,19 @@
           <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Recent</h3>
           <div id="investmentsRecent"></div>
 
-          <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Log an Investment</h3>
-          <div class="field">
-            <label>Amount (₹)</label>
-            <input type="number" id="investAmountInput" min="0" step="1" placeholder="0">
+          <button type="button" id="addInvestmentToggleButton" style="margin-top:20px;">+ Log an Investment</button>
+          <div id="addInvestmentForm" style="display:none; margin-top:12px;">
+            <div class="field">
+              <label>Amount (₹)</label>
+              <input type="number" id="investAmountInput" min="0" step="1" placeholder="0">
+            </div>
+            <div class="field">
+              <label>Type</label>
+              <input type="text" id="investTypeInput" placeholder="e.g. Mutual Fund, Gold, Stocks">
+            </div>
+            <button type="button" id="saveInvestmentButton">Save</button>
+            <div id="logInvestmentResult" class="pending-result"></div>
           </div>
-          <div class="field">
-            <label>Type</label>
-            <input type="text" id="investTypeInput" placeholder="e.g. Mutual Fund, Gold, Stocks">
-          </div>
-          <button type="button" id="saveInvestmentButton">Save</button>
-          <div id="logInvestmentResult" class="pending-result"></div>
         </div>
       </div>
 
@@ -1604,37 +1606,39 @@
             <div class="today-split" id="cashTodaySpend"></div>
           </div>
 
-          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Log Cash</h3>
-          <div class="field">
-            <label>Type</label>
-            <select id="cashTypeInput">
-              <option value="debit">Spent</option>
-              <option value="credit">Received</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Amount (₹)</label>
-            <input type="number" id="cashAmountInput" min="0" step="1" placeholder="0">
-          </div>
-          <div class="field">
-            <label>Note</label>
-            <input type="text" id="cashNoteInput" placeholder="e.g. tea, auto, Rahul returned">
-          </div>
-          <div class="field">
-            <label>Category (for spend)</label>
-            <select id="cashCategoryInput"></select>
-          </div>
-          <div class="field type-field" id="cashTypeField">
-            <label>Type</label>
-            <div class="type-toggle">
-              <button type="button" class="type-btn" data-type="Need">Need</button>
-              <button type="button" class="type-btn" data-type="Want">Want</button>
-              <button type="button" class="type-btn" data-type="Saving">Saving</button>
-              <button type="button" class="type-btn" data-type="Investment">Investment</button>
+          <button type="button" id="addCashToggleButton">+ Log Cash</button>
+          <div id="addCashForm" style="display:none; margin-top:12px;">
+            <div class="field">
+              <label>Type</label>
+              <select id="cashTypeInput">
+                <option value="debit">Spent</option>
+                <option value="credit">Received</option>
+              </select>
             </div>
+            <div class="field">
+              <label>Amount (₹)</label>
+              <input type="number" id="cashAmountInput" min="0" step="1" placeholder="0">
+            </div>
+            <div class="field">
+              <label>Note</label>
+              <input type="text" id="cashNoteInput" placeholder="e.g. tea, auto, Rahul returned">
+            </div>
+            <div class="field">
+              <label>Category (for spend)</label>
+              <select id="cashCategoryInput"></select>
+            </div>
+            <div class="field type-field" id="cashTypeField">
+              <label>Type</label>
+              <div class="type-toggle">
+                <button type="button" class="type-btn" data-type="Need">Need</button>
+                <button type="button" class="type-btn" data-type="Want">Want</button>
+                <button type="button" class="type-btn" data-type="Saving">Saving</button>
+                <button type="button" class="type-btn" data-type="Investment">Investment</button>
+              </div>
+            </div>
+            <button type="button" id="saveCashButton">Save</button>
+            <div id="cashResult" class="pending-result"></div>
           </div>
-          <button type="button" id="saveCashButton">Save</button>
-          <div id="cashResult" class="pending-result"></div>
 
           <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Recent</h3>
           <div id="cashRecent"></div>
@@ -1750,8 +1754,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-11-01";
-    const APP_CHANGELOG = "Polish pass: settling a debt or marking a savings goal purchased now asks for a second tap first; easier-to-read gray text on dates/bank names; bigger Need/Want/Saving buttons; easier-to-tap Savings carousel dots with a peek of the next card; a styled file picker on Reconcile; proper arrow icons on Analysis' month switcher; a nicer \"all caught up\" message on Pending; and matching \"Show more\" wording everywhere.";
+    const APP_VERSION = "2026-08-11-02";
+    const APP_CHANGELOG = "Polish pass: settling a debt or marking a savings goal purchased now asks for a second tap first; easier-to-read gray text on dates/bank names; bigger Need/Want/Saving buttons; easier-to-tap Savings carousel dots with a peek of the next card; a styled file picker on Reconcile; proper arrow icons on Analysis' month switcher; a nicer \"all caught up\" message on Pending; and matching \"Show more\" wording everywhere. Also: the Cash and Investments screens now hide their entry forms behind a \"+ Log Cash\" / \"+ Log an Investment\" button, same as Debts and Savings, so they don't take up space every time you just want to check your recent activity.";
 
     (function checkWhatsNew() {
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
@@ -4811,10 +4815,20 @@
     const investmentsBreakdownEl   = document.getElementById("investmentsBreakdown");
     const investmentsRecentEl      = document.getElementById("investmentsRecent");
 
+    const addInvestmentToggleButtonEl = document.getElementById("addInvestmentToggleButton");
+    const addInvestmentFormEl   = document.getElementById("addInvestmentForm");
     const investAmountInputEl   = document.getElementById("investAmountInput");
     const investTypeInputEl     = document.getElementById("investTypeInput");
     const saveInvestmentButtonEl = document.getElementById("saveInvestmentButton");
     const logInvestmentResultEl = document.getElementById("logInvestmentResult");
+
+    // Form starts collapsed behind a toggle button, same pattern as
+    // Debts/Savings — added 2026-08-11 so the Investments screen doesn't
+    // show a form every time you just want to check Recent.
+    addInvestmentToggleButtonEl.addEventListener("click", function () {
+      const isHidden = addInvestmentFormEl.style.display === "none";
+      addInvestmentFormEl.style.display = isHidden ? "block" : "none";
+    });
 
     // Lets you fix a past investment entry — added 2026-08-10. Investments
     // previously had no way to correct a mistake short of editing the
@@ -4976,6 +4990,8 @@
     const cashContentEl       = document.getElementById("cashContent");
     const cashBalanceAmountEl = document.getElementById("cashBalanceAmount");
     const cashTodaySpendEl    = document.getElementById("cashTodaySpend");
+    const addCashToggleButtonEl = document.getElementById("addCashToggleButton");
+    const addCashFormEl       = document.getElementById("addCashForm");
     const cashTypeInputEl     = document.getElementById("cashTypeInput");
     const cashAmountInputEl   = document.getElementById("cashAmountInput");
     const cashNoteInputEl     = document.getElementById("cashNoteInput");
@@ -4984,6 +5000,14 @@
     const cashResultEl        = document.getElementById("cashResult");
     const cashRecentEl        = document.getElementById("cashRecent");
     const cashTypeFieldEl     = document.getElementById("cashTypeField");
+
+    // Form starts collapsed behind a toggle button, same pattern as
+    // Debts/Savings — added 2026-08-11. Cash is logged daily, so this
+    // sits above "Recent" (unlike Investments) to stay quick to reach.
+    addCashToggleButtonEl.addEventListener("click", function () {
+      const isHidden = addCashFormEl.style.display === "none";
+      addCashFormEl.style.display = isHidden ? "block" : "none";
+    });
 
     // Need/Want/Saving/Investment for cash — same idea as Pending, but
     // cash has no bank-parsed merchant to key learning on, so this stays
