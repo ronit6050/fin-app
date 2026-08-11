@@ -47,7 +47,7 @@ function handlePwaRequest(data){
   }
 
   if(data.action === "saveNote"){
-    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent, data.financialEventName, data.debtPerson));
+    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent, data.financialEventName, data.debtPerson, data.investmentInstrument));
   }
 
   if(data.action === "getTodaySummary"){
@@ -152,12 +152,24 @@ function handlePwaRequest(data){
     return jsonResponse({ ok:true, investments: getInvestmentsData() });
   }
 
+  // ── Investment Instruments (added 2026-08-11, backend/investmentInstruments.js) ──
+  // A fixed, named list of the user's real investments — replaces the
+  // old free-typed "Type" string, see that file's header comment.
+
+  if(data.action === "getInvestmentInstruments"){
+    return jsonResponse({ ok:true, ...getInvestmentInstrumentsList() });
+  }
+
+  if(data.action === "addInvestmentInstrument"){
+    return jsonResponse(addInvestmentInstrument(data.name, data.category));
+  }
+
   if(data.action === "logInvestment"){
-    return jsonResponse(logInvestmentFromApp(data.amount, data.type));
+    return jsonResponse(logInvestmentFromApp(data.amount, data.instrumentName));
   }
 
   if(data.action === "updateInvestment"){
-    return jsonResponse(updateInvestmentEntry(data.row, data.type, data.amount));
+    return jsonResponse(updateInvestmentEntry(data.row, data.instrumentName, data.amount));
   }
 
   if(data.action === "getCash"){
@@ -418,9 +430,22 @@ function updateCashEntry(row, type, amount, note, category, needWantSaving){
 
 // Same data as sendInvestmentDashboard() in SavingsAdvisor.js, returned
 // as plain data instead of a Telegram message.
+//
+// Groups by exact string match on column B (Type) — this only stays
+// correct now because EVERY write path (logInvestmentFromApp,
+// updateInvestmentEntry, the note-match auto-log via autoLogInvestment)
+// validates its instrument name against InvestmentInstruments first
+// (see investmentInstruments.js), so the same fund can never end up
+// split across two slightly-different spellings again.
 function getInvestmentsData(){
   const investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
   const data = investSheet.getDataRange().getValues();
+
+  // Name -> Category (SIP / One-time Fund / Stock / Gold), so the
+  // frontend can group/label the breakdown into sections without a
+  // second round trip. Small, natural addition now that every Type
+  // string is guaranteed to be a real InvestmentInstruments name.
+  const instrumentCategories = getInstrumentCategoryMap_();
 
   let typeTotals = {};
   let total = 0;
@@ -435,7 +460,7 @@ function getInvestmentsData(){
 
   const breakdown = Object.entries(typeTotals)
     .sort(function(a, b){ return b[1] - a[1]; })
-    .map(function(e){ return { type: e[0], amount: e[1] }; });
+    .map(function(e){ return { type: e[0], amount: e[1], category: instrumentCategories[e[0]] || null }; });
 
   // row is tracked from the ORIGINAL sheet position, before the sort
   // below reorders everything by date — without this, editing an entry
@@ -459,13 +484,23 @@ function getInvestmentsData(){
   return { total: total, breakdown: breakdown, recent: recent };
 }
 
-// Same as logInvestment() in SavingsAdvisor.js, minus the Telegram message
-function logInvestmentFromApp(amount, type){
+// Manual "+ Log an Investment" path. instrumentName must be an exact (or
+// case-insensitive) match to a name already in InvestmentInstruments —
+// validated server-side (never trust the frontend), same defensive
+// pattern as updateInvestmentEntry's row-number check below. Rewritten
+// 2026-08-11: used to take a free-typed "type" string directly (the
+// fragmentation bug this whole feature fixes — see
+// investmentInstruments.js's file header).
+function logInvestmentFromApp(amount, instrumentName){
   try{
+    const validation = validateInvestmentInstrumentName_(instrumentName);
+    if(!validation.ok) return validation;
+    if(!amount || Number(amount) <= 0) return { ok:false, error:"Enter a valid amount." };
+
     const investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
     const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
-    investSheet.appendRow([today, type, amount, ""]);
+    investSheet.appendRow([today, validation.name, Number(amount), ""]);
 
     return { ok: true };
   }catch(err){
@@ -473,10 +508,11 @@ function logInvestmentFromApp(amount, type){
   }
 }
 
-// Fixes a past investment entry's type/amount — added 2026-08-10.
-// Investments previously had no way to correct a mistake short of
-// editing the Sheet directly, unlike Transactions (which has History).
-function updateInvestmentEntry(row, type, amount){
+// Fixes a past investment entry's instrument/amount — added 2026-08-10,
+// updated 2026-08-11 to validate instrumentName against
+// InvestmentInstruments the same way logInvestmentFromApp does, so an
+// edit can never reintroduce a stray free-typed spelling.
+function updateInvestmentEntry(row, instrumentName, amount){
   try{
     const investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
 
@@ -486,13 +522,37 @@ function updateInvestmentEntry(row, type, amount){
     if(!amount || Number(amount) <= 0){
       return { ok:false, error:"Enter a valid amount." };
     }
+    const validation = validateInvestmentInstrumentName_(instrumentName);
+    if(!validation.ok) return validation;
 
-    investSheet.getRange(row, 2).setValue(type);          // column B
-    investSheet.getRange(row, 3).setValue(Number(amount)); // column C
+    investSheet.getRange(row, 2).setValue(validation.name);  // column B
+    investSheet.getRange(row, 3).setValue(Number(amount));   // column C
 
     return { ok: true };
   }catch(err){
     return { ok: false, error: err.toString() };
+  }
+}
+
+// ONE-TIME MANUAL UTILITY (2026-08-11) — no longer needed for its
+// original purpose (deciding how to migrate — that's done, see
+// migrateInvestmentsToNamedInstruments() in investmentInstruments.js),
+// but left in place since it's still a harmless, useful read-only
+// snapshot of whatever is currently in the Investments sheet. Run by
+// hand from the Apps Script editor (select this function, Run, then
+// View > Logs).
+function auditInvestmentsSheet(){
+  const investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
+  const data = investSheet.getDataRange().getValues();
+
+  Logger.log("Investments sheet — " + (data.length - 1) + " row(s):");
+  for(let i = 1; i < data.length; i++){
+    const row = data[i];
+    Logger.log(
+      "Row " + (i + 1) + ": " +
+      "date=" + row[0] + " | type=\"" + row[1] + "\" | amount=" + row[2] +
+      " | note=\"" + (row[3] || "") + "\""
+    );
   }
 }
 
@@ -1365,6 +1425,10 @@ function getPendingTransactions(txnData){
   const financialEventsSheet = ss.getSheetByName("FinancialEvents");
   const financialEventsData  = financialEventsSheet ? financialEventsSheet.getDataRange().getValues() : [];
 
+  // Same "read once, outside the loop" pattern as the sheets above — see
+  // investmentInstruments.js for what this is used for.
+  const investInstrumentsData = getInvestmentInstrumentsSheet_().getDataRange().getValues();
+
   for(let i = 1; i < data.length; i++){
     const processed = (data[i][15] || "").toString().trim(); // column P
     const note       = (data[i][12] || "").toString().trim(); // column M
@@ -1387,6 +1451,16 @@ function getPendingTransactions(txnData){
     // through anyway for correctness, same reasoning as suggestedType above.
     const feSuggestion = txnType === "debit"
       ? suggestFinancialEvent(counterparty, amount, financialEventsData, note)
+      : null;
+
+    // Investment-instrument note match — see investmentInstruments.js.
+    // note is always empty here (Pending = unnoted transactions), so
+    // this can never actually fire yet in Pending — same inherent limit
+    // isLendingTransfer/isSavingsNote already have there. Passed through
+    // anyway for correctness/consistency, and so History (which always
+    // has a note) gets the exact same code path "for free."
+    const investSuggestion = txnType === "debit"
+      ? matchInvestmentInstrumentByNote(note, investInstrumentsData)
       : null;
 
     // A credit card bill payment or wallet top-up isn't spending — same
@@ -1438,7 +1512,18 @@ function getPendingTransactions(txnData){
       financialEventName:          null,
       suggestedFinancialEvent:     feSuggestion ? feSuggestion.type : null,
       suggestedFinancialEventName: feSuggestion ? (feSuggestion.name || null) : null,
-      financialEventConfident:     feSuggestion ? feSuggestion.confident : false
+      financialEventConfident:     feSuggestion ? feSuggestion.confident : false,
+      // Investment-instrument note match — see investmentInstruments.js.
+      // Three distinct states, since (unlike financialEventName) a null
+      // name is genuinely ambiguous between "no signal at all" and "an
+      // unnamed new stock/fund" — investmentInstrumentLooksNew tells
+      // those two apart explicitly instead of overloading null:
+      //   suggestedInvestmentInstrument = "<name>", confident = true   -> one-tap confirm
+      //   suggestedInvestmentInstrument = null, looksNew = true        -> "which one?" name-it prompt
+      //   suggestedInvestmentInstrument = null, looksNew = false       -> nothing to show
+      suggestedInvestmentInstrument: investSuggestion ? investSuggestion.name : null,
+      investmentInstrumentConfident: investSuggestion ? investSuggestion.confident : false,
+      investmentInstrumentLooksNew:  !!(investSuggestion && investSuggestion.confident === false)
     });
   }
 
@@ -1459,6 +1544,10 @@ function getTransactionHistory(offset, limit){
 
   const financialEventsSheet = ss.getSheetByName("FinancialEvents");
   const financialEventsData  = financialEventsSheet ? financialEventsSheet.getDataRange().getValues() : [];
+
+  // Same "read once, outside the loop" pattern as above — see
+  // investmentInstruments.js for what this is used for.
+  const investInstrumentsData = getInvestmentInstrumentsSheet_().getDataRange().getValues();
 
   const noted = [];
 
@@ -1515,6 +1604,18 @@ function getTransactionHistory(offset, limit){
     t.suggestedFinancialEvent = feSuggestion ? feSuggestion.type : null;
     t.suggestedFinancialEventName = feSuggestion ? (feSuggestion.name || null) : null;
     t.financialEventConfident = feSuggestion ? feSuggestion.confident : false;
+
+    // Investment-instrument note match — see investmentInstruments.js and
+    // the matching comment in getPendingTransactions for the 3-state
+    // shape. t.note always has real content in History (unlike Pending),
+    // so this is where a stock/fund note ("Tata Steel shares") actually
+    // gets caught in practice.
+    const investSuggestion = t.type === "debit"
+      ? matchInvestmentInstrumentByNote(t.note, investInstrumentsData)
+      : null;
+    t.suggestedInvestmentInstrument = investSuggestion ? investSuggestion.name : null;
+    t.investmentInstrumentConfident = investSuggestion ? investSuggestion.confident : false;
+    t.investmentInstrumentLooksNew  = !!(investSuggestion && investSuggestion.confident === false);
 
     // See the matching comment in getPendingTransactions — a CC bill
     // payment or wallet top-up never needs asking, so hide the toggle
@@ -1577,7 +1678,7 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
 // teach SmartMemory/TypeVotes exactly like a first-time correction does
 // (confirmed with the user 2026-08-08) — reusing this function is what
 // gets that for free instead of writing a second, parallel code path.
-function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName, debtPerson){
+function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName, debtPerson, investmentInstrument){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
 
@@ -1662,6 +1763,53 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       handleDebtAutoLink(savedTxnType, note, debtPerson, debtAmount);
     }
 
+    // Investment-instrument note match (added 2026-08-11) — see
+    // investmentInstruments.js's file header for why this is deliberately
+    // SEPARATE from the Financial Event block above (it doesn't touch
+    // columns R/S, doesn't use the FinancialEvents amount-matching
+    // memory, and doesn't exclude anything from spend totals — a
+    // note-recognized stock/fund purchase, e.g. "Tata Steel shares", is
+    // still real, ordinary day-to-day spend from the bank's point of
+    // view, unlike a Rent/EMI/SIP obligation). This ONLY adds a matching
+    // row to the Investments portfolio tracker (via autoLogInvestment).
+    //
+    // skipDuplicateCheck=true (added 2026-08-11, same day, after
+    // change-reviewer + ui-ux-expert both flagged this as worth
+    // reconsidering) — this path does NOT use autoLogInvestment's
+    // "likely duplicate" guard, unlike the Financial Event/SIP call
+    // above. Reasoning: a note-matched confirm is already an explicit,
+    // one-tap HUMAN decision — the same trust level as the manual
+    // "+ Log an Investment" form, which has no duplicate check at all.
+    // Silently dropping a real, just-confirmed purchase because it
+    // happens to land near a similar amount within 3 days (e.g. two
+    // separate top-ups of the same stock) would do more harm than good.
+    // See autoLogInvestment's own comment (financialEvents.js) for the
+    // full reasoning — the Financial Event/SIP call site keeps the
+    // duplicate check exactly as it was, unaffected by this.
+    //
+    // Need/Want/Saving IS still skipped for it, though — decided with
+    // the user 2026-08-11: buying a stock/fund isn't a spending decision
+    // in the Need/Want/Saving sense either, same reasoning already
+    // applied to Rent/EMI/Investment Financial Events and to Lending.
+    // See `investmentInstrumentValid` below, used in the column-Q gate.
+    // instrumentInstrument is validated against InvestmentInstruments
+    // here too — never trust a name from the frontend without checking
+    // it server-side, same defense-in-depth pattern as everything else
+    // in this function.
+    let investmentLogged = false;
+    let investmentInstrumentValid = false;
+    if(investmentInstrument){
+      const instrumentCheck = validateInvestmentInstrumentName_(investmentInstrument);
+      if(instrumentCheck.ok){
+        investmentInstrumentValid = true;
+        const invTxnDateRaw = sheet.getRange(row, 1).getValue(); // column A
+        const invTxnDateStr = Utilities.formatDate(new Date(invTxnDateRaw), Session.getScriptTimeZone(), "yyyy-MM-dd");
+        const invAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
+        const logResult = autoLogInvestment(invTxnDateStr, instrumentCheck.name, invAmount, note, true); // skipDuplicateCheck
+        investmentLogged = !!logResult.logged;
+      }
+    }
+
     // Save the actual chosen type ON this transaction (column Q) whenever
     // one was sent and it isn't a recognized loan/repayment. This is
     // separate from the vote below (which only feeds FUTURE suggestions
@@ -1688,6 +1836,16 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     // isn't a meaningful question for it (confirmed with the user
     // 2026-08-10, as part of the wider Category/Financial Event design).
     //
+    // Also skipped when investmentInstrumentValid is true (added
+    // 2026-08-11) — a note-matched stock/one-time-fund purchase (see
+    // the block above) isn't a Need/Want/Saving decision either, same
+    // reasoning as Rent/EMI/Investment Financial Events, confirmed with
+    // the user. Uses investmentInstrumentValid (whether the NAME
+    // validated), not investmentLogged (whether the row actually got
+    // written) — a likely-duplicate skip inside autoLogInvestment still
+    // means this transaction IS a confirmed investment purchase, so the
+    // question should stay skipped either way.
+    //
     // Also skipped for a credit card bill payment or wallet top-up
     // (checked here, server-side, from the row's own stored Mode/
     // Reference rather than anything the frontend sends — same defense-
@@ -1701,7 +1859,7 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     const isNonSpendTransfer = isCreditCardBillPayment(savedMode, counterparty, note) || isWalletTopUp(counterparty, savedReference);
 
     let typeSaved = false;
-    if(type && !isLendingTransfer(counterparty, note) && !effectiveFinancialEvent && !isNonSpendTransfer){
+    if(type && !isLendingTransfer(counterparty, note) && !effectiveFinancialEvent && !isNonSpendTransfer && !investmentInstrumentValid){
       sheet.getRange(row, 17).setValue(type); // column Q
       typeSaved = true;
 
@@ -1721,7 +1879,7 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       recordNoteUsage(counterparty, noteAmount, note);
     }
 
-    return { ok:true, typeRequested: !!type, typeSaved: typeSaved };
+    return { ok:true, typeRequested: !!type, typeSaved: typeSaved, investmentLogged: investmentLogged };
   }catch(err){
     return { ok:false, error: err.toString() };
   }

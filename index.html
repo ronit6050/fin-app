@@ -1518,6 +1518,73 @@
       margin-bottom: 10px;
     }
 
+    /* ---------- Investment instrument picker (2026-08-11) ----------
+       One shared dropdown used in three places: the Investments manual
+       "+ Log an Investment" form, the SIP Financial Event naming prompt,
+       and the note-based investment chip in Pending/History (see
+       docs/features/investment-instruments.md). Reuses the app's normal
+       input/select styling automatically (the global `select` rule) —
+       this block only handles the layout of the select plus its inline
+       "+ Add new instrument" mini-form. Reuses .settings-group /
+       .settings-group-title for the Investments tab's category
+       sections, so no new heading style needed either. */
+    .instrument-picker {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .instrument-add-new {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px;
+      background: var(--surface-inset);
+      border-radius: var(--radius-sm);
+    }
+
+    /* ---------- Pending investment-log notice (2026-08-11) ----------
+       Pending's Save is optimistic — the card is gone from the screen
+       the instant you tap Save (see that handler's own comment) — so if
+       a confirmed "Log as investment" chip's actual write gets silently
+       skipped by the duplicate-avoidance guard (autoLogInvestment),
+       there's no card left to show an error ON. This is a small,
+       dismissible banner above the Pending list instead — reuses the
+       app's existing warning color pair (same one status-pill.warning
+       and CC Advisor's threshold warning already use), not a new color.
+       Manual dismiss only (no auto-hide timer) — an auto-hide could
+       expire before you've even switched back to this tab and actually
+       seen it, which would defeat the entire point of surfacing this.
+       See docs/features/investment-instruments.md. */
+    .pending-notice {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--bg-warning);
+      color: var(--color-warning);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+    .pending-notice-dismiss {
+      width: auto;
+      flex-shrink: 0;
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-size: 1.05rem;
+      font-weight: 700;
+      line-height: 1;
+      padding: 2px 4px;
+      cursor: pointer;
+    }
+    .pending-notice-dismiss:hover {
+      background: transparent;
+    }
+
     /* ---------- "Back" button on More's sub-screens ----------
        Redesigned 2026-08-11 — was a small plain-text link ("← Back"),
        undersized for a thumb and the one place in the app still using a
@@ -1724,6 +1791,7 @@
       <section id="view-pending" class="tab-view" style="display:none">
         <h2 class="section-title">Pending Transactions</h2>
         <div class="pending-status" id="pendingStatus"></div>
+        <div id="pendingInvestmentNotices"></div>
         <div id="pendingList">
           <div class="skeleton-block" style="height:120px; margin-bottom:12px;"></div>
           <div class="skeleton-block" style="height:120px; margin-bottom:12px;"></div>
@@ -2102,7 +2170,11 @@
             <div class="today-split">Separate from savings — not counted toward your emergency fund</div>
           </div>
 
-          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">Breakdown</h3>
+          <!-- Grouped by instrument (SIPs / One-time Funds / Stocks / Gold),
+               2026-08-11 — was one flat list of free-typed "Type" strings,
+               which fragmented the same real fund into several lines if it
+               was ever typed slightly differently. See
+               docs/features/investment-instruments.md. -->
           <div id="investmentsBreakdown"></div>
 
           <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Recent</h3>
@@ -2115,8 +2187,8 @@
               <input type="number" id="investAmountInput" min="0" step="1" placeholder="0">
             </div>
             <div class="field">
-              <label>Type</label>
-              <input type="text" id="investTypeInput" placeholder="e.g. Mutual Fund, Gold, Stocks">
+              <label>Investment</label>
+              <div class="instrument-picker" id="investInstrumentPicker"></div>
             </div>
             <button type="button" id="saveInvestmentButton">Save</button>
             <div id="logInvestmentResult" class="pending-result"></div>
@@ -2299,8 +2371,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-11-03";
-    const APP_CHANGELOG = "Visual refresh: a richer accent color and a friendlier sign-in screen; two new charts on Home (where your money's going, and a Need/Want/Saving snapshot); hand-drawn icons for every spending category (replacing emoji); Analysis' category bars are now color-coded and its month switcher got a cleaner redesign; the More tab is now grouped (Daily/Advisors/Tools) with icon tiles, a proper Back button, grouped Settings, and skeleton loading + a Retry button on every screen that used to show a plain spinner or a dead-end error. Also fixed a real bug: the \"What's New\" popup (this message!) used to sometimes appear before you'd even signed in — it now only ever shows after a successful sign-in.";
+    const APP_VERSION = "2026-08-11-04";
+    const APP_CHANGELOG = "Investments now use a fixed list of your real funds/stocks instead of free-typed names, so the same investment never gets split into two lines again — the Investments tab is grouped into SIPs/One-time Funds/Stocks/Gold, the \"Log an Investment\" form is now a dropdown (with a quick \"+ Add new instrument\"), naming a new SIP is a pick instead of typing it from memory, and Pending/History can now spot a stock or fund purchase from your note and offer a one-tap \"log as investment\" — which also skips the Need/Want/Saving question for it, same as Rent/EMI already do.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -2476,6 +2548,12 @@
       // is opened) so new-transaction notifications keep working correctly.
       loadDashboard();
       loadPendingTransactions();
+      // Loaded eagerly (not just when the Investments tab opens) so the
+      // note-based investment chip and SIP naming picker in Pending have
+      // real instrument names ready by the time they're needed, instead
+      // of a brief "Loading investments..." — see
+      // docs/features/investment-instruments.md.
+      loadInvestmentInstruments();
       restoreLastTab();
 
       // Ask (once) if we're allowed to show notifications for new transactions
@@ -2505,6 +2583,7 @@
           showSignedInUI(currentUser);
           loadDashboard();
           loadPendingTransactions();
+          loadInvestmentInstruments();
           restoreLastTab();
           setupPushNotifications();
         } else {
@@ -2736,23 +2815,29 @@
     // Hides the Need/Want/Saving toggle live if the note looks like a
     // loan/repayment or a saving (isSavingsNote — added 2026-08-10), OR
     // if a Financial Event (Rent/EMI/Investment) is currently selected
-    // on this card — none of those are real spending, so the question
-    // doesn't make sense for any of them. isFinancialEventSelected is
-    // optional — only Pending/History pass it (see
-    // docs/features/financial-events.md); Reconciliation/Cash cards call
-    // this the old way, unaffected.
+    // on this card, OR a note-matched investment instrument is currently
+    // selected (see isInvestmentInstrumentSelected below) — none of
+    // those are real spending, so the question doesn't make sense for
+    // any of them. isFinancialEventSelected/isInvestmentInstrumentSelected
+    // are both optional — only Pending/History pass them (see
+    // docs/features/financial-events.md and
+    // docs/features/investment-instruments.md); Reconciliation/Cash
+    // cards call this the old way, unaffected.
     //
     // Returns the internal `update` function so a caller can re-run the
     // same check after something OTHER than typing in the note changes
-    // (e.g. tapping a Financial Event chip) — a second, separate
-    // show/hide mechanism would risk the two fighting each other (one
-    // hiding the toggle, the other un-hiding it right after).
-    function wireLendingAwareToggle(card, noteInput, onHide, isFinancialEventSelected) {
+    // (e.g. tapping a Financial Event or investment chip) — a second,
+    // separate show/hide mechanism would risk the two fighting each
+    // other (one hiding the toggle, the other un-hiding it right after).
+    function wireLendingAwareToggle(card, noteInput, onHide, isFinancialEventSelected, isInvestmentInstrumentSelected) {
       const typeField = card.querySelector(".type-field");
       if (!typeField || !noteInput) return function () {};
 
       function update() {
-        const hide = isLendingNote(noteInput.value) || isSavingsNote(noteInput.value) || !!(isFinancialEventSelected && isFinancialEventSelected());
+        const hide = isLendingNote(noteInput.value)
+          || isSavingsNote(noteInput.value)
+          || !!(isFinancialEventSelected && isFinancialEventSelected())
+          || !!(isInvestmentInstrumentSelected && isInvestmentInstrumentSelected());
         typeField.style.display = hide ? "none" : "";
         if (hide && onHide) onHide();
       }
@@ -2781,9 +2866,26 @@
       if (!feType) return "";
 
       if (NAMEABLE_FE_TYPES.includes(feType) && !feName) {
-        const prompt = feType === "EMI"
-          ? { question: "This looks like an EMI — which one?", placeholder: "Name this EMI (e.g. Laptop EMI)", confirmLabel: "Mark as this EMI" }
-          : { question: "This looks like an investment — what would you call it?", placeholder: "Name this investment (e.g. Mutual Fund)", confirmLabel: "Mark as this investment" };
+        // SIP naming (Investment) — 2026-08-11: a dropdown picked from the
+        // fixed 15-instrument list, not free text. This was the literal
+        // root cause of the fragmentation bug this feature fixed (two
+        // slightly different typed names for the same fund) — see
+        // docs/features/investment-instruments.md. EMI naming is
+        // deliberately left exactly as it was — free text — since EMIs
+        // aren't a fixed, known list the way investments are.
+        if (feType === "Investment") {
+          return `
+            <div class="field fe-field">
+              <label>This looks like an investment — which one?</label>
+              <div class="instrument-picker fe-instrument-picker">${instrumentPickerHtml("fe-emi-name-select")}</div>
+              <div class="type-toggle" style="margin-top:8px;">
+                <button type="button" class="fe-emi-confirm-btn fe-btn">Mark as this investment</button>
+                <button type="button" class="fe-btn" data-fe="">No, regular spend</button>
+              </div>
+            </div>
+          `;
+        }
+        const prompt = { question: "This looks like an EMI — which one?", placeholder: "Name this EMI (e.g. Laptop EMI)", confirmLabel: "Mark as this EMI" };
         return `
           <div class="field fe-field">
             <label>${prompt.question}</label>
@@ -2828,6 +2930,10 @@
       const feButtons = feField.querySelectorAll(".fe-btn");
       const emiNameInput = feField.querySelector(".fe-emi-name-input");
       const emiConfirmBtn = feField.querySelector(".fe-emi-confirm-btn");
+      // Investment naming (SIP) uses the shared instrument dropdown
+      // instead of a text input — see buildFinancialEventHtml above.
+      const feInstrumentPickerEl = feField.querySelector(".fe-instrument-picker");
+      const getFeInstrumentSelection = feInstrumentPickerEl ? wireInstrumentPicker(feInstrumentPickerEl) : null;
 
       function clearActive() {
         feButtons.forEach(function (b) { b.classList.remove("active"); });
@@ -2850,14 +2956,293 @@
         });
       });
 
-      if (emiNameInput && emiConfirmBtn) {
+      if (emiConfirmBtn) {
         emiConfirmBtn.addEventListener("click", function () {
-          const typed = emiNameInput.value.trim();
-          if (!typed) return; // need a name to confirm — silently no-op, same as tapping nothing
+          // Either the EMI free-text box or the Investment instrument
+          // dropdown is present here, never both — see
+          // buildFinancialEventHtml above for which one renders when.
+          let typed = null;
+          let feType = "EMI";
+          if (emiNameInput) {
+            typed = emiNameInput.value.trim();
+            feType = emiNameInput.dataset.feType || "EMI";
+          } else if (getFeInstrumentSelection) {
+            typed = getFeInstrumentSelection();
+            feType = "Investment";
+          }
+          if (!typed) return; // need a name/instrument to confirm — silently no-op, same as tapping nothing
           clearActive();
           emiConfirmBtn.classList.add("active");
-          selected.type = emiNameInput.dataset.feType || "EMI";
+          selected.type = feType;
           selected.name = typed;
+          if (onChange) onChange();
+        });
+      }
+
+      return selected;
+    }
+
+    // ---------------------------------------------------------
+    // INVESTMENT INSTRUMENTS — the fixed, named list (SIPs/One-time
+    // Funds/Stocks/Gold) that replaced free-typed investment "Type"
+    // strings, 2026-08-11. Shared by three places: the Investments tab's
+    // manual "+ Log an Investment" form, the SIP naming picker above
+    // (buildFinancialEventHtml/setupFinancialEventField), and the
+    // note-based investment chip in Pending/History further below. See
+    // docs/features/investment-instruments.md for the full backend
+    // contract this reads.
+    // ---------------------------------------------------------
+
+    // Loaded once at sign-in (see the two places that call
+    // loadInvestmentInstruments()) and kept here in memory — every
+    // picker on screen reads from this same object, and gets rebuilt via
+    // refreshAllInstrumentSelects() once a fresh copy arrives. Also
+    // mirrored into localStorage (loadCache/saveCache) so a picker has
+    // something to show immediately on a repeat visit, same
+    // stale-while-revalidate pattern every other screen in this app uses.
+    let investmentInstrumentsData = null;
+
+    const INSTRUMENT_CATEGORY_ORDER = ["SIP", "One-time Fund", "Stock", "Gold"];
+    const INSTRUMENT_CATEGORY_LABELS = {
+      "SIP": "SIPs",
+      "One-time Fund": "One-time Funds",
+      "Stock": "Stocks",
+      "Gold": "Gold"
+    };
+
+    function loadInvestmentInstruments() {
+      const cached = loadCache("investmentInstruments");
+      if (cached) investmentInstrumentsData = cached;
+
+      callAppsScript({ action: "getInvestmentInstruments", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (!data.ok) return; // silent — pickers just keep showing the cached/empty list
+          investmentInstrumentsData = { instruments: data.instruments, grouped: data.grouped };
+          saveCache("investmentInstruments", investmentInstrumentsData);
+          refreshAllInstrumentSelects();
+        })
+        .catch(function () { /* silent — same reasoning as above */ });
+    }
+
+    // Builds the <option>/<optgroup> markup for one instrument dropdown,
+    // in the fixed SIP/One-time Fund/Stock/Gold order, plus a trailing
+    // "+ Add new instrument..." option. selectedName pre-selects a real
+    // instrument if given.
+    function instrumentOptionsHtml(selectedName) {
+      if (!investmentInstrumentsData) return '<option value="">Loading investments...</option>';
+      let html = '<option value="">Choose an investment...</option>';
+      INSTRUMENT_CATEGORY_ORDER.forEach(function (cat) {
+        const group = investmentInstrumentsData.grouped.find(function (g) { return g.category === cat; });
+        if (!group || !group.instruments.length) return;
+        html += '<optgroup label="' + escapeHtml(INSTRUMENT_CATEGORY_LABELS[cat] || cat) + '">';
+        group.instruments.forEach(function (inst) {
+          const sel = (inst.name === selectedName) ? " selected" : "";
+          html += '<option value="' + escapeHtml(inst.name) + '"' + sel + '>' + escapeHtml(inst.name) + '</option>';
+        });
+        html += '</optgroup>';
+      });
+      html += '<option value="__add_new__">+ Add new instrument...</option>';
+      return html;
+    }
+
+    // Full markup for one picker: the dropdown itself, plus a hidden
+    // inline "+ Add new instrument" mini-form (name + category), shown
+    // when "+ Add new instrument..." is chosen. selectClass tags the
+    // <select> so a caller can find this exact picker among several on
+    // the same card/screen.
+    function instrumentPickerHtml(selectClass) {
+      return `
+        <select class="${selectClass} instrument-select">${instrumentOptionsHtml(null)}</select>
+        <div class="instrument-add-new" style="display:none;">
+          <div class="field" style="margin-bottom:0;">
+            <label>New instrument name</label>
+            <input type="text" class="instrument-add-name" placeholder="e.g. Parag Parikh Flexi Cap">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Category</label>
+            <select class="instrument-add-category">
+              <option value="SIP">SIP</option>
+              <option value="One-time Fund" selected>One-time Fund</option>
+              <option value="Stock">Stock</option>
+              <option value="Gold">Gold</option>
+            </select>
+          </div>
+          <button type="button" class="instrument-add-confirm-btn">Add instrument</button>
+          <div class="pending-result instrument-add-result"></div>
+        </div>
+      `;
+    }
+
+    // Adds a freshly-created instrument to the in-memory list (and its
+    // cached copy) so every OTHER picker already on screen can pick it
+    // up too, without a full reload.
+    function registerNewInstrumentLocally(name, category) {
+      if (!investmentInstrumentsData) investmentInstrumentsData = { instruments: [], grouped: [] };
+      const entry = { name: name, category: category, sipAmount: 0 };
+      investmentInstrumentsData.instruments.push(entry);
+      let group = investmentInstrumentsData.grouped.find(function (g) { return g.category === category; });
+      if (!group) {
+        group = { category: category, instruments: [] };
+        investmentInstrumentsData.grouped.push(group);
+      }
+      group.instruments.push(entry);
+      saveCache("investmentInstruments", investmentInstrumentsData);
+    }
+
+    // Rebuilds every instrument <select> currently on screen (e.g. after
+    // a fresh getInvestmentInstruments response arrives, or a new
+    // instrument gets added) — keeps whatever was already picked,
+    // selected, if it's still in the list.
+    function refreshAllInstrumentSelects() {
+      document.querySelectorAll(".instrument-select").forEach(function (select) {
+        const current = select.value && select.value !== "__add_new__" ? select.value : null;
+        select.innerHTML = instrumentOptionsHtml(current);
+      });
+    }
+
+    // Wires up one instrument-picker block (a container with both
+    // .instrument-select and .instrument-add-new inside it, from
+    // instrumentPickerHtml above). Returns a getter — call it at save
+    // time to read whatever's currently picked (never a real instrument
+    // name when "+ Add new instrument..." is still showing its own
+    // mini-form and hasn't been confirmed yet).
+    function wireInstrumentPicker(pickerEl) {
+      const select = pickerEl.querySelector(".instrument-select");
+      const addNewBox = pickerEl.querySelector(".instrument-add-new");
+      const addNameInput = pickerEl.querySelector(".instrument-add-name");
+      const addCategorySelect = pickerEl.querySelector(".instrument-add-category");
+      const addConfirmBtn = pickerEl.querySelector(".instrument-add-confirm-btn");
+      const addResultEl = pickerEl.querySelector(".instrument-add-result");
+
+      select.addEventListener("change", function () {
+        addNewBox.style.display = (select.value === "__add_new__") ? "block" : "none";
+      });
+
+      addConfirmBtn.addEventListener("click", function () {
+        const name = addNameInput.value.trim();
+        const category = addCategorySelect.value;
+        if (!name) {
+          addResultEl.textContent = "Enter a name first.";
+          return;
+        }
+        addResultEl.textContent = "Adding...";
+        callAppsScript({ action: "addInvestmentInstrument", idToken: currentUser.idToken, name: name, category: category })
+          .then(function (data) {
+            if (!data.ok) {
+              addResultEl.textContent = data.error;
+              return;
+            }
+            registerNewInstrumentLocally(data.name, data.category);
+            select.innerHTML = instrumentOptionsHtml(data.name);
+            addNewBox.style.display = "none";
+            addNameInput.value = "";
+            addResultEl.textContent = "";
+          })
+          .catch(function (err) {
+            addResultEl.textContent = err.message;
+          });
+      });
+
+      return function getSelectedInstrument() {
+        return (select.value && select.value !== "__add_new__") ? select.value : null;
+      };
+    }
+
+    // Note-based investment detection chip — Pending/History only (a
+    // transaction's note is what's matched against, and Pending's note
+    // starts empty, so this is effectively inert there until History —
+    // same inherent limit isLendingTransfer/isSavingsNote/
+    // suggestFinancialEvent already have in Pending, see
+    // docs/features/investment-instruments.md). Genuinely separate
+    // mechanism from the Financial Event (SIP) chip above — this one
+    // matches by NOTE TEXT (a one-time fund/stock/gold purchase, no
+    // fixed amount), that one matches by AMOUNT (a recurring SIP) — so
+    // both can show on the same card without conflicting.
+    // Two shapes:
+    // - investmentInstrumentConfident — a known instrument name was
+    //   recognized in the note — a one-tap Yes/No confirm chip.
+    // - investmentInstrumentLooksNew — the note mentions "stock"/"shares"
+    //   etc. but no specific known name — a picker + confirm/no chip.
+    function buildInvestmentChipHtml(txn) {
+      // Deliberately NOT tagged with the "fe-field" class, even though it
+      // wants the same visual shape (buttons still use the shared
+      // "fe-btn" class purely for styling) — setupFinancialEventField
+      // looks up its own field with card.querySelector(".fe-field"),
+      // which only ever finds the FIRST match. If this chip's div also
+      // carried "fe-field" and the Financial Event chip was ABSENT on
+      // this card (feHtml === ""), setupFinancialEventField would
+      // mistakenly grab THIS div instead and double-wire click handlers
+      // onto these buttons. ".fe-field" gave nothing visually beyond
+      // what ".field" + the app's normal label styling already do, so
+      // there's no look lost by leaving it off.
+      if (txn.investmentInstrumentConfident && txn.suggestedInvestmentInstrument) {
+        const name = txn.suggestedInvestmentInstrument;
+        return `
+          <div class="field inv-chip-field">
+            <label>Log as investment: ${escapeHtml(name)}?</label>
+            <div class="type-toggle">
+              <button type="button" class="fe-btn inv-confirm-btn" data-inv="${escapeHtml(name)}">Yes, log it</button>
+              <button type="button" class="fe-btn inv-confirm-btn" data-inv="">No</button>
+            </div>
+          </div>
+        `;
+      }
+      if (txn.investmentInstrumentLooksNew) {
+        return `
+          <div class="field inv-chip-field">
+            <label>This looks like a new investment — which one?</label>
+            <div class="instrument-picker inv-instrument-picker">${instrumentPickerHtml("inv-instrument-select")}</div>
+            <div class="type-toggle" style="margin-top:8px;">
+              <button type="button" class="fe-btn inv-name-confirm-btn">Mark as this investment</button>
+              <button type="button" class="fe-btn inv-confirm-btn" data-inv="">No, not an investment</button>
+            </div>
+          </div>
+        `;
+      }
+      return "";
+    }
+
+    // Wires up whatever buildInvestmentChipHtml rendered into `card`.
+    // Returns a plain object — read `.name` at save time, same pattern
+    // setupFinancialEventField uses. preselectedName pre-confirms a
+    // confident suggestion (mirrors a confident Financial Event chip
+    // also starting pre-selected) — a "looks new" suggestion is never
+    // pre-selected, it genuinely needs a pick. onChange fires on every
+    // selection change so the caller can re-run wireLendingAwareToggle's
+    // update() (a confirmed investment purchase isn't a Need/Want/Saving
+    // decision either — see docs/features/investment-instruments.md).
+    function setupInvestmentInstrumentField(card, preselectedName, onChange) {
+      const selected = { name: preselectedName || null };
+      const invField = card.querySelector(".inv-chip-field");
+      if (!invField) return selected;
+
+      const confirmBtns = invField.querySelectorAll(".inv-confirm-btn");
+      const instrumentPickerEl = invField.querySelector(".inv-instrument-picker");
+      const nameConfirmBtn = invField.querySelector(".inv-name-confirm-btn");
+      const getInstrumentSelection = instrumentPickerEl ? wireInstrumentPicker(instrumentPickerEl) : null;
+
+      function clearActive() {
+        confirmBtns.forEach(function (b) { b.classList.remove("active"); });
+        if (nameConfirmBtn) nameConfirmBtn.classList.remove("active");
+      }
+
+      confirmBtns.forEach(function (btn) {
+        if (preselectedName && btn.dataset.inv === preselectedName) btn.classList.add("active");
+        btn.addEventListener("click", function () {
+          clearActive();
+          btn.classList.add("active");
+          selected.name = btn.dataset.inv || null;
+          if (onChange) onChange();
+        });
+      });
+
+      if (nameConfirmBtn) {
+        nameConfirmBtn.addEventListener("click", function () {
+          const name = getInstrumentSelection && getInstrumentSelection();
+          if (!name) return; // need a pick to confirm — silently no-op, same as EMI/Investment naming above
+          clearActive();
+          nameConfirmBtn.classList.add("active");
+          selected.name = name;
           if (onChange) onChange();
         });
       }
@@ -2956,6 +3341,24 @@
     const pendingStatusEl  = document.getElementById("pendingStatus");
     const pendingListEl    = document.getElementById("pendingList");
     const showMoreButtonEl = document.getElementById("showMoreButton");
+    const pendingInvestmentNoticesEl = document.getElementById("pendingInvestmentNotices");
+
+    // Small, dismissible banner(s) above the Pending list — see this
+    // element's own CSS comment for why Pending needs this at all
+    // (optimistic Save means the card that would normally show an error
+    // is already gone by the time a problem can be reported). Each call
+    // adds its own line rather than replacing a single slot, so saving
+    // several duplicates back-to-back (rare, but possible) doesn't
+    // silently overwrite an earlier warning you hadn't seen yet.
+    function showPendingInvestmentNotice(message) {
+      const notice = document.createElement("div");
+      notice.className = "pending-notice";
+      notice.innerHTML = `<span>${escapeHtml(message)}</span><button type="button" class="pending-notice-dismiss" aria-label="Dismiss">×</button>`;
+      notice.querySelector(".pending-notice-dismiss").addEventListener("click", function () {
+        notice.remove();
+      });
+      pendingInvestmentNoticesEl.appendChild(notice);
+    }
 
     // How many cards to show at once, so a big backlog doesn't mean endless scrolling.
     const PAGE_SIZE = 10;
@@ -3502,6 +3905,14 @@
       // docs/features/financial-events.md.
       const feHtml = buildFinancialEventHtml(txn.suggestedFinancialEvent, txn.suggestedFinancialEventName, txn.financialEventConfident);
 
+      // Note-based investment detection (a one-time fund/stock/gold
+      // purchase, recognized by note text) — genuinely separate from the
+      // Financial Event/SIP chip above, see buildInvestmentChipHtml's own
+      // comment. Almost always "" in Pending (note starts empty) —
+      // becomes meaningful once the same transaction is edited in
+      // History.
+      const invChipHtml = buildInvestmentChipHtml(txn);
+
       card.innerHTML = `
         <div class="pending-top">
           <span class="pending-amount">₹${txn.amount.toLocaleString("en-IN")}</span>
@@ -3517,6 +3928,7 @@
           <select class="category-select">${categoryOptionsHtml}</select>
         </div>
         ${feHtml}
+        ${invChipHtml}
         <div class="field fe-field debt-field" style="display:none"></div>
         ${typeToggleHtml}
         <button type="button" class="save-btn">Save</button>
@@ -3574,14 +3986,28 @@
         updateCategoryVisibility();
       });
 
-      // A loan/repayment, or a confirmed Financial Event, isn't spending
-      // — hide the Need/Want/Saving question entirely for either one.
-      // See wireLendingAwareToggle's comment for why this returns a
-      // function instead of just running once.
+      // Note-based investment instrument — pre-selected only when the
+      // note match is confident (mirrors financialEvent's own
+      // pre-selection rule above). Category/spend are UNCHANGED by this
+      // (still ordinary spending) — only Need/Want/Saving hides for it,
+      // via updateTypeVisibility below. See
+      // docs/features/investment-instruments.md.
+      const initialInvestmentInstrument = (txn.investmentInstrumentConfident && txn.suggestedInvestmentInstrument)
+        ? txn.suggestedInvestmentInstrument
+        : null;
+      const investmentInstrument = setupInvestmentInstrumentField(card, initialInvestmentInstrument, function () {
+        updateTypeVisibility();
+      });
+
+      // A loan/repayment, a confirmed Financial Event, or a confirmed
+      // investment-instrument purchase isn't a Need/Want/Saving decision
+      // — hide the toggle entirely for any of them. See
+      // wireLendingAwareToggle's comment for why this returns a function
+      // instead of just running once.
       const updateTypeVisibility = wireLendingAwareToggle(card, noteInput, function () {
         selectedType = null;
         card.querySelectorAll(".type-field .type-btn").forEach(function (b) { b.classList.remove("active"); });
-      }, function () { return !!financialEvent.type; });
+      }, function () { return !!financialEvent.type; }, function () { return !!investmentInstrument.name; });
 
       // Category doesn't make sense either once this is a confirmed
       // Financial Event — "what kind of spending" isn't a meaningful
@@ -3592,6 +4018,9 @@
       // every category total once column R is set, regardless of what
       // column N holds. Not tied to lending on purpose (unlike the type
       // toggle above) — lending's own category handling is unchanged.
+      // Also NOT tied to the investment-instrument chip — a note-matched
+      // investment purchase is still real spend for Category purposes,
+      // see docs/features/investment-instruments.md.
       function updateCategoryVisibility() {
         if (!categoryField) return;
         if (financialEvent.type) {
@@ -3637,9 +4066,10 @@
         saveCache("pending", allPending);
         card.remove();
 
-        const savedFinancialEvent     = financialEvent.type;
-        const savedFinancialEventName = financialEvent.name;
-        const savedDebtPerson         = selectedDebtPerson;
+        const savedFinancialEvent       = financialEvent.type;
+        const savedFinancialEventName   = financialEvent.name;
+        const savedDebtPerson           = selectedDebtPerson;
+        const savedInvestmentInstrument = investmentInstrument.name;
 
         callAppsScript({
           action:       "saveNote",
@@ -3649,19 +4079,43 @@
           category:     savedCategory,
           counterparty: txn.counterparty,
           type:         savedType,
-          financialEvent:     savedFinancialEvent,
-          financialEventName: savedFinancialEventName,
-          debtPerson:         savedDebtPerson
+          financialEvent:       savedFinancialEvent,
+          financialEventName:   savedFinancialEventName,
+          debtPerson:           savedDebtPerson,
+          investmentInstrument: savedInvestmentInstrument
         })
           .then(function (data) {
             if (!data.ok) {
               restoreAfterFailedSave("Couldn't save (" + data.error + ") — check your connection and tap Save again.");
-            } else if (data.typeRequested && !data.typeSaved) {
+              return;
+            }
+            if (data.typeRequested && !data.typeSaved) {
               // Note/category saved fine, but the Need/Want/Saving
-              // pick specifically didn't (e.g. recognized as a loan/repayment
-              // and correctly excluded) — treat as needing another look
+              // pick specifically didn't (e.g. recognized as a loan/
+              // repayment or a confirmed investment purchase, and
+              // correctly excluded) — treat as needing another look
               // rather than silently losing that half of what you picked.
-              restoreAfterFailedSave("Note & category saved, but the type wasn't (this looks like a loan/repayment) — check and re-save if that's wrong.");
+              restoreAfterFailedSave("Note & category saved, but the type wasn't (looks like a loan/repayment or an investment purchase) — check and re-save if that's wrong.");
+              return;
+            }
+            if (savedInvestmentInstrument && data.investmentLogged === false) {
+              // The card is already gone (this is an optimistic save —
+              // see this handler's own opening comment) and the note/
+              // category (and correctly-skipped Need/Want/Saving) all
+              // genuinely saved fine — only the actual Investments-sheet
+              // row didn't, because autoLogInvestment's duplicate-
+              // avoidance guard decided this looked like a near-
+              // duplicate of something already there (same-ish amount
+              // within 3 days of an existing row). Re-inserting the card
+              // via restoreAfterFailedSave would be misleading here —
+              // nothing about the save itself failed — so this is a
+              // small dismissible banner instead. See
+              // showPendingInvestmentNotice's own comment and
+              // docs/features/investment-instruments.md.
+              showPendingInvestmentNotice(
+                "₹" + txn.amount.toLocaleString("en-IN") + " confirmed as " + savedInvestmentInstrument +
+                ", but wasn't logged to Investments (looks like a duplicate of something already there) — check the Investments tab."
+              );
             }
             // otherwise: fully saved, nothing more to do, it's already off the screen
           })
@@ -5553,9 +6007,16 @@
     const addInvestmentToggleButtonEl = document.getElementById("addInvestmentToggleButton");
     const addInvestmentFormEl   = document.getElementById("addInvestmentForm");
     const investAmountInputEl   = document.getElementById("investAmountInput");
-    const investTypeInputEl     = document.getElementById("investTypeInput");
+    const investInstrumentPickerEl = document.getElementById("investInstrumentPicker");
     const saveInvestmentButtonEl = document.getElementById("saveInvestmentButton");
     const logInvestmentResultEl = document.getElementById("logInvestmentResult");
+
+    // The manual log form's own instrument picker — built once here (the
+    // static HTML only has an empty placeholder div), wired the same way
+    // as every other instrument picker in the app. See
+    // docs/features/investment-instruments.md.
+    investInstrumentPickerEl.innerHTML = instrumentPickerHtml("investInstrumentSelect");
+    const getInvestFormInstrument = wireInstrumentPicker(investInstrumentPickerEl);
 
     // Form starts collapsed behind a toggle button, same pattern as
     // Debts/Savings — added 2026-08-11 so the Investments screen doesn't
@@ -5567,7 +6028,10 @@
 
     // Lets you fix a past investment entry — added 2026-08-10. Investments
     // previously had no way to correct a mistake short of editing the
-    // Sheet directly, unlike Transactions (which has History).
+    // Sheet directly, unlike Transactions (which has History). Reworked
+    // 2026-08-11 to use the same instrument picker as everywhere else,
+    // instead of a free-typed Type box — see
+    // docs/features/investment-instruments.md.
     function buildInvestmentRecentItem(entry) {
       const card = document.createElement("div");
       card.className = "pending-item";
@@ -5577,32 +6041,36 @@
           <span>${escapeHtml(entry.date)}</span>
         </div>
         <div class="field">
-          <label>Type</label>
-          <input type="text" class="invest-edit-type" value="${escapeHtml(entry.type)}">
+          <label>Investment</label>
+          <div class="instrument-picker invest-edit-picker">${instrumentPickerHtml("invest-edit-select")}</div>
         </div>
         <button type="button" class="invest-edit-save-btn">Save</button>
         <div class="pending-result"></div>
       `;
 
       const amountInput = card.querySelector(".invest-edit-amount");
-      const typeInput   = card.querySelector(".invest-edit-type");
+      const pickerEl     = card.querySelector(".invest-edit-picker");
+      const selectEl     = pickerEl.querySelector(".instrument-select");
+      selectEl.innerHTML = instrumentOptionsHtml(entry.type); // pre-select the instrument this entry already holds
+      const getSelectedInstrument = wireInstrumentPicker(pickerEl);
       const saveButton  = card.querySelector(".invest-edit-save-btn");
       const resultEl    = card.querySelector(".pending-result");
 
       saveButton.addEventListener("click", function () {
         const amount = parseFloat(amountInput.value);
-        if (!amount || amount <= 0) {
-          resultEl.textContent = "Enter a valid amount.";
+        const instrumentName = getSelectedInstrument();
+        if (!amount || amount <= 0 || !instrumentName) {
+          resultEl.textContent = "Choose an investment and enter a valid amount.";
           return;
         }
 
         resultEl.textContent = "Saving...";
         callAppsScript({
-          action:  "updateInvestment",
-          idToken: currentUser.idToken,
-          row:     entry.row,
-          type:    typeInput.value.trim(),
-          amount:  amount
+          action:         "updateInvestment",
+          idToken:        currentUser.idToken,
+          row:            entry.row,
+          instrumentName: instrumentName,
+          amount:         amount
         })
           .then(function (data) {
             resultEl.textContent = data.ok ? "Saved." : data.error;
@@ -5644,33 +6112,83 @@
         });
     }
 
+    // Grouped by instrument category (SIPs / One-time Funds / Stocks /
+    // Gold), 2026-08-11 — each breakdown entry now carries its own
+    // `category` (from the backend's InvestmentInstruments list), so
+    // this groups instead of showing one flat list. The bar inside each
+    // card is relative to the largest amount IN THAT SAME GROUP, not the
+    // overall largest — a global max would make every Stock/Gold bar
+    // look tiny next to a big SIP total, even though within Stocks it
+    // might be the biggest holding. See
+    // docs/features/investment-instruments.md.
+    function renderInvestmentBreakdown(breakdown) {
+      investmentsBreakdownEl.innerHTML = "";
+      if (breakdown.length === 0) {
+        investmentsBreakdownEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💹</span><p>No investments logged yet.</p></div>";
+        return;
+      }
+
+      INSTRUMENT_CATEGORY_ORDER.forEach(function (cat) {
+        const entries = breakdown.filter(function (e) { return e.category === cat; });
+        if (entries.length === 0) return;
+
+        const group = document.createElement("div");
+        group.className = "settings-group";
+        const maxAmount = Math.max.apply(null, entries.map(function (e) { return e.amount; }));
+
+        let rowsHtml = "";
+        entries.forEach(function (entry) {
+          const percentOfMax = maxAmount > 0 ? Math.round((entry.amount / maxAmount) * 100) : 0;
+          rowsHtml += `
+            <div class="category-row" style="margin-bottom:8px;">
+              <div class="category-top">
+                <span>${escapeHtml(entry.type)}</span>
+                <span>₹${entry.amount.toLocaleString("en-IN")}</span>
+              </div>
+              <div class="category-bar-track">
+                <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
+              </div>
+            </div>
+          `;
+        });
+
+        group.innerHTML = `<div class="settings-group-title">${escapeHtml(INSTRUMENT_CATEGORY_LABELS[cat] || cat)}</div>${rowsHtml}`;
+        // The last .category-row's own bottom margin already spaces it
+        // from whatever comes after — drop it so it doesn't stack with
+        // the group card's own padding.
+        group.lastElementChild.style.marginBottom = "0";
+        investmentsBreakdownEl.appendChild(group);
+      });
+
+      // Any entry whose category isn't one of the 4 known ones (shouldn't
+      // normally happen, see the getInvestments doc's `null` case) —
+      // shown in its own small group rather than silently dropped, so
+      // nothing invested ever goes missing from the screen.
+      const uncategorized = breakdown.filter(function (e) { return !INSTRUMENT_CATEGORY_ORDER.includes(e.category); });
+      if (uncategorized.length > 0) {
+        const group = document.createElement("div");
+        group.className = "settings-group";
+        let rowsHtml = "";
+        uncategorized.forEach(function (entry) {
+          rowsHtml += `
+            <div class="category-row" style="margin-bottom:8px;">
+              <div class="category-top"><span>${escapeHtml(entry.type)}</span><span>₹${entry.amount.toLocaleString("en-IN")}</span></div>
+            </div>
+          `;
+        });
+        group.innerHTML = `<div class="settings-group-title">Other</div>${rowsHtml}`;
+        group.lastElementChild.style.marginBottom = "0";
+        investmentsBreakdownEl.appendChild(group);
+      }
+    }
+
     function renderInvestments(inv) {
       investmentsStatusEl.textContent = "";
       investmentsContentEl.style.display = "block";
 
       investmentsTotalAmountEl.textContent = "₹" + inv.total.toLocaleString("en-IN");
 
-      investmentsBreakdownEl.innerHTML = "";
-      if (inv.breakdown.length === 0) {
-        investmentsBreakdownEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💹</span><p>No investments logged yet.</p></div>";
-      } else {
-        const maxAmount = inv.breakdown[0].amount;
-        inv.breakdown.forEach(function (entry) {
-          const percentOfMax = maxAmount > 0 ? Math.round((entry.amount / maxAmount) * 100) : 0;
-          const row = document.createElement("div");
-          row.className = "category-row";
-          row.innerHTML = `
-            <div class="category-top">
-              <span>${escapeHtml(entry.type)}</span>
-              <span>₹${entry.amount.toLocaleString("en-IN")}</span>
-            </div>
-            <div class="category-bar-track">
-              <div class="category-bar-fill" style="width:${percentOfMax}%"></div>
-            </div>
-          `;
-          investmentsBreakdownEl.appendChild(row);
-        });
-      }
+      renderInvestmentBreakdown(inv.breakdown);
 
       investmentsRecentEl.innerHTML = "";
       if (inv.recent.length === 0) {
@@ -5684,25 +6202,25 @@
 
     saveInvestmentButtonEl.addEventListener("click", function () {
       const amount = parseFloat(investAmountInputEl.value);
-      const type   = investTypeInputEl.value.trim();
+      const instrumentName = getInvestFormInstrument();
 
-      if (!amount || amount <= 0 || !type) {
-        logInvestmentResultEl.textContent = "Enter a type and a valid amount.";
+      if (!amount || amount <= 0 || !instrumentName) {
+        logInvestmentResultEl.textContent = "Choose an investment and enter a valid amount.";
         return;
       }
 
       logInvestmentResultEl.textContent = "Saving...";
 
       callAppsScript({
-        action:  "logInvestment",
-        idToken: currentUser.idToken,
-        amount:  amount,
-        type:    type
+        action:         "logInvestment",
+        idToken:        currentUser.idToken,
+        amount:         amount,
+        instrumentName: instrumentName
       })
         .then(function (data) {
           if (data.ok) {
             investAmountInputEl.value = "";
-            investTypeInputEl.value = "";
+            investInstrumentPickerEl.querySelector(".instrument-select").value = "";
             logInvestmentResultEl.textContent = "Saved.";
             // Fetch fresh (not cache-first) since the cache is now stale
             callAppsScript({ action: "getInvestments", idToken: currentUser.idToken })
@@ -6442,6 +6960,17 @@
         ? buildFinancialEventHtml(txn.financialEvent, txn.financialEventName, true, true)
         : buildFinancialEventHtml(txn.suggestedFinancialEvent, txn.suggestedFinancialEventName, txn.financialEventConfident, false);
 
+      // Note-based investment detection — see the matching comment in
+      // buildPendingItem. History always has a real note already, so
+      // this is where the chip actually becomes meaningful (unlike
+      // Pending, where the note usually starts empty). There's no
+      // column tracking "already confirmed" for this one (unlike
+      // Financial Events) — see
+      // docs/features/investment-instruments.md's "Open items" — so it
+      // shows the same suggestion again each time you revisit, same as
+      // any other still-live suggestion.
+      const invChipHtml = buildInvestmentChipHtml(txn);
+
       const noteValue = escapeHtml(txn.note || "");
       const counterpartyText = txn.counterparty ? " · " + escapeHtml(txn.counterparty) : "";
 
@@ -6460,6 +6989,7 @@
           <select class="history-category">${categoryOptionsHtml}</select>
         </div>
         ${feHtml}
+        ${invChipHtml}
         <div class="field fe-field debt-field" style="display:none"></div>
         ${typeToggleHtml}
         <button type="button" class="history-save-btn">Save</button>
@@ -6507,16 +7037,29 @@
         updateCategoryVisibility();
       });
 
-      // A loan/repayment, or a confirmed Financial Event, isn't spending
-      // — hide the Need/Want/Saving question entirely for either one.
+      // Note-based investment instrument — same pre-selection rule as
+      // buildPendingItem: pre-confirmed only when the note match is
+      // confident. See docs/features/investment-instruments.md.
+      const initialInvestmentInstrument = (txn.investmentInstrumentConfident && txn.suggestedInvestmentInstrument)
+        ? txn.suggestedInvestmentInstrument
+        : null;
+      const investmentInstrument = setupInvestmentInstrumentField(card, initialInvestmentInstrument, function () {
+        updateTypeVisibility();
+      });
+
+      // A loan/repayment, a confirmed Financial Event, or a confirmed
+      // investment-instrument purchase isn't spending — hide the
+      // Need/Want/Saving question entirely for any of them.
       const updateTypeVisibility = wireLendingAwareToggle(card, noteInput, function () {
         selectedType = null;
         card.querySelectorAll(".type-field .type-btn").forEach(function (b) { b.classList.remove("active"); });
-      }, function () { return !!financialEvent.type; });
+      }, function () { return !!financialEvent.type; }, function () { return !!investmentInstrument.name; });
 
       // Category doesn't make sense either once this is a confirmed
       // Financial Event — see buildPendingItem's matching comment for
-      // the full reasoning.
+      // the full reasoning. NOT tied to the investment-instrument chip
+      // — a note-matched investment purchase is still real spend for
+      // Category purposes.
       function updateCategoryVisibility() {
         if (!categoryField) return;
         if (financialEvent.type) {
@@ -6546,6 +7089,12 @@
       saveButton.addEventListener("click", function () {
         resultEl.textContent = "Saving...";
 
+        // Captured at click time (not re-read inside .then()) so the
+        // response is checked against exactly what was actually sent,
+        // even if the user somehow changes the picker again before the
+        // response comes back.
+        const sentInvestmentInstrument = investmentInstrument.name;
+
         callAppsScript({
           action:       "saveNote",
           idToken:      currentUser.idToken,
@@ -6555,18 +7104,30 @@
           counterparty: txn.counterparty,
           type:         selectedType,
           amount:       parseFloat(amountInput.value) || txn.amount,
-          financialEvent:     financialEvent.type,
-          financialEventName: financialEvent.name,
-          debtPerson:         selectedDebtPerson
+          financialEvent:       financialEvent.type,
+          financialEventName:   financialEvent.name,
+          debtPerson:           selectedDebtPerson,
+          investmentInstrument: sentInvestmentInstrument
         })
           .then(function (data) {
             if (!data.ok) {
               resultEl.textContent = data.error;
             } else if (data.typeRequested && !data.typeSaved) {
               // Note/category saved fine, but the type specifically didn't
-              // (e.g. recognized as a loan/repayment) — say so plainly
-              // rather than a generic "Saved." that would hide the gap.
-              resultEl.textContent = "Note & category saved, but the type wasn't (looks like a loan/repayment).";
+              // (e.g. recognized as a loan/repayment or a confirmed
+              // investment purchase) — say so plainly rather than a
+              // generic "Saved." that would hide the gap.
+              resultEl.textContent = "Note & category saved, but the type wasn't (looks like a loan/repayment or an investment purchase).";
+            } else if (sentInvestmentInstrument && data.investmentLogged === false) {
+              // The note/category (and skipped Need/Want/Saving) all
+              // saved fine, but the actual Investments-sheet row didn't
+              // — autoLogInvestment's duplicate-avoidance guard decided
+              // this looked like a near-duplicate of something already
+              // there (same-ish amount within 3 days). Say so plainly
+              // rather than a generic "Saved." that would hide a real
+              // investment silently never landing in the Investments
+              // tab total. See docs/features/investment-instruments.md.
+              resultEl.textContent = "Saved, but this wasn't logged to Investments (looks like a duplicate of something already there) — check the Investments tab.";
             } else {
               resultEl.textContent = "Saved.";
             }

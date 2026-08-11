@@ -507,6 +507,10 @@ changes:
 - Backend/brain: Google Apps Script + Google Sheets. As of 2026-08-08, the backend source lives in `D:\fin-app\backend` (this repo) and is kept in sync with the live Apps Script project via `clasp` — see "finance-bot backend — current state" below. The original `ronit6050/finance-bot` GitHub repo is old/stale and no longer used.
 
 ## How to work with me
+- **Explain with short examples, not long paragraphs** (confirmed
+  2026-08-11). E.g. instead of a paragraph explaining SIP amount-change
+  handling, say: "SIP goes from ₹2000 to ₹3000 → app asks once, you tap
+  'Nifty 50 SIP' again, done." Keep explanations short and scannable.
 - One step at a time for anything that needs my judgment or that I'm
   actually going to use/experience — this hasn't changed.
 - **Refined 2026-08-11**: "one step at a time" was about me being the one
@@ -1170,6 +1174,100 @@ the user's go-ahead for `clasp deploy`. Full detail:
 [docs/features/savings-v2.md](docs/features/savings-v2.md#fixed-2026-08-11--autologsaving-now-writes-to-the-real-savings-system)
 and
 [docs/features/financial-events.md](docs/features/financial-events.md#fixed-2026-08-11--autologsaving-was-writing-the-old-pot-names).
+
+**Investment Instruments — backend built 2026-08-11: pushed, not yet
+deployed. Frontend (`index.html`) now wired up, same day, by the
+`ui-ux-expert` subagent.** Same fragmentation problem as the
+old Savings pots, but for Investments: the Investments tab used to let
+you type any "Type" text freehand, so the same fund could split into
+two breakdown lines ("Nifty 50" vs "Nifty 50 SIP"). Replaced with a
+fixed, named list of the user's real 15 investments (3 SIPs, 6 one-time
+funds, 5 stocks, 1 gold instrument), same idea as the `Goals` sheet did
+for Savings — new `InvestmentInstruments` sheet
+(`backend/investmentInstruments.js`), auto-created and seeded on first
+use. SIPs are recognized by amount (reuses the existing Rent/EMI
+mechanism, `FinancialEvents`); the other 12 are recognized by note text
+only (`matchInvestmentInstrumentByNote`) — deliberately never by
+amount, since a one-off stock purchase could otherwise get wrongly
+matched to an unrelated SIP that happens to land on the same figure.
+Every write path (manual log, edit, note-match auto-log) now validates
+the instrument name against this fixed list before writing anything,
+which is what actually fixes the fragmentation. Full detail, exact
+action/field contracts for the frontend, and open items:
+[docs/features/investment-instruments.md](docs/features/investment-instruments.md).
+
+**Confirmed 2026-08-11: a note-matched investment (via `investmentInstrument`)
+skips Need/Want/Saving, same as Rent/EMI/a confirmed SIP already do.**
+The first version left this open as a judgment call (Category and the
+spend total stayed normal, but Need/Want/Saving was still being asked) —
+the user resolved it: skip Need/Want/Saving too, buying a stock/fund
+isn't that kind of decision either. Fixed in `saveTransactionNote`
+(`PWA.js`) — a new `investmentInstrumentValid` check added alongside
+the existing lending/Financial-Event/non-spend-transfer exclusions on
+column Q. Category and the spend total are still unaffected — only
+Need/Want/Saving changed. New test:
+`backend/tests/investmentInstrumentSkipsNeedWantSaving.test.js`.
+
+**Frontend pass, done 2026-08-11 (`ui-ux-expert` subagent, `index.html`
+only):** the Investments tab is now grouped into SIP/One-time Fund/
+Stock/Gold cards instead of one flat list; "+ Log an Investment" is now
+a dropdown sourced from the real 15-instrument list (with an inline
+"+ Add new instrument" option) instead of a free-typed box; the SIP
+naming prompt (Financial Event flow) is also now a dropdown pick
+instead of free text (EMI naming was deliberately left as free text,
+out of scope); and Pending/History gained a new note-based investment
+chip (`suggestedInvestmentInstrument`) — a one-tap confirm when
+confident, a picker when "looks new but which one." The
+`isInvestmentInstrumentSelected` getter was added as
+`wireLendingAwareToggle`'s 5th parameter exactly as the doc's "Frontend
+hide-toggle" brief specified, so the toggle now hides live for this
+case too. Full detail:
+[docs/features/investment-instruments.md](docs/features/investment-instruments.md#frontend--what-actually-shipped-2026-08-11-indexhtml-only).
+
+**`change-reviewer` caught one real gap in that frontend pass, fixed
+same day:** `saveTransactionNote`'s response already honestly reports
+`investmentLogged: true/false` (`false` when `autoLogInvestment`'s
+duplicate-avoidance guard skips the actual write — see the next
+paragraph), but the first version of the frontend never read that
+field, so a confirmed investment chip could say "Saved." even when the
+Investments-sheet row silently never landed. Fixed in both save paths
+(History's persistent result line, and a new small dismissible banner
+above the Pending list for its optimistic-save case, since Pending's
+card is already gone from the screen by the time the response comes
+back). Full detail, including why Pending needed a genuinely new small
+UI piece (no toast/banner mechanism existed anywhere in this app before
+this):
+[docs/features/investment-instruments.md](docs/features/investment-instruments.md#a-second-gap-found-by-change-reviewer-not-the-original-frontend-pass-and-fixed-the-same-day).
+
+**Resolved 2026-08-11 (was: "open recommendation, not yet acted on"):**
+`hasLikelyDuplicateInvestment`'s 3-day/similar-amount guard no longer
+applies to the note-based investment-instrument confirm chip — decided
+by the user after `change-reviewer` and `ui-ux-expert` both
+independently flagged it as the wrong trust level, same reasoning as
+the manual "+ Log an Investment" form (which never had this check at
+all): a note-matched confirm is already an explicit, one-tap human
+decision, not an automatic guess. `autoLogInvestment` (`financialEvents.js`)
+gained an optional `skipDuplicateCheck` parameter (default false — every
+existing call, including the Financial Event/SIP auto-log path, is
+unaffected); `saveTransactionNote`'s `investmentInstrument` block now
+passes `true`. Checked carefully whether this makes the frontend's
+`investmentLogged === false` messaging (History's message branch,
+Pending's dismissible banner) unreachable dead code for this specific
+path: practically yes — the only other way `autoLogInvestment` can
+still report `logged:false` is a missing `Investments` sheet, which
+never happens in real use (it's a core, always-present sheet, never
+auto-created). Left that messaging in place as harmless defense-in-depth
+rather than removing it — flagged as a call the user can make either
+way, not decided unilaterally. New test:
+`backend/tests/autoLogInvestmentDuplicateSkip.test.js`. Full detail:
+[docs/features/investment-instruments.md](docs/features/investment-instruments.md#fixed-2026-08-11--duplicate-check-removed-for-note-matched-confirms).
+
+**Still to do for this feature**: run the one-time
+`migrateInvestmentsToNamedInstruments()` function once from the Apps
+Script editor (replaces the Investments sheet's 5 old generic rows with
+the 15 real named ones, and registers the 3 SIPs for amount-matching —
+not run yet); `clasp deploy` once the user gives the go-ahead;
+`git push` the frontend change, also pending the user's go-ahead.
 
 **Minor UI polish, same day, not otherwise documented (2026-08-11,
 `0a5dcf5` + `b7bd568`):** tap-again-to-confirm before settling a debt or

@@ -218,8 +218,25 @@ function hasLikelyDuplicateInvestment(dateStr, amount){
 // Auto-logs a confirmed Investment Financial Event into the real
 // Investments tab, unless a likely-duplicate manual entry already
 // exists nearby (see hasLikelyDuplicateInvestment above).
-function autoLogInvestment(dateStr, name, amount, note){
-  if(hasLikelyDuplicateInvestment(dateStr, amount)) return { logged: false, reason: "duplicate" };
+//
+// skipDuplicateCheck (added 2026-08-11, default false — every EXISTING
+// caller is unaffected) — for the note-matched investment-instrument
+// confirm flow only (PWA.js's saveTransactionNote, the
+// investmentInstrument block). Decided with the user, after both
+// change-reviewer and ui-ux-expert independently flagged this as worth
+// reconsidering: unlike a Financial Event/SIP being auto-detected
+// (where the duplicate check protects against double-counting a
+// pre-existing MANUAL entry the user typed in before this feature
+// existed), a note-matched confirm is already an explicit, one-tap
+// HUMAN decision — the same trust level as the manual "+ Log an
+// Investment" form, which has no duplicate check at all. Silently
+// dropping a real, just-confirmed entry because it happens to be a
+// similar amount to something logged a couple of days earlier (e.g.
+// two separate top-ups of the same stock) does more harm than good.
+// The Financial Event/SIP call site below is UNCHANGED — still always
+// checks for a duplicate.
+function autoLogInvestment(dateStr, name, amount, note, skipDuplicateCheck){
+  if(!skipDuplicateCheck && hasLikelyDuplicateInvestment(dateStr, amount)) return { logged: false, reason: "duplicate" };
   var investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
   if(!investSheet) return { logged: false, reason: "no sheet" };
   investSheet.appendRow([dateStr, name || "Investment", Number(amount) || 0, note || ""]);
