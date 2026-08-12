@@ -141,6 +141,40 @@
       --saving-bg: #e6f1fb; --saving-text: #0c447c;
       --investment-bg: #f2e9fb; --investment-text: #6b2fa0;
 
+      /* Chart-only color tier — added 2026-08-12, round 6 of the dark-mode
+         chart pass. Every round before this used the SAME token for a
+         category badge (text sitting on a tinted --cat-*-bg, a real
+         legibility constraint) and a chart fill (a donut arc or bar with
+         nothing written on top of it — no legibility constraint at all,
+         it only ever needs to read against --chart-track-bg). That shared
+         token meant chart fills were stuck compromising for a constraint
+         they never actually had. These --chart-* tokens are the fix:
+         a second, chart-only tier that can be pushed more vivid/saturated
+         than the badge tokens, wired into categoryBarColor()/
+         NWS_CHART_COLORS/the CC Advisor bar (not into badges — those
+         keep reading --cat-*-text/--need-text/etc, completely untouched).
+         In light mode these simply ALIAS the existing badge/category
+         colors below — i.e. this block changes nothing in light mode,
+         same "light mode untouched" rule as every round before. Dark
+         mode (further down) gives each one its own, more saturated
+         standalone value instead of aliasing. */
+      --chart-food:        var(--cat-food-text);
+      --chart-transport:   var(--cat-transport-text);
+      --chart-bills:       var(--cat-bills-text);
+      --chart-shopping:    var(--cat-shopping-text);
+      --chart-lifestyle:   var(--cat-lifestyle-text);
+      --chart-financial:   var(--cat-financial-text);
+      --chart-income:      var(--cat-income-text);
+      --chart-education:   var(--cat-education-text);
+      --chart-health:      var(--cat-health-text);
+      --chart-other:       var(--cat-other-text);
+      --chart-need:        var(--need-text);
+      --chart-want:        var(--want-text);
+      --chart-saving:      var(--saving-text);
+      --chart-investment:  var(--investment-text);
+      --chart-danger:      var(--color-danger);
+      --chart-warning:     var(--color-warning);
+
       /* Chart "visual weight" tokens — added 2026-08-12, round 3 of the
          dark-mode chart pass. Rounds 1-2 only brightened the hex values
          feeding the donut/bars, but a thin 16-unit ring or a 7px-tall bar
@@ -300,6 +334,48 @@
         --saving-bg: #0f2033; --saving-text: #53A2F6;
         --investment-bg: #241633; --investment-text: #BF89F5;
 
+        /* FIX 2026-08-12, round 6 — user pointed out the actual gap:
+           phone's default is dark mode, and switching to light mode made
+           everything look brighter — some of that gap is inherent (white
+           page vs. near-black page, already discussed and the near-black
+           page is staying), but this part wasn't: every round so far
+           reused the SAME token for a category badge (text on a tinted
+           background — a real legibility constraint) and a chart fill (a
+           donut arc/bar with nothing written on top — no legibility
+           constraint at all). The --chart-* tokens above default to
+           aliasing the badge colors in light mode; here in dark mode they
+           get their own, more saturated standalone values instead, since
+           they only ever need to clear --chart-track-bg (#2E303B) — never
+           a tinted badge background or the near-black page. Every one
+           below is fully saturated (100%) at the LOWEST lightness that
+           still clears 4.5:1 against the track (checked for real, with a
+           roughly 1.5-point lightness buffer, not eyeballed) — genuinely
+           more vivid than the round-4/5 badge colors just above, not just
+           differently-signed. Same hue per token as everywhere else — Food
+           is still orange, Financial is still teal-green, etc. Bills/Other
+           stays neutral/gray (9% saturation) for the same reason as every
+           round before: it's meant to look like "no specific category,"
+           not a real color. Badges (--cat-*-text/--need-text/etc, just
+           above) are completely untouched by this block — verified via
+           diff that every one of those lines is byte-identical to what
+           was already live. */
+        --chart-food:       #FF6D3C;
+        --chart-transport:  #429EFF;
+        --chart-bills:      #A09B8E;
+        --chart-shopping:   #FF6598;
+        --chart-lifestyle:  #9A91FF;
+        --chart-financial:  #00B673;
+        --chart-income:     #67B100;
+        --chart-education:  #D68F00;
+        --chart-health:     #FF6B6B;
+        --chart-other:      #A09B8E;
+        --chart-need:       #67B100;
+        --chart-want:       #D68F00;
+        --chart-saving:     #429EFF;
+        --chart-investment: #BF80FF;
+        --chart-danger:     #FF6B6B;
+        --chart-warning:    #D68F00;
+
         /* FIX 2026-08-12, round 3 — round 2 brightened every chart color's
            hex value, but the user tested it and said the donut/bars still
            read as dark, even though the category badges (built from the
@@ -421,6 +497,30 @@
       --want-bg:   #2e2308; --want-text:   #D79309;
       --saving-bg: #0f2033; --saving-text: #53A2F6;
       --investment-bg: #241633; --investment-text: #BF89F5;
+
+      /* Same round-6 chart-only color tier as the prefers-color-scheme
+         dark block above — see that block's comment for the full "why"
+         (badges and chart fills no longer share one token; chart fills
+         get their own, more saturated values since they never had a
+         legibility-on-tinted-background constraint to begin with). Kept
+         in sync since this is the manual "Dark" theme choice's copy of
+         the same tokens. */
+      --chart-food:       #FF6D3C;
+      --chart-transport:  #429EFF;
+      --chart-bills:      #A09B8E;
+      --chart-shopping:   #FF6598;
+      --chart-lifestyle:  #9A91FF;
+      --chart-financial:  #00B673;
+      --chart-income:     #67B100;
+      --chart-education:  #D68F00;
+      --chart-health:     #FF6B6B;
+      --chart-other:      #A09B8E;
+      --chart-need:       #67B100;
+      --chart-want:       #D68F00;
+      --chart-saving:     #429EFF;
+      --chart-investment: #BF80FF;
+      --chart-danger:     #FF6B6B;
+      --chart-warning:    #D68F00;
 
       /* Same round-3 "visual weight" fix as the prefers-color-scheme dark
          block above — see that block's comment for the full "why"
@@ -2588,8 +2688,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-12-02";
-    const APP_CHANGELOG = "Dark mode chart colors redone properly: earlier attempts just made every color paler, which looks washed-out, not vivid. Every category color and Need/Want/Saving/Investment color is now a genuinely punchy, saturated color instead — same colors mapped to the same things as before, just actually bright the way a color should be, not pastel. Light mode is untouched.";
+    const APP_VERSION = "2026-08-12-03";
+    const APP_CHANGELOG = "Dark mode charts made brighter again: the donut chart and every colored bar now use their own, more vivid color than the small category badges do, since a chart bar never had to stay as gentle as text does. Badges look exactly the same as before — only the charts got brighter. Light mode is untouched.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -3535,12 +3635,18 @@
       return `<span class="category-badge" style="background:var(--cat-${style.css}-bg); color:var(--cat-${style.css}-text);">${icon}${escapeHtml(categoryName)}</span>`;
     }
 
-    // Same category color, as a plain CSS color value (not a badge) — used
-    // to color-code the Analysis progress bar per category instead of
-    // every bar being the same generic accent color.
+    // Same category, as a plain CSS color value for a CHART FILL (not a
+    // badge) — used to color-code the Analysis/Home/CC Advisor bars per
+    // category. Deliberately reads the --chart-* tier (round 6), not
+    // --cat-*-text: a bar fill has no text sitting on top of it, so it
+    // never needed the badge tokens' text-on-tinted-background
+    // legibility constraint, and --chart-* is tuned brighter/more
+    // saturated than the badge colors as a result. categoryBadgeHtml
+    // above (the actual badge) intentionally still reads --cat-*-text —
+    // do not change that one to match this.
     function categoryBarColor(categoryName) {
       const style = CATEGORY_STYLES[categoryName] || CATEGORY_STYLES.Other;
-      return `var(--cat-${style.css}-text)`;
+      return `var(--chart-${style.css})`;
     }
 
     // The matching light background tint for a category — used behind
@@ -4800,13 +4906,18 @@
     const analysisCategoriesEl = document.getElementById("analysisCategories");
     const analysisNeedWantSavingEl = document.getElementById("analysisNeedWantSaving");
 
-    // Same colors the Need/Want/Saving/Investment buttons already use
-    // everywhere else, so the chart reads as the same tag, not a new palette.
+    // Round 6: reads the --chart-* tier, not --need-text/etc directly —
+    // the donut/stack-bar segments are chart fills with no text on top,
+    // same reasoning as categoryBarColor() above. The Need/Want/Saving/
+    // Investment TOGGLE BUTTONS (.type-btn) and typeBadgeHtml() still
+    // read --need-text/etc unchanged, since those really do have text
+    // sitting on the color. Untagged stays --text-muted — it's not a
+    // real category with a hue to make vivid, just "not tagged yet."
     const NWS_CHART_COLORS = {
-      Need:       "var(--need-text)",
-      Want:       "var(--want-text)",
-      Saving:     "var(--saving-text)",
-      Investment: "var(--investment-text)",
+      Need:       "var(--chart-need)",
+      Want:       "var(--chart-want)",
+      Saving:     "var(--chart-saving)",
+      Investment: "var(--chart-investment)",
       Untagged:   "var(--text-muted)"
     };
 
@@ -5221,12 +5332,19 @@
       const cur = cc.current;
       ccCurrentAmountEl.textContent = "₹" + cur.spend.toLocaleString("en-IN");
       ccUsageBarEl.style.width = Math.min(cur.usagePct, 100) + "%";
+      // Round 6: this bar fill reads --chart-danger/--chart-warning (the
+      // chart-only tier), not --color-danger/--color-warning directly —
+      // those two are still used elsewhere as real text (error messages,
+      // status pills), which keeps its own, less-saturated tuning. The
+      // "healthy" state stays on --color-primary unchanged — it's the
+      // app's main accent color, not a per-category chart color, and
+      // wasn't part of the pastel problem the other tokens had.
       let barColor = "var(--color-primary)";
-      if (cur.status === "alert") barColor = "var(--color-danger)";
-      else if (cur.status === "warning") barColor = "var(--color-warning)";
+      if (cur.status === "alert") barColor = "var(--chart-danger)";
+      else if (cur.status === "warning") barColor = "var(--chart-warning)";
       ccUsageBarEl.style.background = barColor;
-      // Same round-3 dark-mode glow as the category bars — `color` has to
-      // match `background` for currentColor to resolve correctly.
+      // `color` has to match `background` for currentColor to resolve
+      // correctly if the glow tokens are ever turned back on.
       ccUsageBarEl.style.color = barColor;
       ccUsageBarEl.classList.add("chart-glow-fill");
       ccProjectionEl.textContent = cur.cycleStart + " → " + cur.cycleEnd +
