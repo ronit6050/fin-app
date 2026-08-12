@@ -196,25 +196,61 @@
          than the badge tokens, wired into categoryBarColor()/
          NWS_CHART_COLORS/the CC Advisor bar (not into badges — those
          keep reading --cat-*-text/--need-text/etc, completely untouched).
-         In light mode these simply ALIAS the existing badge/category
-         colors below — i.e. this block changes nothing in light mode,
-         same "light mode untouched" rule as every round before. Dark
-         mode (further down) gives each one its own, more saturated
-         standalone value instead of aliasing. */
-      --chart-food:        var(--cat-food-text);
-      --chart-transport:   var(--cat-transport-text);
-      --chart-bills:       var(--cat-bills-text);
-      --chart-shopping:    var(--cat-shopping-text);
-      --chart-lifestyle:   var(--cat-lifestyle-text);
-      --chart-financial:   var(--cat-financial-text);
-      --chart-income:      var(--cat-income-text);
-      --chart-education:   var(--cat-education-text);
-      --chart-health:      var(--cat-health-text);
-      --chart-other:       var(--cat-other-text);
-      --chart-need:        var(--need-text);
-      --chart-want:        var(--want-text);
-      --chart-saving:      var(--saving-text);
-      --chart-investment:  var(--investment-text);
+
+         Round 6 (2026-08-12) left light mode aliasing the badge/category
+         text colors below, since at the time that read "good enough."
+         FIX, same day, later round (after the blue/off-white retheme):
+         the user flagged the Home stacked bar + Need/Want/Saving snapshot
+         bar as muddy/dull in light mode specifically. Root cause was the
+         exact same one dark mode already fixed — a badge text color is
+         tuned to sit as readable TEXT on a light tinted background, not
+         to be a bold, standalone bar/donut fill with no text constraint —
+         so it was always going to read weak once spread across a chart,
+         especially against the new warm --surface-inset (#F1ECE1) track.
+         Every value below is now its own standalone hex (same hue family
+         as the badge it used to alias — nothing was reassigned, still
+         "Food = orange", "Transport = blue", etc, and also matching the
+         same hue chosen for that category's dark-mode chart token), with
+         saturation pushed to 78-90% and lightness picked as the HIGHEST
+         value per hue that still clears >=4.5:1 against --chart-track-bg
+         (#F1ECE1) — the mirror image of the dark-mode method (there,
+         lower lightness = more contrast against a dark track, so the
+         LOWEST lightness that still cleared contrast was picked; here,
+         on a light track, lower lightness = more contrast, so the
+         boundary is approached from the light/vivid side instead, then
+         backed off ~1.5 lightness points darker as a safety buffer,
+         same buffer method as the dark-mode round-4 pass). Computed with
+         a script, not eyeballed — every one of the 14 values below clears
+         at least 4.78:1 against #F1ECE1, most closer to 4.8-5.0:1.
+         Confirms the same real WCAG-math constraint already documented
+         for dark mode, mirrored: green/gold hues (Financial, Income/Need,
+         Education/Want) have to go genuinely dark (24-28% lightness) to
+         hit contrast on a light track, since green dominates perceived
+         luminance in the WCAG formula; blue/purple hues (Transport/Saving,
+         Lifestyle, Investment) can stay noticeably lighter/brighter
+         (55-61% lightness) and still hit the same contrast, since blue
+         contributes very little to perceived luminance either way.
+         Bills/Other stays the same low-saturation neutral gray as before
+         (9%, unchanged in spirit) — still meant to read as "no specific
+         category," not a real color. Dark mode (further down, two blocks)
+         is untouched by this — it already has its own standalone values
+         from round 6. Category/Need-Want-Saving badge tokens just below
+         (--cat-*-text, --need-text, etc.) are also untouched — this is
+         a chart-fill-only fix, badges were never reported as a problem. */
+      --chart-food:        #BC380C;
+      --chart-transport:   #0A65C5;
+      --chart-bills:       #6C675A;
+      --chart-shopping:    #CC0D4C;
+      --chart-lifestyle:   #584BED;
+      --chart-financial:   #06734B;
+      --chart-income:      #47700E;
+      --chart-education:   #885D07;
+      --chart-health:      #CD1717;
+      --chart-other:       #6C675A;
+      --chart-need:        #47700E;
+      --chart-want:        #885D07;
+      --chart-saving:      #0A65C5;
+      --chart-investment:  #8C33E6;
       --chart-danger:      var(--color-danger);
       --chart-warning:     var(--color-warning);
 
@@ -2827,8 +2863,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-12-06";
-    const APP_CHANGELOG = "Fixed: some phones' own auto dark-mode was fighting with the app's Light/Dark choice in Settings, causing a half-mismatched look. The app now tells the phone it handles its own colors.";
+    const APP_VERSION = "2026-08-12-07";
+    const APP_CHANGELOG = "Chart colors in light mode (Home bars, Analysis donut/bars, CC usage bar) are now more vivid instead of muddy, matching the fix already applied to dark mode.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
