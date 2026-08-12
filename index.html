@@ -24,7 +24,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <meta name="theme-color" content="#EEF0F3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#F7F3EA" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0B0B0C" media="(prefers-color-scheme: dark)">
 
   <!-- Google's official Sign-In script. This is Google's own code,
@@ -44,28 +44,32 @@
        every one of them in one place instead of hunting through 600+
        lines of rules. */
     :root {
-      /* Colour refresh, 2026-08-11: was a plain generic blue (#2f6fed).
-         Moved to a richer indigo/violet — still reads as "trustworthy
-         blue family" (buttons, links, focus rings, the active progress
-         bar on Analysis) but less like a default framework color.
-         Confirmed via a real contrast check (not a visual skim) against
-         both white and dark cards before shipping — see
-         docs/features/ui-redesign-2026-08.md if present, or the mockup
-         review in chat history. */
-      --color-primary: #5B4FE9;
-      --color-primary-dark: #4638C9;
-      /* Fixed 2026-08-11 (this session) — a real contrast gap found while
-         double-checking the palette above: --color-primary reads fine as
-         TEXT/an icon/a border against a page or card background in both
-         themes, but a SOLID button filled with it and white text is a
-         different pairing — in dark mode the brighter #8B80FF value
-         (needed so links/icons stay legible on near-black) only gives
-         white text about 3.2:1 contrast, under the 4.5:1 minimum for
-         normal-size text. --button-fill is a separate token just for
-         "solid fill behind white button text": same as --color-primary
-         in light mode (already 5.6:1, no issue there), but the darker
-         --color-primary-dark shade in dark mode (4.6:1) — see both dark
-         blocks below. Used by the default `button` rule and `.retry-btn`. */
+      /* Colour refresh, 2026-08-12: moved from the indigo/violet family
+         (#5B4FE9) to a plain, clear BLUE + off-white theme — approved via
+         mockup ("Option A"). #2563EB reads as unambiguous "blue" (not
+         blue-purple like the old indigo), used for buttons, links, focus
+         rings, the active bottom-nav icon, AND now the hero card itself
+         (see --surface-hero below — it's deliberately the exact same
+         blue, unifying what used to be two different signature colors
+         into one). Contrast checked directly against real hex pairs, not
+         eyeballed — see the --button-fill note just below for the
+         white-text-on-solid-fill numbers specifically. */
+      --color-primary: #2563EB;
+      --color-primary-dark: #1D4FBE;
+      /* --button-fill stays a separate token for "solid fill behind white
+         button text" — this pairing is a stricter contrast case than
+         --color-primary used as plain text/an icon/a border, and this
+         project has shipped a button-fill contrast bug before (a
+         light-mode-safe indigo reused as a dark-mode button fill only
+         hit 3.2:1). Checked again for the new blue: white text on
+         --color-primary (#2563EB) in light mode = 5.17:1 — comfortably
+         clears 4.5:1, so light mode can reuse --color-primary directly.
+         Dark mode's brighter accent (#4C8DFF, needed so text/icons stay
+         legible on near-black) only gives white text 3.20:1 — same
+         failure shape as before — so --button-fill again points at the
+         separate, deeper --color-primary-dark shade in dark mode
+         instead (5.05:1) — see both dark blocks below. Used by the
+         default `button` rule and `.retry-btn`. */
       --button-fill: var(--color-primary);
       --color-danger: #d93025;
       --color-warning: #f29900;
@@ -76,32 +80,59 @@
 
       /* Page vs. card vs. inset — three elevation steps. The page is a
          soft tint (not pure white) specifically so cards visibly sit ON
-         something instead of blending into the background. */
-      --bg-page:      #eef0f3;
+         something instead of blending into the background.
+         Colour refresh, 2026-08-12: was a cool grey-blue tint (#eef0f3).
+         Moved to a warm, neutral off-white per the approved blue theme —
+         surface-inset/border-hairline nudged the same warm direction so
+         the neutrals stay coherent with the new page color instead of
+         looking like leftover grey against cream. */
+      --bg-page:      #F7F3EA;
       --surface-card: #ffffff;
-      --surface-inset: #f5f5f6;
-      --border-hairline: #ececee;
+      --surface-inset: #F1ECE1;
+      --border-hairline: #EAE4D6;
 
       /* The hero card (today's spend) and the active bottom-nav pill are
-         deliberately inverted — a high-contrast signature surface rather
-         than blending in with the rest of the light-blue-accent UI.
-         Changed 2026-08-11 from flat near-black (#111214) to a deep
-         forest green, so the light-mode hero visually ties back to the
-         vivid green used for the exact same surface in dark mode below —
-         previously the two modes used unrelated colors (black vs green)
-         for what's meant to be the same "signature" element. */
-      --surface-hero: #0E2620;
+         deliberately a high-contrast signature surface. Colour refresh,
+         2026-08-12: previously an inverted near-black/forest-green,
+         unrelated to the accent color family — now deliberately the
+         SAME blue as --color-primary, so the "signature surface" and
+         "the app's one accent color" are unified into a single color
+         instead of two. White text on this blue = 5.17:1 (see the
+         --button-fill note above for the same underlying number). */
+      --surface-hero: #2563EB;
       --text-on-hero: #ffffff;
-      --text-on-hero-muted: #9FC2B6;
+      /* Muted on-hero text (the small label/sub lines) needs to still
+         clear 4.5:1 against the medium-blue hero, which is a narrower
+         gap than the old near-black hero gave — #EEF3FF (a very light
+         blue-white) lands at 4.65:1, checked directly. */
+      --text-on-hero-muted: #EEF3FF;
 
       --text-primary: #111214;
-      --text-secondary: #6b6c72;
-      /* Was #9a9ca3 — too pale to read comfortably (dates/times/bank
-         names on every Pending/History card use this). Darkened
-         2026-08-11 to read clearly on both white cards and the page's
-         soft-tint background, while staying visibly lighter than
-         --text-secondary. */
-      --text-muted: #6e7079;
+      /* Colour refresh, 2026-08-12: nudged one shade darker from #6b6c72
+         as a direct side-effect of the new, slightly warmer/darker
+         --surface-inset above. This color isn't only used on cards/the
+         page — it's also the default (unselected) text on the Need/Want/
+         Saving/Investment buttons (.type-btn, "the single most-tapped
+         control in the app") and the Reconcile file-picker/More-menu
+         labels, all of which sit directly on --surface-inset. The old
+         value only cleared 4.44:1 there (under the 4.5:1 floor, checked
+         directly) even though it was fine everywhere else. #666870
+         restores real margin: 4.72:1 vs --surface-inset, 5.02:1 vs
+         --bg-page, 5.56:1 vs white cards. */
+      --text-secondary: #666870;
+      /* Was #9a9ca3, darkened once already (2026-08-11) to #6e7079 to
+         read clearly on both white cards and the page's soft-tint
+         background. Nudged one shade darker again, 2026-08-12, as a
+         direct side-effect of the new --bg-page/--surface-inset above:
+         --text-muted isn't only used on the page background, it's also
+         used directly on --surface-inset (e.g. .stat-label on Home's
+         stat cards) — and #6e7079 only cleared 4.44:1 against the new,
+         slightly warmer/darker --surface-inset (under the 4.5:1 floor,
+         checked directly), even though it stayed fine against the page
+         background alone. #63656E restores real margin against all
+         three surfaces it actually sits on: 4.95:1 vs --surface-inset,
+         5.27:1 vs --bg-page, 5.83:1 vs white cards. */
+      --text-muted: #63656E;
 
       --shadow-card: 0 1px 2px rgba(17, 18, 20, 0.05), 0 1px 1px rgba(17, 18, 20, 0.03);
 
@@ -216,16 +247,24 @@
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]),
       :root[data-theme="dark"] {
-        /* Same indigo family as light mode, brightened so it stays
-           legible against the near-black dark card background — this
-           didn't have its own dark-mode value before (it silently reused
-           the light-mode hex), which happened to still be readable for
-           the old plain blue but is worth pinning explicitly now. */
-        --color-primary: #8B80FF;
-        --color-primary-dark: #6F63E0;
+        /* Colour refresh, 2026-08-12: same blue family as light mode, but
+           picked as its own standalone dark-mode value rather than just
+           "the light hex, brightened" — needs to be genuinely vivid
+           (high saturation) rather than merely lighter, same lesson this
+           project already learned the hard way for chart colors on a
+           near-black background (a pastel/light blue reads weak here).
+           #4C8DFF is 100% saturated at ~65% lightness — checked via HSL,
+           not eyeballed — and clears 6.15:1 against the near-black page
+           and 5.49:1 against the dark card background, both as plain
+           text/icon/border use. */
+        --color-primary: #4C8DFF;
+        --color-primary-dark: #1D64F2;
         /* See the light-mode --button-fill comment above — solid button
-           fill needs the darker shade here so white button text stays
-           readable (4.6:1) instead of the brighter #8B80FF (3.2:1). */
+           fill needs the darker, more saturated shade here so white
+           button text stays readable: #1D64F2 gives white text 5.05:1,
+           vs. only 3.20:1 for the brighter #4C8DFF used as plain text/
+           icons above — same failure shape this project hit before with
+           the old indigo, checked again here so it isn't repeated. */
         --button-fill: var(--color-primary-dark);
 
         --bg-page:      #0b0b0c;
@@ -233,17 +272,20 @@
         --surface-inset: #212226;
         --border-hairline: #232427;
 
-        --surface-hero: #1d9e75;
-        /* FIX 2026-08-11 — real, pre-existing readability bug found
-           during a contrast audit, not a new change: the old muted color
-           (#0f6e56) sat almost exactly as dark as the hero background
-           itself (#1d9e75), giving a contrast ratio of about 1.8:1 —
-           the "Spent today" label and the "this month" line under it
-           were very hard to read in dark mode. Both values below are
-           checked against the WCAG contrast formula and land at 4.8:1
-           and 5.5:1 (the accepted minimum for small text is 4.5:1). */
-        --text-on-hero: #021712;
-        --text-on-hero-muted: #03251E;
+        /* Colour refresh, 2026-08-12: the hero card is now the exact same
+           blue as --color-primary (unified with the accent, same as
+           light mode above) instead of the old vivid green. Kept the
+           established pattern of DARK text on this bright hero (rather
+           than white-on-medium-blue, which can't reach 4.5:1 here) —
+           the same shape of fix this token pair already needed once
+           before for the green hero, now redone for blue: checked
+           directly, #071233 (main) lands at 5.74:1 and #142347 (muted)
+           at 4.82:1 against the #4C8DFF hero fill — both clear 4.5:1,
+           and muted is deliberately the lower-contrast/closer-to-the-
+           background of the two, same relationship as before. */
+        --surface-hero: #4C8DFF;
+        --text-on-hero: #071233;
+        --text-on-hero-muted: #142347;
 
         --text-primary: #f2f2f3;
         --text-secondary: #9a9ca3;
@@ -439,10 +481,11 @@
       }
     }
     :root[data-theme="dark"] {
-      /* Same indigo family as light mode / the manual dark block below —
-         kept in sync, same reasoning as the prefers-color-scheme block. */
-      --color-primary: #8B80FF;
-      --color-primary-dark: #6F63E0;
+      /* Same blue family as light mode / the prefers-color-scheme dark
+         block above — kept in sync, same reasoning as always. See that
+         block's comment for the full "why" behind the exact values. */
+      --color-primary: #4C8DFF;
+      --color-primary-dark: #1D64F2;
       /* Same button-fill contrast fix as the prefers-color-scheme block
          above — see that block's comment for the full "why". */
       --button-fill: var(--color-primary-dark);
@@ -452,11 +495,12 @@
       --surface-inset: #212226;
       --border-hairline: #232427;
 
-      --surface-hero: #1d9e75;
-      /* Same contrast fix as the prefers-color-scheme block above — see
-         that block's comment for the full "why". */
-      --text-on-hero: #021712;
-      --text-on-hero-muted: #03251E;
+      /* Same blue-unified hero + dark-on-bright text fix as the
+         prefers-color-scheme block above — see that block's comment for
+         the full "why". */
+      --surface-hero: #4C8DFF;
+      --text-on-hero: #071233;
+      --text-on-hero-muted: #142347;
 
       --text-primary: #f2f2f3;
       --text-secondary: #9a9ca3;
@@ -691,10 +735,15 @@
     }
 
     /* ---------- Home dashboard ---------- */
-    /* Deliberately inverted (near-black on the light page, vivid green on
-       the dark page) — the one high-contrast "signature" surface, rather
-       than another card in the same blue-accent family as everything
-       else. Matches the active bottom-nav pill for the same reason. */
+    /* Colour refresh, 2026-08-12: used to be an inverted near-black/
+       forest-green surface, deliberately a different color family than
+       the rest of the blue-accent UI. Now unified instead — the hero
+       card is filled with the SAME blue as --color-primary in both
+       themes, so it reads as "the app's one accent color, at full
+       strength" rather than a second, separate signature color. Still
+       the one high-contrast standout surface on the page (via the
+       --text-on-hero pairing), matches the active bottom-nav pill for
+       the same reason. */
     .hero-card {
       background-color: var(--surface-hero);
       color: var(--text-on-hero);
@@ -1770,8 +1819,8 @@
     .tab-btn.active .tab-icon {
       background: var(--surface-hero);
       /* Overrides the inherited text-primary color specifically for the
-         icon — it's sitting ON the near-black/green pill now, not on the
-         page background, so it needs the "on-hero" contrast color
+         icon — it's sitting ON the blue hero-colored pill now, not on
+         the page background, so it needs the "on-hero" contrast color
          instead, same as the hero card's own text. */
       color: var(--text-on-hero);
     }
@@ -2755,8 +2804,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-12-04";
-    const APP_CHANGELOG = "Added Demo Mode (Settings → View Demo Mode) — shows the whole app filled with realistic pretend data so you can walk someone through it without exposing your real numbers. Tapping Save/Add while in Demo Mode updates the screen normally but never touches your real Google Sheet; exiting throws every pretend change away and brings your real data back.";
+    const APP_VERSION = "2026-08-12-05";
+    const APP_CHANGELOG = "New look: switched the app's color theme from purple/indigo to blue, with a warmer off-white background in light mode (dark mode still uses the near-black background, just with a brighter blue accent).";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
