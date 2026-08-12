@@ -428,6 +428,84 @@ and dark definition. `APP_VERSION` bumped to `2026-08-12-04`. No
 is one self-contained dispatcher function, not spread across the
 backend.
 
+**Third visual pass — blue + off-white theme (2026-08-12): done,
+deployed live.** User's own colour picks (non-designer, explicit
+preference): white/off-white background + blue as the main colour;
+charts and everything else left to be decided on looks. Two mockup
+rounds shown via the visualize tool before touching code, per the
+"show before building" rule — first a light-mode-only comparison
+(hero card also blue vs. hero kept a separate dark colour — user
+picked "hero also blue," the unified option), then a light+dark pair
+to confirm the dark-mode direction too, since this is a PWA that must
+respect the phone's own system light/dark switch on top of the
+in-app Settings toggle. Built by `ui-ux-expert`:
+- Accent moved from purple/indigo (`#5B4FE9` light / `#8B80FF` dark)
+  to blue (`#2563EB` light / `#4C8DFF` dark).
+- Light-mode page background moved from a cool grey to a warm
+  off-white (`#F7F3EA`); dark mode's near-black page was left as is.
+- The hero card ("today's spend") is now filled with the SAME blue as
+  the accent, in both themes — replacing its previous separate
+  dark-green identity, so there's one signature colour instead of two
+  unrelated ones.
+- Category badges, Need/Want/Saving/Investment tag colours, and chart
+  colours were deliberately left alone in this pass — see the chart
+  fix below for why that turned out to matter.
+`change-reviewer` checked the diff before push: recomputed every
+contrast ratio itself rather than trusting the diff's own comments,
+confirmed both dark-mode CSS blocks stayed in sync, confirmed no
+leftover old-theme hex values anywhere in the file, and specifically
+re-checked the "solid button fill + white text" pairing since that
+exact bug shape shipped once before in this project (2026-08-11,
+the indigo theme) — correctly avoided this time via the existing
+`--button-fill` token. `APP_VERSION` bumped to `2026-08-12-05`.
+
+**Bug found right after shipping — some phones fight the app's own
+colours (2026-08-12): fixed, deployed live.** User reported picking
+Light in Settings but still seeing a half-dark, half-light mismatched
+screen (dark background/cards, but the hero card still correctly
+showing its light-mode white-on-blue look). First fix: added
+`<meta name="color-scheme" content="light dark">` plus a matching CSS
+`color-scheme` property (locked to `light`/`dark` when the user's
+Settings choice sets `data-theme`) — this stops the *browser's* own
+automatic dark-theme heuristic (e.g. Chrome's built-in "force dark for
+web contents") from recolouring the page on top of the app's own
+CSS. Shipped, but didn't fully resolve the user's report. **Real root
+cause**, found by the user after being asked to check: a phone/OS-level
+"force dark for all apps" setting — separate from, and not governed by,
+what a webpage's CSS declares — was recolouring the app underneath the
+browser entirely. Turning that off directly in the phone's own settings
+fixed it; nothing further was needed in the app's code for that specific
+report. The `color-scheme` fix is still a correct, worthwhile addition
+on its own merits (it prevents a real, different failure mode — the
+browser's own force-dark, not the OS's), just wasn't what this
+particular report turned out to be. `APP_VERSION` bumped to
+`2026-08-12-06` for the `color-scheme` fix.
+
+**Light-mode chart colours were muddy — fixed same day, deployed
+live.** Once the theme above was confirmed working, user flagged the
+Home "Where it's going" stacked bar and the Need/Want/Saving snapshot
+bar as dull/muddy in light mode. Root cause: this app already has a
+dedicated `--chart-*` colour tier (added 2026-08-12, "round 6" of an
+earlier dark-mode-only chart pass — see the dark-mode chart-color-fix
+entries further up) specifically because a badge's text colour and a
+large chart fill have different needs — a badge colour is tuned to be
+readable as small text on a light tinted background, not to be a bold
+standalone fill. Dark mode already got its own vivid, standalone
+values in that round; light mode was left aliasing the badge/category
+text colours, "good enough" at the time, but read weak once the page
+background changed to the new warmer off-white above. Fix
+(`ui-ux-expert`): gave light mode its own standalone vivid values for
+all 14 `--chart-*` tokens — same hue family as before per category,
+nothing reassigned — each one computed (not eyeballed) to clear at
+least 4.78:1 contrast against the new `--chart-track-bg` (`#F1ECE1`).
+The same real WCAG-math pattern already seen in the dark-mode round
+showed up again, mirrored: green/gold hues (Financial, Income,
+Education/Want) need to stay genuinely darker to hit contrast on a
+light track; blue/purple hues (Transport/Saving, Lifestyle, Investment)
+can stay brighter and still clear it. Badge colours and both dark-mode
+blocks were left completely untouched — confirmed via diff before
+push. `APP_VERSION` bumped to `2026-08-12-07`.
+
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
 never need to ask for a category, and ALL routine interaction must happen
