@@ -146,8 +146,11 @@ function findMerchantMatch(searchText, memData, exactOnly){
     let score = 0;
 
     if(exactOnly){
-      // Exact match only
-      if(searchText === merchant || searchText.includes(merchant)){
+      // Exact match only — whole-word, not a bare substring (a merchant
+      // named "tea" would otherwise also match inside "team", same bug
+      // class as the lending-word fix elsewhere in this file).
+      const merchantPattern = new RegExp("\\b" + merchant.replace(/ /g, "\\s+") + "\\b");
+      if(searchText === merchant || merchantPattern.test(searchText)){
         score = confidence;
       }
     } else {
@@ -287,7 +290,9 @@ function matchByPattern(note, counterparty, amount, mode){
     return { category:"Financial", subcategory:"Transfer", confidence:70 };
   }
 
-  if(amount <= 100 && (text.includes("tea") || text.includes("coffee") || text.includes("chai"))){
+  // Whole-word match only — a bare substring would also match "tea"
+  // inside "team", same bug class as the lending fix above.
+  if(amount <= 100 && (/\btea\b/.test(text) || /\bcoffee\b/.test(text) || /\bchai\b/.test(text))){
     return { category:"Food", subcategory:"Snacks", confidence:95 };
   }
 

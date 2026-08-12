@@ -760,15 +760,19 @@ thoroughness" rule in action — none of this was touched):
   Apps Script editor's Triggers page, not visible from the code files
   themselves). Deleting these without checking that page first could
   silently break a real, currently-working daily/weekly notification.
-  **Worth a 2-minute manual check**: open the Apps Script editor's
-  Triggers page and confirm which of these actually still have a timer
-  attached — anything that doesn't could be cleaned up next time. (One
-  of these, `sendSundaySavingsReminder`, also still uses the OLD 4-pot
-  Savings math (`EMERGENCY_TARGET`/`getSplitRule`) — if it IS still
-  running on a timer, it would currently be showing stale numbers in
-  that specific weekly message. Not fixed this pass since fixing it
-  means editing still-in-use Telegram code, not removing dead code —
-  flagged here and in `docs/AGENT_BACKLOG.md` for a future pass.)
+  **Checked 2026-08-12** — user shared a screenshot of the real
+  Triggers page. Only 3 triggers actually exist: `checkDebtDueDates`,
+  `processNewTransactions`, `sendDailyCashCheckin` — all legitimate,
+  still needed. `checkCCAlerts` (the function with the old due-date
+  bug) and `sendSundaySavingsReminder` (the one with stale math) are
+  BOTH absent — neither runs automatically, so neither risk is real.
+  `sendWeeklyDebtNudge` is also absent — noted as a possible gap (no
+  automatic weekly debt nudge going out) but not confirmed as a real
+  problem, just flagged since it turned up in the same check. These 4
+  remaining unscheduled functions (`checkCCAlerts`, `sendWeeklyDebtNudge`,
+  `sendSundaySavingsReminder`, plus test/debug helpers below) are now
+  safe to clean up on a future pass since we know for certain nothing
+  triggers them.
 - **A handful of "test"/"debug"/"one-time setup" helper functions**
   (`testSmartCategory`, `testCash`, `testDashboard`, `testTransaction`,
   `testRepaymentPlan`, `debugRepaymentPlan`, `testPushNotification`,
@@ -801,6 +805,22 @@ unused `getSavingsData()` call. Full test suite (all 6 files under
 `backend/tests/`) passes. Deployed live via `clasp deploy` (@302) and
 the commit (`7fb9b0e`) pushed to GitHub on 2026-08-12 — nothing left
 pending on this pass.
+
+**Two "matches part of a word" bugs fixed in `category.js` (2026-08-12).**
+Same bug class as the already-fixed "lent" inside "excellent" problem,
+just never applied to this file: `findMerchantMatch`'s exact-match check
+used `searchText.includes(merchant)` (a bare substring test), so a
+merchant memory entry named e.g. "tea" would also match inside an
+unrelated word like "team." The built-in tea/coffee/chai "Snacks" rule
+in `matchByPattern` had the same gap. Both now use whole-word regex
+matching (`\b...\b`) instead — safe because `normalizeText()` strips
+merchant names down to just letters/digits/spaces first, so no regex
+special characters ever reach the pattern. Verified with a new test,
+`backend/tests/categoryWordBoundary.test.js` (confirms "team meeting"
+no longer false-matches, a real "tea" purchase still matches, a
+multi-word merchant like "swiggy instamart" still matches correctly).
+Pushed to the Apps Script editor draft (`clasp push`) — not yet
+deployed live, needs the user's go-ahead.
 
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/

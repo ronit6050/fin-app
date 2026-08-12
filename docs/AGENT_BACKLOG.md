@@ -28,52 +28,32 @@ has one file to check instead of re-reading old conversations.
   proof by themselves. This is not optional/best-effort — skipping it
   is exactly what caused the repeat mistake.
 
-## My picks, if prioritizing from scratch (2026-08-11)
+## My picks, if prioritizing from scratch (2026-08-12)
 
-1. 🛠️ **EMI-filter risk** (SMS Parser #2) — if this is real, it means
-   real loan payments are silently never logged. Worth a quick check
-   against your next EMI payment before it needs a code fix.
-2. 🛠️ **Old CC Advisor due-date bug** (Backend #1) — same bug already
-   fixed elsewhere; if a background trigger still calls the old code,
-   you could still get a wrong-due-date push notification. A 2-minute
-   check in the Apps Script Triggers page (not something an agent can
-   see) settles this either way.
-
-Everything else below is lower urgency — good for a "next time we're
-doing cleanup" pass, not urgent.
+Everything that used to be here needed a manual Triggers-page check —
+**done 2026-08-12**, user shared the real screenshot. Both flagged
+risks turned out to be non-issues (see "Recently fixed" below). Picks
+below are what's left, lower urgency, good for a "next cleanup pass."
 
 ## Backend (`backend/*.js`)
 
-1. 🔍 **Old CC Advisor (`CCAdvisor.js`, Telegram-era) still has the
-   pre-fix due-date bug** that was already fixed in `PWA.js` on
-   2026-08-10. Since push notifications now go out regardless of
-   whether Telegram is on, an old time-based trigger calling this code
-   could still send a wrong-due-date alert. *Check the Apps Script
-   Triggers page to see if such a trigger still exists — an agent
-   can't see this from the files.*
-2. 🧹 **Two "matches part of a word" bugs in `category.js`**, same bug
-   class as the already-fixed "lent" inside "excellent" bug:
-   `findMerchantMatch`'s exact-match check has no word-boundary
-   protection, and the tea/coffee "Snacks" rule matches "tea" inside
-   ordinary words like "team." Low real-world impact (small amounts
-   only for the second one).
-3. 🧹 **An untested `"SPLIT"` debt type** in `getDebtsData()` counts as
+1. 🧹 **`checkCCAlerts` and `sendWeeklyDebtNudge`, confirmed unscheduled
+   2026-08-12** — no trigger calls either one (verified against the
+   real Triggers page), so both are safe to delete next cleanup pass.
+   `sendWeeklyDebtNudge` being unscheduled might mean you're not
+   getting a weekly debt reminder at all if that was ever intended —
+   💡 worth confirming whether you want that revived as a real feature
+   before just deleting it.
+2. 🧹 **An untested `"SPLIT"` debt type** in `getDebtsData()` counts as
    money owed to you, but nothing currently creates that type — worth
    confirming it's not leftover from an older version before trusting
    it in a money calculation.
-4. 🔍 **A second AI fallback path references an undefined function** —
+3. 🔍 **A second AI fallback path references an undefined function** —
    `sms-parser-backend/Code.js`'s `verifyWithAI()` falls back to
    `callChatGPT()` if an `OPENAI_API_KEY` were ever set instead of
    Gemini's key, but `callChatGPT` is never defined anywhere in the
    file. Harmless today since Gemini's key is the one actually used —
    would only matter if that ever changed.
-5. 🔍 **`sendSundaySavingsReminder` (`SavingsAdvisor.js`) still uses the
-   OLD 4-pot Savings math** (`EMERGENCY_TARGET`/`getSplitRule`) —
-   found during the 2026-08-12 backend cleanup pass. Harmless if the
-   Telegram bot's weekly-reminder trigger isn't actually installed
-   anymore, but if it is, that one weekly message would be showing
-   stale numbers. Same "check the Triggers page" situation as item 2
-   above — worth checking both at the same time.
 
 ## SMS Parser (`sms-parser-backend/Code.js`)
 
@@ -174,6 +154,19 @@ still unanswered as of 2026-08-11.)
      stale every month. Auto-detecting the real credit avoids that.
 
 ## Recently fixed (for reference — full detail stays in CLAUDE.md)
+
+- **2026-08-12**: Fixed two "matches part of a word" bugs in
+  `category.js` (`findMerchantMatch`'s exact-match check, and the
+  tea/coffee/chai Snacks rule) — both now use whole-word matching, same
+  fix pattern as the earlier "lent" inside "excellent" bug. Verified
+  with a new test, `backend/tests/categoryWordBoundary.test.js`. Pushed
+  to the Apps Script editor draft (`clasp push`).
+- **2026-08-12**: Triggers page checked (user shared a real screenshot,
+  3 triggers exist: `checkDebtDueDates`, `processNewTransactions`,
+  `sendDailyCashCheckin` — all legitimate). Confirmed both flagged
+  risks are non-issues: `checkCCAlerts` (old CC due-date bug) and
+  `sendSundaySavingsReminder` (stale Savings math) are both absent from
+  the list, so neither runs automatically, so neither risk is real.
 
 - **2026-08-11**: `autoLogSaving` was writing auto-detected savings
   into old, now-unrecognized Savings bucket names — fixed to write
