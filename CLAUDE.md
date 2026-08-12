@@ -494,9 +494,8 @@ changes:
    its *saved* cache in the background, not what was on screen — now it
    reconciles the visible list immediately too.
 
-**Responsiveness pass, part 2 (2026-08-12): pushed to the Apps Script
-editor, not yet deployed live or git-pushed — needs the user's
-go-ahead.** User reported switching Analysis months, and new
+**Responsiveness pass, part 2 (2026-08-12): done, deployed live.**
+User reported switching Analysis months, and new
 transactions showing up, both still felt slow (3-10 seconds). Root
 cause found: `verifyGoogleIdToken` (`PWA.js`) — the "is this really
 Ronit?" check that runs before EVERY single action — called out to
@@ -521,9 +520,8 @@ Apps Script's own "wake up" latency (inherent to how Apps Script Web
 Apps work, not something in our control) still applies — this won't
 be instant like a native app, but should be noticeably faster across
 every screen, not just Analysis. `APP_VERSION` bumped to
-`2026-08-12-01`. Still to do: commit + `git push` this change, and
-`clasp deploy` to update the live app — both pending the user's
-go-ahead.
+`2026-08-12-01`. Deployed live via `clasp deploy` (@301) and pushed to
+GitHub — nothing left pending on this one.
 
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
