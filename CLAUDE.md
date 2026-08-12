@@ -819,8 +819,8 @@ special characters ever reach the pattern. Verified with a new test,
 `backend/tests/categoryWordBoundary.test.js` (confirms "team meeting"
 no longer false-matches, a real "tea" purchase still matches, a
 multi-word merchant like "swiggy instamart" still matches correctly).
-Pushed to the Apps Script editor draft (`clasp push`) — not yet
-deployed live, needs the user's go-ahead.
+Deployed live via `clasp deploy` (@303) on 2026-08-12 — nothing left
+pending on this fix.
 
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/

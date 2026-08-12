@@ -159,8 +159,8 @@ still unanswered as of 2026-08-11.)
   `category.js` (`findMerchantMatch`'s exact-match check, and the
   tea/coffee/chai Snacks rule) — both now use whole-word matching, same
   fix pattern as the earlier "lent" inside "excellent" bug. Verified
-  with a new test, `backend/tests/categoryWordBoundary.test.js`. Pushed
-  to the Apps Script editor draft (`clasp push`).
+  with a new test, `backend/tests/categoryWordBoundary.test.js`.
+  Deployed live (`@303`).
 - **2026-08-12**: Triggers page checked (user shared a real screenshot,
   3 triggers exist: `checkDebtDueDates`, `processNewTransactions`,
   `sendDailyCashCheckin` — all legitimate). Confirmed both flagged
