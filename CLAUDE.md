@@ -506,6 +506,118 @@ can stay brighter and still clear it. Badge colours and both dark-mode
 blocks were left completely untouched — confirmed via diff before
 push. `APP_VERSION` bumped to `2026-08-12-07`.
 
+**"Feels instant" everywhere — Save/Add/Edit/Delete made optimistic on
+every remaining screen (2026-08-12): done, not yet deployed (pushed to
+GitHub still pending the user's go-ahead).** Pending's Save already
+worked this way (the card disappears the instant you tap Save, the real
+network call happens quietly after — see that handler's own comment,
+searchable as "Pending's Save is optimistic"). User asked to extend the
+same trade-off everywhere else that currently waits for Apps Script to
+respond before the screen changes. Frontend-only (`index.html`), no
+backend touched. What actually changed, screen by screen:
+- **Cash** — adding an entry and editing a past one both update the
+  balance/today's-spend and the Recent list immediately; a failed
+  background save reverts the numbers and reopens the form with what
+  you typed still in it.
+- **Debts** — adding a debt, Settling one, and Recording a partial
+  payment all update the You Owe/Owed to You lists and the "You're
+  Ahead/Behind" totals immediately (a partial payment mirrors the
+  backend's own `applyDebtPayment` rule locally — pays off exactly ->
+  settles it, matches the same math). All revert on failure.
+- **Investments** — logging and editing an entry update the total +
+  category breakdown immediately.
+- **History** — was the one screen that still wasn't optimistic even
+  though it reused Pending's own `saveNote` action; now shows "Saved."
+  the instant you tap it (it doesn't remove the card like Pending does,
+  since History edits a transaction in place) and reverts the fields on
+  failure. Kept the exact same honest partial-failure messages Pending
+  already had (e.g. "note saved but the type wasn't, looks like a loan/
+  repayment").
+- **Savings** — the one screen this needed real judgment on, since its
+  numbers (Emergency/CC Buffer targets, "can afford to buy this goal"
+  thresholds) are computed by the backend, not just simple totals.
+  Withdraw, Manual Split, editing/deleting a past entry, adding a goal,
+  Set Priority, and Mark Purchased are all optimistic, using a new
+  `applySavingsBucketDelta` helper that only ever does plain addition/
+  subtraction on a bucket's saved amount (verified correct with a
+  standalone Node test) — never re-derives the backend's real business
+  logic. Auto Split is the one deliberate exception: it only applies
+  optimistically when a matching real preview (from `previewSavingsSplit`,
+  fetched moments earlier while you were typing the amount) is already
+  in hand, reusing the backend's own just-computed split rather than
+  guessing the Emergency -> CC Buffer -> priority goal -> Free waterfall
+  itself; if the amount changed since that preview, it falls back to the
+  old wait-for-the-server behavior rather than show a guess.
+- **Judgment call, not applied everywhere blindly:** every destructive
+  action here (Settle a debt, delete a Savings entry, Mark Purchased)
+  was still made optimistic, same as Pending's own philosophy — nothing
+  is actually lost, since a failed background save puts the card/entry
+  right back with a clear error, it only *looks* gone for the moment
+  between tapping and a real failure (rare). Settings and Reconcile were
+  deliberately left as-is: Settings is a single form with no list to
+  update instantly, and Reconcile is a batch review-many-then-submit
+  flow, not a single Save button — neither fit this pattern.
+- **A real gap found while verifying, not shipped as a bug**: double-
+  checked that History's transparency messaging (note/category saved
+  but the type wasn't, or an investment note-match didn't log because it
+  looked like a duplicate) still works correctly once made optimistic —
+  it does, since the optimistic step only ever shows "Saved." and the
+  same honest follow-up message still overwrites it if the backend's
+  response says only part of the save actually went through.
+- **Verification**: full JS syntax check (Node), a standalone Node test
+  of `applySavingsBucketDelta` (the reusable Savings math), and a full
+  render pass of Cash/Debts/Investments/Savings/History against Demo
+  Mode's real pretend data (via a temporary, since-removed test-only URL
+  hook that bypassed Google Sign-In — never shipped) confirmed every
+  touched screen renders correctly with no console errors. **The actual
+  click-and-watch-it-revert testing could NOT be done this session** —
+  this environment's browser preview pane never composited a single
+  frame (every `screenshot` call timed out, and every `computer` click
+  reported the target element "outside the viewport (0,0)", even for
+  elements confirmed present and correctly laid out via the DOM/
+  accessibility tree) — a more severe version of this project's
+  already-known preview limitation. Real-device testing of the actual
+  tap-Save-and-see-it-update-instantly (and a forced-offline test of the
+  revert path) is still owed before this is fully confirmed working, the
+  same way the original dark-mode live-toggle repaint was flagged rather
+  than claimed. `APP_VERSION` bumped to `2026-08-12-08`.
+
+**`change-reviewer` caught a real, significant bug before this shipped
+(2026-08-12), fixed same day, still not deployed live.** `renderDebts`/
+`renderCash`/`renderInvestments` never set the new `debtsData`/
+`cashData`/`investmentsData` tracking variables the optimistic-Add code
+depends on — only `renderSavingsGoals` did (`savingsData = s;`, from the
+2026-08-11 Savings rebuild), which is exactly why Savings didn't have
+this problem and the other three did; it was an inconsistency from
+copying the pattern without copying that one line. Since Home
+pre-loads Debts/Cash/Investments in the background on every sign-in
+(`seedTabsFromDashboard`) and that path never touches the real
+`loadDebts()`/`loadCash()`/`loadInvestments()` functions (the only
+place that used to set these variables), the very first "+ Add" you
+tapped on any of those three tabs in a normal session would silently do
+nothing on screen for 1-3 seconds — no error, no "Saving...", nothing —
+until a background refresh quietly caught up. No money was ever wrong
+or lost, but it directly broke the "feels instant" goal at the exact
+moment it mattered most. **Fixed** by adding `debtsData = d;` /
+`cashData = c;` / `investmentsData = inv;` at the top of each render
+function (mirroring `renderSavingsGoals`), so the variable is always
+correct regardless of which caller renders the screen.
+
+Two smaller issues from the same review, also fixed: Savings' "Mark
+Purchased" was calling `applySavingsBucketDelta(savingsData, g.name,
+-g.saved)` on top of already manually zeroing the same goal's `saved`
+field — a double-application landing on a negative number. Currently
+invisible (every screen that reads `savingsData.goals` filters to
+`status === "Active"`, and this goal's status was just set to "Done"),
+but a real data-model bug worth closing properly — removed the
+redundant call. Also, editing a Cash **credit** entry's amount wasn't
+updating the balance figure optimistically (only "debit" edits were) —
+added the matching `credit` branch.
+
+Re-ran the full Node syntax check after these fixes — clean. Still
+**not deployed live and not pushed to GitHub** — same real-device
+verification gap as above still applies, now on top of these fixes too.
+
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
 never need to ask for a category, and ALL routine interaction must happen
