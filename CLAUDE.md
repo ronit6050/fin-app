@@ -377,6 +377,29 @@ untouched, no orphaned/dead code, contrast re-verified independently).
 is a frontend-only (`index.html`) change, no Apps Script/`clasp deploy`
 involved.
 
+**Round 6, same day: chart colors split from badge colors, deployed
+live.** After round 5 shipped, user tested on their phone (whose default
+is dark mode) and compared against manually switching to light mode —
+light mode looked brighter. Explained the part that's inherent (a white
+page will always make colors pop more than a near-black one — not
+fixable without abandoning dark mode, and the user already confirmed via
+a direct background A/B test that the near-black page should stay).
+But one real lever was still unused: every chart fill (donut ring,
+category bars, stack bars, CC Advisor bar) was reading the exact same
+color token as the small category badges — badges need to stay gentle
+since they have text sitting on top, but chart fills have no text on
+them and never needed that restraint. Added a parallel `--chart-*`
+token tier: a plain alias of the badge colors in light mode (zero visual
+change there), and its own more saturated standalone values in dark
+mode, repointed `categoryBarColor()`/`NWS_CHART_COLORS`/CC Advisor's bar
+to read the new tier while badge-rendering code keeps reading the
+original tokens. `change-reviewer` confirmed badge tokens are
+byte-identical to what was live (not just described as unchanged), both
+dark-mode blocks stay in sync, and all 16 new values clear WCAG contrast
+against `--chart-track-bg` (margin is thin — lowest is 4.68:1 against a
+4.5:1 floor — worth remembering if `--chart-track-bg` itself changes in
+a future round). Deployed via `git push`.
+
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
 never need to ask for a category, and ALL routine interaction must happen
