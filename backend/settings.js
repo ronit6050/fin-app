@@ -9,10 +9,13 @@
    MONTHLY_EXPENSES/MONTHLY_SAVE_GOAL in SavingsAdvisor.js). Deliberately
    NOT touching every place those constants are still used — most of
    that is dormant Telegram message-building code (Telegram's off, see
-   CLAUDE.md). getSplitRule()/getStageLabel() in SavingsAdvisor.js now
-   accept optional overrides (falling back to the original constants,
-   so nothing dormant breaks); PWA.js's getCCAdvisorData/getSavingsData/
-   logSavingFromApp are the only things that actually read these live.
+   CLAUDE.md). getSplitRule()/getStageLabel() in SavingsAdvisor.js still
+   accept optional overrides for that reason, but as of 2026-08-12
+   nothing live actually passes them anymore — PWA.js's getSavingsData()/
+   logSavingFromApp() (the only things that used to read these settings
+   live) were removed as dead code, superseded by the Goals-based
+   Savings engine (savingsGoals.js). getCCAdvisorData is now the only
+   thing in PWA.js reading these settings live.
 ============================================ */
 
 function getSettings(){

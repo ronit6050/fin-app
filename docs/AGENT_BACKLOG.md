@@ -29,8 +29,6 @@ has one file to check instead of re-reading old conversations.
    you could still get a wrong-due-date push notification. A 2-minute
    check in the Apps Script Triggers page (not something an agent can
    see) settles this either way.
-3. 🧹 **Delete the old dead Savings code** (Backend #4) — confirmed
-   safe to remove, just hasn't been done yet.
 
 Everything else below is lower urgency — good for a "next time we're
 doing cleanup" pass, not urgent.
@@ -54,20 +52,23 @@ doing cleanup" pass, not urgent.
    money owed to you, but nothing currently creates that type — worth
    confirming it's not leftover from an older version before trusting
    it in a money calculation.
-4. 🧹 **Old 4-pot Savings code is still present but unused** — full
-   detail in `CLAUDE.md`'s Savings section and
-   [docs/features/savings-v2.md](features/savings-v2.md). Confirmed
-   low-risk dead code, safe to delete once double-checked.
-5. 🔍 **A second AI fallback path references an undefined function** —
+4. 🔍 **A second AI fallback path references an undefined function** —
    `sms-parser-backend/Code.js`'s `verifyWithAI()` falls back to
    `callChatGPT()` if an `OPENAI_API_KEY` were ever set instead of
    Gemini's key, but `callChatGPT` is never defined anywhere in the
    file. Harmless today since Gemini's key is the one actually used —
    would only matter if that ever changed.
-6. 💡 Confirm the new Savings screen has a way to fix a typo in a past
+5. 💡 Confirm the new Savings screen has a way to fix a typo in a past
    entry, the way History/Cash/Investments already do (Savings was
    deliberately left out of that pass, see CLAUDE.md's "Full-app gap
    review" note).
+6. 🔍 **`sendSundaySavingsReminder` (`SavingsAdvisor.js`) still uses the
+   OLD 4-pot Savings math** (`EMERGENCY_TARGET`/`getSplitRule`) —
+   found during the 2026-08-12 backend cleanup pass. Harmless if the
+   Telegram bot's weekly-reminder trigger isn't actually installed
+   anymore, but if it is, that one weekly message would be showing
+   stale numbers. Same "check the Triggers page" situation as item 2
+   above — worth checking both at the same time.
 
 ## SMS Parser (`sms-parser-backend/Code.js`)
 
@@ -80,6 +81,9 @@ confirmed bugs; each needs a real example to prove one way or another.
    debit/credit label.
 2. 🔍 Any message containing "emi" is filtered out before it's even
    checked — could be blocking real EMI payment alerts, not just spam.
+   **Deprioritized 2026-08-12**: user confirmed they have no EMI on
+   their account right now, so there's no real message to test this
+   against. Revisit only if/when an EMI ever gets set up.
 3. 🔍 The reward/points/cashback spam filter could catch a real
    transaction confirmation that happens to mention reward points.
 4. 🧹 The "block future-dated reminder" safety check is dead code — an
@@ -126,6 +130,40 @@ still unanswered as of 2026-08-11.)
 4. ❓ CC statement import (`Credit Card.js` → PWA) — user said to pick
    this up after the 18th of the month, when the next bill generates.
 
+## Feature ideas (discussed directly with the user, not agent-found)
+
+1. 💡 **"Safe to spend till next salary"** — Home screen card idea,
+   fully designed in conversation on 2026-08-12, then deliberately
+   deferred: user said the app keeps growing new features and wants it
+   to "build up properly" first — pick this up later, don't start yet.
+   Design agreed, ready to build when picked up:
+   - **Salary auto-detect**: a bank credit landing between the 1st–7th,
+     noticeably bigger than usual spending, gets a confirm chip — same
+     pattern as the Investment Instruments note-match chip —
+     *"Looks like your salary, ₹X — confirm?"* Deliberately always asks,
+     never auto-trusts after a few confirms (unlike Investments), since
+     the user can receive other large amounts in that same date window
+     and a wrong guess here would throw off every number downstream.
+   - **Other income also counts**, not just salary: debt repayments
+     (already tracked by the existing Debts feature — no new detection
+     needed, just include the number), plus a simple yes/no chip for
+     anything else unexpected (dividend, bank interest, other) —
+     *"₹500 credit — count this as extra income?"* No need to know which
+     sub-type, just spendable-or-not.
+   - **Formula**: `money left = confirmed salary + confirmed extra
+     income + debt repayments already tracked − everything spent since
+     salary day`.
+   - Only a **confirmed salary** resets the "days left" countdown; other
+     income just tops up the pot without changing the cycle.
+   - Display: a small Home card, e.g. *"₹1,240/day safe to spend · 9
+     days to go."*
+   - Why salary *amount* alone isn't enough to store as a fixed Settings
+     number: the app has no live bank-balance connection, so it has to
+     reconstruct "money in hand" as salary minus tracked spending since
+     that date — and since the real amount varies with deductions and
+     the date drifts 1st–7th, a fixed manually-entered figure would go
+     stale every month. Auto-detecting the real credit avoids that.
+
 ## Recently fixed (for reference — full detail stays in CLAUDE.md)
 
 - **2026-08-11**: `autoLogSaving` was writing auto-detected savings
@@ -133,3 +171,16 @@ still unanswered as of 2026-08-11.)
   into Free Savings instead, deployed live. See
   [docs/features/savings-v2.md](features/savings-v2.md) and
   [docs/features/financial-events.md](features/financial-events.md).
+- **2026-08-12**: Full backend cleanup pass — old dead Savings code
+  (`getSavingsData`/`logSavingFromApp`/`logCCBufferSaving`/
+  `addWishlistItemFromApp`/`markWishlistPurchasedFromApp` and their 5
+  action routes) and 4 small unused leftovers in `category.js`
+  (`askAI`/`normalize`/`extractKeyword`/`migrateToSmartMemory`)
+  removed. Caught one real near-miss along the way: `getSavingsData()`
+  was still secretly being called by the Home screen's main data
+  function even though its result was never shown — fixed properly
+  (function + call site + the response field all removed together),
+  verified with a new test before pushing. Pushed to the Apps Script
+  editor draft (`clasp push`) — **not yet deployed live**, needs the
+  user's go-ahead. See CLAUDE.md's 2026-08-12 "Backend cleanup pass"
+  entry and [docs/features/savings-v2.md](features/savings-v2.md).

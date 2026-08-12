@@ -239,27 +239,29 @@ data — **not independently re-verified against the live Sheet by this
 documentation pass**, worth a quick manual check next time Savings is
 touched.
 
-## Old system — not deleted, dead code (flagged 2026-08-11)
+## Old system — deleted 2026-08-12 (was: dead code, flagged 2026-08-11)
 
-The original 4-pot functions are still physically present and still
-routed in `PWA.js` (`getSavings` → `getSavingsData()`, `logSaving` →
-`logSavingFromApp()`, `logCCBuffer` → `logCCBufferSaving()`,
-`addWishlistItem` → `addWishlistItemFromApp()`, `markWishlistPurchased`
-→ `markWishlistPurchasedFromApp()`, all still calling
-`getSavingsTotals()`/`getSplitRule()` from `SavingsAdvisor.js`) — but
-**`index.html` no longer calls any of them**; it only calls the new
-`getSavingsGoals`/`saveSavings*`/`withdrawSavings`/`*SavingsGoal`
-actions. Nothing currently reachable from the app can trigger the old
-code, but it's still callable directly (e.g. by hand-crafting a
-request) and its pot math (`Emergency`/`WishList`/`Free`/`CCBuffer`,
-the old 4-value `Destination` set) is now stale relative to the real
-`Destination` values Goals writes. **Not fixed yet — tracked as a
-cleanup item**, see CLAUDE.md's dated note for 2026-08-11. Low risk
-(nothing calls it), but worth deleting `getSavingsData`,
+**Fixed.** The original 4-pot functions (`getSavingsData`,
 `logSavingFromApp`, `logCCBufferSaving`, `addWishlistItemFromApp`,
-`markWishlistPurchasedFromApp` and their `PWA.js` action routes once
-confirmed truly unused, same as `TypeMemory`'s old sheet was left
-renamed-but-not-deleted after that rebuild.
+`markWishlistPurchasedFromApp` in `PWA.js`) and their 5 action routes
+(`getSavings`/`logSaving`/`logCCBuffer`/`addWishlistItem`/
+`markWishlistPurchased`) have been removed, as part of a full backend
+cleanup pass — see CLAUDE.md's 2026-08-12 "Backend cleanup pass" entry
+for the full writeup. **One real catch made during that removal**:
+`getSavingsData()` turned out to NOT be fully unused the way this
+section originally assumed — `getDashboardData()` (the Home screen's
+data source) was still quietly calling it on every load, even though
+`index.html` never reads that particular result (only
+`full.savingsGoals`, this system's real data). Deleting the function
+without also removing that call site would have crashed the Home
+screen. Fixed properly: the function, its call site inside
+`getDashboardData()`, and the now-empty `savings:` field in the
+response were all removed together. Verified with
+`backend/tests/backendCleanup2026-08-12.test.js`. The Telegram-era
+helpers this old code reused (`getSavingsTotals`/`getSplitRule`/
+`getStageLabel` in `SavingsAdvisor.js`) were deliberately left alone —
+still genuinely used by the Telegram bot's own (currently switched off,
+but intentionally kept working) Savings menu.
 
 ## Fixed 2026-08-11 — `autoLogSaving` now writes to the real Savings system
 
@@ -311,5 +313,5 @@ actually counts it; also re-checks duplicate-avoidance still works).
 - Migration (`migrateSavingsToV2`) hasn't been independently
   re-verified against the live Sheet by this documentation pass — see
   note above.
-- Old 4-pot functions/actions are dead code, not yet deleted — see
-  "Old system" above.
+- ~~Old 4-pot functions/actions are dead code, not yet deleted.~~
+  **Fixed 2026-08-12 — see "Old system" above.**

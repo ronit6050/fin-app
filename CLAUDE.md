@@ -694,6 +694,116 @@ every screen, not just Analysis. `APP_VERSION` bumped to
 `2026-08-12-01`. Deployed live via `clasp deploy` (@301) and pushed to
 GitHub — nothing left pending on this one.
 
+**Backend cleanup pass — old unused code removed (2026-08-12): pushed
+to the editor draft (`clasp push`), NOT yet deployed live (needs the
+user's go-ahead for `clasp deploy`).** A full read-through of every
+`backend/*.js` file plus a caller/route check for every function in the
+codebase (built by counting how many places each function name is
+actually used, then hand-checking every low-count one), looking for
+code nothing calls anymore from anywhere the real app can reach —
+plain-English: leftover helper functions from old rebuilds that got
+replaced but never cleaned up, still physically sitting in the files.
+The one hard rule: the live app must not break — anything not 100%
+certain was left in place rather than guessed at. What was removed:
+
+1. **The old 4-pot Savings functions** (`getSavingsData`,
+   `logSavingFromApp`, `logCCBufferSaving`, `addWishlistItemFromApp`,
+   `markWishlistPurchasedFromApp` in `PWA.js`) and their 5 action routes
+   (`getSavings`/`logSaving`/`logCCBuffer`/`addWishlistItem`/
+   `markWishlistPurchased`) — this was the item already flagged as
+   confirmed-safe-to-delete in `docs/features/savings-v2.md` and
+   `docs/AGENT_BACKLOG.md`, now actually done. **One real catch made
+   during this pass, worth remembering**: `getSavingsData()` was NOT
+   fully unused the way the existing notes assumed — `getDashboardData()`
+   (the function behind the Home screen's main data call) was still
+   quietly calling it on every single load, even though `index.html`
+   never actually reads that result (it only reads the newer
+   `full.savingsGoals` field, confirmed by checking every place
+   `index.html` touches `full.`). If this had been deleted as "just
+   dead code" without checking every caller first, the very next Home
+   screen load would have crashed with "getSavingsData is not defined."
+   Fixed properly: removed the function AND its call site inside
+   `getDashboardData()` AND the now-empty `savings:` field it fed into
+   the response. The Telegram-era helper functions these old functions
+   *reused* (`getSavingsTotals`/`getSplitRule`/`getStageLabel` in
+   `SavingsAdvisor.js`) were deliberately left untouched — they're still
+   genuinely used by the old Telegram bot's own Savings menu (currently
+   switched off, but kept working on purpose in case it's ever turned
+   back on with the `TELEGRAM_ENABLED` flag — see below).
+2. **Three small unused leftover functions in `category.js`**: `askAI`,
+   `normalize`, `extractKeyword` — old backward-compatibility wrapper
+   functions around `getCategory()` that, on checking, nothing anywhere
+   actually called (confirmed by searching every file for each name).
+   `getCategory()` itself was kept — it's still a real, live fallback
+   used inside `getSmartCategory()`.
+3. **One completed one-time migration function**, `migrateToSmartMemory()`
+   (`category.js`) — this already did its one job back on 2026-08-08
+   (copying the old `CategoryMemory` sheet into a fresh `SmartMemory`,
+   see the Automation-phase notes above), nothing calls it anymore, and
+   its source sheet (`CategoryMemory`) is already documented as
+   superseded. Removed.
+
+**What was deliberately left alone, and why** (the "safety over
+thoroughness" rule in action — none of this was touched):
+- **All of the Telegram bot's own code** (`handlers.js`, `telegram.js`,
+  and the Telegram-only parts of `CCAdvisor.js`/`DebtAdvisor.js`/
+  `SavingsAdvisor.js`/`Analysis.js`/`Summary.js`/`cash.js`/
+  `AIAdvisor.js`/`Recon.js`/`Credit Card.js`) — the bot is switched off
+  today (`TELEGRAM_ENABLED = false`), but this code is deliberately kept
+  working end-to-end so flipping that one flag back to `true` instantly
+  restores it, exactly as already documented. None of it is truly dead —
+  it's a working feature that's just turned off, not a leftover.
+- **Several "runs on a schedule" functions** (`checkCCAlerts`,
+  `checkDebtDueDates`, `sendWeeklyDebtNudge`, `sendDailyCashCheckin`,
+  `sendSundaySavingsReminder`) — these aren't called by any code file,
+  but that's expected: they're meant to be run automatically by an
+  Apps Script "Trigger" (a scheduled timer set up separately in the
+  Apps Script editor's Triggers page, not visible from the code files
+  themselves). Deleting these without checking that page first could
+  silently break a real, currently-working daily/weekly notification.
+  **Worth a 2-minute manual check**: open the Apps Script editor's
+  Triggers page and confirm which of these actually still have a timer
+  attached — anything that doesn't could be cleaned up next time. (One
+  of these, `sendSundaySavingsReminder`, also still uses the OLD 4-pot
+  Savings math (`EMERGENCY_TARGET`/`getSplitRule`) — if it IS still
+  running on a timer, it would currently be showing stale numbers in
+  that specific weekly message. Not fixed this pass since fixing it
+  means editing still-in-use Telegram code, not removing dead code —
+  flagged here and in `docs/AGENT_BACKLOG.md` for a future pass.)
+- **A handful of "test"/"debug"/"one-time setup" helper functions**
+  (`testSmartCategory`, `testCash`, `testDashboard`, `testTransaction`,
+  `testRepaymentPlan`, `debugRepaymentPlan`, `testPushNotification`,
+  `testNeedWantSaving`, `testExtractNoteFromNarration`, `setupBotMenu`,
+  `setupMenuButton`, `auditInvestmentsSheet`) — these are meant to be
+  run by hand from the Apps Script editor (select the function, click
+  Run) to manually check something works, the same idea as this
+  project's own `backend/tests/*.test.js` files but written for
+  Apps Script instead of Node. Harmless to leave, genuinely still
+  useful for manual troubleshooting later.
+- **`migrateSavingsToV2()`** (`savingsGoals.js`) — a one-time migration
+  function, almost certainly already run (the live Savings screen only
+  works if it was), but `docs/features/savings-v2.md` itself already
+  flags that this was never independently double-checked against the
+  real spreadsheet. Left in place rather than guessed at.
+- Every function in the newer, actively-developed files
+  (`financialEvents.js`, `investmentInstruments.js`, `needWantSaving.js`,
+  `noteMemory.js`, `savingsGoals.js`, `settings.js`) was individually
+  checked and confirmed to have a real, live caller — nothing unused
+  found there.
+
+Verified with a new saved test,
+`backend/tests/backendCleanup2026-08-12.test.js` — proves the 5 removed
+Savings functions and their action routes are genuinely gone from the
+code, proves the 3 removed `category.js` wrappers are gone while
+`getCategory()` still works, and (the most important check) proves
+`getDashboardData()` still runs end-to-end without crashing and every
+real screen's data is still present in its response after removing the
+unused `getSavingsData()` call. Full test suite (all 6 files under
+`backend/tests/`) passes. Pushed to the Apps Script editor draft via
+`clasp push` — **not yet deployed to the live pinned deployment**, and
+not yet pushed to GitHub (there's nothing to push — this pass only
+touched `backend/*.js`, not `index.html`).
+
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
 - **PWA source**: https://github.com/ronit6050/fin-app (this repo, `D:\fin-app` — the one this file lives in). Plain HTML/CSS/JS in `index.html`, plus `sw.js` (service worker), `manifest.json`, `icons/`.
@@ -1475,12 +1585,17 @@ way, not decided unilaterally. New test:
 `backend/tests/autoLogInvestmentDuplicateSkip.test.js`. Full detail:
 [docs/features/investment-instruments.md](docs/features/investment-instruments.md#fixed-2026-08-11--duplicate-check-removed-for-note-matched-confirms).
 
-**Still to do for this feature**: run the one-time
-`migrateInvestmentsToNamedInstruments()` function once from the Apps
-Script editor (replaces the Investments sheet's 5 old generic rows with
-the 15 real named ones, and registers the 3 SIPs for amount-matching —
-not run yet); `clasp deploy` once the user gives the go-ahead;
-`git push` the frontend change, also pending the user's go-ahead.
+**All done, confirmed 2026-08-12.** The one-time
+`migrateInvestmentsToNamedInstruments()` function was run by the user
+from the Apps Script editor on 2026-08-11 (converted the Investments
+sheet's 5 old generic rows to the 15 real named ones, registered the 3
+SIPs for amount-matching). Backend is deployed live — confirmed via
+`clasp deployments`: the pinned deployment
+(`AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v`)
+is at version `@301`, which is a full snapshot taken after version 299
+("Investment Instruments: named instrument list, migration, note-based
+detection"), so that code is live. Frontend is pushed — confirmed via
+`git log`, commit `a5a9d2e`. Nothing left pending on this feature.
 
 **Minor UI polish, same day, not otherwise documented (2026-08-11,
 `0a5dcf5` + `b7bd568`):** tap-again-to-confirm before settling a debt or

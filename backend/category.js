@@ -456,88 +456,12 @@ function handleCategoryCorrection(merchant, correctCategory, correctSubcategory)
 }
 
 
-/* ===============================
-   MIGRATE FROM OLD CategoryMemory
-   Run once manually
-=============================== */
-function migrateToSmartMemory(){
-
-  try{
-
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
-    const oldSheet  = ss.getSheetByName("CategoryMemory");
-    const newSheet  = ss.getSheetByName("SmartMemory");
-
-    if(!oldSheet){ sendMessage("❌ CategoryMemory sheet not found"); return; }
-    if(!newSheet){ sendMessage("❌ SmartMemory sheet not found"); return; }
-
-    const oldData = oldSheet.getDataRange().getValues();
-
-    let migrated = 0;
-    let skipped  = 0;
-
-    // Track seen merchants to avoid duplicates
-    const seen = new Set();
-
-    for(let i = 1; i < oldData.length; i++){
-
-      const note     = (oldData[i][0] || "").toString().trim();
-      const category = (oldData[i][1] || "").toString().trim();
-      const keyword  = (oldData[i][2] || "").toString().trim();
-
-      if(!note || !category) continue;
-
-      // Skip noise entries
-      const noiseWords = ["test","na","n/a","-","misc","unknown","temp"];
-      if(noiseWords.includes(note.toLowerCase())){
-        skipped++;
-        continue;
-      }
-
-      // Skip person names (no spaces = likely keyword, has spaces = likely name)
-      // Use keyword as the merchant key
-      const merchantKey = keyword || note;
-
-      if(seen.has(merchantKey.toLowerCase())){
-        skipped++;
-        continue;
-      }
-
-      seen.add(merchantKey.toLowerCase());
-
-      // Valid category check
-      if(!Object.keys(SMART_CATEGORIES).includes(category)){
-        skipped++;
-        continue;
-      }
-
-      newSheet.appendRow([
-        merchantKey,
-        category,
-        "Other",   // subcategory — unknown from old data
-        75,        // medium-high confidence for migrated data
-        1,
-        new Date()
-      ]);
-
-      migrated++;
-    }
-
-    sendMessage(
-`✅ Migration complete!
-
-Migrated: ${migrated} entries
-Skipped: ${skipped} (duplicates/noise)
-
-SmartMemory is ready.`
-    );
-
-  }catch(err){
-    logAI("MIGRATION_ERROR", err.toString());
-    sendMessage("❌ Migration error: " + err.toString());
-  }
-}
-
+// migrateToSmartMemory() — the one-time "copy old CategoryMemory sheet
+// into the new SmartMemory sheet" migration — was removed 2026-08-12.
+// It already did its one job (see CLAUDE.md's Automation-phase notes,
+// 2026-08-08: SmartMemory was rebuilt clean and the migration already
+// ran), nothing called it anymore, and CategoryMemory itself is already
+// documented as a superseded legacy sheet nothing else reads.
 
 /* ===============================
    NORMALIZE TEXT
@@ -553,27 +477,18 @@ function normalizeText(text){
 
 
 /* ===============================
-   KEEP OLD FUNCTIONS
-   For backward compatibility
+   KEEP OLD FUNCTION
+   getCategory() is still a real fallback path inside getSmartCategory()
+   above (used when there's no counterparty match) — kept. Its old
+   siblings normalize()/extractKeyword()/askAI() were plain unused
+   wrappers around it (nothing anywhere called them) and were removed
+   2026-08-12.
 =============================== */
 function getCategory(note, memory){
   // Redirect to new smart system
   const result = getSmartCategory(note, "", 0, "", null);
   return result.category;
 }
-
-function normalize(text){ return normalizeText(text); }
-
-function extractKeyword(note){
-  const ignore = ["paid","via","upi","to","from","order","txn","ref","no","for"];
-  const words  = note.split(" ");
-  for(let word of words){
-    if(!ignore.includes(word) && word.length > 2) return word;
-  }
-  return words[0];
-}
-
-function askAI(note){ return getCategory(note, null); }
 
 
 /* ===============================

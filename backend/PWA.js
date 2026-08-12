@@ -78,30 +78,12 @@ function handlePwaRequest(data){
     return jsonResponse(applyDebtPayment(data.row, data.amount));
   }
 
-  if(data.action === "getSavings"){
-    return jsonResponse({ ok:true, savings: getSavingsData() });
-  }
-
-  if(data.action === "logSaving"){
-    return jsonResponse(logSavingFromApp(data.amount, data.type, data.note));
-  }
-
-  if(data.action === "logCCBuffer"){
-    return jsonResponse(logCCBufferSaving(data.amount, data.note));
-  }
-
-  if(data.action === "addWishlistItem"){
-    return jsonResponse(addWishlistItemFromApp(data.item, data.price, data.priority));
-  }
-
-  if(data.action === "markWishlistPurchased"){
-    return jsonResponse(markWishlistPurchasedFromApp(data.row, data.item, data.price));
-  }
-
   // ── Savings v2 (Goals-based engine, backend/savingsGoals.js) ──
-  // New, alongside the old actions above (not replacing them yet) —
-  // the old Savings screen keeps working until the new one is built
-  // and the existing pot data has been reconciled into the new shape.
+  // The old 4-pot actions (getSavings/logSaving/logCCBuffer/
+  // addWishlistItem/markWishlistPurchased) were removed 2026-08-12 —
+  // index.html only ever called these new actions, confirmed by
+  // checking every "action:" string the frontend sends. See CLAUDE.md's
+  // backend cleanup entry and docs/features/savings-v2.md.
   // See docs/features/savings-v2.md.
 
   if(data.action === "getSavingsGoals"){
@@ -238,13 +220,14 @@ function getDashboardData(){
   const month   = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, txnData, cashData);
   const cash    = getCashData(cashData);
 
-  // Debts/Savings/Investments each read their own sheet(s) only once
-  // already — no duplication to fix there, just reusing their results.
-  // Savings computed before CC Advisor now, since CC Advisor's
-  // affordability check needs the CC Buffer pot's balance (see
-  // docs/features/cc-advisor.md).
+  // Debts/Investments each read their own sheet(s) only once already —
+  // no duplication to fix there, just reusing their results. (The old
+  // 4-pot getSavingsData() used to be read here too — removed
+  // 2026-08-12, its result was never actually shown by index.html,
+  // which only ever reads full.savingsGoals below. Savings computed
+  // before CC Advisor now, since CC Advisor's affordability check needs
+  // the CC Buffer pot's balance, see docs/features/cc-advisor.md.)
   const debts       = getDebtsData();
-  const savings     = getSavingsData();
   const investments = getInvestmentsData();
 
   // CC Buffer now lives in the new Goals-based Savings engine (see
@@ -279,7 +262,6 @@ function getDashboardData(){
       cash:        cash,
       cc:          cc,
       debts:       debts,
-      savings:     savings,
       savingsGoals: savingsGoalsData,
       investments: investments,
       pending:     pending
@@ -556,137 +538,19 @@ function auditInvestmentsSheet(){
   }
 }
 
-// Reuses getSavingsTotals(), getSplitRule(), getStageLabel() from
-// SavingsAdvisor.js, but passes the live Settings values into the two
-// functions that accept overrides, instead of their hardcoded defaults
-// — see settings.js for why those two specifically were changed and the
-// rest of SavingsAdvisor.js wasn't.
-function getSavingsData(){
-  const ss        = SpreadsheetApp.getActiveSpreadsheet();
-  const savSheet  = ss.getSheetByName("Savings");
-  const wishSheet = ss.getSheetByName("WishList");
-
-  const settings = getSettings();
-  const emergencyTarget = settings.monthlyExpenses * 3;
-
-  const totals     = getSavingsTotals(savSheet);
-  const split      = getSplitRule(totals.emergency, settings.monthlyExpenses, emergencyTarget);
-  const stageLabel = getStageLabel(totals.emergency, settings.monthlyExpenses, emergencyTarget);
-
-  const wishData = wishSheet.getDataRange().getValues();
-  let wishItems = [];
-
-  for(let i = 1; i < wishData.length; i++){
-    const item     = (wishData[i][0] || "").toString().trim();
-    const price    = Number(wishData[i][1]) || 0;
-    const priority = (wishData[i][2] || "Medium").toString().trim();
-    const status   = (wishData[i][3] || "Active").toString().trim();
-
-    if(!item || status !== "Active") continue;
-
-    wishItems.push({
-      row: i + 1,
-      item: item,
-      price: price,
-      priority: priority,
-      canAfford: totals.wishlist >= price,
-      remaining: Math.max(price - totals.wishlist, 0)
-    });
-  }
-
-  return {
-    emergency: totals.emergency,
-    emergencyTarget: emergencyTarget,
-    wishlist: totals.wishlist,
-    free: totals.free,
-    ccBuffer: totals.ccBuffer,
-    stageLabel: stageLabel,
-    splitPct: {
-      emergency: Math.round(split.emergency * 100),
-      wishlist:  Math.round(split.wishlist * 100),
-      free:      Math.round(split.free * 100)
-    },
-    monthlyGoal: settings.monthlySaveGoal,
-    wishItems: wishItems
-  };
-}
-
-// Same split-and-write logic as logSaving() in SavingsAdvisor.js, but
-// skips the Telegram message — the PWA shows the result on screen instead.
-function logSavingFromApp(amount, type, note){
-  try{
-    const savSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Savings");
-
-    const settings = getSettings();
-    const totals = getSavingsTotals(savSheet);
-    const split  = getSplitRule(totals.emergency, settings.monthlyExpenses, settings.monthlyExpenses * 3);
-
-    const emergencyAmt = Math.round(amount * split.emergency);
-    const wishlistAmt  = Math.round(amount * split.wishlist);
-    const freeAmt      = amount - emergencyAmt - wishlistAmt;
-
-    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-
-    if(emergencyAmt > 0) savSheet.appendRow([today, emergencyAmt, type, note, "Emergency"]);
-    if(wishlistAmt  > 0) savSheet.appendRow([today, wishlistAmt, type, note, "WishList"]);
-    if(freeAmt      > 0) savSheet.appendRow([today, freeAmt, type, note, "FreeSavings"]);
-
-    return { ok: true, emergencyAmt: emergencyAmt, wishlistAmt: wishlistAmt, freeAmt: freeAmt };
-  }catch(err){
-    return { ok: false, error: err.toString() };
-  }
-}
-
-// Adds straight to the CC Buffer pot — deliberately separate from
-// logSavingFromApp above, which auto-splits across the other 3 pots.
-// The buffer only grows when you decide to add to it, kept manual on
-// purpose while it's a new habit. See docs/features/cc-advisor.md.
-function logCCBufferSaving(amount, note){
-  try{
-    const savSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Savings");
-    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-    savSheet.appendRow([today, amount, "CC Buffer", note || "", "CCBuffer"]);
-    return { ok: true };
-  }catch(err){
-    return { ok: false, error: err.toString() };
-  }
-}
-
-// Plain-fields version of addWishListItem() — no AI parsing
-function addWishlistItemFromApp(item, price, priority){
-  try{
-    const wishSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("WishList");
-    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-
-    wishSheet.appendRow([item, price, priority || "Medium", "Active", today]);
-
-    return { ok: true };
-  }catch(err){
-    return { ok: false, error: err.toString() };
-  }
-}
-
-// Marks a wish list item purchased and deducts its price from the pot
-function markWishlistPurchasedFromApp(row, item, price){
-  try{
-    const ss       = SpreadsheetApp.getActiveSpreadsheet();
-    const wishSheet = ss.getSheetByName("WishList");
-    const savSheet  = ss.getSheetByName("Savings");
-
-    if(!Number.isInteger(row) || row < 2 || row > wishSheet.getLastRow()){
-      return { ok: false, error: "Invalid row." };
-    }
-
-    const today     = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-
-    wishSheet.getRange(row, 4).setValue("Purchased");
-    savSheet.appendRow([today, -price, "purchase", "Purchased: " + item, "WishList"]);
-
-    return { ok: true };
-  }catch(err){
-    return { ok: false, error: err.toString() };
-  }
-}
+// The old 4-pot Savings functions that used to live here — getSavingsData(),
+// logSavingFromApp(), logCCBufferSaving(), addWishlistItemFromApp(),
+// markWishlistPurchasedFromApp() — were removed 2026-08-12. They were
+// superseded by the Goals-based Savings engine (backend/savingsGoals.js)
+// on 2026-08-11; confirmed (by checking every "action:" string index.html
+// sends, and by checking getDashboardData() below, which also used to call
+// getSavingsData() but never actually used its result) that nothing live
+// called them anymore. Full detail: CLAUDE.md's backend cleanup entry and
+// docs/features/savings-v2.md. The Telegram-era equivalents these reused
+// (getSavingsTotals/getSplitRule/getStageLabel in SavingsAdvisor.js) were
+// deliberately left alone — they're still used by the old Telegram bot
+// code, which is currently switched off but kept working on purpose in
+// case it's ever turned back on.
 
 // Same logic as sendDebtDashboard() in DebtAdvisor.js, but returns plain
 // data instead of a Telegram message.
