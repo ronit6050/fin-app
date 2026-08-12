@@ -18,6 +18,15 @@ has one file to check instead of re-reading old conversations.
   before fixing (fixing blind risks guessing wrong) · 🧹 safe cleanup,
   low urgency · 💡 feature idea, not a bug · ❓ a product decision only
   the user can make.
+- **Hard rule, added 2026-08-12 after this file went stale and cost the
+  user real time:** before presenting ANY item from this file (or from
+  CLAUDE.md) to the user as still-open — whether recommending "what's
+  next" or just answering a question — grep/read the actual current
+  code first to confirm it's still true. This file and CLAUDE.md are
+  written by past sessions and go stale the moment work happens without
+  a doc update; they are a starting point for where to look, never
+  proof by themselves. This is not optional/best-effort — skipping it
+  is exactly what caused the repeat mistake.
 
 ## My picks, if prioritizing from scratch (2026-08-11)
 
@@ -58,11 +67,7 @@ doing cleanup" pass, not urgent.
    Gemini's key, but `callChatGPT` is never defined anywhere in the
    file. Harmless today since Gemini's key is the one actually used —
    would only matter if that ever changed.
-5. 💡 Confirm the new Savings screen has a way to fix a typo in a past
-   entry, the way History/Cash/Investments already do (Savings was
-   deliberately left out of that pass, see CLAUDE.md's "Full-app gap
-   review" note).
-6. 🔍 **`sendSundaySavingsReminder` (`SavingsAdvisor.js`) still uses the
+5. 🔍 **`sendSundaySavingsReminder` (`SavingsAdvisor.js`) still uses the
    OLD 4-pot Savings math** (`EMERGENCY_TARGET`/`getSplitRule`) —
    found during the 2026-08-12 backend cleanup pass. Harmless if the
    Telegram bot's weekly-reminder trigger isn't actually installed
@@ -99,21 +104,25 @@ confirmed bugs; each needs a real example to prove one way or another.
 
 ## UI/UX (`index.html`)
 
-Full detail in `CLAUDE.md`'s Step 11 → "Known UI polish items" block.
+**Re-verified against the live file 2026-08-12** (this whole section was
+stale — 4 of its 7 items were already fixed back on 2026-08-11 by the
+Login/Home/Analysis/More redesign, but nobody removed them here, so they
+were still being recommended as if open a full day later. Wasted the
+user's time/tokens twice in one conversation before this pass — see
+[[feedback_beginner_collaboration]] for the standing rule this created.)
 
-1. 🧹 Inconsistent loading states — 8 screens use a plain spinner, Home
-   and Pending use nicer skeleton placeholders.
-2. 🛠️ No "Retry" button anywhere when a screen fails to load.
-3. 🛠️ The "← Back" link on More sub-screens has an undersized tap
-   target and doesn't match the app's hand-drawn icon style.
-4. 🛠️ Settings screen fields aren't visually grouped by topic.
-5. 🧹 Some style duplication instead of reusing shared classes (Savings
-   manual-split row, `.fe-btn` vs `.type-btn`, repeated inline
-   subheading styles) plus some unused leftover CSS.
-6. 🧹 One stray emoji outside the agreed exceptions ("✨ Updated" in the
-   What's New popup).
-7. 💡 CC Advisor's affordability breakdown could use color-coded
-   visual hierarchy (safe vs. risky), like the CC usage bar already has.
+1. 🧹 One stray emoji outside the agreed exceptions — confirmed still
+   present: `<h3>✨ Updated</h3>` in the What's New popup (index.html,
+   grep `✨ Updated` to find it).
+2. 🧹 Possible style duplication instead of reusing shared classes
+   (Savings manual-split row, `.fe-btn` vs `.type-btn`, repeated inline
+   subheading styles) — **not re-verified this pass**, both class names
+   still exist in the file but whether they're genuinely duplicated
+   logic or already fine wasn't checked closely. Check before trusting.
+3. 💡 CC Advisor's affordability breakdown could use color-coded
+   visual hierarchy (safe vs. risky), like the CC usage bar already has
+   — not re-verified this pass either, small enough to just look at the
+   screen directly rather than grep for it.
 
 ## Product decisions only the user can make
 
@@ -180,7 +189,6 @@ still unanswered as of 2026-08-11.)
   was still secretly being called by the Home screen's main data
   function even though its result was never shown — fixed properly
   (function + call site + the response field all removed together),
-  verified with a new test before pushing. Pushed to the Apps Script
-  editor draft (`clasp push`) — **not yet deployed live**, needs the
-  user's go-ahead. See CLAUDE.md's 2026-08-12 "Backend cleanup pass"
+  verified with a new test before pushing. Deployed live (`@302`) and
+  pushed to GitHub. See CLAUDE.md's 2026-08-12 "Backend cleanup pass"
   entry and [docs/features/savings-v2.md](features/savings-v2.md).
