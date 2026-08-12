@@ -26,6 +26,11 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="theme-color" content="#F7F3EA" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0B0B0C" media="(prefers-color-scheme: dark)">
+  <!-- Tells the phone/browser this page already handles its own light and
+       dark look — without this, some Android phones' built-in "force dark"
+       feature will auto-recolor the page on top of our own colors, causing
+       a half-inverted mismatched look even when Light is picked in Settings. -->
+  <meta name="color-scheme" content="light dark">
 
   <!-- Google's official Sign-In script. This is Google's own code,
        loaded straight from Google — not a 3rd-party company. -->
@@ -44,6 +49,13 @@
        every one of them in one place instead of hunting through 600+
        lines of rules. */
     :root {
+      /* Same reasoning as the <meta name="color-scheme"> tag in <head>:
+         tells the browser this page manages its own light/dark colors, so
+         it won't try to auto-recolor form controls/scrollbars on top of
+         ours. The two data-theme blocks below override this to a single
+         locked value when Light or Dark is explicitly picked in Settings. */
+      color-scheme: light dark;
+
       /* Colour refresh, 2026-08-12: moved from the indigo/violet family
          (#5B4FE9) to a plain, clear BLUE + off-white theme — approved via
          mockup ("Option A"). #2563EB reads as unambiguous "blue" (not
@@ -235,6 +247,13 @@
            shapes don't reliably support box-shadow across browsers). */
       --chart-glow-shadow: none;
       --chart-glow-filter: none;
+    }
+
+    /* Locks the browser to light form controls/scrollbars when Light is
+       explicitly picked in Settings, even if the phone's system setting
+       is Dark — see the base :root color-scheme comment above. */
+    :root[data-theme="light"] {
+      color-scheme: light;
     }
 
     /* ---------- Design tokens — dark mode ----------
@@ -481,6 +500,10 @@
       }
     }
     :root[data-theme="dark"] {
+      /* Locks the browser to dark form controls/scrollbars too, matching
+         the manual choice — see the base :root color-scheme comment. */
+      color-scheme: dark;
+
       /* Same blue family as light mode / the prefers-color-scheme dark
          block above — kept in sync, same reasoning as always. See that
          block's comment for the full "why" behind the exact values. */
@@ -2804,8 +2827,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-12-05";
-    const APP_CHANGELOG = "New look: switched the app's color theme from purple/indigo to blue, with a warmer off-white background in light mode (dark mode still uses the near-black background, just with a brighter blue accent).";
+    const APP_VERSION = "2026-08-12-06";
+    const APP_CHANGELOG = "Fixed: some phones' own auto dark-mode was fighting with the app's Light/Dark choice in Settings, causing a half-mismatched look. The app now tells the phone it handles its own colors.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
