@@ -1507,6 +1507,50 @@
     }
     .status-pill.success { background: var(--bg-success); color: var(--color-success); }
 
+    /* ---------- Demo Mode banner (2026-08-12) ----------
+       Shown across every screen while Demo Mode is on, so it's never
+       ambiguous — to you OR to whoever you're showing the app to —
+       whether the numbers on screen are real. Reuses the existing
+       warning tokens (already has a light+dark pair) instead of
+       inventing new colors just for this. Sticky so it stays visible
+       even if a long screen is scrolled down. The negative margin
+       cancels out the page's own 16px edge padding (see body{padding:16px}
+       above) so the bar reaches the true screen edge instead of sitting
+       inset like a normal card — a deliberately different look from
+       everything else on the page, on purpose, so it reads as a system
+       banner rather than another piece of app content. */
+    .demo-banner {
+      display: none; /* toggled to flex by enterDemoMode()/JS */
+      position: sticky;
+      top: -16px;
+      z-index: 30;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: -16px -16px 16px -16px;
+      padding: 10px 16px;
+      background: var(--bg-warning);
+      border-bottom: 1px solid var(--color-warning);
+    }
+    .demo-banner-text {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--color-warning);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .demo-banner button {
+      width: auto;
+      padding: 6px 14px;
+      font-size: 0.78rem;
+      background-color: var(--color-warning);
+      flex-shrink: 0;
+    }
+    .demo-banner button:hover {
+      background-color: color-mix(in srgb, var(--color-warning) 85%, black 15%);
+    }
+
     /* ---------- Empty states — icon + friendly message, used instead
        of plain gray text wherever a list has nothing in it ---------- */
     .empty-state {
@@ -1997,6 +2041,18 @@
           <button type="button" class="profile-signout-btn" id="signOutButton">Sign out</button>
         </div>
       </div>
+    </div>
+
+    <!-- ===== Demo Mode banner (2026-08-12) — hidden unless Demo Mode
+         is on (see enterDemoMode()/exitDemoMode() in the script below).
+         Sits above everything else so it's never ambiguous whether
+         what's on screen is real or pretend data. ===== -->
+    <div class="demo-banner" id="demoBanner">
+      <span class="demo-banner-text">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M12 9v4M12 16.5h.01"/><path d="M10.3 4.5 2.9 18a1.8 1.8 0 0 0 1.6 2.7h15a1.8 1.8 0 0 0 1.6-2.7L13.7 4.5a1.8 1.8 0 0 0-3.4 0z"/></svg>
+        Demo Mode — pretend data, not yours
+      </span>
+      <button type="button" id="exitDemoModeButton">Exit Demo</button>
     </div>
 
     <!-- ===== Sign-in welcome (2026-08-11) — shown above the actual
@@ -2645,6 +2701,17 @@
 
         <button type="button" id="saveSettingsButton">Save</button>
         <div id="settingsResult" class="pending-result"></div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Demo</div>
+          <p class="pending-status" style="margin-top:-2px;">
+            Fills the whole app with realistic pretend data so you can show
+            someone how it works without exposing your real numbers.
+            Nothing you do in Demo Mode is ever saved to your real
+            Google Sheet — leaving Demo Mode throws it all away.
+          </p>
+          <button type="button" class="secondary" id="viewDemoModeButton" style="margin-top:8px;">View Demo Mode</button>
+        </div>
       </div>
 
       <!-- ===== SUB-SCREEN: History (edit past transactions) ===== -->
@@ -2688,8 +2755,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-12-03";
-    const APP_CHANGELOG = "Dark mode charts made brighter again: the donut chart and every colored bar now use their own, more vivid color than the small category badges do, since a chart bar never had to stay as gentle as text does. Badges look exactly the same as before — only the charts got brighter. Light mode is untouched.";
+    const APP_VERSION = "2026-08-12-04";
+    const APP_CHANGELOG = "Added Demo Mode (Settings → View Demo Mode) — shows the whole app filled with realistic pretend data so you can walk someone through it without exposing your real numbers. Tapping Save/Add while in Demo Mode updates the screen normally but never touches your real Google Sheet; exiting throws every pretend change away and brings your real data back.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -3714,7 +3781,22 @@
     let knownRows = new Set();
 
     // Small helper: sends a request to Apps Script and hands back the parsed reply.
+    //
+    // Demo Mode (2026-08-12) hooks in right here. Every single screen's
+    // loading AND every Save/Add button in this whole app already funnels
+    // through this one function — so when demoMode is on, this never
+    // touches the real network at all. It hands the request to
+    // demoHandleRequest() instead (defined further down, right after this
+    // function), which reads/writes a pretend, in-memory copy of a fixed
+    // dataset and hands back a response shaped exactly like the real
+    // backend would. That means turning demoMode on automatically covers
+    // every tab and every write action with nothing extra to wire up per
+    // screen — including the 15-second "check for new transactions"
+    // polling loop, which will just keep re-serving the same pretend data.
     function callAppsScript(payload) {
+      if (demoMode) {
+        return demoHandleRequest(payload);
+      }
       return fetch(APPS_SCRIPT_URL, {
         method: "POST",
         // text/plain avoids the browser's extra "permission check" request
@@ -3723,6 +3805,913 @@
         body: JSON.stringify(payload)
       }).then(function (response) { return response.json(); });
     }
+
+    // ===========================================================
+    // DEMO MODE (added 2026-08-12)
+    // ===========================================================
+    // Lets you show the app to someone else without exposing your real
+    // financial data, and with zero chance of accidentally writing to
+    // your real Google Sheet. Turned on from Settings → "View Demo Mode".
+    //
+    // How it works: callAppsScript() above already short-circuits to
+    // demoHandleRequest() (right below) whenever demoMode is true, instead
+    // of ever calling fetch(). demoHandleRequest() reads and mutates
+    // demoState — an in-memory COPY of a fixed pretend dataset (built
+    // fresh by demoFreshState() every time you enter Demo Mode) — and
+    // hands back a response shaped exactly like the real backend
+    // (PWA.js/savingsGoals.js) would for the same action. Because every
+    // screen's loading AND every Save/Add button already goes through
+    // callAppsScript, this one hook covers the entire app automatically.
+    //
+    // Tapping Save/Add for real: the pretend data really does change on
+    // screen (removes a Pending card, adds a Debt, moves Savings money,
+    // etc.) — it's meant to FEEL real. It just never leaves your phone.
+    // Exiting Demo Mode does a plain location.reload() — the simplest way
+    // to guarantee every pretend edit is thrown away at once and your
+    // real, signed-in data comes back clean, with no risk of a leftover
+    // pretend value sticking around by accident.
+    let demoMode = false;
+    let demoState = null; // set by demoFreshState() each time you enter Demo Mode
+
+    // ---------- small date helpers, used only to build/format the
+    // pretend dataset — kept separate from the app's real date logic ----------
+    const DEMO_MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    function demoPad2(n) { return n < 10 ? "0" + n : "" + n; }
+    function demoFmtDateShort(d) { return demoPad2(d.getDate()) + " " + DEMO_MONTH_ABBR[d.getMonth()]; }   // "12 Aug" — matches the real backend's "dd MMM"
+    function demoFmtDateLong(d) { return demoFmtDateShort(d) + " " + d.getFullYear(); }                     // "12 Aug 2026" — matches "dd MMM yyyy"
+    function demoFmtTime(d) { return demoPad2(d.getHours()) + ":" + demoPad2(d.getMinutes()); }
+    function demoFmtISODate(d) { return d.getFullYear() + "-" + demoPad2(d.getMonth() + 1) + "-" + demoPad2(d.getDate()); }
+
+    // n days before/after right now (negative n = in the future), with a
+    // specific time of day — used for CC-cycle and Debts dates, which are
+    // naturally relative to "today" rather than tied to a calendar month.
+    function demoDaysAgo(n, hh, mm) {
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      d.setHours(hh == null ? 12 : hh, mm == null ? 0 : mm, 0, 0);
+      return d;
+    }
+    // fraction 0..1 maps to day-of-month 1..today — every everyday demo
+    // transaction always lands inside the CURRENT calendar month this
+    // way, no matter what day of the month it actually is when someone
+    // opens Demo Mode (so Today/Analysis/Home always show something).
+    function demoDayOfThisMonth(fraction, hh, mm) {
+      const now = new Date();
+      const day = Math.max(1, Math.min(now.getDate(), Math.round(1 + fraction * (now.getDate() - 1))));
+      const d = new Date(now.getFullYear(), now.getMonth(), day);
+      d.setHours(hh == null ? 12 : hh, mm == null ? 0 : mm, 0, 0);
+      return d;
+    }
+    // A point partway between two dates — used to spread card swipes
+    // realistically across a real CC billing cycle window.
+    function demoDateWithinRange(start, end, fraction, hh, mm) {
+      const span = end.getTime() - start.getTime();
+      const d = new Date(start.getTime() + span * fraction);
+      d.setHours(hh == null ? 12 : hh, mm == null ? 0 : mm, 0, 0);
+      return d;
+    }
+
+    // Same 19th->18th billing-cycle math as getCCAdvisorData() in
+    // backend/PWA.js — kept here as its own small mirror rather than
+    // trying to share code with a file that only runs on Apps Script's
+    // servers, not in this page.
+    function demoCCCycles() {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const dayOfMonth = today.getDate();
+      const mostRecentClose = new Date(today.getFullYear(), today.getMonth() - (dayOfMonth < 18 ? 1 : 0), 18);
+      const outstandingStart = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() - 1, 19);
+      const outstandingEnd = mostRecentClose;
+      const outstandingDue = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() + 1, 9);
+      const currentStart = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth(), 19);
+      const currentEnd = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() + 1, 18);
+      return { today: today, outstandingStart: outstandingStart, outstandingEnd: outstandingEnd, outstandingDue: outstandingDue, currentStart: currentStart, currentEnd: currentEnd };
+    }
+
+    // -----------------------------------------------------------
+    // THE PRETEND DATASET — tweak the numbers/names below any time you
+    // want Demo Mode to show something different. Everything else in
+    // this file just reads from this one place.
+    // -----------------------------------------------------------
+    function demoFreshState() {
+      // Same fixed 15-instrument list as the real backend's
+      // INVESTMENT_INSTRUMENTS_SEED (backend/investmentInstruments.js) —
+      // copied here so Demo Mode's Investments tab looks and behaves
+      // exactly like the real one, with no network call needed.
+      const investmentInstruments = [
+        { name: "HDFC Nifty 50 Index Fund", category: "SIP", sipAmount: 3000 },
+        { name: "HDFC Mid Cap Fund", category: "SIP", sipAmount: 4000 },
+        { name: "Bandhan Small Cap (Money2Mgt SIP)", category: "SIP", sipAmount: 2000 },
+        { name: "Motilal Oswal Flexi Cap", category: "One-time Fund", sipAmount: null },
+        { name: "HDFC Gold ETF Fund", category: "One-time Fund", sipAmount: null },
+        { name: "Bandhan Small Cap", category: "One-time Fund", sipAmount: null },
+        { name: "ICICI Prudential", category: "One-time Fund", sipAmount: null },
+        { name: "HDFC Silver ETF", category: "One-time Fund", sipAmount: null },
+        { name: "Motilal Oswal Midcap", category: "One-time Fund", sipAmount: null },
+        { name: "Digital Gold", category: "Gold", sipAmount: null },
+        { name: "Tata Motors Commercial", category: "Stock", sipAmount: null },
+        { name: "Tata Steel", category: "Stock", sipAmount: null },
+        { name: "LIC", category: "Stock", sipAmount: null },
+        { name: "HDFC Bank", category: "Stock", sipAmount: null },
+        { name: "Tata Motors Passenger", category: "Stock", sipAmount: null }
+      ];
+
+      // ---- Bank transactions — mirrors the meaningful columns of the
+      // real Transactions sheet. A blank `note` means "still pending"
+      // (unnoted), same meaning as the real sheet. ----
+      const t = [];
+      function addTxn(o) {
+        t.push(Object.assign({
+          bank: "HDFC", mode: "upi", reference: "", counterparty: "", note: "",
+          category: "", needWantSaving: "", financialEvent: "", financialEventName: "",
+          suggestedCategory: "", suggestedType: null, suggestedNote: ""
+        }, o));
+      }
+
+      // Salary, near the start of the month
+      addTxn({ date: demoDayOfThisMonth(0.05, 10, 5), type: "credit", amount: 65000, mode: "neft", counterparty: "Employer Pvt Ltd", note: "Salary", category: "Income" });
+
+      // Rent + EMI + 3 confirmed SIPs — Financial Events, excluded from
+      // day-to-day spend and from the Need/Want/Saving question, same as
+      // the real app (see docs/features/financial-events.md).
+      addTxn({ date: demoDayOfThisMonth(0.15, 9, 0), type: "debit", amount: 15000, counterparty: "Landlord", note: "Monthly rent", category: "Bills", financialEvent: "Rent" });
+      addTxn({ date: demoDayOfThisMonth(0.20, 11, 30), type: "debit", amount: 4000, counterparty: "Bajaj Finserv", note: "laptop emi", category: "Financial", financialEvent: "EMI", financialEventName: "Laptop EMI" });
+      addTxn({ date: demoDayOfThisMonth(0.25, 10, 0), type: "debit", amount: 3000, counterparty: "HDFC Mutual Fund", note: "SIP", category: "Financial", financialEvent: "Investment", financialEventName: "HDFC Nifty 50 Index Fund" });
+      addTxn({ date: demoDayOfThisMonth(0.28, 10, 5), type: "debit", amount: 4000, counterparty: "HDFC Mutual Fund", note: "SIP", category: "Financial", financialEvent: "Investment", financialEventName: "HDFC Mid Cap Fund" });
+      addTxn({ date: demoDayOfThisMonth(0.30, 10, 10), type: "debit", amount: 2000, counterparty: "Bandhan Mutual Fund", note: "SIP", category: "Financial", financialEvent: "Investment", financialEventName: "Bandhan Small Cap (Money2Mgt SIP)" });
+
+      // Everyday spend, already noted (History) — a spread of categories
+      // and Need/Want/Saving tags, including a couple left untagged on
+      // purpose (realistic — not every old transaction gets answered).
+      [
+        { f: 0.08, cat: "Food", cp: "Swiggy", note: "Dinner order", amt: 420, nws: "Want" },
+        { f: 0.10, cat: "Transport", cp: "Uber", note: "Cab to office", amt: 180, nws: "Need" },
+        { f: 0.18, cat: "Food", cp: "BigBasket", note: "Groceries", amt: 2350, nws: "Need" },
+        { f: 0.22, cat: "Bills", cp: "Airtel", note: "Mobile recharge", amt: 599, nws: "Need" },
+        { f: 0.27, cat: "Shopping", cp: "Amazon", note: "Phone case", amt: 499, nws: "Want" },
+        { f: 0.33, cat: "Lifestyle", cp: "PVR Cinemas", note: "Movie night", amt: 650, nws: "Want" },
+        { f: 0.38, cat: "Food", cp: "Zomato", note: "Lunch order", amt: 310, nws: "Want" },
+        { f: 0.42, cat: "Health", cp: "Apollo Pharmacy", note: "Medicines", amt: 540, nws: "Need" },
+        { f: 0.47, cat: "Transport", cp: "IndianOil", note: "Fuel", amt: 1500, nws: "Need" },
+        { f: 0.52, cat: "Shopping", cp: "Myntra", note: "New shoes", amt: 2199, nws: "Want" },
+        { f: 0.58, cat: "Bills", cp: "Tata Power", note: "Electricity bill", amt: 1840, nws: "Need" },
+        { f: 0.63, cat: "Education", cp: "Udemy", note: "Online course", amt: 499, nws: "Saving" },
+        { f: 0.68, cat: "Food", cp: "Domino's", note: "Weekend pizza", amt: 560, nws: "Want" },
+        { f: 0.74, cat: "Lifestyle", cp: "Cult.fit", note: "Gym membership", amt: 1200, nws: "Need" },
+        { f: 0.80, cat: "Shopping", cp: "Decathlon", note: "Sports gear", amt: 850, nws: "" },
+        { f: 0.85, cat: "Other", cp: "IRCTC", note: "Train ticket", amt: 720, nws: "" }
+      ].forEach(function (e) {
+        addTxn({ date: demoDayOfThisMonth(e.f, 13, 20), type: "debit", amount: e.amt, counterparty: e.cp, note: e.note, category: e.cat, needWantSaving: e.nws || "" });
+      });
+
+      // Card swipes, positioned inside the real CC billing cycles
+      // (19th -> 18th) so CC Advisor tells a coherent story regardless
+      // of what day it actually is when Demo Mode is opened.
+      const cyc = demoCCCycles();
+      [
+        { f: 0.10, cat: "Shopping", cp: "Amazon", note: "Headphones", amt: 3499 },
+        { f: 0.30, cat: "Lifestyle", cp: "BookMyShow", note: "Concert tickets", amt: 2400 },
+        { f: 0.45, cat: "Food", cp: "Zomato", note: "Dinner", amt: 860 },
+        { f: 0.55, cat: "Shopping", cp: "Myntra", note: "Jacket", amt: 3200 },
+        { f: 0.70, cat: "Bills", cp: "Airtel", note: "Broadband bill", amt: 1499 },
+        { f: 0.85, cat: "Lifestyle", cp: "Cult.fit", note: "Gear", amt: 1200 },
+        { f: 0.95, cat: "Shopping", cp: "Decathlon", note: "Running shoes", amt: 2600 }
+      ].forEach(function (e) {
+        addTxn({ date: demoDateWithinRange(cyc.outstandingStart, cyc.outstandingEnd, e.f, 15, 0), mode: "card-hdfc", type: "debit", amount: e.amt, counterparty: e.cp, note: e.note, category: e.cat, needWantSaving: "Want" });
+      });
+      [
+        { f: 0.15, cat: "Food", cp: "Swiggy", note: "Lunch", amt: 380 },
+        { f: 0.40, cat: "Shopping", cp: "Amazon", note: "Books", amt: 899 },
+        { f: 0.65, cat: "Lifestyle", cp: "Netflix", note: "Subscription", amt: 649 },
+        { f: 0.85, cat: "Food", cp: "Starbucks", note: "Coffee", amt: 410 }
+      ].forEach(function (e) {
+        addTxn({ date: demoDateWithinRange(cyc.currentStart, cyc.today, e.f, 12, 30), mode: "card-hdfc", type: "debit", amount: e.amt, counterparty: e.cp, note: e.note, category: e.cat, needWantSaving: "Want" });
+      });
+
+      // Still-unnoted transactions — what the Pending tab shows, dated
+      // very recently so the demo feels like "just happened."
+      [
+        { d: 1, h: 9, cp: "Blinkit", amt: 640, sc: "Food", st: "Need", sn: "Groceries" },
+        { d: 0, h: 13, cp: "Ola", amt: 220, sc: "Transport", st: "Need", sn: "Cab ride" },
+        { d: 0, h: 19, cp: "Swiggy", amt: 355, sc: "Food", st: "Want", sn: "Dinner order" },
+        { d: 2, h: 11, cp: "Flipkart", amt: 1299, sc: "Shopping", st: "Want", sn: "" },
+        { d: 1, h: 20, cp: "BookMyShow", amt: 500, sc: "Lifestyle", st: "Want", sn: "Movie tickets" },
+        { d: 0, h: 8, cp: "Jio", amt: 399, sc: "Bills", st: "Need", sn: "Recharge" }
+      ].forEach(function (p) {
+        addTxn({ date: demoDaysAgo(p.d, p.h, 15), type: "debit", amount: p.amt, counterparty: p.cp, note: "", category: "", suggestedCategory: p.sc, suggestedType: p.st, suggestedNote: p.sn });
+      });
+
+      t.sort(function (a, b) { return a.date - b.date; }); // oldest first, like a real appended sheet
+      t.forEach(function (row, i) { row.row = i + 2; });    // row 1 = header, same convention as the real sheet
+
+      // ---- Cash entries ----
+      const cash = [
+        { f: 0.12, type: "debit", amt: 150, note: "Auto rickshaw", cat: "Transport", nws: "Need" },
+        { f: 0.30, type: "debit", amt: 80, note: "Tea and snacks", cat: "Food", nws: "Want" },
+        { f: 0.50, type: "credit", amt: 2000, note: "Cash gift", cat: "Income", nws: "" },
+        { f: 0.65, type: "debit", amt: 300, note: "Local market", cat: "Food", nws: "Need" },
+        { f: 0.82, type: "debit", amt: 120, note: "Parking", cat: "Transport", nws: "Need" }
+      ].map(function (e) { return { date: demoDayOfThisMonth(e.f, 17, 0), type: e.type, amount: e.amt, note: e.note, category: e.cat, needWantSaving: e.nws }; });
+
+      // ---- Debts — a mix of lent/borrowed, one already settled ----
+      const debts = [
+        { date: demoDaysAgo(20), person: "Rahul", type: "LENT", amount: 1500, note: "Movie tickets", dueDate: demoDaysAgo(-5), status: "Pending" },
+        { date: demoDaysAgo(12), person: "Priya", type: "BORROWED", amount: 2000, note: "Dinner split", dueDate: demoDaysAgo(3), status: "Pending" },
+        { date: demoDaysAgo(35), person: "Amit", type: "LENT", amount: 800, note: "Cab fare", dueDate: null, status: "Settled" }
+      ];
+
+      // ---- Savings — Emergency + a recurring CC Buffer goal + one
+      // Wish List item (partially funded) + a little Free Savings ----
+      const goals = [
+        { name: "CC Buffer", type: "Recurring", target: 0, status: "Active", priority: false, dateAdded: demoDaysAgo(60) },
+        { name: "New Phone", type: "OneTime", target: 40000, status: "Active", priority: true, dateAdded: demoDaysAgo(40) }
+      ];
+      const savingsEntries = [
+        { date: demoDaysAgo(50), amount: 12000, type: "manual", note: "Starting balance", destination: "Emergency" },
+        { date: demoDaysAgo(30), amount: 10000, type: "manual", note: "Monthly top-up", destination: "Emergency" },
+        { date: demoDaysAgo(20), amount: 10000, type: "manual", note: "Monthly top-up", destination: "Emergency" },
+        { date: demoDaysAgo(45), amount: 4000, type: "manual", note: "Card buffer", destination: "CC Buffer" },
+        { date: demoDaysAgo(25), amount: 4000, type: "manual", note: "Wish list", destination: "New Phone" },
+        { date: demoDaysAgo(10), amount: 5000, type: "manual", note: "Wish list", destination: "New Phone" },
+        { date: demoDaysAgo(5), amount: 5000, type: "manual", note: "Wish list", destination: "New Phone" },
+        { date: demoDaysAgo(15), amount: 6000, type: "manual", note: "Leftover", destination: "Free" }
+      ];
+
+      // ---- Investments — matches the 3 confirmed SIPs above, plus a
+      // couple of one-time/stock/gold purchases for variety ----
+      const investments = [
+        { date: demoDayOfThisMonth(0.25, 10, 0), type: "HDFC Nifty 50 Index Fund", amount: 3000, note: "" },
+        { date: demoDayOfThisMonth(0.28, 10, 5), type: "HDFC Mid Cap Fund", amount: 4000, note: "" },
+        { date: demoDayOfThisMonth(0.30, 10, 10), type: "Bandhan Small Cap (Money2Mgt SIP)", amount: 2000, note: "" },
+        { date: demoDaysAgo(18), type: "Tata Steel", amount: 5000, note: "" },
+        { date: demoDaysAgo(9), type: "Digital Gold", amount: 2000, note: "" }
+      ];
+
+      return {
+        transactions: t,
+        cash: cash,
+        debts: debts,
+        goals: goals,
+        savingsEntries: savingsEntries,
+        investments: investments,
+        investmentInstruments: investmentInstruments,
+        settings: { ccLimit: 50000, ccWarnPct: 0.25, ccAlertPct: 0.30, monthlyExpenses: 30000, monthlySaveGoal: 3000, monthlyInvestmentGoal: 9000 }
+      };
+    }
+
+    // -----------------------------------------------------------
+    // READ-SIDE COMPUTATIONS — small JS mirrors of the matching
+    // functions in backend/PWA.js and backend/savingsGoals.js, but
+    // reading demoState arrays instead of a Google Sheet. Not a
+    // byte-for-byte port of every edge case (e.g. wallet-top-up/credit-
+    // card-bill-payment detection) — Demo Mode's own dataset never
+    // creates those cases, so there was nothing to detect.
+    // -----------------------------------------------------------
+
+    function demoComputeTodaySummary() {
+      const todayStr = new Date().toDateString();
+      let bankSpend = 0, cashSpend = 0, totalTxn = 0;
+      const categoryTotals = {};
+
+      demoState.transactions.forEach(function (t) {
+        if (t.type !== "debit" || t.financialEvent || t.date.toDateString() !== todayStr) return;
+        const category = t.category || "Other";
+        bankSpend += t.amount; totalTxn++;
+        categoryTotals[category] = (categoryTotals[category] || 0) + t.amount;
+      });
+      demoState.cash.forEach(function (c) {
+        if (c.type !== "debit" || c.date.toDateString() !== todayStr) return;
+        const category = c.category || "Other";
+        cashSpend += c.amount;
+        categoryTotals[category] = (categoryTotals[category] || 0) + c.amount;
+      });
+
+      const categories = Object.entries(categoryTotals).sort(function (a, b) { return b[1] - a[1]; }).map(function (e) { return { category: e[0], amount: e[1] }; });
+      return { bankSpend: bankSpend, cashSpend: cashSpend, total: bankSpend + cashSpend, transactionCount: totalTxn, categories: categories };
+    }
+
+    function demoComputeMonthlyAnalysis(year, month) {
+      let totalDebit = 0, totalCredit = 0, topAmount = 0, topNote = "";
+      const categoryTotals = {}, categoryTxns = {}, dailyTotals = {};
+      const typeTotals = { Need: 0, Want: 0, Saving: 0, Investment: 0 };
+      let untaggedTotal = 0, untaggedCount = 0, fixedObligations = 0, invested = 0;
+
+      demoState.transactions.forEach(function (t) {
+        if (t.date.getFullYear() !== year || (t.date.getMonth() + 1) !== month) return;
+        const day = t.date.getDate();
+
+        if (t.type === "debit" && t.financialEvent) {
+          if (t.financialEvent === "Rent" || t.financialEvent === "EMI") fixedObligations += t.amount;
+          else if (t.financialEvent === "Investment") { invested += t.amount; typeTotals.Investment += t.amount; }
+          return; // not day-to-day spend — its own line, not blended into category totals
+        }
+
+        if (t.type === "debit") {
+          const category = t.category || "Other";
+          totalDebit += t.amount;
+          categoryTotals[category] = (categoryTotals[category] || 0) + t.amount;
+          dailyTotals[day] = (dailyTotals[day] || 0) + t.amount;
+          if (t.amount > topAmount) { topAmount = t.amount; topNote = t.note || t.counterparty || ""; }
+          if (!categoryTxns[category]) categoryTxns[category] = [];
+          categoryTxns[category].push({ note: t.note || t.counterparty || "", amount: t.amount, date: demoFmtDateShort(t.date) });
+          const savedType = t.needWantSaving || "";
+          if (typeTotals.hasOwnProperty(savedType)) typeTotals[savedType] += t.amount;
+          else { untaggedTotal += t.amount; untaggedCount++; }
+        } else if (t.type === "credit") {
+          totalCredit += t.amount;
+        }
+      });
+
+      demoState.cash.forEach(function (c) {
+        if (c.date.getFullYear() !== year || (c.date.getMonth() + 1) !== month) return;
+        const day = c.date.getDate();
+        if (c.type === "debit") {
+          const category = c.category || "Other";
+          totalDebit += c.amount;
+          categoryTotals[category] = (categoryTotals[category] || 0) + c.amount;
+          dailyTotals[day] = (dailyTotals[day] || 0) + c.amount;
+          if (c.amount > topAmount) { topAmount = c.amount; topNote = category || "Cash Spend"; }
+          if (!categoryTxns[category]) categoryTxns[category] = [];
+          categoryTxns[category].push({ note: c.note || "Cash Spend", amount: c.amount, date: demoFmtDateShort(c.date) });
+          const savedType = c.needWantSaving || "";
+          if (typeTotals.hasOwnProperty(savedType)) typeTotals[savedType] += c.amount;
+          else { untaggedTotal += c.amount; untaggedCount++; }
+        } else if (c.type === "credit") {
+          totalCredit += c.amount;
+        }
+      });
+
+      const savings = totalCredit - totalDebit;
+      const days = Object.keys(dailyTotals).length || 1;
+      const avgDaily = Math.round(totalDebit / days);
+      const categories = Object.entries(categoryTotals).sort(function (a, b) { return b[1] - a[1]; }).map(function (e) {
+        const topTransactions = (categoryTxns[e[0]] || []).sort(function (a, b) { return b.amount - a.amount; }).slice(0, 5);
+        return { category: e[0], amount: e[1], topTransactions: topTransactions };
+      });
+      const taggedTotal = typeTotals.Need + typeTotals.Want + typeTotals.Saving + typeTotals.Investment;
+
+      return {
+        totalDebit: totalDebit, totalCredit: totalCredit, savings: savings, avgDaily: avgDaily,
+        topAmount: topAmount, topNote: topNote, categories: categories,
+        fixedObligations: fixedObligations, invested: invested,
+        needWantSaving: { need: typeTotals.Need, want: typeTotals.Want, saving: typeTotals.Saving, investment: typeTotals.Investment, untagged: untaggedTotal, untaggedCount: untaggedCount, taggedTotal: taggedTotal }
+      };
+    }
+
+    function demoComputeCashData() {
+      const todayStr = new Date().toDateString();
+      let balance = 0, todaySpend = 0;
+      const recent = [];
+      demoState.cash.forEach(function (e, idx) {
+        if (e.type === "debit") balance -= e.amount; else if (e.type === "credit") balance += e.amount;
+        if (e.date.toDateString() === todayStr && e.type === "debit") todaySpend += e.amount;
+        recent.push({ row: idx + 2, date: demoFmtDateShort(e.date), type: e.type, amount: e.amount, note: e.note, category: e.category, needWantSaving: e.needWantSaving || null });
+      });
+      return { balance: balance, todaySpend: todaySpend, recent: recent.slice().reverse().slice(0, 10) };
+    }
+
+    function demoComputeDebts() {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      let totalYouOwe = 0, totalTheyOwe = 0;
+      const debts = [];
+      demoState.debts.forEach(function (e, idx) {
+        if (!e.person || !e.amount || e.status === "Settled") return;
+        let daysUntilDue = null, isOverdue = false, dueSoon = false;
+        if (e.dueDate) {
+          const due = new Date(e.dueDate); due.setHours(0, 0, 0, 0);
+          daysUntilDue = Math.ceil((due - today) / 86400000);
+          isOverdue = daysUntilDue < 0;
+          dueSoon = daysUntilDue >= 0 && daysUntilDue <= 7;
+        }
+        debts.push({ row: idx + 2, person: e.person, type: e.type, amount: e.amount, note: e.note, dueDate: e.dueDate ? demoFmtDateLong(new Date(e.dueDate)) : "", daysUntilDue: daysUntilDue, isOverdue: isOverdue, dueSoon: dueSoon });
+        if (e.type === "BORROWED") totalYouOwe += e.amount;
+        else if (e.type === "LENT" || e.type === "SPLIT") totalTheyOwe += e.amount;
+      });
+      return { debts: debts, totalYouOwe: totalYouOwe, totalTheyOwe: totalTheyOwe, netPosition: totalTheyOwe - totalYouOwe };
+    }
+
+    function demoSumByPot(potName) {
+      let total = 0;
+      demoState.savingsEntries.forEach(function (e) { if (e.destination === potName) total += e.amount; });
+      return total;
+    }
+
+    function demoGoalsList() {
+      // The CC Buffer goal's target is the average of recent closed
+      // billing cycles' card spend, same idea as the real
+      // computeCCBufferTarget_() — Demo Mode only has one real cycle of
+      // data to average (the "outstanding" one), which the real
+      // function's own zero-cycle fallback logic handles fine too.
+      const cyc = demoCCCycles();
+      let outstandingCardTotal = 0;
+      demoState.transactions.forEach(function (t) {
+        if (t.type === "debit" && t.mode.indexOf("card") === 0 && t.date >= cyc.outstandingStart && t.date <= cyc.outstandingEnd) outstandingCardTotal += t.amount;
+      });
+      const ccBufferTarget = outstandingCardTotal > 0 ? Math.round(outstandingCardTotal) : 6000;
+
+      return demoState.goals.map(function (g, idx) {
+        const saved = demoSumByPot(g.name);
+        const target = g.type === "Recurring" ? ccBufferTarget : g.target;
+        return { row: idx + 2, name: g.name, type: g.type, target: target, saved: saved, remaining: Math.max(target - saved, 0), canAfford: target > 0 && saved >= target, status: g.status, priority: g.priority, dateAdded: g.dateAdded };
+      });
+    }
+
+    function demoComputeSavingsBreakdown() {
+      const settings = demoState.settings;
+      const emergency = demoSumByPot("Emergency");
+      const emergencyTarget = settings.monthlyExpenses * 3;
+      const free = demoSumByPot("Free");
+      const goals = demoGoalsList();
+      const ccBufferGoal = goals.find(function (g) { return g.type === "Recurring"; }) || null;
+      const priorityGoal =
+        goals.find(function (g) { return g.type === "OneTime" && g.status === "Active" && g.priority; }) ||
+        goals.find(function (g) { return g.type === "OneTime" && g.status === "Active"; }) || null;
+      const destinations = ["Emergency"].concat(goals.filter(function (g) { return g.status === "Active"; }).map(function (g) { return g.name; })).concat(["Free"]);
+      const recentEntries = demoState.savingsEntries
+        .map(function (e, idx) { return { row: idx + 2, date: demoFmtISODate(e.date), amount: e.amount, type: e.type, note: e.note, destination: e.destination }; })
+        .slice().reverse().slice(0, 15);
+      return { recentEntries: recentEntries, destinations: destinations, emergency: emergency, emergencyTarget: emergencyTarget, emergencyDone: emergency >= emergencyTarget, free: free, goals: goals, ccBufferGoal: ccBufferGoal, priorityGoalName: priorityGoal ? priorityGoal.name : null };
+    }
+
+    function demoComputeInvestments() {
+      let total = 0;
+      const typeTotals = {};
+      demoState.investments.forEach(function (e) {
+        if (!e.amount) return;
+        typeTotals[e.type] = (typeTotals[e.type] || 0) + e.amount;
+        total += e.amount;
+      });
+      const catMap = {};
+      demoState.investmentInstruments.forEach(function (i) { catMap[i.name] = i.category; });
+      const breakdown = Object.entries(typeTotals).sort(function (a, b) { return b[1] - a[1]; }).map(function (e) { return { type: e[0], amount: e[1], category: catMap[e[0]] || null }; });
+      const recent = demoState.investments
+        .map(function (e, idx) { return { row: idx + 2, rawDate: e.date, type: e.type, amount: e.amount }; })
+        .filter(function (r) { return r.amount; })
+        .sort(function (a, b) { return b.rawDate - a.rawDate; })
+        .slice(0, 5)
+        .map(function (r) { return { row: r.row, date: demoFmtDateShort(r.rawDate), type: r.type, amount: r.amount }; });
+      return { total: total, breakdown: breakdown, recent: recent };
+    }
+
+    function demoGetInvestmentInstrumentsList() {
+      const DEMO_INVESTMENT_CATEGORIES = ["SIP", "One-time Fund", "Stock", "Gold"];
+      const instruments = demoState.investmentInstruments.map(function (i) { return { name: i.name, category: i.category, sipAmount: i.sipAmount || null }; });
+      const grouped = DEMO_INVESTMENT_CATEGORIES.map(function (cat) { return { category: cat, instruments: instruments.filter(function (i) { return i.category === cat; }) }; });
+      return { instruments: instruments, grouped: grouped };
+    }
+
+    function demoComputePending() {
+      return demoState.transactions
+        .filter(function (t) { return !t.note; })
+        .slice()
+        .sort(function (a, b) { return b.date - a.date; }) // newest first
+        .map(function (t) {
+          return {
+            row: t.row, date: demoFmtDateLong(t.date), time: demoFmtTime(t.date), bank: t.bank, type: t.type, mode: t.mode,
+            amount: t.amount, counterparty: t.counterparty, suggestedCategory: t.suggestedCategory || "Other",
+            suggestedType: t.suggestedType || null, isNonSpendTransfer: false, suggestedNote: t.suggestedNote || "",
+            financialEvent: null, financialEventName: null, suggestedFinancialEvent: null, suggestedFinancialEventName: null,
+            financialEventConfident: false, suggestedInvestmentInstrument: null, investmentInstrumentConfident: false, investmentInstrumentLooksNew: false
+          };
+        });
+    }
+
+    function demoComputeHistory(offset, limit) {
+      offset = Number(offset) || 0;
+      limit = Number(limit) || 20;
+      const noted = demoState.transactions
+        .filter(function (t) { return !!t.note; })
+        .slice()
+        .sort(function (a, b) { return b.date - a.date; })
+        .map(function (t) {
+          return {
+            row: t.row, date: demoFmtDateLong(t.date), time: demoFmtTime(t.date), bank: t.bank, type: t.type, mode: t.mode,
+            amount: t.amount, reference: t.reference || "", counterparty: t.counterparty, note: t.note, category: t.category || "Other",
+            suggestedType: t.needWantSaving || null, financialEvent: t.financialEvent || null, financialEventName: t.financialEventName || null,
+            isNonSpendTransfer: false, suggestedFinancialEvent: null, suggestedFinancialEventName: null, financialEventConfident: false,
+            suggestedInvestmentInstrument: null, investmentInstrumentConfident: false, investmentInstrumentLooksNew: false
+          };
+        });
+      return { total: noted.length, transactions: noted.slice(offset, offset + limit) };
+    }
+
+    function demoKnownDebtPeople() {
+      return demoState.debts.filter(function (d) { return d.status !== "Settled"; }).map(function (d) { return d.person; });
+    }
+
+    function demoComputeCCAdvisor() {
+      const cyc = demoCCCycles();
+      const settings = demoState.settings;
+      const ccLimit = settings.ccLimit;
+      const ccWarnAmt = ccLimit * settings.ccWarnPct;
+      const ccAlertAmt = ccLimit * settings.ccAlertPct;
+
+      function summarize(start, end) {
+        let total = 0, txnCount = 0;
+        const categoryTotals = {}, categoryTxns = {}, cardTotals = {}, allTxns = [];
+        demoState.transactions.forEach(function (t) {
+          if (t.type !== "debit" || t.mode.indexOf("card") !== 0 || t.amount <= 0) return;
+          if (t.date < start || t.date > end) return;
+          total += t.amount; txnCount++;
+          const cat = t.category || "Other";
+          categoryTotals[cat] = (categoryTotals[cat] || 0) + t.amount;
+          cardTotals[t.mode] = (cardTotals[t.mode] || 0) + t.amount;
+          if (!categoryTxns[cat]) categoryTxns[cat] = [];
+          categoryTxns[cat].push({ note: t.note || t.counterparty || "", amount: t.amount, date: demoFmtDateShort(t.date) });
+          allTxns.push(t);
+        });
+        const cardBreakdown = Object.entries(cardTotals).sort(function (a, b) { return b[1] - a[1]; }).map(function (e) { return { card: e[0].toUpperCase(), amount: e[1] }; });
+        const topCategories = Object.entries(categoryTotals).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 6).map(function (e) {
+          const topTxns = (categoryTxns[e[0]] || []).sort(function (a, b) { return b.amount - a.amount; }).slice(0, 5);
+          return { category: e[0], amount: e[1], topTransactions: topTxns };
+        });
+        const recentTxns = allTxns.sort(function (a, b) { return b.date - a.date; }).slice(0, 5).map(function (t) { return { date: demoFmtDateShort(t.date), counterparty: t.counterparty, note: t.note, amount: t.amount }; });
+        return { total: total, txnCount: txnCount, cardBreakdown: cardBreakdown, topCategories: topCategories, recentTxns: recentTxns };
+      }
+
+      const outstanding = summarize(cyc.outstandingStart, cyc.outstandingEnd);
+      const current = summarize(cyc.currentStart, cyc.today);
+      const outstandingPaid = false; // Demo Mode always shows a bill due — a clean, realistic default story
+      const daysUntilDue = Math.ceil((cyc.outstandingDue - cyc.today) / 86400000);
+      const isOverdue = !outstandingPaid && outstanding.total > 0 && daysUntilDue < 0;
+
+      const cash = demoComputeCashData();
+      const cashBalance = cash.balance;
+
+      const since = new Date(cyc.today); since.setDate(since.getDate() - 35);
+      let recentIncome = 0;
+      demoState.transactions.forEach(function (t) {
+        if (t.type === "credit" && t.category === "Income" && t.date >= since && t.date <= cyc.today) recentIncome += t.amount;
+      });
+
+      const now = new Date();
+      const month = demoComputeMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1);
+      const fixedObl = month.fixedObligations;
+      const investedActual = month.invested;
+
+      const ccBuffer = (function () { const g = demoComputeSavingsBreakdown().ccBufferGoal; return g ? g.saved : 0; })();
+      const investedTarget = settings.monthlyInvestmentGoal;
+      const investedCommitted = Math.max(investedActual, investedTarget);
+
+      function computeAfford(billAmount) {
+        const available = cashBalance + recentIncome + ccBuffer;
+        const needed = billAmount + settings.monthlyExpenses + fixedObl + investedCommitted + settings.monthlySaveGoal;
+        const net = available - needed;
+        return {
+          cashBalance: cashBalance, recentIncome: recentIncome, ccBuffer: ccBuffer, available: available, billAmount: billAmount,
+          monthlyExpenses: settings.monthlyExpenses, fixedObligations: fixedObl, invested: investedCommitted, investedActual: investedActual,
+          investedTarget: investedTarget, savingsGoal: settings.monthlySaveGoal, needed: needed, net: net, canAfford: net >= 0
+        };
+      }
+
+      const affordability = (outstanding.total > 0 && !outstandingPaid) ? computeAfford(outstanding.total) : null;
+
+      const daysLeft = Math.ceil((cyc.currentEnd - cyc.today) / 86400000);
+      const daysInCycle = Math.ceil((cyc.currentEnd - cyc.currentStart) / 86400000);
+      const daysElapsed = daysInCycle - daysLeft;
+      const dailyAvg = daysElapsed > 0 ? current.total / daysElapsed : 0;
+      const projected = Math.round(dailyAvg * daysInCycle);
+      const projectedPct = Math.round((projected / ccLimit) * 100);
+      const usagePct = Math.round((current.total / ccLimit) * 100);
+      let status = "healthy";
+      if (current.total >= ccAlertAmt) status = "alert"; else if (current.total >= ccWarnAmt) status = "warning";
+
+      return {
+        limit: ccLimit,
+        outstanding: {
+          amount: outstanding.total, cycleStart: demoFmtDateLong(cyc.outstandingStart), cycleEnd: demoFmtDateLong(cyc.outstandingEnd),
+          dueDate: demoFmtDateLong(cyc.outstandingDue), daysUntilDue: daysUntilDue, isOverdue: isOverdue, isPaid: outstandingPaid,
+          cardBreakdown: outstanding.cardBreakdown, topCategories: outstanding.topCategories
+        },
+        affordability: affordability,
+        current: {
+          cycleStart: demoFmtDateLong(cyc.currentStart), cycleEnd: demoFmtDateLong(cyc.currentEnd), spend: current.total, projected: projected,
+          projectedPct: projectedPct, daysLeft: daysLeft, usagePct: usagePct, status: status,
+          affordabilityNow: computeAfford(current.total), affordabilityProjected: computeAfford(projected)
+        },
+        cycleStart: demoFmtDateLong(cyc.currentStart), cycleEnd: demoFmtDateLong(cyc.currentEnd), cycleSpend: current.total, usagePct: usagePct,
+        status: status, txnCount: current.txnCount, cardBreakdown: current.cardBreakdown, topCategories: current.topCategories, recentCardTxns: current.recentTxns
+      };
+    }
+
+    function demoComputeDashboard() {
+      const now = new Date();
+      const today = demoComputeTodaySummary();
+      const month = demoComputeMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1);
+      const cash = demoComputeCashData();
+      const debts = demoComputeDebts();
+      const investments = demoComputeInvestments();
+      const savingsGoalsData = demoComputeSavingsBreakdown();
+      const cc = demoComputeCCAdvisor();
+      const pending = demoComputePending();
+      const recent = pending.slice(0, 3).map(function (t) { return { label: t.counterparty || t.bank, amount: t.amount }; });
+
+      return {
+        todaySpend: today.total, monthSpend: month.totalDebit, pendingCount: pending.length, cashBalance: cash.balance,
+        ccUsagePct: cc.usagePct, debtsNet: debts.netPosition, recent: recent,
+        full: { today: today, month: month, cash: cash, cc: cc, debts: debts, savingsGoals: savingsGoalsData, investments: investments, pending: pending }
+      };
+    }
+
+    // -----------------------------------------------------------
+    // WRITE-SIDE ACTIONS — mirrors the matching backend functions,
+    // mutating demoState in place. "row" is always the array position
+    // (index + 2) at the moment the get-response that showed it was
+    // built — the same way real Google Sheets row numbers work (they
+    // shift after a delete too), so this needed no special handling.
+    // -----------------------------------------------------------
+
+    function demoSaveNote(row, note, category, counterparty, type, amount) {
+      const t = demoState.transactions[row - 2];
+      if (!t) return { ok: false, error: "Invalid row." };
+      t.note = note || "";
+      t.category = category || "";
+      if (amount !== undefined && amount !== null && amount !== "") t.amount = Number(amount);
+      let typeSaved = false;
+      if (type && !t.financialEvent) { t.needWantSaving = type; typeSaved = true; }
+      return { ok: true, typeRequested: !!type, typeSaved: typeSaved, investmentLogged: false };
+    }
+
+    function demoAddDebt(person, type, amount, note, dueDate) {
+      if (!person || !amount) return { ok: false, error: "Enter a person and a valid amount." };
+      demoState.debts.push({ date: new Date(), person: person, type: type, amount: Number(amount), note: note || "", dueDate: dueDate ? new Date(dueDate) : null, status: "Pending" });
+      return { ok: true };
+    }
+    function demoSettleDebt(row) {
+      const e = demoState.debts[row - 2];
+      if (!e) return { ok: false, error: "Invalid row." };
+      e.status = "Settled";
+      return { ok: true };
+    }
+    function demoRecordDebtPayment(row, amount) {
+      const e = demoState.debts[row - 2];
+      if (!e) return { ok: false, error: "Invalid row." };
+      const paid = Number(amount);
+      if (!paid || paid <= 0) return { ok: false, error: "Enter a valid amount." };
+      const remaining = e.amount - paid;
+      if (remaining <= 0) { e.status = "Settled"; return { ok: true, settled: true, remaining: 0 }; }
+      e.amount = remaining;
+      return { ok: true, settled: false, remaining: remaining };
+    }
+
+    function demoAutoSplitPreviewCalc(amount) {
+      amount = Math.round(Number(amount) || 0);
+      if (amount <= 0) return { ok: false, error: "Enter a valid amount." };
+      const b = demoComputeSavingsBreakdown();
+      const emergencyGap = Math.max(b.emergencyTarget - b.emergency, 0);
+      const ccBufferGap = b.ccBufferGoal ? Math.max(b.ccBufferGoal.target - b.ccBufferGoal.saved, 0) : 0;
+      const goalName = b.priorityGoalName || null;
+      let parts;
+      if (emergencyGap > 0) {
+        const emergency = Math.round(amount * 0.70), ccBuffer = Math.round(amount * 0.20);
+        parts = { emergency: emergency, ccBuffer: ccBuffer, goal: 0, goalName: goalName, free: amount - emergency - ccBuffer };
+      } else if (ccBufferGap > 0) {
+        const ccBuffer = Math.round(amount * 0.70), goal = goalName ? Math.round(amount * 0.20) : 0;
+        parts = { emergency: 0, ccBuffer: ccBuffer, goal: goal, goalName: goalName, free: amount - ccBuffer - goal };
+      } else {
+        const goal = goalName ? Math.round(amount * 0.90) : 0;
+        parts = { emergency: 0, ccBuffer: 0, goal: goal, goalName: goalName, free: amount - goal };
+      }
+      return { ok: true, amount: amount, breakdown: parts };
+    }
+    function demoSaveAutoSplit(amount, note) {
+      const preview = demoAutoSplitPreviewCalc(amount);
+      if (!preview.ok) return preview;
+      const b = preview.breakdown, today = new Date(), cleanNote = note || "";
+      if (b.emergency > 0) demoState.savingsEntries.push({ date: today, amount: b.emergency, type: "auto", note: cleanNote, destination: "Emergency" });
+      if (b.ccBuffer > 0) demoState.savingsEntries.push({ date: today, amount: b.ccBuffer, type: "auto", note: cleanNote, destination: "CC Buffer" });
+      if (b.goal > 0 && b.goalName) demoState.savingsEntries.push({ date: today, amount: b.goal, type: "auto", note: cleanNote, destination: b.goalName });
+      if (b.free > 0) demoState.savingsEntries.push({ date: today, amount: b.free, type: "auto", note: cleanNote, destination: "Free" });
+      return { ok: true, breakdown: b };
+    }
+    function demoValidateManualSplit(amount, rows) {
+      amount = Number(amount) || 0;
+      if (amount <= 0) return { ok: false, error: "Enter a valid amount." };
+      if (!Array.isArray(rows) || rows.length === 0) return { ok: false, error: "Add at least one destination." };
+      let sum = 0;
+      for (let i = 0; i < rows.length; i++) {
+        const rowAmt = Number(rows[i].amount) || 0;
+        if (!rows[i].destination) return { ok: false, error: "Every row needs a destination." };
+        if (rowAmt <= 0) return { ok: false, error: "Every row needs a valid amount." };
+        sum += rowAmt;
+      }
+      if (sum !== amount) return { ok: false, error: "Amounts add up to ₹" + sum.toLocaleString("en-IN") + ", not ₹" + amount.toLocaleString("en-IN") + "." };
+      return { ok: true };
+    }
+    function demoSaveManualSplit(amount, rows, note) {
+      const check = demoValidateManualSplit(amount, rows);
+      if (!check.ok) return check;
+      const today = new Date(), cleanNote = note || "";
+      rows.forEach(function (r) { demoState.savingsEntries.push({ date: today, amount: Number(r.amount), type: "manual", note: cleanNote, destination: r.destination }); });
+      return { ok: true };
+    }
+    function demoWithdrawSaving(bucket, amount, note) {
+      amount = Number(amount) || 0;
+      if (!bucket) return { ok: false, error: "Pick where to withdraw from." };
+      if (amount <= 0) return { ok: false, error: "Enter a valid amount." };
+      const available = demoSumByPot(bucket);
+      if (amount > available) return { ok: false, error: "Only ₹" + Math.round(available).toLocaleString("en-IN") + " available there." };
+      demoState.savingsEntries.push({ date: new Date(), amount: -amount, type: "withdraw", note: note || "", destination: bucket });
+      return { ok: true, remaining: available - amount };
+    }
+    function demoUpdateSavingsEntry(row, amount, note, destination) {
+      const e = demoState.savingsEntries[row - 2];
+      if (!e) return { ok: false, error: "Invalid row." };
+      if (!amount || Number(amount) === 0) return { ok: false, error: "Enter a valid amount." };
+      if (!destination) return { ok: false, error: "Pick a destination." };
+      e.amount = Number(amount); e.note = note || ""; e.destination = destination;
+      return { ok: true };
+    }
+    function demoDeleteSavingsEntry(row) {
+      const idx = row - 2;
+      if (idx < 0 || idx >= demoState.savingsEntries.length) return { ok: false, error: "Invalid row." };
+      demoState.savingsEntries.splice(idx, 1);
+      return { ok: true };
+    }
+    function demoAddGoal(name, type, target) {
+      name = (name || "").toString().trim();
+      type = type === "Recurring" ? "Recurring" : "OneTime";
+      if (!name) return { ok: false, error: "Enter a goal name." };
+      if (type === "OneTime" && (!target || Number(target) <= 0)) return { ok: false, error: "Enter a target amount." };
+      const hasActiveOneTime = demoState.goals.some(function (g) { return g.type === "OneTime" && g.status === "Active"; });
+      demoState.goals.push({ name: name, type: type, target: type === "OneTime" ? Number(target) : 0, status: "Active", priority: type === "OneTime" && !hasActiveOneTime, dateAdded: new Date() });
+      return { ok: true };
+    }
+    function demoSetPriorityGoal(row) {
+      const idx = row - 2;
+      if (idx < 0 || idx >= demoState.goals.length) return { ok: false, error: "Invalid row." };
+      demoState.goals.forEach(function (g, i) { if (g.type === "OneTime") g.priority = (i === idx); });
+      return { ok: true };
+    }
+    function demoMarkGoalDone(row) {
+      const g = demoState.goals[row - 2];
+      if (!g) return { ok: false, error: "Invalid row." };
+      g.status = "Done"; g.priority = false;
+      return { ok: true };
+    }
+    function demoPurchaseGoal(row, name, amount) {
+      const result = demoWithdrawSaving(name, amount, "Purchased: " + name);
+      if (!result.ok) return result;
+      return demoMarkGoalDone(row);
+    }
+
+    function demoValidateInstrumentName(name) {
+      const clean = (name || "").toString().trim();
+      if (!clean) return { ok: false, error: "Choose an investment." };
+      const found = demoState.investmentInstruments.find(function (i) { return i.name.toLowerCase() === clean.toLowerCase(); });
+      if (!found) return { ok: false, error: "Unknown investment — add it first." };
+      return { ok: true, name: found.name };
+    }
+    function demoLogInvestment(amount, instrumentName) {
+      const v = demoValidateInstrumentName(instrumentName);
+      if (!v.ok) return v;
+      if (!amount || Number(amount) <= 0) return { ok: false, error: "Enter a valid amount." };
+      demoState.investments.push({ date: new Date(), type: v.name, amount: Number(amount), note: "" });
+      return { ok: true };
+    }
+    function demoUpdateInvestment(row, instrumentName, amount) {
+      const e = demoState.investments[row - 2];
+      if (!e) return { ok: false, error: "Invalid row." };
+      if (!amount || Number(amount) <= 0) return { ok: false, error: "Enter a valid amount." };
+      const v = demoValidateInstrumentName(instrumentName);
+      if (!v.ok) return v;
+      e.type = v.name; e.amount = Number(amount);
+      return { ok: true };
+    }
+    function demoAddInvestmentInstrument(name, category) {
+      const DEMO_INVESTMENT_CATEGORIES = ["SIP", "One-time Fund", "Stock", "Gold"];
+      const cleanName = (name || "").toString().trim();
+      const cleanCategory = (category || "").toString().trim();
+      if (!cleanName) return { ok: false, error: "Enter an instrument name." };
+      if (DEMO_INVESTMENT_CATEGORIES.indexOf(cleanCategory) === -1) return { ok: false, error: "Choose a valid category." };
+      const exists = demoState.investmentInstruments.some(function (i) { return i.name.toLowerCase() === cleanName.toLowerCase(); });
+      if (exists) return { ok: false, error: "That investment already exists." };
+      demoState.investmentInstruments.push({ name: cleanName, category: cleanCategory, sipAmount: null });
+      return { ok: true, name: cleanName, category: cleanCategory };
+    }
+
+    function demoAddCashEntry(type, amount, note, category, needWantSaving) {
+      if (!amount || Number(amount) <= 0) return { ok: false, error: "Enter a valid amount." };
+      demoState.cash.push({ date: new Date(), type: type, amount: Number(amount), note: note || "", category: category || "", needWantSaving: needWantSaving || "" });
+      return { ok: true };
+    }
+    function demoUpdateCashEntry(row, type, amount, note, category, needWantSaving) {
+      const e = demoState.cash[row - 2];
+      if (!e) return { ok: false, error: "Invalid row." };
+      if (!amount || Number(amount) <= 0) return { ok: false, error: "Enter a valid amount." };
+      e.type = type; e.amount = Number(amount); e.note = note || ""; e.category = category || ""; e.needWantSaving = needWantSaving || "";
+      return { ok: true };
+    }
+
+    function demoUpdateSettings(newSettings) {
+      if (!newSettings) return { ok: true };
+      const s = demoState.settings;
+      if (newSettings.ccLimit) s.ccLimit = Number(newSettings.ccLimit);
+      if (newSettings.ccWarnPct) s.ccWarnPct = Number(newSettings.ccWarnPct);
+      if (newSettings.ccAlertPct) s.ccAlertPct = Number(newSettings.ccAlertPct);
+      if (newSettings.monthlyExpenses) s.monthlyExpenses = Number(newSettings.monthlyExpenses);
+      if (newSettings.monthlySaveGoal) s.monthlySaveGoal = Number(newSettings.monthlySaveGoal);
+      if (newSettings.monthlyInvestmentGoal !== undefined && newSettings.monthlyInvestmentGoal !== null && newSettings.monthlyInvestmentGoal !== "") s.monthlyInvestmentGoal = Number(newSettings.monthlyInvestmentGoal);
+      return { ok: true };
+    }
+
+    // -----------------------------------------------------------
+    // THE DISPATCHER — one action name in, one response out, same
+    // shape callAppsScript()'s real fetch() would have produced. A
+    // small artificial delay makes Save/Add buttons feel like they're
+    // really talking to a server (matching the "should FEEL real" rule
+    // this feature was built to), instead of resolving instantly.
+    // -----------------------------------------------------------
+    function demoRouteAction(data) {
+      try {
+        switch (data.action) {
+          case "ping": return { ok: true, message: "Hello Demo, you're verified!" };
+          case "getPending": return { ok: true, transactions: demoComputePending(), knownDebtPeople: demoKnownDebtPeople() };
+          case "saveNote": return demoSaveNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount);
+          case "getTodaySummary": return { ok: true, summary: demoComputeTodaySummary() };
+          case "getMonthlyAnalysis": {
+            const now = new Date();
+            return { ok: true, analysis: demoComputeMonthlyAnalysis(data.year || now.getFullYear(), data.month || (now.getMonth() + 1)) };
+          }
+          case "getCCAdvisor": return { ok: true, cc: demoComputeCCAdvisor() };
+          case "getDebts": return { ok: true, debts: demoComputeDebts() };
+          case "addDebt": return demoAddDebt(data.person, data.type, data.amount, data.note, data.dueDate);
+          case "settleDebt": return demoSettleDebt(data.row);
+          case "recordDebtPayment": return demoRecordDebtPayment(data.row, data.amount);
+          case "getSavingsGoals": return { ok: true, savings: demoComputeSavingsBreakdown() };
+          case "previewSavingsSplit": return demoAutoSplitPreviewCalc(data.amount);
+          case "saveSavingsAuto": return demoSaveAutoSplit(data.amount, data.note);
+          case "saveSavingsManual": return demoSaveManualSplit(data.amount, data.rows, data.note);
+          case "withdrawSavings": return demoWithdrawSaving(data.bucket, data.amount, data.note);
+          case "updateSavingsEntry": return demoUpdateSavingsEntry(data.row, data.amount, data.note, data.destination);
+          case "deleteSavingsEntry": return demoDeleteSavingsEntry(data.row);
+          case "addSavingsGoal": return demoAddGoal(data.name, data.type, data.target);
+          case "setPrioritySavingsGoal": return demoSetPriorityGoal(data.row);
+          case "markSavingsGoalDone": return demoMarkGoalDone(data.row);
+          case "purchaseSavingsGoal": return demoPurchaseGoal(data.row, data.name, data.amount);
+          case "getInvestments": return { ok: true, investments: demoComputeInvestments() };
+          case "getInvestmentInstruments": return Object.assign({ ok: true }, demoGetInvestmentInstrumentsList());
+          case "addInvestmentInstrument": return demoAddInvestmentInstrument(data.name, data.category);
+          case "logInvestment": return demoLogInvestment(data.amount, data.instrumentName);
+          case "updateInvestment": return demoUpdateInvestment(data.row, data.instrumentName, data.amount);
+          case "getCash": return { ok: true, cash: demoComputeCashData() };
+          case "addCashEntry": return demoAddCashEntry(data.type, data.amount, data.note, data.category, data.needWantSaving);
+          case "updateCashEntry": return demoUpdateCashEntry(data.row, data.type, data.amount, data.note, data.category, data.needWantSaving);
+          case "registerPushToken": return { ok: true }; // no-op — never worth registering a real push token while pretending
+          case "getDashboard": return { ok: true, dashboard: demoComputeDashboard() };
+          case "reconcileStatement": return { ok: false, error: "Bank statement upload isn't available in Demo Mode." };
+          case "insertReconciledTransactions": return { ok: false, error: "Not available in Demo Mode." };
+          case "getSettings": return { ok: true, settings: demoState.settings };
+          case "updateSettings": return demoUpdateSettings(data.settings);
+          case "getTransactionHistory": return Object.assign({ ok: true }, demoComputeHistory(data.offset, data.limit), { knownDebtPeople: demoKnownDebtPeople() });
+          default: return { ok: false, error: "Unknown action." };
+        }
+      } catch (err) {
+        return { ok: false, error: "Demo Mode hit a snag: " + err.message };
+      }
+    }
+
+    function demoHandleRequest(payload) {
+      return new Promise(function (resolve) {
+        setTimeout(function () { resolve(demoRouteAction(payload)); }, 300);
+      });
+    }
+
+    // ---------------------------------------------------------
+    // ENTER / EXIT
+    // ---------------------------------------------------------
+    function enterDemoMode() {
+      demoMode = true;
+      demoState = demoFreshState();
+
+      // Analysis remembers whichever month you were last looking at —
+      // reset to the current month so Demo Mode always starts on the
+      // month its own dataset was actually built around.
+      const now = new Date();
+      analysisYear = now.getFullYear();
+      analysisMonth = now.getMonth() + 1;
+
+      // Every tab gets reloaded fresh with (demo) data next time it's
+      // opened — Home/Pending are loaded eagerly below since they're
+      // not gated by tabLoaded the way the other tabs are.
+      Object.keys(tabLoaded).forEach(function (key) { tabLoaded[key] = false; });
+
+      document.getElementById("demoBanner").style.display = "flex";
+
+      switchTab("home");
+      loadDashboard();
+      loadPendingTransactions();
+      loadInvestmentInstruments();
+    }
+
+    function exitDemoMode() {
+      // Simplest way to guarantee every pretend edit is thrown away at
+      // once and your real, signed-in data comes back clean — no
+      // partial-state restore that could get subtly wrong.
+      location.reload();
+    }
+
+    document.getElementById("viewDemoModeButton").addEventListener("click", enterDemoMode);
+    document.getElementById("exitDemoModeButton").addEventListener("click", exitDemoMode);
 
     // A sign-in proof lasts about an hour. When it finally expires, Apps
     // Script will say so — this cleanly asks you to sign in again, once,
@@ -3741,6 +4730,10 @@
     // Small helpers: remember the last-seen version of a screen's data on
     // this phone, so next time it can show instantly instead of waiting.
     function loadCache(key) {
+      // Demo Mode (2026-08-12): never show real cached data while
+      // presenting a demo to someone — a flash of your real numbers
+      // right as you switch into Demo Mode would defeat the whole point.
+      if (demoMode) return null;
       try {
         const raw = localStorage.getItem("cache_" + key);
         return raw ? JSON.parse(raw) : null;
@@ -3750,6 +4743,11 @@
     }
 
     function saveCache(key, data) {
+      // Demo Mode (2026-08-12): never let pretend data overwrite the real
+      // cache — otherwise, after exiting (which reloads the page), the
+      // real app could briefly flash stale demo numbers before the real
+      // fetch overwrites them again.
+      if (demoMode) return;
       try {
         localStorage.setItem("cache_" + key, JSON.stringify(data));
       } catch (e) { /* storage full or unavailable — just skip caching this once */ }
