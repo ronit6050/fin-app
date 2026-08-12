@@ -400,6 +400,34 @@ against `--chart-track-bg` (margin is thin — lowest is 4.68:1 against a
 4.5:1 floor — worth remembering if `--chart-track-bg` itself changes in
 a future round). Deployed via `git push`.
 
+**Demo Mode (2026-08-12): done, deployed live.** Settings → "View Demo
+Mode" fills every tab with a fixed, realistic pretend dataset (a
+believable month of transactions, debts, savings, investments, etc.),
+so the app can be shown to someone without exposing real numbers or
+risking any write to the real Sheet. Built by `ui-ux-expert`,
+frontend-only (`index.html`). Works by intercepting `callAppsScript()`
+— the single function every screen's loading and every Save/Add button
+already goes through — so when `demoMode` is on, it never calls
+`fetch(APPS_SCRIPT_URL...)` at all; instead a local dispatcher
+(`demoRouteAction`, search `DEMO MODE (added 2026-08-12)`) reads/writes
+an in-memory copy of the pretend dataset (`demoFreshState()`) and hands
+back responses shaped like the real backend. Save/Add really do update
+the screen (feels real), but only that in-memory copy — exiting does a
+plain `location.reload()` to throw it all away and bring real data back
+clean. A persistent amber banner ("Demo Mode — pretend data, not
+yours") with an Exit button stays on every screen so it's never
+ambiguous which data is showing. Verified directly (not via subagent,
+to conserve usage after this session hit its limit mid-review):
+confirmed `callAppsScript`'s `fetch` is the only path to
+`APPS_SCRIPT_URL` in the whole file (grepped), confirmed the
+`loadCache`/`saveCache` guards actually skip themselves while
+`demoMode` is on (no real-data flash, no pretend data leaking into the
+real cache), and confirmed the new banner's colors have both a light
+and dark definition. `APP_VERSION` bumped to `2026-08-12-04`. No
+`docs/features/` file — kept to this one entry since the whole feature
+is one self-contained dispatcher function, not spread across the
+backend.
+
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
 never need to ask for a category, and ALL routine interaction must happen
