@@ -614,9 +614,11 @@ redundant call. Also, editing a Cash **credit** entry's amount wasn't
 updating the balance figure optimistically (only "debit" edits were) —
 added the matching `credit` branch.
 
-Re-ran the full Node syntax check after these fixes — clean. Still
-**not deployed live and not pushed to GitHub** — same real-device
-verification gap as above still applies, now on top of these fixes too.
+Re-ran the full Node syntax check after these fixes — clean. Pushed to
+GitHub and live on 2026-08-12 (commit `3e00bd8`) — for this frontend-only
+change, `git push` IS the live deploy step (unlike the backend's
+separate push/deploy split), so this was also the first real chance to
+test it on an actual phone, not just in code review.
 
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
