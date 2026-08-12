@@ -694,9 +694,8 @@ every screen, not just Analysis. `APP_VERSION` bumped to
 `2026-08-12-01`. Deployed live via `clasp deploy` (@301) and pushed to
 GitHub — nothing left pending on this one.
 
-**Backend cleanup pass — old unused code removed (2026-08-12): pushed
-to the editor draft (`clasp push`), NOT yet deployed live (needs the
-user's go-ahead for `clasp deploy`).** A full read-through of every
+**Backend cleanup pass — old unused code removed (2026-08-12): done,
+deployed live.** A full read-through of every
 `backend/*.js` file plus a caller/route check for every function in the
 codebase (built by counting how many places each function name is
 actually used, then hand-checking every low-count one), looking for
@@ -799,10 +798,9 @@ code, proves the 3 removed `category.js` wrappers are gone while
 `getDashboardData()` still runs end-to-end without crashing and every
 real screen's data is still present in its response after removing the
 unused `getSavingsData()` call. Full test suite (all 6 files under
-`backend/tests/`) passes. Pushed to the Apps Script editor draft via
-`clasp push` — **not yet deployed to the live pinned deployment**, and
-not yet pushed to GitHub (there's nothing to push — this pass only
-touched `backend/*.js`, not `index.html`).
+`backend/tests/`) passes. Deployed live via `clasp deploy` (@302) and
+the commit (`7fb9b0e`) pushed to GitHub on 2026-08-12 — nothing left
+pending on this pass.
 
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
@@ -1492,8 +1490,11 @@ hand afterwards if you want it somewhere specific. Verified with a new
 Node test, `backend/tests/autoLogSaving.test.js` (checks the row lands
 on `"Free"` not the old names, and that the real Savings screen's own
 totals function then actually counts it). Pushed to the Apps Script
-editor (`clasp push`) on 2026-08-11 — **not yet deployed live**, needs
-the user's go-ahead for `clasp deploy`. Full detail:
+editor (`clasp push`) on 2026-08-11 — **confirmed live** (this code was
+version 298; the pinned deployment moved to version 301 on 2026-08-12,
+a later snapshot that includes it — caught and corrected 2026-08-12
+while fixing a similar stale note for Investment Instruments below).
+Full detail:
 [docs/features/savings-v2.md](docs/features/savings-v2.md#fixed-2026-08-11--autologsaving-now-writes-to-the-real-savings-system)
 and
 [docs/features/financial-events.md](docs/features/financial-events.md#fixed-2026-08-11--autologsaving-was-writing-the-old-pot-names).
