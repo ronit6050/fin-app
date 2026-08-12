@@ -494,6 +494,37 @@ changes:
    its *saved* cache in the background, not what was on screen — now it
    reconciles the visible list immediately too.
 
+**Responsiveness pass, part 2 (2026-08-12): pushed to the Apps Script
+editor, not yet deployed live or git-pushed — needs the user's
+go-ahead.** User reported switching Analysis months, and new
+transactions showing up, both still felt slow (3-10 seconds). Root
+cause found: `verifyGoogleIdToken` (`PWA.js`) — the "is this really
+Ronit?" check that runs before EVERY single action — called out to
+Google's servers over the internet on every single tap, with no
+memory of an already-verified token. That round trip was the single
+biggest, most-repeated source of delay in the whole app (every tab,
+not just Analysis). Two fixes:
+1. `verifyGoogleIdToken` now remembers a verified token's result for
+   5 minutes using Apps Script's own fast built-in memory
+   (`CacheService`), keyed by a hash of the token (never the raw
+   token). A failed/rejected check is deliberately never cached — so a
+   real problem can't get masked as "cached as broken" for 5 minutes.
+   Verified with a new test,
+   `backend/tests/verifyGoogleIdTokenCache.test.js` (same-token cache
+   hit, different-token cache miss, failures never cached, 300s TTL).
+2. `index.html` now listens for `messaging.onMessage()` — a push
+   arriving while the app is already open used to just sit there
+   until the next scheduled 15-second poll caught up (nothing was
+   listening for it in the foreground); now it triggers an immediate
+   re-check the moment the push lands.
+Apps Script's own "wake up" latency (inherent to how Apps Script Web
+Apps work, not something in our control) still applies — this won't
+be instant like a native app, but should be noticeably faster across
+every screen, not just Analysis. `APP_VERSION` bumped to
+`2026-08-12-01`. Still to do: commit + `git push` this change, and
+`clasp deploy` to update the live app — both pending the user's
+go-ahead.
+
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
 - **PWA source**: https://github.com/ronit6050/fin-app (this repo, `D:\fin-app` — the one this file lives in). Plain HTML/CSS/JS in `index.html`, plus `sw.js` (service worker), `manifest.json`, `icons/`.
@@ -511,6 +542,19 @@ changes:
   2026-08-11). E.g. instead of a paragraph explaining SIP amount-change
   handling, say: "SIP goes from ₹2000 to ₹3000 → app asks once, you tap
   'Nifty 50 SIP' again, done." Keep explanations short and scannable.
+- **Don't ask which approach to use — decide and go** (confirmed
+  2026-08-11, after the Investment Instruments feature burned a lot of
+  usage on subagents). A small tweak (a doc fix, a one-line bug fix, a
+  quick backend/frontend change I can verify myself) → just make the
+  edit directly, no agent, no asking first. A genuinely big/multi-part
+  feature → use the specialist subagents freely, without hesitating
+  over cost — the user explicitly said "never worry about the
+  credits" for cases that actually need them. The only judgment call
+  left to me is picking which bucket a task falls into; once decided,
+  proceed without a check-in for that choice specifically. (This is
+  about *how* to execute, not a license to skip the separate "show
+  before building" / "one step at a time for judgment calls" rules
+  above — those still apply to the outcome, not the tooling choice.)
 - One step at a time for anything that needs my judgment or that I'm
   actually going to use/experience — this hasn't changed.
 - **Refined 2026-08-11**: "one step at a time" was about me being the one

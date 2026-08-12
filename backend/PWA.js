@@ -1901,6 +1901,25 @@ function verifyGoogleIdToken(idToken){
   try{
     if(!idToken) return null;
 
+    // Every action (every tap in the app) used to call Google's own
+    // servers here, EVERY single time, just to re-confirm "yes, this is
+    // really Ronit" — that round trip over the internet was a big chunk
+    // of the delay felt when switching tabs/months. Fixed 2026-08-12:
+    // remember a verified token's result for a few minutes using Apps
+    // Script's own fast built-in memory (CacheService), keyed by a hash
+    // of the token itself (never the raw token — same reasoning as not
+    // logging secrets). Same token string = same person, so re-asking
+    // Google within that window is pure wasted time, not a real check.
+    // Google's own token still expires on its own (about an hour), so
+    // this only ever shortcuts repeat checks of a token that's already
+    // been freshly verified.
+    const cache = CacheService.getScriptCache();
+    const cacheKey = "idtok_" + Utilities.base64EncodeWebSafe(
+      Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken)
+    );
+    const cached = cache.get(cacheKey);
+    if(cached) return JSON.parse(cached);
+
     const response = UrlFetchApp.fetch(
       "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(idToken),
       { muteHttpExceptions: true }
@@ -1913,7 +1932,9 @@ function verifyGoogleIdToken(idToken){
     // Make sure the proof was issued for OUR app specifically
     if(info.aud !== PWA_CLIENT_ID) return null;
 
-    return { email: info.email, name: info.name || info.email };
+    const verified = { email: info.email, name: info.name || info.email };
+    cache.put(cacheKey, JSON.stringify(verified), 300); // remember for 5 minutes
+    return verified;
 
   }catch(err){
     return null;

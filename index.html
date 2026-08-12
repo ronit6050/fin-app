@@ -2371,8 +2371,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-11-04";
-    const APP_CHANGELOG = "Investments now use a fixed list of your real funds/stocks instead of free-typed names, so the same investment never gets split into two lines again — the Investments tab is grouped into SIPs/One-time Funds/Stocks/Gold, the \"Log an Investment\" form is now a dropdown (with a quick \"+ Add new instrument\"), naming a new SIP is a pick instead of typing it from memory, and Pending/History can now spot a stock or fund purchase from your note and offer a one-tap \"log as investment\" — which also skips the Need/Want/Saving question for it, same as Rent/EMI already do.";
+    const APP_VERSION = "2026-08-12-01";
+    const APP_CHANGELOG = "Faster app: switching tabs/months and seeing new transactions used to feel slow because every single tap made the app re-confirm your sign-in with Google over the internet before doing anything else — that's now remembered for a few minutes instead of re-checked every time. Also, a push notification arriving while the app is already open now refreshes the screen right away instead of waiting up to 15 seconds for the next scheduled check.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -2438,6 +2438,17 @@
 
     firebase.initializeApp(FIREBASE_CONFIG);
     const messaging = firebase.messaging();
+
+    // sw.js's onBackgroundMessage only fires while the app is closed or
+    // backgrounded. When the app is already open, a push instead arrives
+    // here — but until now nothing was listening, so an open app just sat
+    // there until its next scheduled 15-second poll caught up. Fixed
+    // 2026-08-12: re-check for new transactions the moment a push lands,
+    // same function the regular poll already calls, so an open app updates
+    // right when the push arrives instead of up to 15 seconds later.
+    messaging.onMessage(function () {
+      checkForNewTransactions();
+    });
 
     // We'll keep the signed-in person's info here once they sign in.
     // Later steps (talking to the Google Sheet) will use this.
