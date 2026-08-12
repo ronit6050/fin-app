@@ -335,6 +335,48 @@ same day by a look-and-suggest review):**
   heading; and CC Advisor's affordability breakdown still being a plain
   list of numbers with no color-coded visual hierarchy.
 
+**Dark mode chart color fix (2026-08-12): done, deployed live.** User
+felt every chart/graph (Analysis donut, Home/Analysis bars, category
+badges) looked muddy/dark specifically in dark mode, formatting
+untouched. Took 5 rounds of `ui-ux-expert` work, each based on the user
+testing a mockup and reporting back what still felt wrong — a good
+example of why "show before building" matters for subjective visual
+calls:
+1. Brightened the two most washed-out category colors (Financial,
+   Income/Need) — user said no visible difference.
+2. Brightened all 10 category + Need/Want/Saving/Investment colors
+   meaningfully — still not enough.
+3. Root cause found: badges and charts already shared the exact same
+   color values — a badge is a bold filled dot, but the donut ring was
+   only 16 units thick and category bars were 7px tall, so the same
+   color read as weak once spread that thin. Fixed with dedicated
+   `--chart-*` tokens: thicker donut ring, taller bars, a brighter
+   `--chart-track-bg` for contrast, plus a glow effect.
+4. User shared a reference "vivid palette" image and correctly called
+   out that rounds 1-2's "brighter" was actually "lighter/pastel" (68-92%
+   lightness) — real vividness is saturation at a punchier, more
+   medium lightness. Re-picked every hex value the right way: same hue
+   per category, saturation pushed to 85-92%, lightness set to the
+   lowest value that still clears WCAG contrast against
+   `--chart-track-bg` (green/yellow hues can go genuinely dark and
+   punchy; blue/purple/red/pink hues need more lightness to hit the
+   same contrast — a real limit of the contrast math, not a shortcut).
+5. User A/B tested the glow directly and preferred plain color — glow
+   tokens (`--chart-glow-shadow`/`--chart-glow-filter`) turned back to
+   `none` in dark mode, keeping the thicker ring/bars/track from round 3.
+Also confirmed via a direct side-by-side test (same colors, two
+different page-background darknesses) that the near-black page
+background itself was NOT the problem — user preferred the current
+near-black over a lighter charcoal test, so the whole-app dark theme
+was correctly left alone; the fix was chart-specific tokens only.
+`change-reviewer` checked the full diff before push (both dark-mode
+blocks — `@media (prefers-color-scheme: dark)` and
+`:root[data-theme="dark"]` — confirmed in sync, light mode confirmed
+untouched, no orphaned/dead code, contrast re-verified independently).
+`APP_VERSION` bumped to `2026-08-12-02`. Deployed via `git push` — this
+is a frontend-only (`index.html`) change, no Apps Script/`clasp deploy`
+involved.
+
 ## Automation phase (started 2026-08-08, current focus)
 User's core ask: "zero interference" over time — the app should almost
 never need to ask for a category, and ALL routine interaction must happen
