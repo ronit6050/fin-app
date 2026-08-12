@@ -140,6 +140,36 @@
       --want-bg:   #faeeda; --want-text:   #854f0b;
       --saving-bg: #e6f1fb; --saving-text: #0c447c;
       --investment-bg: #f2e9fb; --investment-text: #6b2fa0;
+
+      /* Chart "visual weight" tokens — added 2026-08-12, round 3 of the
+         dark-mode chart pass. Rounds 1-2 only brightened the hex values
+         feeding the donut/bars, but a thin 16-unit ring or a 7px-tall bar
+         reads as weak/dull even at the exact same hex a bold filled badge
+         uses, just because there's so little solid-color area on screen.
+         These control the donut's ring thickness/radius, the bar/stack
+         track height, and the track background the fill sits on top of
+         — kept as their own tokens (not hardcoded numbers in the JS/CSS)
+         so dark mode can make charts chunkier/higher-contrast without
+         touching light mode's proportions at all. Light mode's values
+         here are exactly what the donut/bars already used before this
+         pass — i.e. this block changes nothing visually in light mode. */
+      --chart-track-bg:    var(--surface-inset);
+      --chart-bar-height:  7px;
+      --chart-stack-height: 9px;
+      --chart-ring-radius: 50;
+      --chart-ring-stroke: 16;
+      /* No glow in light mode — a bright color against a white/light card
+         doesn't need extra "pop", and a shadow would just look like a
+         smudge. Dark mode turns these into a real glow (see the round-3
+         dark-token comment). Two separate tokens because box-shadow and
+         filter:drop-shadow() take differently-shaped values — one CSS
+         property can't reuse the other's syntax:
+         --chart-glow-shadow -> box-shadow, used on the div-based bar/
+           stack fills.
+         --chart-glow-filter -> filter, used on the SVG donut arcs (SVG
+           shapes don't reliably support box-shadow across browsers). */
+      --chart-glow-shadow: none;
+      --chart-glow-filter: none;
     }
 
     /* ---------- Design tokens — dark mode ----------
@@ -190,25 +220,136 @@
 
         --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
 
-        --bg-danger: #2e1414;  --color-danger:  #f09595;
-        --bg-warning: #2e2308; --color-warning: #efc775;
+        /* --color-danger/--color-warning also feed a real chart fill (CC
+           Advisor's usage bar switches to these for its warning/alert
+           states — see the barColor logic near ccUsageBarEl), so they get
+           the same boost as their matching category colors below
+           (Health/Education) — kept identical to those two, same as
+           before. --color-success is NOT touched: it's only ever used for
+           a small status-pill's text (e.g. "Settled"/"Healthy" badges),
+           never a bar/donut/progress fill, so it's out of scope for this
+           chart-colors pass. */
+        --bg-danger: #2e1414;  --color-danger:  #F67979;
+        --bg-warning: #2e2308; --color-warning: #D79309;
         --bg-success: #1b2408; --color-success: #97c459;
 
-        --cat-food-bg:      #2e1a10; --cat-food-text:      #f0997b;
-        --cat-transport-bg: #0f2033; --cat-transport-text: #85b7eb;
-        --cat-bills-bg:     #232320; --cat-bills-text:     #b4b2a9;
-        --cat-shopping-bg:  #2e131f; --cat-shopping-text:  #ed93b1;
-        --cat-lifestyle-bg: #201c3a; --cat-lifestyle-text: #afa9ec;
-        --cat-financial-bg: #0d2b22; --cat-financial-text: #5dcaa5;
-        --cat-income-bg:    #1b2408; --cat-income-text:    #97c459;
-        --cat-education-bg: #2e2308; --cat-education-text: #efc775;
-        --cat-health-bg:    #2e1414; --cat-health-text:    #f09595;
-        --cat-other-bg:     #232320; --cat-other-text:     #b4b2a9;
+        /* FIX 2026-08-12, round 4 — rounds 1-2 both made the mistake the
+           user called out directly: "brighter" was implemented as "add
+           more white" (round 2 landed at 68-92% LIGHTNESS, only 60-90%
+           saturation) — that's what a pastel is, not a vivid color, no
+           matter how much the hex moved. The user's reference image
+           ("Bright Color Palettes") is mostly MEDIUM-lightness,
+           NEAR-MAXIMUM-saturation colors instead (e.g. its vivid teal
+           #00B0BA is ~37% lightness at ~100% saturation) — genuinely
+           punchy/saturated, not light. Round 3's thicker
+           bars/ring/glow was a real improvement but the user was clear
+           it wasn't the core issue either — this round finally re-derives
+           the hex values themselves the right way: same hue per token as
+           every round before (nothing was reassigned), saturation pushed
+           to 85-92% (near the reference image's own ~90-100%), and
+           lightness picked as the LOWEST value per hue that still clears
+           a real WCAG contrast check against --chart-track-bg (#2E303B,
+           round 3's chart background — the hardest of the three
+           backgrounds these colors sit on, since it's the lightest; if a
+           color clears that, it clears the near-black page and every
+           badge background too, which are all darker).
+           This split the palette into two honest groups, not a flaw —
+           it's how relative-luminance math actually works: green/yellow-
+           green/gold hues (Financial, Income/Need, Education/Want) can
+           stay genuinely medium-dark (35-44% lightness) and still hit
+           5:1+ contrast, because green dominates perceived luminance.
+           Blue/purple/red/pink hues (Transport/Saving, Lifestyle,
+           Shopping, Health, Investment) need real lightness (64-78%) to
+           hit the same contrast — those channels contribute far less to
+           perceived luminance in the WCAG formula, so a dark, saturated
+           blue simply CANNOT reach 4.5:1 against this background no
+           matter how vivid it looks in isolation (checked this by
+           sweeping lightness at 100% saturation for every hue before
+           picking final values — see chat history for the full sweep).
+           Every one of those five still kept saturation at 85-90%
+           (near-max) rather than giving up vividness to fix contrast, per
+           the explicit instruction not to retreat to pastel — the
+           lightness increase was the only lever pulled, same as
+           requested. Bills/Other again stays neutral/gray (9% saturation,
+           lightened to 64% to sit closer to the new medium-toned palette
+           instead of standing out as "the pale one") — intentionally
+           uncolored, same reasoning as every round before.
+           Contrast recheck below is against all three real backgrounds
+           these colors actually sit on (near-black page, the round-3
+           chart track, and each color's own badge background) — lowest
+           across all of them is Food at 4.88:1 (vs. chart track), still
+           comfortably clearing the 4.5:1 minimum with margin, not sitting
+           exactly on the edge. NOTE: this changes the category badges
+           too (--cat-*-text feeds both the badges AND the charts, same
+           token, same as every round before) — the badges were already
+           approved as fixed, so this is worth a second look once you see
+           it, not something split into a separate token silently. */
+        --cat-food-bg:      #2e1a10; --cat-food-text:      #F67A51;
+        --cat-transport-bg: #0f2033; --cat-transport-text: #53A2F6;
+        --cat-bills-bg:     #232320; --cat-bills-text:     #ABA79B;
+        --cat-shopping-bg:  #2e131f; --cat-shopping-text:  #F8729F;
+        --cat-lifestyle-bg: #201c3a; --cat-lifestyle-text: #9F97F7;
+        --cat-financial-bg: #0d2b22; --cat-financial-text: #0ABB7A;
+        --cat-income-bg:    #1b2408; --cat-income-text:    #6DB508;
+        --cat-education-bg: #2e2308; --cat-education-text: #D79309;
+        --cat-health-bg:    #2e1414; --cat-health-text:    #F67979;
+        --cat-other-bg:     #232320; --cat-other-text:     #ABA79B;
 
-        --need-bg:   #1b2408; --need-text:   #97c459;
-        --want-bg:   #2e2308; --want-text:   #efc775;
-        --saving-bg: #0f2033; --saving-text: #85b7eb;
-        --investment-bg: #241633; --investment-text: #c79ef0;
+        --need-bg:   #1b2408; --need-text:   #6DB508;
+        --want-bg:   #2e2308; --want-text:   #D79309;
+        --saving-bg: #0f2033; --saving-text: #53A2F6;
+        --investment-bg: #241633; --investment-text: #BF89F5;
+
+        /* FIX 2026-08-12, round 3 — round 2 brightened every chart color's
+           hex value, but the user tested it and said the donut/bars still
+           read as dark, even though the category badges (built from the
+           exact same tokens) now read as fixed. Root cause: a badge is a
+           bold filled pill — lots of solid color. The donut was a 16-unit
+           stroke on a 50-unit radius, and the category/stack bars were
+           only 7-9px tall — a thin sliver of that same bright color
+           surrounded by a lot of near-black empty space reads as weak
+           regardless of how vivid the hex itself is. Also, the track
+           these bars/the donut's background ring sit on
+           (--surface-inset, #212226) is only 1.24:1 off the page
+           background (#0b0b0c) — basically invisible — so the fill had
+           nothing to visually pop against. This round fixes the actual
+           geometry, dark mode only:
+           - Donut ring: stroke 16->24 (+50%), radius 50->43 (shrunk just
+             enough that the thicker ring still fits inside the same
+             120-unit viewBox without clipping — checked the outer-edge
+             math before picking these numbers, not guessed).
+           - Category bar / stack bar height: 7px/9px -> 12px/14px, close
+             to double.
+           - A new --chart-track-bg (#2E303B) used only for these tracks/
+             the donut's background ring, instead of reusing the general
+             --surface-inset — 1.50:1 off the page (was 1.24:1), enough to
+             read as a visible "trough" without becoming its own bright
+             surface. Every chart fill color still clears at least 5.2:1
+             against this new track (checked all 10), so nothing got
+             harder to read.
+           - A soft glow (drop-shadow/box-shadow in the segment's own
+             color, dark mode only) on the donut arcs and bar fills, via
+             the .donut-arc/.category-bar-fill/.stack-bar span rules
+             further down — adds perceived "pop" without needing yet a
+             third round of hex changes.
+           Light mode is untouched: --chart-track-bg/--chart-bar-height/
+           --chart-stack-height/--chart-ring-radius/--chart-ring-stroke
+           all default (in :root above) to the exact values the donut/bars
+           already used before this pass, and the two glow tokens default
+           to "none" there too. */
+        --chart-track-bg:    #2E303B;
+        --chart-bar-height:  12px;
+        --chart-stack-height: 14px;
+        --chart-ring-radius: 43;
+        --chart-ring-stroke: 24;
+        /* FIX 2026-08-12, round 5 — user tested round 3's glow directly
+           against plain vivid color (no glow) and preferred plain: "the
+           glow effect is too much... if it is a plain bright, vivid
+           color, then it looks good." Turned off here, same as light
+           mode already was — the thicker ring/bars/track from round 3
+           stay, only the glow itself is removed. */
+        --chart-glow-shadow: none;
+        --chart-glow-filter: none;
 
         /* Same tactile press effect as light mode, but the "edge" shadow
            needs to be much darker to still show up against a near-black
@@ -250,25 +391,53 @@
 
       --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
 
-      --bg-danger: #2e1414;  --color-danger:  #f09595;
-      --bg-warning: #2e2308; --color-warning: #efc775;
+      /* Same round-4 boost as the prefers-color-scheme dark block above —
+         --color-danger/--color-warning feed CC Advisor's usage bar fill,
+         --color-success stays untouched (badge text only, not a chart). */
+      --bg-danger: #2e1414;  --color-danger:  #F67979;
+      --bg-warning: #2e2308; --color-warning: #D79309;
       --bg-success: #1b2408; --color-success: #97c459;
 
-      --cat-food-bg:      #2e1a10; --cat-food-text:      #f0997b;
-      --cat-transport-bg: #0f2033; --cat-transport-text: #85b7eb;
-      --cat-bills-bg:     #232320; --cat-bills-text:     #b4b2a9;
-      --cat-shopping-bg:  #2e131f; --cat-shopping-text:  #ed93b1;
-      --cat-lifestyle-bg: #201c3a; --cat-lifestyle-text: #afa9ec;
-      --cat-financial-bg: #0d2b22; --cat-financial-text: #5dcaa5;
-      --cat-income-bg:    #1b2408; --cat-income-text:    #97c459;
-      --cat-education-bg: #2e2308; --cat-education-text: #efc775;
-      --cat-health-bg:    #2e1414; --cat-health-text:    #f09595;
-      --cat-other-bg:     #232320; --cat-other-text:     #b4b2a9;
+      /* Same round-4 "genuinely vivid, not pastel" fix as the
+         prefers-color-scheme dark block above — see that block's comment
+         for the full "why" (rounds 1-2 only pushed lightness, which reads
+         as pastel no matter the saturation; this round pushes saturation
+         to 85-92% and finds the lowest lightness per hue that still
+         clears a real contrast check against --chart-track-bg). Kept in
+         sync since this is the manual "Dark" theme choice's copy of the
+         same tokens. */
+      --cat-food-bg:      #2e1a10; --cat-food-text:      #F67A51;
+      --cat-transport-bg: #0f2033; --cat-transport-text: #53A2F6;
+      --cat-bills-bg:     #232320; --cat-bills-text:     #ABA79B;
+      --cat-shopping-bg:  #2e131f; --cat-shopping-text:  #F8729F;
+      --cat-lifestyle-bg: #201c3a; --cat-lifestyle-text: #9F97F7;
+      --cat-financial-bg: #0d2b22; --cat-financial-text: #0ABB7A;
+      --cat-income-bg:    #1b2408; --cat-income-text:    #6DB508;
+      --cat-education-bg: #2e2308; --cat-education-text: #D79309;
+      --cat-health-bg:    #2e1414; --cat-health-text:    #F67979;
+      --cat-other-bg:     #232320; --cat-other-text:     #ABA79B;
 
-      --need-bg:   #1b2408; --need-text:   #97c459;
-      --want-bg:   #2e2308; --want-text:   #efc775;
-      --saving-bg: #0f2033; --saving-text: #85b7eb;
-      --investment-bg: #241633; --investment-text: #c79ef0;
+      --need-bg:   #1b2408; --need-text:   #6DB508;
+      --want-bg:   #2e2308; --want-text:   #D79309;
+      --saving-bg: #0f2033; --saving-text: #53A2F6;
+      --investment-bg: #241633; --investment-text: #BF89F5;
+
+      /* Same round-3 "visual weight" fix as the prefers-color-scheme dark
+         block above — see that block's comment for the full "why"
+         (thicker donut ring, taller bars, a track color with more
+         separation from the page, plus a subtle glow further down).
+         Kept in sync since this is the manual "Dark" theme choice's copy
+         of the same tokens. */
+      --chart-track-bg:    #2E303B;
+      --chart-bar-height:  12px;
+      --chart-stack-height: 14px;
+      --chart-ring-radius: 43;
+      --chart-ring-stroke: 24;
+      /* Round 5 — glow turned off, same reasoning as the
+         prefers-color-scheme block above (user preferred plain vivid
+         color over the glow once tested side by side). */
+      --chart-glow-shadow: none;
+      --chart-glow-filter: none;
 
       /* Same as the prefers-color-scheme dark block above. */
       --tac-edge:    rgba(0, 0, 0, 0.55);
@@ -975,16 +1144,45 @@
     }
 
     .category-row .category-bar-track {
-      background: var(--surface-inset);
+      /* --chart-track-bg/--chart-bar-height default (in :root) to exactly
+         --surface-inset/7px — i.e. identical to before this token existed
+         — and only change in dark mode (see the round-3 comment on the
+         dark tokens above for why).
+         `overflow: hidden` was REMOVED here 2026-08-12 (round 3) — it was
+         silently clipping the new dark-mode glow (a box-shadow always
+         gets cut off by an ancestor's overflow:hidden, same as any other
+         overflowing paint). Safe to drop: .category-bar-fill already
+         carries its own matching 6px border-radius directly, so the
+         rounded-corner look never actually depended on this clip — it
+         only mattered when clipping something to begin with, which is
+         exactly the glow we now want visible. */
+      background: var(--chart-track-bg);
       border-radius: 6px;
-      height: 7px;
-      overflow: hidden;
+      height: var(--chart-bar-height);
     }
 
     .category-row .category-bar-fill {
       background: var(--color-primary);
       height: 100%;
       border-radius: 6px;
+    }
+
+    /* Round-3 dark-mode "pop" — a soft glow in the bar/arc's own color,
+       added ONLY to elements that also set an inline `color` matching
+       their `background` (so `currentColor` in --chart-glow-shadow/
+       --chart-glow-filter resolves to the right color, not whatever text
+       color happens to be inherited). Deliberately a separate opt-in
+       class rather than applying to every .category-bar-fill/.stack-bar
+       span directly — a couple of usages of those classes (the CC
+       Advisor health bar, the Savings goal thermometer) don't set a
+       matching `color` and would otherwise get a mismatched white-ish
+       glow. --chart-glow-shadow/--chart-glow-filter are both "none" in
+       light mode, so this rule is inert there regardless. */
+    .chart-glow-fill {
+      box-shadow: var(--chart-glow-shadow);
+    }
+    .donut-arc {
+      filter: var(--chart-glow-filter);
     }
 
     /* ---------- Home charts (2026-08-11) ----------
@@ -1017,15 +1215,34 @@
     }
     .stack-bar {
       display: flex;
-      height: 9px;
+      /* --chart-stack-height/--chart-track-bg default to the original
+         9px/--surface-inset in light mode — see the round-3 dark-token
+         comment above for the dark-mode reasoning.
+         `overflow: hidden` was REMOVED here 2026-08-12 (round 3) for the
+         same reason as .category-bar-track above — it clipped the new
+         glow. Unlike that bar, a stack bar's individual <span> segments
+         had NO border-radius of their own before now — the rounded-pill
+         look for the two outer ends came entirely from this clip. So
+         removing the clip needed a real replacement, not just a removal:
+         the first/last segment now carry their own matching corner
+         radius directly (below), same idea as .category-bar-fill already
+         did, so the whole bar still reads as one rounded pill with the
+         clip gone. */
+      height: var(--chart-stack-height);
       border-radius: 5px;
-      overflow: hidden;
-      background: var(--surface-inset);
+      background: var(--chart-track-bg);
     }
     .stack-bar span {
       display: block;
       height: 100%;
     }
+    /* Replaces the rounding that used to come from .stack-bar's
+       `overflow: hidden` (see comment above) — :only-child covers a bar
+       that ends up with a single segment (e.g. 100% Need, nothing else
+       tagged yet), so it still gets all 4 corners rounded like before. */
+    .stack-bar span:first-child { border-top-left-radius: 5px; border-bottom-left-radius: 5px; }
+    .stack-bar span:last-child  { border-top-right-radius: 5px; border-bottom-right-radius: 5px; }
+    .stack-bar span:only-child  { border-radius: 5px; }
     .chip-row {
       display: flex;
       gap: 6px;
@@ -2371,8 +2588,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-12-01";
-    const APP_CHANGELOG = "Faster app: switching tabs/months and seeing new transactions used to feel slow because every single tap made the app re-confirm your sign-in with Google over the internet before doing anything else — that's now remembered for a few minutes instead of re-checked every time. Also, a push notification arriving while the app is already open now refreshes the screen right away instead of waiting up to 15 seconds for the next scheduled check.";
+    const APP_VERSION = "2026-08-12-02";
+    const APP_CHANGELOG = "Dark mode chart colors redone properly: earlier attempts just made every color paler, which looks washed-out, not vivid. Every category color and Need/Want/Saving/Investment color is now a genuinely punchy, saturated color instead — same colors mapped to the same things as before, just actually bright the way a color should be, not pastel. Light mode is untouched.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -3685,7 +3902,12 @@
         homeCategoryStackEl.style.display = "flex";
         homeCategoryStackEl.innerHTML = cats.map(function (c) {
           const pct = Math.round((c.amount / catTotal) * 100);
-          return `<span style="width:${pct}%; background:${categoryBarColor(c.category)};"></span>`;
+          const color = categoryBarColor(c.category);
+          // class="chart-glow-fill" + the matching `color:` (on top of
+          // `background:`) is what lets the round-3 dark-mode glow pick
+          // up this exact color via currentColor — see the CSS comment
+          // on .chart-glow-fill for why it's not just applied globally.
+          return `<span class="chart-glow-fill" style="width:${pct}%; background:${color}; color:${color};"></span>`;
         }).join("");
 
         const top = cats.slice(0, 2);
@@ -3725,7 +3947,7 @@
         .filter(function (s) { return s.amount > 0; })
         .map(function (s) {
           const pct = Math.round((s.amount / grandTotal) * 100);
-          return `<span style="width:${pct}%; background:${s.color};"></span>`;
+          return `<span class="chart-glow-fill" style="width:${pct}%; background:${s.color}; color:${s.color};"></span>`;
         }).join("");
 
       if (nws.taggedTotal > 0) {
@@ -4547,7 +4769,7 @@
             <span>₹${entry.amount.toLocaleString("en-IN")}</span>
           </div>
           <div class="category-bar-track">
-            <div class="category-bar-fill" style="width:${percentOfMax}%; background:${categoryBarColor(entry.category)};"></div>
+            <div class="category-bar-fill chart-glow-fill" style="width:${percentOfMax}%; background:${categoryBarColor(entry.category)}; color:${categoryBarColor(entry.category)};"></div>
           </div>
         `;
         todayCategoriesEl.appendChild(row);
@@ -4588,6 +4810,19 @@
       Untagged:   "var(--text-muted)"
     };
 
+    // Reads a numeric CSS custom property (e.g. --chart-ring-radius) off
+    // the root element — added 2026-08-12, round 3 of the dark-mode chart
+    // pass, so the donut's ring thickness/radius can live in the same
+    // CSS design-token system as every color, instead of being a fixed
+    // JS number that's identical in both themes. Falls back to the given
+    // number if the token is missing/unreadable for any reason, so a
+    // typo here can never break the chart outright.
+    function getChartCssNum(varName, fallback) {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+      const num = parseFloat(raw);
+      return isNaN(num) ? fallback : num;
+    }
+
     // Hand-rolled SVG donut chart (stroke-dasharray technique) — no chart
     // library, same "no frameworks" approach as the rest of this app.
     // Includes "Untagged" as its own gray segment on purpose: the chart
@@ -4610,7 +4845,16 @@
         return;
       }
 
-      const r = 50, cx = 60, cy = 60, strokeWidth = 16;
+      // r/strokeWidth come from --chart-ring-radius/--chart-ring-stroke
+      // (see getChartCssNum above) — dark mode uses a thicker stroke on a
+      // slightly smaller radius (round 3 of the dark-mode chart pass: a
+      // thin 16-unit ring read as weak/dull even with a bright color, so
+      // dark mode now renders a genuinely chunkier ring, still fitting
+      // inside the same 120-unit viewBox). Light mode's token values are
+      // the exact old numbers, so this is a no-op change there.
+      const r = getChartCssNum("--chart-ring-radius", 50);
+      const cx = 60, cy = 60;
+      const strokeWidth = getChartCssNum("--chart-ring-stroke", 16);
       const circumference = 2 * Math.PI * r;
 
       let cumulative = 0;
@@ -4618,7 +4862,12 @@
       segments.forEach(function (seg) {
         if (seg.amount <= 0) return;
         const arcLen = (seg.amount / grandTotal) * circumference;
-        arcsSvg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${NWS_CHART_COLORS[seg.label]}" stroke-width="${strokeWidth}" stroke-dasharray="${arcLen} ${circumference - arcLen}" stroke-dashoffset="${-cumulative}"/>`;
+        const color = NWS_CHART_COLORS[seg.label];
+        // class="donut-arc" + style="color:..." is what lets the round-3
+        // dark-mode glow (filter: var(--chart-glow-filter), which uses
+        // currentColor) match each arc's own segment color — see the CSS
+        // comment on .donut-arc/.chart-glow-fill for the full reasoning.
+        arcsSvg += `<circle class="donut-arc" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-dasharray="${arcLen} ${circumference - arcLen}" stroke-dashoffset="${-cumulative}" style="color:${color};"/>`;
         cumulative += arcLen;
       });
 
@@ -4656,9 +4905,9 @@
       analysisNeedWantSavingEl.innerHTML = `
         <div class="category-row" style="text-align:center;">
           <div style="position:relative; width:160px; height:160px; margin:0 auto;">
-            <svg viewBox="0 0 120 120" width="160" height="160">
+            <svg viewBox="0 0 120 120" width="160" height="160" style="overflow:visible;">
               <g transform="rotate(-90 ${cx} ${cy})">
-                <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-inset)" stroke-width="${strokeWidth}"/>
+                <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--chart-track-bg)" stroke-width="${strokeWidth}"/>
                 ${arcsSvg}
               </g>
             </svg>
@@ -4775,7 +5024,7 @@
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M6 9l6 6 6-6"/></svg>
           </div>
           <div class="category-bar-track">
-            <div class="category-bar-fill" style="width:${percentOfMax}%; background:${categoryBarColor(entry.category)};"></div>
+            <div class="category-bar-fill chart-glow-fill" style="width:${percentOfMax}%; background:${categoryBarColor(entry.category)}; color:${categoryBarColor(entry.category)};"></div>
           </div>
           <div class="category-detail" style="display:none; background:${categoryBadgeBg(entry.category)};">
             <p style="font-size:0.78rem; color:var(--text-secondary); margin:10px 0 6px;">Top ${topTxns.length} in ${entry.category}</p>
@@ -4976,6 +5225,10 @@
       if (cur.status === "alert") barColor = "var(--color-danger)";
       else if (cur.status === "warning") barColor = "var(--color-warning)";
       ccUsageBarEl.style.background = barColor;
+      // Same round-3 dark-mode glow as the category bars — `color` has to
+      // match `background` for currentColor to resolve correctly.
+      ccUsageBarEl.style.color = barColor;
+      ccUsageBarEl.classList.add("chart-glow-fill");
       ccProjectionEl.textContent = cur.cycleStart + " → " + cur.cycleEnd +
         "  ·  projected ₹" + cur.projected.toLocaleString("en-IN") + " (" + cur.projectedPct + "%)" +
         "  ·  " + cur.daysLeft + " day" + (cur.daysLeft === 1 ? "" : "s") + " left";
@@ -5059,7 +5312,7 @@
               <span>₹${entry.amount.toLocaleString("en-IN")}</span>
             </div>
             <div class="category-bar-track">
-              <div class="category-bar-fill" style="width:${percentOfMax}%; background:${categoryBarColor(entry.category)};"></div>
+              <div class="category-bar-fill chart-glow-fill" style="width:${percentOfMax}%; background:${categoryBarColor(entry.category)}; color:${categoryBarColor(entry.category)};"></div>
             </div>
             <div class="category-detail" style="display:none;">
               <p style="font-size:0.78rem; color:var(--text-secondary); margin:10px 0 6px;">Top ${topTxns.length} in ${entry.category}</p>
