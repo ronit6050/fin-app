@@ -2378,10 +2378,25 @@
             <div class="today-split" id="analysisSplit"></div>
             <div class="today-split" id="analysisFinancialEvents"></div>
           </div>
+
+          <!-- Sort-by toggle (2026-08-17) — picks which breakdown shows
+               below: the plain category list, or the Need/Want/Saving/
+               Investment chart. Both are always rendered from the same
+               payment-mode-filtered data (see renderAnalysisForMode) —
+               this only shows/hides, it never re-fetches or re-filters,
+               so switching All/Bank/Card/Wallet above always stays in
+               sync with whichever one you're looking at. -->
+          <div class="type-toggle" id="analysisViewToggle" style="margin-bottom:14px;">
+            <button type="button" class="type-btn active" data-view="category">Category</button>
+            <button type="button" class="type-btn" data-view="type">Need / Want / Saving</button>
+          </div>
+
           <div id="analysisCategories"></div>
 
-          <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Need / Want / Saving / Investment</h3>
-          <div id="analysisNeedWantSaving"></div>
+          <div id="analysisNwsSection" style="display:none">
+            <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Need / Want / Saving / Investment</h3>
+            <div id="analysisNeedWantSaving"></div>
+          </div>
         </div>
       </section>
 
@@ -2938,8 +2953,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-17-02";
-    const APP_CHANGELOG = "Need/Want/Saving chart now includes Rent/EMI under Need and checks the 50/30/20 split against your income, not just tagged spend.";
+    const APP_VERSION = "2026-08-17-03";
+    const APP_CHANGELOG = "Analysis: added a Category / Need-Want-Saving toggle so you can switch which breakdown you see, instead of scrolling past both.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -6161,6 +6176,8 @@
     const analysisCategoriesEl = document.getElementById("analysisCategories");
     const analysisNeedWantSavingEl = document.getElementById("analysisNeedWantSaving");
     const analysisModeToggleEl = document.getElementById("analysisModeToggle");
+    const analysisViewToggleEl = document.getElementById("analysisViewToggle");
+    const analysisNwsSectionEl = document.getElementById("analysisNwsSection");
 
     // Payment-mode filter (2026-08-17) — see the .mode-toggle CSS comment
     // and getMonthlyAnalysis's byMode field. analysisLastData holds the
@@ -6170,6 +6187,11 @@
     // (not fetched again) so switching modes never needs a network call.
     let analysisMode = "all";
     let analysisLastData = null;
+    // Which breakdown is showing below the hero card — "category" (the
+    // plain list) or "type" (Need/Want/Saving/Investment). Purely a
+    // display choice, doesn't affect what data was fetched, so it never
+    // needs to reset on month change the way analysisMode sometimes does.
+    let analysisView = "category";
     let analysisModeResetFor = null; // "year_month" of the last render — only reset analysisMode back to "All" when this actually changes (a real month switch), not on every render (a background refresh of the same month re-calls renderMonthlyAnalysis too, and shouldn't silently undo a toggle tap)
 
     // Round 6: reads the --chart-* tier, not --need-text/etc directly —
@@ -6413,6 +6435,12 @@
 
       if (a.needWantSaving) renderNeedWantSavingChart(a.needWantSaving, a.fixedObligations, a.totalCredit);
 
+      // Both sections are rendered every time regardless of which one is
+      // currently visible — updateAnalysisViewUI() below just shows/hides,
+      // so whichever one you're looking at is always this same
+      // payment-mode-filtered data, never stale.
+      updateAnalysisViewUI();
+
       analysisCategoriesEl.innerHTML = "";
 
       if (a.categories.length === 0) {
@@ -6516,6 +6544,30 @@
           analysisMode = btn.dataset.mode;
           updateAnalysisModeToggleUI();
           renderAnalysisForMode();
+        });
+      });
+    }
+
+    // Shows the category list or the Need/Want/Saving chart (never both),
+    // and reflects analysisView onto the toggle buttons' active state.
+    // Called after every renderAnalysisForMode() so a month/mode switch
+    // never leaves the wrong section visible.
+    function updateAnalysisViewUI() {
+      if (analysisViewToggleEl) {
+        analysisViewToggleEl.querySelectorAll(".type-btn").forEach(function (btn) {
+          btn.classList.toggle("active", btn.dataset.view === analysisView);
+        });
+      }
+      analysisCategoriesEl.style.display = analysisView === "category" ? "" : "none";
+      analysisNwsSectionEl.style.display = analysisView === "type" ? "" : "none";
+    }
+
+    if (analysisViewToggleEl) {
+      analysisViewToggleEl.querySelectorAll(".type-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          if (btn.dataset.view === analysisView) return; // already selected
+          analysisView = btn.dataset.view;
+          updateAnalysisViewUI();
         });
       });
     }
