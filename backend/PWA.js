@@ -538,6 +538,74 @@ function auditInvestmentsSheet(){
   }
 }
 
+// READ-ONLY DIAGNOSTIC (added 2026-08-17) — checks whether ATM
+// withdrawals are being double-counted in Total Spent. Nothing in
+// getTodaySummary/getMonthlyAnalysis currently excludes Mode="atm"
+// debits, unlike credit-card-bill-payments and wallet-top-ups (both
+// excluded, see isCreditCardBillPayment/isWalletTopUp below) — so if
+// you withdraw cash at an ATM AND later log spending that same cash
+// under the Cash tab, it's counted twice. Whether that's worth fixing
+// depends on how reliably Cash spend actually gets logged after a
+// withdrawal — this function doesn't change anything, it just prints
+// the real numbers so that can be judged from actual data instead of a
+// guess. Run by hand from the Apps Script editor (select this
+// function, Run, then View > Logs / Executions).
+function auditAtmWithdrawals(){
+  const txnData  = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
+  const cashData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Cash").getDataRange().getValues();
+
+  const atmRows = [];
+  for(let i = 1; i < txnData.length; i++){
+    const rawDate = txnData[i][0];
+    if(!rawDate) continue;
+    const type = (txnData[i][3] || "").toString().toLowerCase();
+    const mode = (txnData[i][4] || "").toString().toLowerCase();
+    if(type === "debit" && mode === "atm"){
+      atmRows.push({ date: new Date(rawDate), amount: Number(txnData[i][5]) || 0 });
+    }
+  }
+
+  Logger.log("=== ATM withdrawals found: " + atmRows.length + " ===");
+  atmRows
+    .sort(function(a, b){ return a.date - b.date; })
+    .forEach(function(r){
+      Logger.log(Utilities.formatDate(r.date, Session.getScriptTimeZone(), "yyyy-MM-dd") + "  ₹" + r.amount);
+    });
+
+  // Month-by-month comparison: total ATM withdrawn vs. total Cash debit
+  // logged, same month. If Cash spend tracks close to (or above) ATM
+  // withdrawals, cash is being logged reliably — excluding ATM
+  // withdrawals from spend would be safe. If Cash spend is much lower,
+  // a lot of cash spend is going untracked — excluding the withdrawal
+  // would make that money vanish from Total Spent instead of just
+  // double-counting it.
+  const atmByMonth  = {};
+  const cashByMonth = {};
+
+  atmRows.forEach(function(r){
+    const key = r.date.getFullYear() + "-" + (r.date.getMonth() + 1);
+    atmByMonth[key] = (atmByMonth[key] || 0) + r.amount;
+  });
+
+  for(let i = 1; i < cashData.length; i++){
+    const rawDate = cashData[i][1];
+    if(!rawDate) continue;
+    const type = (cashData[i][3] || "").toString().toLowerCase();
+    if(type !== "debit") continue;
+    const d = new Date(rawDate);
+    const key = d.getFullYear() + "-" + (d.getMonth() + 1);
+    cashByMonth[key] = (cashByMonth[key] || 0) + (Number(cashData[i][4]) || 0);
+  }
+
+  const allMonths = Array.from(new Set(Object.keys(atmByMonth).concat(Object.keys(cashByMonth)))).sort();
+  Logger.log("=== Month-by-month: ATM withdrawn vs. Cash spend logged ===");
+  allMonths.forEach(function(key){
+    const atm  = atmByMonth[key]  || 0;
+    const cash = cashByMonth[key] || 0;
+    Logger.log(key + "  ATM withdrawn: ₹" + atm + "   Cash logged: ₹" + cash);
+  });
+}
+
 // The old 4-pot Savings functions that used to live here — getSavingsData(),
 // logSavingFromApp(), logCCBufferSaving(), addWishlistItemFromApp(),
 // markWishlistPurchasedFromApp() — were removed 2026-08-12. They were
@@ -987,8 +1055,86 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
   };
 }
 
+// Works out which payment-mode bucket a Transactions row's Mode value
+// falls into, for the Analysis screen's All/Bank/Card/Wallet toggle
+// (added 2026-08-17). Same "card" test already used by
+// isCreditCardBillPayment/CCAdvisor.js. "Bank" is everything left over
+// (upi, neft, atm, other, or blank) — deliberately not its own explicit
+// list, so a new Mode value the SMS parser starts sending later still
+// lands somewhere sensible instead of vanishing from every bucket.
+function bucketKeyForMode(mode){
+  const m = (mode || "").toString().trim().toLowerCase();
+  if(m.startsWith("card")) return "card";
+  if(m === "wallet") return "wallet";
+  return "bank";
+}
+
+// One of these per payment-mode bucket (bank/card/wallet) — same fields
+// as the "all" totals above, kept as a plain object instead of separate
+// variables so the accumulation code below can update whichever bucket
+// a row belongs to without a second pass over the sheet.
+function freshModeBucket(){
+  return {
+    totalDebit: 0,
+    totalCredit: 0,
+    categoryTotals: {},
+    categoryTxns: {},
+    dailyTotals: {},
+    topAmount: 0,
+    topNote: "",
+    typeTotals: { Need: 0, Want: 0, Saving: 0, Investment: 0 },
+    untaggedTotal: 0,
+    untaggedCount: 0,
+    fixedObligations: 0,
+    invested: 0
+  };
+}
+
+// Turns one bucket's raw accumulators into the same response shape
+// getMonthlyAnalysis already returns at the top level (categories,
+// needWantSaving, etc.) — used for bank/card/wallet in `byMode` below.
+function finalizeModeBucket(bucket){
+  const savings = bucket.totalCredit - bucket.totalDebit;
+  const days = Object.keys(bucket.dailyTotals).length || 1;
+  const avgDaily = Math.round(bucket.totalDebit / days);
+  const categories = Object.entries(bucket.categoryTotals)
+    .sort(function(a, b){ return b[1] - a[1]; })
+    .map(function(entry){
+      const topTransactions = (bucket.categoryTxns[entry[0]] || [])
+        .sort(function(a, b){ return b.amount - a.amount; })
+        .slice(0, 5);
+      return { category: entry[0], amount: entry[1], topTransactions: topTransactions };
+    });
+  const taggedTotal = bucket.typeTotals.Need + bucket.typeTotals.Want + bucket.typeTotals.Saving + bucket.typeTotals.Investment;
+  return {
+    totalDebit:  bucket.totalDebit,
+    totalCredit: bucket.totalCredit,
+    savings:     savings,
+    avgDaily:    avgDaily,
+    topAmount:   bucket.topAmount,
+    topNote:     bucket.topNote,
+    categories:  categories,
+    fixedObligations: bucket.fixedObligations,
+    invested:         bucket.invested,
+    needWantSaving: {
+      need:           bucket.typeTotals.Need,
+      want:           bucket.typeTotals.Want,
+      saving:         bucket.typeTotals.Saving,
+      investment:     bucket.typeTotals.Investment,
+      untagged:       bucket.untaggedTotal,
+      untaggedCount:  bucket.untaggedCount,
+      taggedTotal:    taggedTotal
+    }
+  };
+}
+
 // Full breakdown for one month: total spend, income, savings, top expense,
-// and spending by category — combining bank/UPI and cash.
+// and spending by category — combining bank/UPI and cash. Also returns
+// `byMode` (added 2026-08-17): the exact same breakdown, computed three
+// more times from ONLY the Transactions rows in the Bank/Card/Wallet
+// payment-mode bucket — never Cash, which has no payment mode — for the
+// Analysis screen's All/Bank/Card/Wallet toggle. Everything above this
+// note (the "all" numbers) is completely unchanged.
 // txnData/cashData are optional — see getCashData's comment, same reasoning.
 function getMonthlyAnalysis(year, month, txnData, cashData){
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1021,6 +1167,10 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   let fixedObligations = 0;
   let invested = 0;
 
+  // Bank/Card/Wallet buckets — Transactions rows only, Cash never
+  // contributes (see function comment above).
+  const modeBuckets = { bank: freshModeBucket(), card: freshModeBucket(), wallet: freshModeBucket() };
+
   for(let i = 1; i < txnData.length; i++){
     const rawDate = txnData[i][0];
     if(!rawDate) continue;
@@ -1036,6 +1186,10 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
       const counterparty = txnData[i][7] || "";
       const financialEvent = (txnData[i][17] || "").toString().trim(); // column R
 
+      // Which Bank/Card/Wallet bucket this specific row belongs to —
+      // computed once per row, used below for both debit and credit.
+      const modeBucket = modeBuckets[bucketKeyForMode(mode)];
+
       if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
       if(type === "debit" && isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet — the real spend gets counted separately, below, as each wallet purchase happens
       // A loan/repayment isn't spending either — you expect the money back.
@@ -1045,9 +1199,12 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
       if(type === "debit" && isLendingTransfer(counterparty, note)) continue;
 
       if(type === "debit" && financialEvent){
-        if(financialEvent === "Rent" || financialEvent === "EMI") fixedObligations += amount;
-        else if(financialEvent === "Investment"){
+        if(financialEvent === "Rent" || financialEvent === "EMI"){
+          fixedObligations += amount;
+          modeBucket.fixedObligations += amount;
+        } else if(financialEvent === "Investment"){
           invested += amount;
+          modeBucket.invested += amount;
           // Also counts toward the Need/Want/Saving/Investment snapshot's
           // "Investment" slice — fixed 2026-08-11. Before this, a confirmed
           // SIP/Investment Financial Event was `continue`d past entirely,
@@ -1058,6 +1215,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
           // month, "Invested" correctly showed ₹3,000 elsewhere, but the
           // snapshot bar still showed Saving+Invest 0%.
           typeTotals.Investment += amount;
+          modeBucket.typeTotals.Investment += amount;
         }
         continue; // not day-to-day spend — tracked as its own line, not blended into spend/category totals
       }
@@ -1082,8 +1240,29 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
           untaggedTotal += amount;
           untaggedCount++;
         }
+
+        // Mirror the same row into its Bank/Card/Wallet bucket.
+        modeBucket.totalDebit += amount;
+        modeBucket.categoryTotals[category] = (modeBucket.categoryTotals[category] || 0) + amount;
+        modeBucket.dailyTotals[day] = (modeBucket.dailyTotals[day] || 0) + amount;
+        if(amount > modeBucket.topAmount){ modeBucket.topAmount = amount; modeBucket.topNote = note; }
+
+        if(!modeBucket.categoryTxns[category]) modeBucket.categoryTxns[category] = [];
+        modeBucket.categoryTxns[category].push({
+          note:   note || counterparty || "",
+          amount: amount,
+          date:   Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM")
+        });
+
+        if(modeBucket.typeTotals.hasOwnProperty(savedType)){
+          modeBucket.typeTotals[savedType] += amount;
+        } else {
+          modeBucket.untaggedTotal += amount;
+          modeBucket.untaggedCount++;
+        }
       } else if(type === "credit"){
         totalCredit += amount;
+        modeBucket.totalCredit += amount;
       }
     }
   }
@@ -1158,6 +1337,15 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
       untagged:       untaggedTotal,
       untaggedCount:  untaggedCount,
       taggedTotal:    taggedTotal
+    },
+
+    // All/Bank/Card/Wallet toggle (added 2026-08-17) — same shape as
+    // everything above, computed separately per payment-mode bucket.
+    // Cash never appears here (see bucketKeyForMode's comment).
+    byMode: {
+      bank:   finalizeModeBucket(modeBuckets.bank),
+      card:   finalizeModeBucket(modeBuckets.card),
+      wallet: finalizeModeBucket(modeBuckets.wallet)
     }
   };
 }

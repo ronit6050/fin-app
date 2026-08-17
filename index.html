@@ -1319,6 +1319,66 @@
       color: var(--text-on-hero);
     }
 
+    /* ---------- Analysis: payment-mode filter toggle (2026-08-17) ----------
+       Sits in the Analysis hero card, next to "Total Spent". Built from
+       only the 3 tokens the hero card already uses (--surface-hero,
+       --text-on-hero, --text-on-hero-muted) via color-mix — no new
+       hardcoded colors, so it's correct in both themes automatically.
+       Inactive segments are transparent/muted against the hero surface;
+       the active segment inverts (fills with --text-on-hero, icon/text
+       colored with --surface-hero) — the same "invert" pairing already
+       used for the hero card and the active bottom-nav pill elsewhere in
+       this file, just mirrored since this control sits ON the hero
+       surface instead of on the page background. */
+    .today-total-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .mode-toggle {
+      display: flex;
+      gap: 2px;
+      background: color-mix(in srgb, var(--text-on-hero) 14%, transparent);
+      border-radius: var(--radius-pill);
+      padding: 3px;
+      flex-shrink: 0;
+    }
+
+    .mode-toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 30px;
+      height: 29px;
+      padding: 0 9px;
+      border: none;
+      border-radius: var(--radius-pill);
+      background: transparent;
+      color: var(--text-on-hero-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+    }
+
+    .mode-toggle-btn svg {
+      width: 15px;
+      height: 15px;
+      display: block;
+    }
+
+    .mode-toggle-btn.active {
+      background: var(--text-on-hero);
+      color: var(--surface-hero);
+    }
+
+    .mode-toggle-btn:active {
+      transform: scale(0.92);
+    }
+
     .category-row {
       background: var(--surface-card);
       border: 0.5px solid var(--border-hairline);
@@ -2298,7 +2358,22 @@
         </div>
         <div id="analysisContent" style="display:none">
           <div class="today-total-box">
-            <div class="today-total-label">Total Spent</div>
+            <div class="today-total-header">
+              <div class="today-total-label">Total Spent</div>
+              <!-- Payment-mode filter (2026-08-17) — re-renders the whole
+                   screen from data already fetched with getMonthlyAnalysis
+                   (a.byMode.bank/card/wallet), no extra network call. See
+                   getAnalysisModeSlice()/renderAnalysisForMode() in the
+                   script below. "All" also includes Cash spend, which
+                   Bank/Card/Wallet deliberately never do (Cash has no
+                   payment mode) — confirmed with the user. -->
+              <div class="mode-toggle" id="analysisModeToggle" role="group" aria-label="Filter by payment mode">
+                <button type="button" class="mode-toggle-btn active" data-mode="all" aria-pressed="true">All</button>
+                <button type="button" class="mode-toggle-btn" data-mode="bank" aria-pressed="false" aria-label="Bank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M4.5 10v8M9.5 10v8M14.5 10v8M19.5 10v8"/><path d="M3 20h18"/></svg></button>
+                <button type="button" class="mode-toggle-btn" data-mode="card" aria-pressed="false" aria-label="Card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></button>
+                <button type="button" class="mode-toggle-btn" data-mode="wallet" aria-pressed="false" aria-label="Wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><circle cx="12" cy="12" r="2.7"/></svg></button>
+              </div>
+            </div>
             <div class="today-total-amount" id="analysisTotalAmount">₹0</div>
             <div class="today-split" id="analysisSplit"></div>
             <div class="today-split" id="analysisFinancialEvents"></div>
@@ -2863,8 +2938,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-12-08";
-    const APP_CHANGELOG = "Save/Add/Edit/Delete now feel instant on Cash, Debts, Savings, Investments and History — the screen updates right away instead of waiting for a response, same as Pending already did.";
+    const APP_VERSION = "2026-08-17-01";
+    const APP_CHANGELOG = "Analysis now has an All / Bank / Card / Wallet toggle on the Total Spent card, so you can see spending broken down by how it was paid.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -4197,19 +4272,70 @@
       return { bankSpend: bankSpend, cashSpend: cashSpend, total: bankSpend + cashSpend, transactionCount: totalTxn, categories: categories };
     }
 
+    // Payment-mode bucketing for Demo Mode's Analysis data (2026-08-17) —
+    // mirrors bucketKeyForMode/freshModeBucket/finalizeModeBucket in the
+    // real backend (backend/PWA.js) exactly, just written against
+    // demoState's in-memory transactions instead of the Transactions
+    // sheet, so the All/Bank/Card/Wallet toggle has real, distinct
+    // numbers to show when trying it out in Demo Mode. Only Transactions
+    // feed these buckets — Cash never does, same "All" also includes
+    // Cash, Bank/Card/Wallet deliberately never do" rule as the real
+    // backend and the toggle's own tooltip/comment.
+    function demoBucketKeyForMode(mode) {
+      const m = (mode || "").toString().trim().toLowerCase();
+      if (m.startsWith("card")) return "card";
+      if (m === "wallet") return "wallet";
+      return "bank";
+    }
+
+    function demoFreshModeBucket() {
+      return {
+        totalDebit: 0, totalCredit: 0, categoryTotals: {}, categoryTxns: {},
+        dailyTotals: {}, topAmount: 0, topNote: "",
+        typeTotals: { Need: 0, Want: 0, Saving: 0, Investment: 0 },
+        untaggedTotal: 0, untaggedCount: 0, fixedObligations: 0, invested: 0
+      };
+    }
+
+    function demoFinalizeModeBucket(bucket) {
+      const savings = bucket.totalCredit - bucket.totalDebit;
+      const days = Object.keys(bucket.dailyTotals).length || 1;
+      const avgDaily = Math.round(bucket.totalDebit / days);
+      const categories = Object.entries(bucket.categoryTotals)
+        .sort(function (a, b) { return b[1] - a[1]; })
+        .map(function (e) {
+          const topTransactions = (bucket.categoryTxns[e[0]] || []).sort(function (a, b) { return b.amount - a.amount; }).slice(0, 5);
+          return { category: e[0], amount: e[1], topTransactions: topTransactions };
+        });
+      const taggedTotal = bucket.typeTotals.Need + bucket.typeTotals.Want + bucket.typeTotals.Saving + bucket.typeTotals.Investment;
+      return {
+        totalDebit: bucket.totalDebit, totalCredit: bucket.totalCredit, savings: savings, avgDaily: avgDaily,
+        topAmount: bucket.topAmount, topNote: bucket.topNote, categories: categories,
+        fixedObligations: bucket.fixedObligations, invested: bucket.invested,
+        needWantSaving: { need: bucket.typeTotals.Need, want: bucket.typeTotals.Want, saving: bucket.typeTotals.Saving, investment: bucket.typeTotals.Investment, untagged: bucket.untaggedTotal, untaggedCount: bucket.untaggedCount, taggedTotal: taggedTotal }
+      };
+    }
+
     function demoComputeMonthlyAnalysis(year, month) {
       let totalDebit = 0, totalCredit = 0, topAmount = 0, topNote = "";
       const categoryTotals = {}, categoryTxns = {}, dailyTotals = {};
       const typeTotals = { Need: 0, Want: 0, Saving: 0, Investment: 0 };
       let untaggedTotal = 0, untaggedCount = 0, fixedObligations = 0, invested = 0;
+      const modeBuckets = { bank: demoFreshModeBucket(), card: demoFreshModeBucket(), wallet: demoFreshModeBucket() };
 
       demoState.transactions.forEach(function (t) {
         if (t.date.getFullYear() !== year || (t.date.getMonth() + 1) !== month) return;
         const day = t.date.getDate();
+        const modeBucket = modeBuckets[demoBucketKeyForMode(t.mode)];
 
         if (t.type === "debit" && t.financialEvent) {
-          if (t.financialEvent === "Rent" || t.financialEvent === "EMI") fixedObligations += t.amount;
-          else if (t.financialEvent === "Investment") { invested += t.amount; typeTotals.Investment += t.amount; }
+          if (t.financialEvent === "Rent" || t.financialEvent === "EMI") {
+            fixedObligations += t.amount;
+            modeBucket.fixedObligations += t.amount;
+          } else if (t.financialEvent === "Investment") {
+            invested += t.amount; typeTotals.Investment += t.amount;
+            modeBucket.invested += t.amount; modeBucket.typeTotals.Investment += t.amount;
+          }
           return; // not day-to-day spend — its own line, not blended into category totals
         }
 
@@ -4224,8 +4350,19 @@
           const savedType = t.needWantSaving || "";
           if (typeTotals.hasOwnProperty(savedType)) typeTotals[savedType] += t.amount;
           else { untaggedTotal += t.amount; untaggedCount++; }
+
+          // Mirror the same row into its Bank/Card/Wallet bucket.
+          modeBucket.totalDebit += t.amount;
+          modeBucket.categoryTotals[category] = (modeBucket.categoryTotals[category] || 0) + t.amount;
+          modeBucket.dailyTotals[day] = (modeBucket.dailyTotals[day] || 0) + t.amount;
+          if (t.amount > modeBucket.topAmount) { modeBucket.topAmount = t.amount; modeBucket.topNote = t.note || t.counterparty || ""; }
+          if (!modeBucket.categoryTxns[category]) modeBucket.categoryTxns[category] = [];
+          modeBucket.categoryTxns[category].push({ note: t.note || t.counterparty || "", amount: t.amount, date: demoFmtDateShort(t.date) });
+          if (modeBucket.typeTotals.hasOwnProperty(savedType)) modeBucket.typeTotals[savedType] += t.amount;
+          else { modeBucket.untaggedTotal += t.amount; modeBucket.untaggedCount++; }
         } else if (t.type === "credit") {
           totalCredit += t.amount;
+          modeBucket.totalCredit += t.amount;
         }
       });
 
@@ -4261,7 +4398,12 @@
         totalDebit: totalDebit, totalCredit: totalCredit, savings: savings, avgDaily: avgDaily,
         topAmount: topAmount, topNote: topNote, categories: categories,
         fixedObligations: fixedObligations, invested: invested,
-        needWantSaving: { need: typeTotals.Need, want: typeTotals.Want, saving: typeTotals.Saving, investment: typeTotals.Investment, untagged: untaggedTotal, untaggedCount: untaggedCount, taggedTotal: taggedTotal }
+        needWantSaving: { need: typeTotals.Need, want: typeTotals.Want, saving: typeTotals.Saving, investment: typeTotals.Investment, untagged: untaggedTotal, untaggedCount: untaggedCount, taggedTotal: taggedTotal },
+        byMode: {
+          bank:   demoFinalizeModeBucket(modeBuckets.bank),
+          card:   demoFinalizeModeBucket(modeBuckets.card),
+          wallet: demoFinalizeModeBucket(modeBuckets.wallet)
+        }
       };
     }
 
@@ -6011,6 +6153,17 @@
     const analysisFinancialEventsEl = document.getElementById("analysisFinancialEvents");
     const analysisCategoriesEl = document.getElementById("analysisCategories");
     const analysisNeedWantSavingEl = document.getElementById("analysisNeedWantSaving");
+    const analysisModeToggleEl = document.getElementById("analysisModeToggle");
+
+    // Payment-mode filter (2026-08-17) — see the .mode-toggle CSS comment
+    // and getMonthlyAnalysis's byMode field. analysisLastData holds the
+    // full response most recently rendered (the "All" view IS its
+    // top-level fields, byMode.bank/card/wallet are the other 3 slices);
+    // analysisMode tracks which one is currently showing. Both live here
+    // (not fetched again) so switching modes never needs a network call.
+    let analysisMode = "all";
+    let analysisLastData = null;
+    let analysisModeResetFor = null; // "year_month" of the last render — only reset analysisMode back to "All" when this actually changes (a real month switch), not on every render (a background refresh of the same month re-calls renderMonthlyAnalysis too, and shouldn't silently undo a toggle tap)
 
     // Round 6: reads the --chart-* tier, not --need-text/etc directly —
     // the donut/stack-bar segments are chart fills with no text on top,
@@ -6179,9 +6332,42 @@
         });
     }
 
-    function renderMonthlyAnalysis(a) {
-      analysisStatusEl.textContent = "";
-      analysisContentEl.style.display = "block";
+    // Picks which slice of a getMonthlyAnalysis response to render for a
+    // given mode. "all" is the literal top-level fields — same object,
+    // so that view stays byte-identical to how it always rendered before
+    // this toggle existed. bank/card/wallet read the matching bucket
+    // from a.byMode. Falls back to an empty-but-valid shape if a bucket
+    // is somehow missing (e.g. a cached response saved before this
+    // feature shipped) so switching modes can never throw.
+    function getAnalysisModeSlice(a, mode) {
+      if (mode === "all" || !a || !a.byMode) return a;
+      return a.byMode[mode] || {
+        totalDebit: 0, totalCredit: 0, savings: 0, avgDaily: 0,
+        topAmount: 0, topNote: "", categories: [],
+        fixedObligations: 0, invested: 0,
+        needWantSaving: { need: 0, want: 0, saving: 0, investment: 0, untagged: 0, untaggedCount: 0, taggedTotal: 0 }
+      };
+    }
+
+    // Reflects analysisMode onto the toggle buttons' active/aria state.
+    function updateAnalysisModeToggleUI() {
+      if (!analysisModeToggleEl) return;
+      analysisModeToggleEl.querySelectorAll(".mode-toggle-btn").forEach(function (btn) {
+        const isActive = btn.dataset.mode === analysisMode;
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    }
+
+    // Renders the whole Analysis screen (hero figures, Fixed obligations/
+    // Invested pills, the Need/Want/Saving/Investment chart, and the
+    // category list) from whichever slice analysisMode currently points
+    // at — same rendering code the "All" view always used, just fed a
+    // different slice. Called on toggle tap (no network call) and once
+    // right after a fresh/cached load.
+    function renderAnalysisForMode() {
+      if (!analysisLastData) return;
+      const a = getAnalysisModeSlice(analysisLastData, analysisMode);
 
       analysisTotalAmountEl.textContent = "₹" + a.totalDebit.toLocaleString("en-IN");
 
@@ -6278,6 +6464,41 @@
           (a.topNote ? " (" + a.topNote + ")" : "");
         analysisCategoriesEl.appendChild(topLine);
       }
+    }
+
+    // Entry point called after a fresh or cached getMonthlyAnalysis
+    // response. loadMonthlyAnalysis() calls this TWICE for a normal open
+    // (once with cached data, once again when the network response
+    // lands) — resetting the payment-mode filter on every call meant a
+    // toggle tap right after opening the tab could get silently undone
+    // the moment the background fetch finished (caught in review before
+    // shipping — same "background refresh clobbers something the user
+    // just touched" bug shape as the Note Memory fix). Only reset back
+    // to "All" when the month actually changed since the last render,
+    // not just because this function ran again for the same month.
+    function renderMonthlyAnalysis(a) {
+      analysisStatusEl.textContent = "";
+      analysisContentEl.style.display = "block";
+
+      const monthKey = analysisYear + "_" + analysisMonth;
+      if (monthKey !== analysisModeResetFor) {
+        analysisMode = "all";
+        analysisModeResetFor = monthKey;
+      }
+      analysisLastData = a;
+      updateAnalysisModeToggleUI();
+      renderAnalysisForMode();
+    }
+
+    if (analysisModeToggleEl) {
+      analysisModeToggleEl.querySelectorAll(".mode-toggle-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          if (btn.dataset.mode === analysisMode) return; // already selected
+          analysisMode = btn.dataset.mode;
+          updateAnalysisModeToggleUI();
+          renderAnalysisForMode();
+        });
+      });
     }
 
     // Moves to the previous/next month and reloads

@@ -936,6 +936,59 @@ multi-word merchant like "swiggy instamart" still matches correctly).
 Deployed live via `clasp deploy` (@303) on 2026-08-12 — nothing left
 pending on this fix.
 
+**Analysis payment-mode filter — backend + frontend both done
+2026-08-17, pushed, NOT yet deployed/pushed live (waiting on the
+deploy go-ahead).** A new All / Bank / Card / Wallet toggle on the
+Analysis screen — so you can see "what did I spend just on my credit
+card this month" separately from UPI/bank transfers or wallet spend,
+instead of only ever seeing everything blended together.
+`getMonthlyAnalysis` (`backend/PWA.js`) now also returns a `byMode`
+key with the exact same numbers (total spent, total in, savings,
+biggest category, category breakdown, Rent/EMI, Invested, Need/Want/
+Saving/Investment split) computed three more times — once each for
+Bank, Card, and Wallet — using the `Mode` column each bank transaction
+already carries (Card = the payment mode starts with "card", same
+check already used for the credit-card-bill-payment fix; Wallet = mode
+is exactly "wallet"; Bank = everything else — UPI, NEFT, ATM). Cash
+entries (the separate Cash tab) have no payment mode at all, so they
+deliberately only ever show up in the existing "All" totals, never in
+any of the three new buckets — confirmed with the user before
+building. All the same exclusion rules that already applied to "All"
+(a credit card bill payment, a wallet top-up, a money-lent transfer,
+and a confirmed Rent/EMI/Investment) apply per-bucket too now — e.g. a
+credit card bill payment made via UPI is excluded from the Bank
+bucket's spend, not just from "All." The existing "All" numbers
+returned by this function are completely unchanged — this is purely
+additive, verified by asserting the exact old field list and values
+still come back unchanged for a mixed fixture. Verified with a new
+test, `backend/tests/analysisByMode.test.js` (mixed card/wallet/UPI/
+NEFT rows land in the right bucket with correct totals; a Cash entry
+appears only in "All"; a bill-payment/top-up stay excluded per bucket
+not just overall; a Rent/Investment row is excluded from that bucket's
+spend and shows up in that bucket's own fixedObligations/invested
+instead). Full existing test suite (8 files,
+299 checks) still passes. `clasp push`ed (editor draft only, not the
+live app yet — needs a `clasp deploy` go-ahead).
+
+**Frontend (`index.html`): also done.** A small icon-only segmented
+pill (All / Bank / Card / Wallet) sits in the top-right of the Total
+Spent hero card — hand-drawn icons matching the app's existing style,
+reusing only the hero card's 3 existing color tokens so both themes
+work with no new colors. Tapping a segment re-renders the whole
+Analysis screen (total, income/savings/avg-per-day line, Fixed
+obligations/Invested pills, category list + Top expense, and the
+Need/Want/Saving/Investment chart) from the `byMode` data already
+fetched — no extra network call. "All" is byte-identical to how the
+screen always looked; the toggle resets to "All" on a real month
+change, not on a routine background refresh of the same month (a real
+bug where a background refresh silently undid a toggle tap was caught
+by `change-reviewer` and fixed before this note was written). Demo
+Mode was also extended to compute matching Bank/Card/Wallet numbers
+from its own pretend data, so the toggle can be tried out from
+Settings → View Demo Mode before this is live. `git push` not yet
+done — pending your review and go-ahead, same as the backend's
+`clasp deploy`.
+
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
 - **PWA source**: https://github.com/ronit6050/fin-app (this repo, `D:\fin-app` — the one this file lives in). Plain HTML/CSS/JS in `index.html`, plus `sw.js` (service worker), `manifest.json`, `icons/`.
@@ -953,19 +1006,24 @@ pending on this fix.
   2026-08-11). E.g. instead of a paragraph explaining SIP amount-change
   handling, say: "SIP goes from ₹2000 to ₹3000 → app asks once, you tap
   'Nifty 50 SIP' again, done." Keep explanations short and scannable.
-- **Don't ask which approach to use — decide and go** (confirmed
-  2026-08-11, after the Investment Instruments feature burned a lot of
-  usage on subagents). A small tweak (a doc fix, a one-line bug fix, a
-  quick backend/frontend change I can verify myself) → just make the
-  edit directly, no agent, no asking first. A genuinely big/multi-part
-  feature → use the specialist subagents freely, without hesitating
-  over cost — the user explicitly said "never worry about the
-  credits" for cases that actually need them. The only judgment call
-  left to me is picking which bucket a task falls into; once decided,
-  proceed without a check-in for that choice specifically. (This is
-  about *how* to execute, not a license to skip the separate "show
-  before building" / "one step at a time for judgment calls" rules
-  above — those still apply to the outcome, not the tooling choice.)
+- **Don't ask which approach to use — decide and go, and actively
+  manage token/credit usage** (confirmed 2026-08-11, **updated
+  2026-08-14** after the user hit their weekly usage limit within just
+  a few days of subagent-heavy work — the old "never worry about the
+  credits" default is retired). A small tweak (a doc fix, a one-line
+  bug fix, a quick backend/frontend change I can verify myself) → just
+  make the edit directly, no agent, no asking first — unchanged. For
+  anything bigger, I now weigh the actual intensity of the work before
+  reaching for a subagent, instead of defaulting to one for anything
+  "big": if I can do it directly and verify it myself (a Node test, a
+  careful read of the diff, the browser preview) without much more
+  effort than briefing a subagent would take, I do it directly. A
+  subagent is for when it's genuinely needed — real parallel work, a
+  large multi-file feature, or a second independent set of eyes before
+  something risky ships (`change-reviewer`, the security-review skill —
+  that safety net stays, it's not being cut to save tokens). The
+  judgment call is still mine to make without asking first; the bar for
+  "this needs a subagent" is just higher now than it was.
 - One step at a time for anything that needs my judgment or that I'm
   actually going to use/experience — this hasn't changed.
 - **Refined 2026-08-11**: "one step at a time" was about me being the one
