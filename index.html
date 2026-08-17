@@ -2938,8 +2938,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-17-01";
-    const APP_CHANGELOG = "Analysis now has an All / Bank / Card / Wallet toggle on the Total Spent card, so you can see spending broken down by how it was paid.";
+    const APP_VERSION = "2026-08-17-02";
+    const APP_CHANGELOG = "Need/Want/Saving chart now includes Rent/EMI under Need and checks the 50/30/20 split against your income, not just tagged spend.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -5279,9 +5279,16 @@
       }
 
       // --- Chart 2: Need / Want / Saving / Investment snapshot ---
+      // fixedObligations (Rent+EMI) folded into Need, and the guideline %
+      // checked against income (totalCredit) not tagged spend — same fix
+      // and same reasoning as Analysis's donut chart, changed 2026-08-17
+      // so Home and Analysis always agree.
       const nws = full.month.needWantSaving;
       if (!nws) return;
-      const grandTotal = (nws.taggedTotal || 0) + (nws.untagged || 0);
+      const fixedObligations = full.month.fixedObligations || 0;
+      const income = full.month.totalCredit || 0;
+      const needWithFixed = nws.need + fixedObligations;
+      const grandTotal = (nws.taggedTotal || 0) + (nws.untagged || 0) + fixedObligations;
 
       if (grandTotal <= 0) {
         homeNwsStackEl.style.display = "none";
@@ -5291,7 +5298,7 @@
 
       homeNwsStackEl.style.display = "flex";
       const segments = [
-        { amount: nws.need,       color: "var(--need-text)" },
+        { amount: needWithFixed,  color: "var(--need-text)" },
         { amount: nws.want,       color: "var(--want-text)" },
         { amount: nws.saving,     color: "var(--saving-text)" },
         { amount: nws.investment, color: "var(--investment-text)" },
@@ -5304,10 +5311,10 @@
           return `<span class="chart-glow-fill" style="width:${pct}%; background:${s.color}; color:${s.color};"></span>`;
         }).join("");
 
-      if (nws.taggedTotal > 0) {
-        const needPct = Math.round((nws.need / nws.taggedTotal) * 100);
-        const wantPct = Math.round((nws.want / nws.taggedTotal) * 100);
-        const savePct = Math.round(((nws.saving + nws.investment) / nws.taggedTotal) * 100);
+      if (income > 0) {
+        const needPct = Math.round((needWithFixed / income) * 100);
+        const wantPct = Math.round((nws.want / income) * 100);
+        const savePct = Math.round(((nws.saving + nws.investment) / income) * 100);
         homeNwsNoteEl.innerHTML =
           `Need ${needPct}% &middot; Want ${wantPct}% &middot; Saving+Invest ${savePct}% ` +
           `<span class="chart-note-muted">(guideline 50/30/20)</span>`;
@@ -6198,17 +6205,27 @@
     // Includes "Untagged" as its own gray segment on purpose: the chart
     // should never silently imply 100% of spend is accounted for when
     // some of it hasn't been tagged yet (see docs/features/need-want-saving.md).
-    function renderNeedWantSavingChart(nws) {
+    // fixedObligations (Rent+EMI) and income (this month's total credit)
+    // added 2026-08-17 — folded into "Need" here so the chart matches the
+    // real 50/30/20 rule (checked against income, not spend), instead of
+    // silently leaving your single biggest Need (rent) out of the chart
+    // entirely. See CLAUDE.md / chat notes for the "why" — rent used to
+    // only show up in the separate "Fixed obligations" pill above this
+    // chart, never counted as a Need here even though it obviously is one.
+    function renderNeedWantSavingChart(nws, fixedObligations, income) {
       analysisNeedWantSavingEl.innerHTML = "";
+      fixedObligations = fixedObligations || 0;
+      income = income || 0;
 
+      const needWithFixed = nws.need + fixedObligations;
       const segments = [
-        { label: "Need",       amount: nws.need },
+        { label: "Need",       amount: needWithFixed },
         { label: "Want",       amount: nws.want },
         { label: "Saving",     amount: nws.saving },
         { label: "Investment", amount: nws.investment },
         { label: "Untagged",   amount: nws.untagged }
       ];
-      const grandTotal = nws.taggedTotal + nws.untagged;
+      const grandTotal = nws.taggedTotal + nws.untagged + fixedObligations;
 
       if (grandTotal <= 0) {
         analysisNeedWantSavingEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🏷️</span><p>No spending recorded this month.</p></div>";
@@ -6257,15 +6274,17 @@
         })
         .join("");
 
-      // Only meaningful against TAGGED spend — comparing against the
-      // grand total (including Untagged) would understate every
-      // percentage while you're still catching up on tagging.
+      // The real 50/30/20 rule is checked against INCOME, not spend —
+      // changed 2026-08-17 (was "of tagged spend"). Need here includes
+      // Rent/EMI (see needWithFixed above), since those are genuinely
+      // Needs even though they're tracked separately from day-to-day
+      // spend elsewhere in the app.
       let guidelineHtml = "";
-      if (nws.taggedTotal > 0) {
-        const needPct   = Math.round((nws.need / nws.taggedTotal) * 100);
-        const wantPct   = Math.round((nws.want / nws.taggedTotal) * 100);
-        const savePct   = Math.round(((nws.saving + nws.investment) / nws.taggedTotal) * 100);
-        guidelineHtml = `<p style="font-size:0.78rem; color:var(--text-muted); margin-top:10px;">Of tagged spend — Need ${needPct}% (guideline ~50%) · Want ${wantPct}% (guideline ~30%) · Saving+Investment ${savePct}% (guideline ~20%)</p>`;
+      if (income > 0) {
+        const needPct   = Math.round((needWithFixed / income) * 100);
+        const wantPct   = Math.round((nws.want / income) * 100);
+        const savePct   = Math.round(((nws.saving + nws.investment) / income) * 100);
+        guidelineHtml = `<p style="font-size:0.78rem; color:var(--text-muted); margin-top:10px;">Of income (₹${income.toLocaleString("en-IN")}) — Need ${needPct}% incl. Rent/EMI (guideline ~50%) · Want ${wantPct}% (guideline ~30%) · Saving+Investment ${savePct}% (guideline ~20%)</p>`;
       }
 
       const untaggedHtml = nws.untagged > 0
@@ -6392,7 +6411,7 @@
         ? '<div class="fe-pills">' + feParts.map(function (p) { return '<span class="fe-pill">' + escapeHtml(p) + '</span>'; }).join("") + '</div>'
         : "";
 
-      if (a.needWantSaving) renderNeedWantSavingChart(a.needWantSaving);
+      if (a.needWantSaving) renderNeedWantSavingChart(a.needWantSaving, a.fixedObligations, a.totalCredit);
 
       analysisCategoriesEl.innerHTML = "";
 
