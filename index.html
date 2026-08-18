@@ -1379,6 +1379,46 @@
       transform: scale(0.92);
     }
 
+    /* Same compact pill shape as .mode-toggle above, but for use on a
+       normal card/page surface instead of the hero card — .mode-toggle's
+       own colors (--text-on-hero etc) only make sense sitting on top of
+       the hero's own background, so this is a separate token set rather
+       than reusing that class outside its one context. Used by the
+       Category / Need-Want-Saving toggle on Analysis (2026-08-17). */
+    .view-toggle {
+      display: flex;
+      gap: 2px;
+      background: var(--surface-inset);
+      border-radius: var(--radius-pill);
+      padding: 3px;
+    }
+
+    .view-toggle-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 32px;
+      padding: 0 10px;
+      border: none;
+      border-radius: var(--radius-pill);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .view-toggle-btn.active {
+      background: var(--button-fill);
+      color: white;
+    }
+
+    .view-toggle-btn:active {
+      transform: scale(0.96);
+    }
+
     .category-row {
       background: var(--surface-card);
       border: 0.5px solid var(--border-hairline);
@@ -2386,9 +2426,9 @@
                this only shows/hides, it never re-fetches or re-filters,
                so switching All/Bank/Card/Wallet above always stays in
                sync with whichever one you're looking at. -->
-          <div class="type-toggle" id="analysisViewToggle" style="margin-bottom:14px;">
-            <button type="button" class="type-btn active" data-view="category">Category</button>
-            <button type="button" class="type-btn" data-view="type">Need / Want / Saving</button>
+          <div class="view-toggle" id="analysisViewToggle" style="margin-bottom:14px;">
+            <button type="button" class="view-toggle-btn active" data-view="category">Category</button>
+            <button type="button" class="view-toggle-btn" data-view="type">Need / Want / Saving</button>
           </div>
 
           <div id="analysisCategories"></div>
@@ -2953,8 +2993,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-17-03";
-    const APP_CHANGELOG = "Analysis: added a Category / Need-Want-Saving toggle so you can switch which breakdown you see, instead of scrolling past both.";
+    const APP_VERSION = "2026-08-17-04";
+    const APP_CHANGELOG = "Restyled the Analysis Category / Need-Want-Saving toggle to match the compact pill look of the payment-mode toggle above it.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -6554,7 +6594,7 @@
     // never leaves the wrong section visible.
     function updateAnalysisViewUI() {
       if (analysisViewToggleEl) {
-        analysisViewToggleEl.querySelectorAll(".type-btn").forEach(function (btn) {
+        analysisViewToggleEl.querySelectorAll(".view-toggle-btn").forEach(function (btn) {
           btn.classList.toggle("active", btn.dataset.view === analysisView);
         });
       }
@@ -6563,7 +6603,7 @@
     }
 
     if (analysisViewToggleEl) {
-      analysisViewToggleEl.querySelectorAll(".type-btn").forEach(function (btn) {
+      analysisViewToggleEl.querySelectorAll(".view-toggle-btn").forEach(function (btn) {
         btn.addEventListener("click", function () {
           if (btn.dataset.view === analysisView) return; // already selected
           analysisView = btn.dataset.view;
