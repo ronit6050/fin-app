@@ -1451,6 +1451,24 @@
       transform: rotate(180deg);
     }
 
+    /* Base height/radius so .category-bar-track/.category-bar-fill render
+       correctly even OUTSIDE a .category-row (e.g. a hero card's own
+       progress bar, which already overrides background via an inline
+       style) — without this, an empty div has no intrinsic height and
+       the bar is invisible (0px), found 2026-08-18 via Planner's Track
+       view reusing this pattern outside .category-row for the first
+       time; the same gap already existed, unnoticed, in the Savings
+       carousel card's own hero bar (search "today-total-box" for that
+       usage), fixed here too since it's the same one-line root cause. */
+    .category-bar-track {
+      border-radius: 6px;
+      height: var(--chart-bar-height);
+    }
+    .category-bar-fill {
+      height: 100%;
+      border-radius: 6px;
+    }
+
     .category-row .category-bar-track {
       /* --chart-track-bg/--chart-bar-height default (in :root) to exactly
          --surface-inset/7px — i.e. identical to before this token existed
@@ -1583,6 +1601,119 @@
     }
     .chart-note-muted {
       color: var(--text-muted);
+    }
+
+    /* ---------- Planner (2026-08-18) ----------
+       "Set targets" view: one card per category. A non-split category
+       shows a single input; a split category shows two indented Need/
+       Want inputs instead (never a single blended number) — matches
+       exactly what getPlannerData's own `split` flag says, nothing
+       decided here. See docs/features/planner.md. */
+    .planner-cat-card {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+    .planner-cat-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .planner-type-tag {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: var(--radius-pill);
+    }
+    .planner-input-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .planner-input-row:last-of-type {
+      margin-bottom: 0;
+    }
+    .planner-input-row label {
+      flex: 1;
+      font-size: 0.85rem;
+      margin-bottom: 0;
+    }
+    .planner-input-row input {
+      width: 116px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    /* Indents the Need/Want sub-rows under their parent category, with a
+       thin connecting line — the same "this belongs to the row above"
+       visual language used elsewhere in this file (e.g. .category-detail
+       below, Planner's own Track view rows further down). */
+    .planner-input-row.sub {
+      margin-left: 12px;
+      padding-left: 12px;
+      border-left: 2px solid var(--border-hairline);
+    }
+    .planner-suggestion-note {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin: 4px 0 0;
+      line-height: 1.4;
+    }
+    .planner-total-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin: 6px 0 14px;
+    }
+    .planner-total-card .planner-total-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .planner-total-card .planner-total-amount {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.3px;
+    }
+
+    /* "Track progress" view — a rollup bar per category, indented Need/
+       Want sub-bars for split categories, same over/near-limit language
+       (.status-pill danger/warning) already used elsewhere (CC Advisor,
+       Debts). */
+    .planner-track-of {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .planner-track-row {
+      margin-top: 12px;
+      margin-left: 12px;
+      padding-left: 12px;
+      border-left: 2px solid var(--border-hairline);
+    }
+    .planner-track-row:first-child {
+      margin-top: 0;
+    }
+    .planner-track-row-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    .planner-track-row-top .cat-amt {
+      color: var(--text-primary);
+      font-weight: 600;
     }
 
     /* ---------- Category detail — top transactions shown when a
@@ -2496,6 +2627,10 @@
               <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5"/></svg></span>
               <span>Reconcile</span>
             </button>
+            <button type="button" class="more-menu-item tactile" data-target="planner">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-7"/><path d="M12 20V8"/><path d="M19 20v-5"/><path d="M3 10.5h18" stroke-dasharray="2.6 2.6"/></svg></span>
+              <span>Planner</span>
+            </button>
           </div>
         </div>
 
@@ -2961,6 +3096,65 @@
         <button type="button" id="historyShowMore" style="display:none">Show more</button>
       </div>
 
+      <!-- ===== SUB-SCREEN: Planner (2026-08-18) ===== -->
+      <!-- Set a monthly spend TARGET per category, then track real spend
+           against it. See docs/features/planner.md — the backend already
+           decides which categories split into separate Need/Want targets
+           (from real history), this screen only ever renders whatever it
+           says, never invents its own split logic. -->
+      <div id="view-planner" style="display:none">
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
+        <h2 class="section-title">Planner</h2>
+
+        <div class="month-nav">
+          <div class="month-switcher">
+            <button type="button" id="plannerPrevMonthButton" class="month-btn" aria-label="Previous month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <span id="plannerMonthLabel">—</span>
+            <button type="button" id="plannerNextMonthButton" class="month-btn" aria-label="Next month"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+          </div>
+        </div>
+
+        <div id="plannerStatus">
+          <div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div>
+          <div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>
+          <div class="skeleton-block" style="height:58px;"></div>
+        </div>
+
+        <div id="plannerContent" style="display:none">
+          <div class="view-toggle" id="plannerViewToggle" style="margin-bottom:14px;">
+            <button type="button" class="view-toggle-btn" data-view="set">Set targets</button>
+            <button type="button" class="view-toggle-btn" data-view="track">Track progress</button>
+          </div>
+
+          <!-- "Set targets" — one card per category, split ones get two
+               indented Need/Want inputs instead of one. -->
+          <div id="plannerSetView">
+            <p class="pending-status" id="plannerSuggestionNote"></p>
+            <div id="plannerSetList"></div>
+            <div class="planner-total-card">
+              <span class="planner-total-label">Total planned</span>
+              <span class="planner-total-amount" id="plannerRunningTotal">₹0</span>
+            </div>
+            <button type="button" id="plannerSaveButton">Save plan</button>
+            <div id="plannerSaveResult" class="pending-result"></div>
+          </div>
+
+          <!-- "Track progress" — hero card (real spend vs. total target)
+               plus one rollup bar per category. -->
+          <div id="plannerTrackView" style="display:none">
+            <div class="today-total-box">
+              <div class="today-total-label">Spent this month</div>
+              <div class="today-total-amount" id="plannerTrackAmount">₹0</div>
+              <div class="today-split" id="plannerTrackMeta"></div>
+              <div class="category-bar-track" style="background:rgba(255,255,255,0.15); margin-top:10px;">
+                <div class="category-bar-fill" id="plannerTrackBar" style="width:0%"></div>
+              </div>
+            </div>
+            <div id="plannerTrackList"></div>
+          </div>
+        </div>
+      </div>
+
       </section>
       <!-- (end of #view-more — CC/Debts/Savings/Investments/Cash all live above) -->
 
@@ -2993,8 +3187,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-17-04";
-    const APP_CHANGELOG = "Restyled the Analysis Category / Need-Want-Saving toggle to match the compact pill look of the payment-mode toggle above it.";
+    const APP_VERSION = "2026-08-18-01";
+    const APP_CHANGELOG = "Added Planner (More menu) — set a monthly spend target per category, split into Need/Want where your own history shows both, and track real spend against it.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -4125,6 +4319,11 @@
       return { today: today, outstandingStart: outstandingStart, outstandingEnd: outstandingEnd, outstandingDue: outstandingDue, currentStart: currentStart, currentEnd: currentEnd };
     }
 
+    // Same 9-category list the real Planner backend computes
+    // (SMART_CATEGORIES minus Income, see backend/planner.js) — used only
+    // by Demo Mode's own pretend planner dispatcher further below.
+    const PLANNER_CATEGORIES = Object.keys(CATEGORY_STYLES).filter(function (c) { return c !== "Income"; });
+
     // -----------------------------------------------------------
     // THE PRETEND DATASET — tweak the numbers/names below any time you
     // want Demo Mode to show something different. Everything else in
@@ -4284,6 +4483,29 @@
         { date: demoDaysAgo(9), type: "Digital Gold", amount: 2000, note: "" }
       ];
 
+      // ---- Planner (2026-08-18) — a real month's worth of already-saved
+      // targets, deliberately mixed: Food shows a saved, split (Need/
+      // Want) plan that's already over budget on both sides (a clear
+      // over-budget example); Bills is ALSO a split category (its one
+      // card-paid broadband bill is tagged Want, its mobile/electricity
+      // bills are Need) with a saved plan sitting close to/just over its
+      // limit on each side (a near-limit + a small-over example);
+      // Transport shows a saved, non-split plan comfortably under
+      // (a healthy example). Lifestyle is a split category with NO saved
+      // plan yet, so it shows the suggested starting numbers instead;
+      // Shopping/Health/Financial/Education/Other are left unsaved
+      // entirely, so Set targets falls back to a plain suggestion for
+      // those too — Shopping/Health also show a real Want/Need tag next
+      // to the category name from real (unsaved) history. ----
+      const plannerMonthKey = new Date().getFullYear() + "-" + demoPad2(new Date().getMonth() + 1);
+      const budgets = [
+        { month: plannerMonthKey, category: "Food",      type: "Need", target: 500 },
+        { month: plannerMonthKey, category: "Food",      type: "Want", target: 500 },
+        { month: plannerMonthKey, category: "Bills",     type: "Need", target: 2500 },
+        { month: plannerMonthKey, category: "Bills",     type: "Want", target: 1400 },
+        { month: plannerMonthKey, category: "Transport", type: "",     target: 3000 }
+      ];
+
       return {
         transactions: t,
         cash: cash,
@@ -4292,6 +4514,7 @@
         savingsEntries: savingsEntries,
         investments: investments,
         investmentInstruments: investmentInstruments,
+        budgets: budgets,
         settings: { ccLimit: 50000, ccWarnPct: 0.25, ccAlertPct: 0.30, monthlyExpenses: 30000, monthlySaveGoal: 3000, monthlyInvestmentGoal: 9000 }
       };
     }
@@ -4601,6 +4824,167 @@
 
     function demoKnownDebtPeople() {
       return demoState.debts.filter(function (d) { return d.status !== "Settled"; }).map(function (d) { return d.person; });
+    }
+
+    // ---- Planner (2026-08-18) — a small JS mirror of backend/planner.js,
+    // reading demoState instead of the Transactions/Cash/Budgets sheets.
+    // Not restricted to a "reliable window" the way the real backend is
+    // (see docs/features/planner.md's "Why August 2026 is the reliability
+    // cutoff") — Demo Mode's whole pretend dataset only ever spans the
+    // current month plus a handful of still-pending items anyway, so
+    // there's no unreliable older data to exclude. ----
+    function demoPlannerZeroBucket() {
+      return { Need: 0, Want: 0, Saving: 0, Investment: 0, Untagged: 0, total: 0 };
+    }
+
+    function demoPlannerBreakdown(matchesDate) {
+      const result = {};
+      function bucketFor(cat) { if (!result[cat]) result[cat] = demoPlannerZeroBucket(); return result[cat]; }
+
+      demoState.transactions.forEach(function (t) {
+        if (t.type !== "debit" || t.financialEvent) return; // a confirmed Rent/EMI/Investment is tracked separately, never blended into category spend
+        if (!matchesDate(t.date)) return;
+        const category = (t.category || "Other").toString().trim();
+        if (PLANNER_CATEGORIES.indexOf(category) === -1) return;
+        const bucket = bucketFor(category);
+        bucket.total += t.amount;
+        const savedType = t.needWantSaving || "";
+        if (savedType && bucket.hasOwnProperty(savedType)) bucket[savedType] += t.amount;
+        else bucket.Untagged += t.amount;
+      });
+
+      demoState.cash.forEach(function (c) {
+        if (c.type !== "debit") return;
+        if (!matchesDate(c.date)) return;
+        const category = (c.category || "Other").toString().trim();
+        if (PLANNER_CATEGORIES.indexOf(category) === -1) return;
+        const bucket = bucketFor(category);
+        bucket.total += c.amount;
+        const savedType = c.needWantSaving || "";
+        if (savedType && bucket.hasOwnProperty(savedType)) bucket[savedType] += c.amount;
+        else bucket.Untagged += c.amount;
+      });
+
+      return result;
+    }
+
+    function demoParsePlannerMonth(monthStr, today) {
+      const m = (monthStr || "").toString().trim();
+      if (/^\d{4}-\d{2}$/.test(m)) {
+        const mm = Number(m.slice(5, 7));
+        if (mm >= 1 && mm <= 12) return { year: Number(m.slice(0, 4)), month: mm, key: m };
+      }
+      const year = today.getFullYear(), month = today.getMonth() + 1;
+      return { year: year, month: month, key: year + "-" + demoPad2(month) };
+    }
+
+    // category -> { "": target, "Need": target, "Want": target } — same
+    // shape as the real backend's getSavedBudgetsForMonth_.
+    function demoGetSavedBudgetsForMonth(monthKey) {
+      const map = {};
+      demoState.budgets.forEach(function (b) {
+        if (b.month !== monthKey) return;
+        if (!map[b.category]) map[b.category] = {};
+        map[b.category][b.type] = b.target;
+      });
+      return map;
+    }
+
+    function demoComputePlannerData(monthStr) {
+      const today = new Date();
+      const target = demoParsePlannerMonth(monthStr, today);
+
+      // Split/type detection over the whole pretend history.
+      const splitBreakdown = demoPlannerBreakdown(function () { return true; });
+
+      // Suggested target — the same scaled-partial-month fallback the
+      // real backend uses right now (as of 2026-08-18 there are zero
+      // complete reliable months yet in the real app either — see
+      // docs/features/planner.md).
+      const y = today.getFullYear(), m = today.getMonth() + 1;
+      const dayOfMonth = today.getDate();
+      const daysInMonth = new Date(y, m, 0).getDate();
+      const partial = demoPlannerBreakdown(function (d) {
+        return d.getFullYear() === y && (d.getMonth() + 1) === m && d.getDate() <= dayOfMonth;
+      });
+      const factor = dayOfMonth > 0 ? (daysInMonth / dayOfMonth) : 1;
+
+      const actualBreakdown = demoPlannerBreakdown(function (d) {
+        return d.getFullYear() === target.year && (d.getMonth() + 1) === target.month;
+      });
+
+      const savedMap = demoGetSavedBudgetsForMonth(target.key);
+
+      const categories = PLANNER_CATEGORIES.map(function (cat) {
+        const splitStats = splitBreakdown[cat] || demoPlannerZeroBucket();
+        const isSplit = splitStats.Need > 0 && splitStats.Want > 0;
+        const dominantType = splitStats.Need > 0 ? "Need" : (splitStats.Want > 0 ? "Want" : "");
+
+        const p = partial[cat] || demoPlannerZeroBucket();
+        const suggested = isSplit
+          ? { need: Math.round(p.Need * factor), want: Math.round(p.Want * factor), total: Math.round((p.Need + p.Want) * factor) }
+          : { total: Math.round((p.Need + p.Want + p.Saving + p.Investment + p.Untagged) * factor) };
+
+        const savedRow = savedMap[cat];
+        let saved = null;
+        if (savedRow) {
+          if (isSplit) {
+            if (savedRow.hasOwnProperty("Need") || savedRow.hasOwnProperty("Want")) {
+              const need = savedRow.Need || 0, want = savedRow.Want || 0;
+              saved = { need: need, want: want, total: need + want };
+            }
+          } else if (savedRow.hasOwnProperty("")) {
+            saved = { total: savedRow[""] };
+          } else if (savedRow.hasOwnProperty("Need") || savedRow.hasOwnProperty("Want")) {
+            const need = savedRow.Need || 0, want = savedRow.Want || 0;
+            saved = { total: need + want };
+          }
+        }
+
+        const act = actualBreakdown[cat] || demoPlannerZeroBucket();
+        const actual = isSplit
+          ? { need: Math.round(act.Need), want: Math.round(act.Want), untagged: Math.round(act.Saving + act.Investment + act.Untagged), total: Math.round(act.total) }
+          : { total: Math.round(act.total) };
+
+        return { category: cat, split: isSplit, type: isSplit ? null : (dominantType || null), suggested: suggested, saved: saved, actual: actual };
+      });
+
+      return {
+        month: target.key,
+        reliableSince: "2026-08",
+        suggestionSource: "scaledPartialMonth",
+        monthsAveraged: null,
+        categories: categories
+      };
+    }
+
+    // Full-replace save, mirroring saveBudgets() in backend/planner.js —
+    // every existing row for the month is dropped first, then the new
+    // set is added, so re-saving a month never leaves stale duplicates.
+    function demoSaveBudgets(monthStr, budgets) {
+      const m = (monthStr || "").toString().trim();
+      if (!/^\d{4}-\d{2}$/.test(m)) return { ok: false, error: "Enter a valid month." };
+      if (!Array.isArray(budgets) || budgets.length === 0) return { ok: false, error: "No budget targets received." };
+
+      const rows = [];
+      for (let i = 0; i < budgets.length; i++) {
+        const b = budgets[i] || {};
+        const category = (b.category || "").toString().trim();
+        if (PLANNER_CATEGORIES.indexOf(category) === -1) return { ok: false, error: "Unknown category: " + (category || "(blank)") };
+        if (b.split) {
+          const need = Number(b.need), want = Number(b.want);
+          if (!(need >= 0) || !(want >= 0)) return { ok: false, error: "Enter a valid Need and Want target for " + category + "." };
+          rows.push({ month: m, category: category, type: "Need", target: need });
+          rows.push({ month: m, category: category, type: "Want", target: want });
+        } else {
+          const target = Number(b.target);
+          if (!(target >= 0)) return { ok: false, error: "Enter a valid target for " + category + "." };
+          rows.push({ month: m, category: category, type: "", target: target });
+        }
+      }
+
+      demoState.budgets = demoState.budgets.filter(function (row) { return row.month !== m; }).concat(rows);
+      return { ok: true, saved: rows.length };
     }
 
     function demoComputeCCAdvisor() {
@@ -4968,6 +5352,8 @@
           case "getSettings": return { ok: true, settings: demoState.settings };
           case "updateSettings": return demoUpdateSettings(data.settings);
           case "getTransactionHistory": return Object.assign({ ok: true }, demoComputeHistory(data.offset, data.limit), { knownDebtPeople: demoKnownDebtPeople() });
+          case "getPlannerData": return { ok: true, planner: demoComputePlannerData(data.month) };
+          case "saveBudgets": return demoSaveBudgets(data.month, data.budgets);
           default: return { ok: false, error: "Unknown action." };
         }
       } catch (err) {
@@ -5956,13 +6342,14 @@
       cash:        document.getElementById("view-cash"),
       reconcile:   document.getElementById("view-reconcile"),
       settings:    document.getElementById("view-settings"),
-      history:     document.getElementById("view-history")
+      history:     document.getElementById("view-history"),
+      planner:     document.getElementById("view-planner")
     };
 
     // Only load a screen's data the first time it's opened, not every time.
     // Home and Pending load on sign-in already (not lazily), since Home is
     // the landing screen and Pending needs to be ready for notifications.
-    const tabLoaded = { home: true, pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false, settings: false, history: false };
+    const tabLoaded = { home: true, pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false, settings: false, history: false, planner: false };
 
     // Switches between the 4 primary tabs
     // Remembers which tab (and, if it's More, which sub-screen) you were
@@ -6105,6 +6492,10 @@
       if (name === "history" && !tabLoaded.history) {
         tabLoaded.history = true;
         loadHistory();
+      }
+      if (name === "planner" && !tabLoaded.planner) {
+        tabLoaded.planner = true;
+        loadPlanner();
       }
     }
 
@@ -9412,6 +9803,385 @@
         })
         .catch(function (err) {
           settingsResultEl.textContent = err.message;
+        });
+    });
+
+    // ---------------------------------------------------------
+    // PLANNER (2026-08-18) — set a monthly spend TARGET per category,
+    // then track real spend against it. See docs/features/planner.md
+    // for the exact getPlannerData/saveBudgets shapes this reads/sends.
+    //
+    // The backend already decides which categories split into separate
+    // Need/Want targets (from real history) — this screen only ever
+    // renders whatever `split`/`type` it's given, never invents its own
+    // split logic. Follows the same per-month cache + skeleton/Retry
+    // pattern as Analysis, and the same optimistic-Save pattern as
+    // Cash/Debts/Investments/History (see those sections' own comments
+    // for the general shape of that trade-off).
+    // ---------------------------------------------------------
+    const plannerStatusEl        = document.getElementById("plannerStatus");
+    const plannerContentEl       = document.getElementById("plannerContent");
+    const plannerMonthLabelEl    = document.getElementById("plannerMonthLabel");
+    const plannerPrevMonthButtonEl = document.getElementById("plannerPrevMonthButton");
+    const plannerNextMonthButtonEl = document.getElementById("plannerNextMonthButton");
+    const plannerViewToggleEl    = document.getElementById("plannerViewToggle");
+    const plannerSetViewEl       = document.getElementById("plannerSetView");
+    const plannerTrackViewEl     = document.getElementById("plannerTrackView");
+    const plannerSuggestionNoteEl = document.getElementById("plannerSuggestionNote");
+    const plannerSetListEl       = document.getElementById("plannerSetList");
+    const plannerRunningTotalEl  = document.getElementById("plannerRunningTotal");
+    const plannerSaveButtonEl    = document.getElementById("plannerSaveButton");
+    const plannerSaveResultEl    = document.getElementById("plannerSaveResult");
+    const plannerTrackAmountEl   = document.getElementById("plannerTrackAmount");
+    const plannerTrackMetaEl     = document.getElementById("plannerTrackMeta");
+    const plannerTrackBarEl      = document.getElementById("plannerTrackBar");
+    const plannerTrackListEl     = document.getElementById("plannerTrackList");
+
+    let plannerYear  = now.getFullYear();
+    let plannerMonth = now.getMonth() + 1;
+    let plannerLastData = null; // the full getPlannerData response most recently rendered
+    let plannerView = "set";    // "set" or "track" — re-decided once per month, see renderPlannerData
+    let plannerViewDecidedForMonth = null;
+
+    function plannerMonthKeyFor(year, month) {
+      return year + "-" + String(month).padStart(2, "0");
+    }
+
+    function loadPlanner() {
+      plannerMonthLabelEl.textContent = MONTH_NAMES[plannerMonth - 1] + " " + plannerYear;
+      const monthKey = plannerMonthKeyFor(plannerYear, plannerMonth);
+      const cacheKey = "planner_" + monthKey;
+      const cached = loadCache(cacheKey);
+
+      if (cached) {
+        renderPlannerData(cached);
+      } else {
+        showSkeletonStatus(plannerStatusEl);
+        plannerContentEl.style.display = "none";
+      }
+
+      callAppsScript({ action: "getPlannerData", idToken: currentUser.idToken, month: monthKey })
+        .then(function (data) {
+          if (!data.ok) {
+            if (isAuthError(data.error)) {
+              handleSessionExpired();
+            } else if (!cached) {
+              showLoadError(plannerStatusEl, data.error, loadPlanner);
+            }
+            return;
+          }
+          saveCache(cacheKey, data.planner);
+          renderPlannerData(data.planner);
+        })
+        .catch(function (err) {
+          if (cached) return;
+          showLoadError(plannerStatusEl, "Couldn't load: " + err.message, loadPlanner);
+        });
+    }
+
+    function changePlannerMonth(delta) {
+      plannerMonth += delta;
+      if (plannerMonth < 1)  { plannerMonth = 12; plannerYear--; }
+      if (plannerMonth > 12) { plannerMonth = 1;  plannerYear++; }
+      loadPlanner();
+    }
+    plannerPrevMonthButtonEl.addEventListener("click", function () { changePlannerMonth(-1); });
+    plannerNextMonthButtonEl.addEventListener("click", function () { changePlannerMonth(1); });
+
+    function updatePlannerViewUI() {
+      plannerViewToggleEl.querySelectorAll(".view-toggle-btn").forEach(function (btn) {
+        btn.classList.toggle("active", btn.dataset.view === plannerView);
+      });
+      plannerSetViewEl.style.display   = plannerView === "set"   ? "" : "none";
+      plannerTrackViewEl.style.display = plannerView === "track" ? "" : "none";
+    }
+    plannerViewToggleEl.querySelectorAll(".view-toggle-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (btn.dataset.view === plannerView) return;
+        plannerView = btn.dataset.view;
+        updatePlannerViewUI();
+      });
+    });
+
+    // Plain-English explanation of where a suggested number came from —
+    // shown right next to each category's suggestion, never just a raw
+    // "scaledPartialMonth" label a beginner wouldn't understand.
+    function plannerSourceCaption(p) {
+      if (p.suggestionSource === "average") {
+        const n = p.monthsAveraged || 1;
+        return "based on your last " + n + " full month" + (n === 1 ? "" : "s") + " of real spending";
+      }
+      return "a rough early estimate, scaled up from just this month's spending so far — there isn't a full month of data yet";
+    }
+
+    function renderPlannerData(p) {
+      plannerStatusEl.textContent = "";
+      plannerContentEl.style.display = "block";
+      plannerLastData = p;
+
+      // Decide the default view once per month: nothing saved yet for
+      // this month -> Set targets first (nothing to track yet); a plan
+      // already exists -> Track progress is more useful by default.
+      // Only re-decided when the month actually changes, so re-rendering
+      // the SAME month (e.g. right after Save, or a background refresh)
+      // never yanks you back to a view you weren't on.
+      if (plannerViewDecidedForMonth !== p.month) {
+        const hasAnySaved = p.categories.some(function (c) { return c.saved !== null; });
+        plannerView = hasAnySaved ? "track" : "set";
+        plannerViewDecidedForMonth = p.month;
+      }
+      updatePlannerViewUI();
+      renderPlannerSetList(p);
+      renderPlannerTrack(p);
+    }
+
+    function updatePlannerRunningTotal() {
+      let total = 0;
+      plannerSetListEl.querySelectorAll(".planner-target-input").forEach(function (inp) {
+        total += Math.max(0, parseFloat(inp.value) || 0);
+      });
+      plannerRunningTotalEl.textContent = "₹" + Math.round(total).toLocaleString("en-IN");
+    }
+
+    function renderPlannerSetList(p) {
+      plannerSuggestionNoteEl.textContent =
+        "Set a monthly spend target for each category. We've suggested a starting number from your recent spending — edit any of them, then tap Save plan.";
+
+      const caption = plannerSourceCaption(p);
+      plannerSetListEl.innerHTML = "";
+
+      p.categories.forEach(function (c) {
+        const card = document.createElement("div");
+        card.className = "planner-cat-card";
+
+        let tagHtml = "";
+        if (!c.split && c.type) {
+          const cls = c.type === "Need" ? "need" : "want";
+          tagHtml = `<span class="planner-type-tag" style="background:var(--${cls}-bg); color:var(--${cls}-text);">${c.type}</span>`;
+        }
+
+        let bodyHtml;
+        if (c.split) {
+          const needVal = c.saved ? c.saved.need : c.suggested.need;
+          const wantVal = c.saved ? c.saved.want : c.suggested.want;
+          bodyHtml = `
+            <div class="planner-input-row sub">
+              <label style="color:var(--need-text); font-weight:700;">Need</label>
+              <input type="number" inputmode="numeric" min="0" step="1" class="planner-target-input" data-category="${c.category}" data-part="need" value="${needVal}">
+            </div>
+            <div class="planner-input-row sub">
+              <label style="color:var(--want-text); font-weight:700;">Want</label>
+              <input type="number" inputmode="numeric" min="0" step="1" class="planner-target-input" data-category="${c.category}" data-part="want" value="${wantVal}">
+            </div>
+            <p class="planner-suggestion-note">Suggested — Need ₹${c.suggested.need.toLocaleString("en-IN")} &middot; Want ₹${c.suggested.want.toLocaleString("en-IN")}: ${caption}.</p>
+          `;
+        } else {
+          const val = c.saved ? c.saved.total : c.suggested.total;
+          bodyHtml = `
+            <div class="planner-input-row">
+              <label>Monthly target</label>
+              <input type="number" inputmode="numeric" min="0" step="1" class="planner-target-input" data-category="${c.category}" data-part="total" value="${val}">
+            </div>
+            <p class="planner-suggestion-note">Suggested ₹${c.suggested.total.toLocaleString("en-IN")}: ${caption}.</p>
+          `;
+        }
+
+        card.innerHTML = `<div class="planner-cat-head">${categoryBadgeHtml(c.category)}${tagHtml}</div>${bodyHtml}`;
+        plannerSetListEl.appendChild(card);
+      });
+
+      plannerSetListEl.querySelectorAll(".planner-target-input").forEach(function (inp) {
+        inp.addEventListener("input", updatePlannerRunningTotal);
+      });
+      updatePlannerRunningTotal();
+    }
+
+    // Decides the bar's state from actual vs target — "none" (no target
+    // saved yet), "ok", "near" (>=90% but not over), or "over". Mirrors
+    // the same over/near-limit language CC Advisor's usage bar already
+    // uses (see ccUsageBarEl's own comment), just applied per Planner
+    // category/sub-target instead of one CC limit.
+    function plannerBarStatus(actual, target) {
+      if (!target || target <= 0) return "none";
+      if (actual > target) return "over";
+      if (actual >= target * 0.9) return "near";
+      return "ok";
+    }
+    function plannerBarColor(status, baseColorVar) {
+      if (status === "over") return "var(--chart-danger)";
+      if (status === "near") return "var(--chart-warning)";
+      return baseColorVar;
+    }
+    function plannerOverWarnHtml(status, label, actual, target) {
+      if (status === "over") {
+        return `<div style="margin-top:6px;"><span class="status-pill danger">Over by ₹${Math.round(actual - target).toLocaleString("en-IN")}</span></div>`;
+      }
+      if (status === "near") {
+        return `<div style="margin-top:6px;"><span class="status-pill warning">Close to your ${escapeHtml(label)} target</span></div>`;
+      }
+      return "";
+    }
+
+    function buildPlannerSubBar(label, actual, target, baseColorVar) {
+      const status = plannerBarStatus(actual, target);
+      const pct = target > 0 ? Math.min(Math.round((actual / target) * 100), 100) : (actual > 0 ? 100 : 0);
+      const color = plannerBarColor(status, baseColorVar);
+      const ofText = target > 0 ? ` <span class="planner-track-of">of ₹${Math.round(target).toLocaleString("en-IN")}</span>` : ` <span class="planner-track-of">no target set</span>`;
+      return `
+        <div class="planner-track-row">
+          <div class="planner-track-row-top">
+            <span>${escapeHtml(label)}</span>
+            <span class="cat-amt">₹${Math.round(actual).toLocaleString("en-IN")}${ofText}</span>
+          </div>
+          <div class="category-bar-track">
+            <div class="category-bar-fill chart-glow-fill" style="width:${pct}%; background:${color}; color:${color};"></div>
+          </div>
+          ${plannerOverWarnHtml(status, label, actual, target)}
+        </div>
+      `;
+    }
+
+    function buildPlannerTrackRow(c) {
+      const row = document.createElement("div");
+      row.className = "category-row";
+
+      const target = c.saved ? c.saved.total : 0;
+      const actual = c.actual.total;
+      const status = plannerBarStatus(actual, target);
+      const pct = target > 0 ? Math.min(Math.round((actual / target) * 100), 100) : (actual > 0 ? 100 : 0);
+      const color = plannerBarColor(status, categoryBarColor(c.category));
+      const ofText = target > 0 ? ` <span class="planner-track-of">of ₹${Math.round(target).toLocaleString("en-IN")}</span>` : "";
+      const noTargetNote = (!c.saved) ? `<p class="planner-track-of" style="margin:6px 0 0;">No target set yet — see Set targets.</p>` : "";
+
+      let extraHtml = "";
+      if (c.split) {
+        // c.actual.total also includes spend tagged Saving/Investment in
+        // this category, or not tagged at all yet (c.actual.untagged) —
+        // real spend that doesn't count toward either bar below. Without
+        // this note the parent row's total can look bigger than Need+Want
+        // added together with no explanation why — same "don't let the
+        // numbers silently not add up" rule this app already follows
+        // elsewhere (e.g. History's "note saved but type wasn't" message).
+        const untaggedNote = c.actual.untagged > 0
+          ? `<p class="planner-track-of" style="margin:8px 0 0;">₹${Math.round(c.actual.untagged).toLocaleString("en-IN")} of this isn't tagged Need or Want yet, so it's not counted in either bar below.</p>`
+          : "";
+        extraHtml = `<div style="margin-top:12px;">
+          ${buildPlannerSubBar("Need", c.actual.need, c.saved ? c.saved.need : 0, "var(--chart-need)")}
+          ${buildPlannerSubBar("Want", c.actual.want, c.saved ? c.saved.want : 0, "var(--chart-want)")}
+          ${untaggedNote}
+        </div>`;
+      }
+
+      row.innerHTML = `
+        <div class="category-top">
+          ${categoryBadgeHtml(c.category)}
+          <span class="cat-amt">₹${Math.round(actual).toLocaleString("en-IN")}${ofText}</span>
+        </div>
+        <div class="category-bar-track">
+          <div class="category-bar-fill chart-glow-fill" style="width:${pct}%; background:${color}; color:${color};"></div>
+        </div>
+        ${plannerOverWarnHtml(status, c.category, actual, target)}
+        ${noTargetNote}
+        ${extraHtml}
+      `;
+      return row;
+    }
+
+    function renderPlannerTrack(p) {
+      let totalTarget = 0, totalActual = 0, anySaved = false, anySpend = false;
+      p.categories.forEach(function (c) {
+        if (c.saved) { totalTarget += c.saved.total; anySaved = true; }
+        totalActual += c.actual.total;
+        if (c.actual.total > 0) anySpend = true;
+      });
+
+      plannerTrackAmountEl.textContent = "₹" + Math.round(totalActual).toLocaleString("en-IN");
+
+      if (totalTarget > 0) {
+        const pct = Math.round((totalActual / totalTarget) * 100);
+        let metaText = "of ₹" + Math.round(totalTarget).toLocaleString("en-IN") + " planned this month";
+        if (totalActual > totalTarget) {
+          metaText += "  ·  Over by ₹" + Math.round(totalActual - totalTarget).toLocaleString("en-IN");
+        }
+        plannerTrackMetaEl.textContent = metaText;
+        plannerTrackBarEl.style.width = Math.min(pct, 100) + "%";
+        let barColor = "var(--text-on-hero)";
+        if (totalActual > totalTarget) barColor = "var(--color-danger)";
+        else if (totalActual >= totalTarget * 0.9) barColor = "var(--color-warning)";
+        plannerTrackBarEl.style.background = barColor;
+      } else {
+        plannerTrackMetaEl.textContent = "No plan saved yet for this month — see Set targets.";
+        plannerTrackBarEl.style.width = totalActual > 0 ? "100%" : "0%";
+        plannerTrackBarEl.style.background = "var(--text-on-hero)";
+      }
+
+      plannerTrackListEl.innerHTML = "";
+      if (!anySaved && !anySpend) {
+        plannerTrackListEl.innerHTML = '<div class="empty-state"><span class="empty-icon">🎯</span><p>Nothing spent or planned yet this month.</p></div>';
+        return;
+      }
+      p.categories.forEach(function (c) {
+        plannerTrackListEl.appendChild(buildPlannerTrackRow(c));
+      });
+    }
+
+    // Optimistic Save (2026-08-18) — same trade-off as every other
+    // Save/Add button in this app (see Cash's saveCashButtonEl comment
+    // for the general shape): the new numbers apply to the screen
+    // immediately, the real network call happens quietly after. If it
+    // fails, the old saved values (or "nothing saved yet") come back and
+    // a clear error shows — the numbers you typed are left exactly as
+    // they were so you can just tap Save plan again.
+    plannerSaveButtonEl.addEventListener("click", function () {
+      if (!plannerLastData) return;
+      const monthKey = plannerLastData.month;
+      const splitMap = {};
+      plannerLastData.categories.forEach(function (c) { splitMap[c.category] = c.split; });
+
+      const values = {};
+      plannerSetListEl.querySelectorAll(".planner-target-input").forEach(function (inp) {
+        const cat = inp.dataset.category, part = inp.dataset.part;
+        const num = Math.max(0, parseFloat(inp.value) || 0);
+        if (!values[cat]) values[cat] = {};
+        values[cat][part] = num;
+      });
+
+      const budgets = Object.keys(values).map(function (cat) {
+        if (splitMap[cat]) {
+          return { category: cat, split: true, need: values[cat].need || 0, want: values[cat].want || 0 };
+        }
+        return { category: cat, split: false, target: values[cat].total || 0 };
+      });
+
+      const snapshot = JSON.parse(JSON.stringify(plannerLastData));
+
+      plannerLastData.categories.forEach(function (c) {
+        const v = values[c.category];
+        if (!v) return;
+        if (c.split) {
+          c.saved = { need: v.need || 0, want: v.want || 0, total: (v.need || 0) + (v.want || 0) };
+        } else {
+          c.saved = { total: v.total || 0 };
+        }
+      });
+      saveCache("planner_" + monthKey, plannerLastData);
+      renderPlannerTrack(plannerLastData); // Track view (even if not currently showing) reflects the new plan right away
+      plannerSaveResultEl.textContent = "Saved.";
+
+      callAppsScript({ action: "saveBudgets", idToken: currentUser.idToken, month: monthKey, budgets: budgets })
+        .then(function (data) {
+          if (!data.ok) {
+            plannerLastData = snapshot;
+            saveCache("planner_" + monthKey, plannerLastData);
+            renderPlannerTrack(plannerLastData);
+            plannerSaveResultEl.textContent = "Couldn't save (" + data.error + ") — check your connection, your numbers are still here, then try again.";
+          }
+        })
+        .catch(function (err) {
+          plannerLastData = snapshot;
+          saveCache("planner_" + monthKey, plannerLastData);
+          renderPlannerTrack(plannerLastData);
+          plannerSaveResultEl.textContent = "Couldn't save (" + err.message + ") — check your connection, your numbers are still here, then try again.";
         });
     });
 

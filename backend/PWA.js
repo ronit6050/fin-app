@@ -194,6 +194,18 @@ function handlePwaRequest(data){
     return jsonResponse({ ok:true, ...getTransactionHistory(data.offset, data.limit), knownDebtPeople: getKnownDebtPeople() });
   }
 
+  // ── Planner (Phase 1, added 2026-08-18, backend/planner.js) ──
+  // Per-category monthly spend targets, with a suggested amount and
+  // actual-spend tracking. See docs/features/planner.md.
+
+  if(data.action === "getPlannerData"){
+    return jsonResponse({ ok:true, planner: getPlannerData(data.month) });
+  }
+
+  if(data.action === "saveBudgets"){
+    return jsonResponse(saveBudgets(data.month, data.budgets));
+  }
+
   return jsonResponse({ ok:false, error:"Unknown action." });
 
   }catch(err){

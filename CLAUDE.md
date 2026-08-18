@@ -989,6 +989,56 @@ Settings → View Demo Mode before this is live. `git push` not yet
 done — pending your review and go-ahead, same as the backend's
 `clasp deploy`.
 
+**Planner tab — Phase 1 (started 2026-08-18): backend AND frontend both
+done and tested, not yet live.** Backend `clasp push`ed to the editor
+draft (not `clasp deploy`d); frontend built in `index.html` (not `git
+push`ed) — both need your go-ahead first, see below. A new tab for setting a spend TARGET per category for
+the month, then tracking real spend against it. Designed through several
+rounds of mockups (via the visualize tool) before any code — the mockups
+caught a real design flaw: a plain per-category budget (e.g. "Food
+₹6,000") blends essential and discretionary spend together (groceries
+vs. restaurants, both "Food"), same problem this project already solved
+once for Rent/EMI ("a category should group *varied* things, not
+mix intent"). Fixed by reusing the existing Need/Want/Saving/Investment
+tag already on every transaction: a category only splits into separate
+Need + Want targets when the user's own history shows it's genuinely
+used both ways (computed from real data, never hand-picked) — Bills/
+Health-style categories that don't mix stay a single target. New
+`Budgets` sheet (Month, Category, Type, Target), two new actions
+(`getPlannerData`, `saveBudgets`), backend in `backend/planner.js`,
+routed in `PWA.js`. Suggested starting targets are averaged from the
+user's real spending — but only from **reliable** months: the
+Need/Want/Saving/Investment tagging system didn't exist before August
+2026 and had real bugs fixed as late as 2026-08-09/10, so June/July data
+is never trusted. Since today (2026-08-18) is still inside the very
+first reliable month with zero complete reliable months yet, the
+suggestion falls back to scaling real partial-August spend up to a
+full-month estimate — confirmed with the user as the preferred fallback
+(vs. showing a blank target until 3 full months exist) before it was
+built. Verified with a new test, `backend/tests/planner.test.js`
+(reliable-month cutoff, the scaled-partial-month fallback, split-vs-
+single-type detection, all the existing double-counting exclusions
+reused correctly, multi-month averaging with the drop-the-oldest
+behavior once more than 3 complete months exist). Full existing suite
+(9 files) still passes. Full detail, schema, and the exact action
+contracts the frontend build needs:
+[docs/features/planner.md](docs/features/planner.md). Frontend built in
+`index.html` by `ui-ux-expert` same day — a "Set targets"/"Track
+progress" toggle inside More → Tools, category rows that split into
+Need/Want sub-targets exactly as the backend decides, a live running
+total, optimistic save, and a Demo Mode extension so it can be tried
+safely before going live. `change-reviewer` caught one real bug before
+ship (the Track view's main progress bar — and the same-shaped,
+pre-existing bug already sitting unnoticed in the Savings hero card —
+had no CSS height/radius outside `.category-row`, so it silently
+rendered at 0px; fixed at the root with a base `.category-bar-track`/
+`.category-bar-fill` rule, verified empirically via computed-style
+checks in the browser, not just code reading) plus a transparency gap
+(a split category's untagged Saving/Investment/no-tag spend wasn't
+shown anywhere, so the parent total could look bigger than Need+Want
+added together with no explanation — fixed with a small note). Next:
+your go-ahead before `clasp deploy` (backend) / `git push` (frontend).
+
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
 - **PWA source**: https://github.com/ronit6050/fin-app (this repo, `D:\fin-app` — the one this file lives in). Plain HTML/CSS/JS in `index.html`, plus `sw.js` (service worker), `manifest.json`, `icons/`.
