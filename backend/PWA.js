@@ -183,7 +183,7 @@ function handlePwaRequest(data){
   // reconcileCreditCardStatementPreview comment for why this is a
   // separate action rather than a branch inside the bank one.
   if(data.action === "reconcileCreditCardStatement"){
-    return jsonResponse(reconcileCreditCardStatementPreview(data.fileBase64, data.fileName));
+    return jsonResponse(reconcileCreditCardStatementPreview(data.fileBase64, data.fileName, data.statementText));
   }
 
   if(data.action === "insertReconciledTransactions"){

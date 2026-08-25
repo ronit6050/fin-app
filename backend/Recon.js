@@ -482,6 +482,25 @@ function testExtractNoteFromNarration(){
 }
 
 /* ===============================
+   AUTH TEST (added 2026-08-25)
+   Run this by hand from the Apps Script editor if the credit card PDF
+   upload fails with "You do not have permission to call
+   DocumentApp.openById" — running a DIFFERENT, unrelated function
+   (even one from this same project) does NOT reliably trigger the
+   Google Docs permission prompt, since Apps Script can grant a scope
+   lazily, only for the specific code path that actually uses it. This
+   function directly creates and immediately deletes a tiny, harmless
+   test Google Doc — the real thing that needs Docs permission — so
+   running it is the one guaranteed way to make Google actually ask.
+=============================== */
+function testDocumentAppAuth(){
+  const doc = DocumentApp.create("fin-app auth test - safe to delete");
+  const id = doc.getId();
+  DriveApp.getFileById(id).setTrashed(true);
+  Logger.log("Success — Google Docs permission is working. Test document created and cleaned up (" + id + ").");
+}
+
+/* ===============================
    PWA CREDIT CARD STATEMENT RECONCILIATION (2026-08-25)
    Same "upload -> review -> approve" idea as the bank statement
    reconciliation above, but for a credit card statement — added after
@@ -703,20 +722,41 @@ function extractTextFromStatementPdf(fileBase64, fileName){
 }
 
 // Entry point for the PWA's reconcileCreditCardStatement action.
-// Branches on the uploaded file's extension — a real HDFC UPI RuPay
-// statement turned out to be a PDF (found 2026-08-25, checking the
-// user's own real statement), not the .xls the bank statement flow
-// uses, so this needs its own path via OCR text extraction +
-// parseCreditCardStatementText() above. Kept .xls/.xlsx support too
-// (parseCreditCardSheet(), the original Sheet-conversion path) in case
-// a different card issuer or export option ever provides one — same
-// idea as the bank flow, unchanged. Either path lands on the exact same
-// previewReconciliation() used everywhere else. A missing entry's mode
-// always comes back "card" (see parseCreditCardSheet /
-// parseCreditCardStatementText), so an approved entry correctly counts
-// as card spend everywhere Mode is checked (CC Advisor,
-// isCreditCardBillPayment, Analysis's Card bucket).
-function reconcileCreditCardStatementPreview(fileBase64, fileName){
+//
+// PDF handling rebuilt 2026-08-25, same day it first shipped — the
+// user's real statement has a genuine embedded text layer (confirmed by
+// checking the raw PDF bytes for real text-drawing operators and font
+// definitions, not just an embedded page image), so it's a text-based
+// PDF, not a scan. Running that through Google's Drive OCR (the first
+// version of this function) was the wrong tool for the job — OCR
+// re-derives text from rendered pixels, which is inherently lossier
+// than just reading the real text bytes already in the file, and it
+// showed on the very first live upload: only 8 of 16 real transaction
+// lines came back, with a transaction confirmed NOT in the Sheet
+// wrongly missing from the "missing" list too. It also tripped a real
+// Drive API rate limit and needed a fresh Google Docs permission grant
+// — friction entirely avoidable by not using Drive/Docs at all for a
+// file that already has real text in it.
+//
+// Fixed by extracting the PDF's own text CLIENT-SIDE instead, using
+// pdf.js in the browser (index.html, before the file is even uploaded)
+// — verified locally against the user's real statement to reconstruct
+// all 16 transaction lines correctly, byte-for-byte compatible with
+// parseCreditCardStatementText() below (no changes needed there). The
+// frontend sends the already-extracted statementText directly; this
+// function only falls back to the OCR path (extractTextFromStatementPdf)
+// for an OLDER cached frontend that hasn't sent statementText yet, or a
+// genuinely image-only/scanned PDF where client-side extraction
+// legitimately finds no real text.
+//
+// .xls/.xlsx (parseCreditCardSheet(), the original Sheet-conversion
+// path) is unchanged — a real spreadsheet doesn't have this problem.
+// Every path lands on the exact same previewReconciliation() used
+// everywhere else. A missing entry's mode always comes back "card" (see
+// parseCreditCardSheet / parseCreditCardStatementText), so an approved
+// entry correctly counts as card spend everywhere Mode is checked (CC
+// Advisor, isCreditCardBillPayment, Analysis's Card bucket).
+function reconcileCreditCardStatementPreview(fileBase64, fileName, statementText){
 
   const isPdf = /\.pdf$/i.test(fileName || "");
 
@@ -726,9 +766,13 @@ function reconcileCreditCardStatementPreview(fileBase64, fileName){
   try{
     let ccTxns;
 
-    if(isPdf){
+    if(statementText){
+      ccTxns = parseCreditCardStatementText(statementText);
+    } else if(isPdf){
       const text = extractTextFromStatementPdf(fileBase64, fileName);
       ccTxns = parseCreditCardStatementText(text);
+      logAI("CC_PDF_OCR_FALLBACK", "Client-side text extraction wasn't sent — fell back to Drive OCR. Extracted " +
+        text.length + " chars, parsed " + ccTxns.length + " transaction(s).");
     } else {
       const blob = Utilities.newBlob(
         Utilities.base64Decode(fileBase64),

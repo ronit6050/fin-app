@@ -237,12 +237,57 @@ doesn't forward, a filter false-positive, etc.) — worth a closer look
 if it happens again, but not chased further here since this is a
 Reconcile-feature fix, not an SMS-parser one.
 
-**Known unverified piece, flagged honestly**: `extractTextFromStatementPdf()`
-(the real Drive API v2 OCR call) has never actually been run — Apps
-Script execution can't be tested outside the live editor from here. The
-text-parsing logic itself (`parseCreditCardStatementText`) is
-thoroughly tested against real statement text, and was deliberately
-written to not depend on any specific currency-symbol rendering for
-exactly this reason, but the OCR step itself still needs one real
-live test — uploading the real PDF through the app — before this is
-fully confirmed working end-to-end.
+**The OCR path was tried live, and turned out unreliable — rebuilt
+same day, PDF handling now reads real embedded text client-side
+instead.** The first real upload hit two real Google issues in a row
+(a Drive API rate limit, then a missing Google Docs permission — both
+one-time authorization/quota friction, fixed at the time by retrying
+and by the user approving a permission prompt). But once those were
+cleared, the actual RESULT was still wrong: only 8 of the real
+statement's 16 transaction lines came back matched, and the confirmed-
+missing Google Asia Pacific charge wasn't flagged missing at all.
+Checked against the user's real Sheet data (a screenshot of the real
+`Transactions` rows, filtered to card-mode) to confirm this wasn't a
+misunderstanding: 14 real transactions really are there, summing to
+exactly ₹6,924.37, and the Google Asia Pacific charge really isn't.
+
+**Root cause, found by inspecting the actual PDF bytes**: this
+statement has a genuine embedded text layer (real font definitions and
+text-drawing operators, confirmed by grepping the raw PDF for `/Tj`,
+`/TJ`, `/Type /Font`) — it's a digitally-generated PDF, not a scanned
+image. OCR is the wrong tool for a file like this: it re-derives text
+by recognizing rendered pixels, which is strictly lossier than reading
+the real text bytes already in the file, and explains both the dropped
+lines and the user's own prior bad experience with Google's OCR on a
+different (Telegram bot) project. Considered and rejected: tuning the
+OCR call further, or loosening the parser to tolerate OCR's specific
+garbling — both would be patching the wrong layer.
+
+**Fixed by reading the PDF's own text directly, client-side, before
+upload** (`index.html`'s `extractPdfTextClientSide`, using pdf.js —
+Mozilla, open-source, loaded from a CDN, runs entirely on the user's
+own device, nothing sent anywhere for this step). pdf.js hands back
+individual text "runs" with their own x/y position rather than
+pre-joined lines, so this groups runs sharing roughly the same Y
+position into a line (sorted left-to-right by X, spaced only where a
+run's own rendered width leaves a real visual gap) — reconstructing
+lines byte-for-byte compatible with the already-built
+`parseCreditCardStatementText()`, no changes needed there. Verified
+twice against the real statement before shipping: once via a local
+Node script using `pdfjs-dist` (the same library, Node build), and
+once via an actual live Chrome browser test (a small standalone HTML
+page served locally, running the real CDN-hosted pdf.js against the
+real PDF file) — both reconstructed all 16 real transaction lines
+correctly, and feeding that text through the existing parser correctly
+found the real ₹474.49 gap.
+
+`reconcileCreditCardStatementPreview(fileBase64, fileName, statementText)`
+now takes an optional `statementText` — when the frontend already
+extracted it client-side, Drive/DriveApp/DocumentApp are never touched
+at all (proven by `backend/tests/ccStatementTextBypass.test.js`, which
+asserts zero calls to any of them in that path). The OCR path
+(`extractTextFromStatementPdf`, with the rate-limit retry) is kept as a
+real, load-bearing fallback — not dead code — for a genuinely
+scanned/image-only PDF, or an older cached frontend that hasn't sent
+`statementText` yet; `withRateLimitRetry_()` still protects that
+fallback path. `.xls`/`.xlsx` is completely unaffected either way.

@@ -41,6 +41,17 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 
+  <!-- pdf.js (Mozilla, open-source, free) — added 2026-08-25 for the
+       Reconcile screen's credit card statement upload. Reads a PDF
+       statement's real embedded text directly in the browser, on your
+       own device — the file never gets sent anywhere for this step, and
+       nothing is uploaded until you review the result. Used instead of
+       Google Drive's OCR (the first version of this feature), which
+       turned out unreliable for a text-based PDF like a real bank
+       statement — OCR re-guesses text from rendered pixels, which is
+       lossier than just reading the text that's already in the file. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
   <style>
     /* ---------- Design tokens — light mode (default) ----------
        Every color used anywhere in this file should reference one of
@@ -9416,6 +9427,57 @@
     // docs/features/reconciliation.md for the full design.
     // ---------------------------------------------------------
 
+    // pdf.js needs a separate worker script URL — same CDN, same
+    // pinned version as the main library above.
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+
+    // Reads a PDF's real embedded text directly (not OCR) — verified
+    // 2026-08-25 against a real HDFC UPI RuPay statement, reconstructing
+    // every transaction line correctly. pdf.js hands back individual
+    // text "runs" with their own x/y position, not pre-joined lines, so
+    // this groups runs that share roughly the same Y position into a
+    // line (sorted left-to-right by X), inserting a space only where
+    // there's a real visual gap between runs (using each run's own
+    // rendered width) rather than gluing adjacent letters together.
+    async function extractPdfTextClientSide(file) {
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      const pageTexts = [];
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+
+        const rows = [];
+        textContent.items.forEach(function (item) {
+          const y = Math.round(item.transform[5]);
+          let row = rows.find(function (r) { return Math.abs(r.y - y) < 3; });
+          if (!row) { row = { y: y, items: [] }; rows.push(row); }
+          row.items.push({ x: item.transform[4], str: item.str, width: item.width });
+        });
+
+        rows.sort(function (a, b) { return b.y - a.y; }); // PDF y grows upward — top of page first
+        rows.forEach(function (row) { row.items.sort(function (a, b) { return a.x - b.x; }); });
+
+        const lines = rows.map(function (row) {
+          let line = "";
+          let lastEndX = null;
+          row.items.forEach(function (item) {
+            if (lastEndX !== null && item.x - lastEndX > 1) line += " ";
+            line += item.str;
+            lastEndX = item.x + (item.width || 0);
+          });
+          return line;
+        });
+
+        pageTexts.push(lines.join("\n"));
+      }
+
+      return pageTexts.join("\n");
+    }
+
     const reconFileInputEl    = document.getElementById("reconFileInput");
     const reconFileLabelEl    = document.querySelector('label[for="reconFileInput"]');
     const reconFileLabelTextEl = document.getElementById("reconFileLabelText");
@@ -9720,6 +9782,15 @@
         });
     }
 
+    function readFileAsBase64(file) {
+      return new Promise(function (resolve, reject) {
+        const reader = new FileReader();
+        reader.onload = function () { resolve(reader.result.split(",")[1]); }; // strips the "data:...;base64," prefix
+        reader.onerror = function () { reject(new Error("Couldn't read that file.")); };
+        reader.readAsDataURL(file);
+      });
+    }
+
     reconUploadButtonEl.addEventListener("click", function () {
       const file = reconFileInputEl.files[0];
       if (!file) {
@@ -9732,32 +9803,40 @@
       reconStatusEl.innerHTML = '<span class="spinner"></span>Checking your statement — this can take a few seconds...';
       reconResultsEl.innerHTML = "";
 
-      const reader = new FileReader();
-      reader.onload = function () {
-        // reader.result looks like "data:application/vnd.ms-excel;base64,XXXX"
-        const base64 = reader.result.split(",")[1];
+      const isCreditCardPdf = reconStatementType === "creditCard" && /\.pdf$/i.test(file.name);
 
-        callAppsScript({
-          action:     reconStatementType === "creditCard" ? "reconcileCreditCardStatement" : "reconcileStatement",
-          idToken:    currentUser.idToken,
-          fileBase64: base64,
-          fileName:   file.name
-        })
-          .then(function (data) {
-            if (!data.ok) {
-              reconStatusEl.textContent = "Couldn't check statement: " + data.error;
-              return;
-            }
-            renderReconResults(data);
-          })
-          .catch(function (err) {
-            reconStatusEl.textContent = "Couldn't check statement: " + err.message;
+      // A credit card PDF gets its real text read directly on your own
+      // device first (see extractPdfTextClientSide's comment for why —
+      // more reliable than the server-side OCR fallback, and avoids
+      // uploading the raw file at all when this succeeds). Bank
+      // statements and .xls credit card statements are unaffected —
+      // same base64 upload as always.
+      const textExtraction = isCreditCardPdf
+        ? extractPdfTextClientSide(file).catch(function () { return null; }) // a genuinely unreadable/scanned PDF falls back to server-side OCR below
+        : Promise.resolve(null);
+
+      textExtraction.then(function (statementText) {
+        const needsBase64 = !statementText; // still needed for .xls, or as the OCR fallback's input
+        return (needsBase64 ? readFileAsBase64(file) : Promise.resolve(null)).then(function (base64) {
+          return callAppsScript({
+            action:        reconStatementType === "creditCard" ? "reconcileCreditCardStatement" : "reconcileStatement",
+            idToken:       currentUser.idToken,
+            fileBase64:    base64,
+            fileName:      file.name,
+            statementText: statementText || undefined
           });
-      };
-      reader.onerror = function () {
-        reconStatusEl.textContent = "Couldn't read that file.";
-      };
-      reader.readAsDataURL(file);
+        });
+      })
+        .then(function (data) {
+          if (!data.ok) {
+            reconStatusEl.textContent = "Couldn't check statement: " + data.error;
+            return;
+          }
+          renderReconResults(data);
+        })
+        .catch(function (err) {
+          reconStatusEl.textContent = "Couldn't check statement: " + err.message;
+        });
     });
 
     // ---------------------------------------------------------

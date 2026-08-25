@@ -1123,10 +1123,35 @@ by parsing the user's actual real statement text as a test fixture
 (`backend/tests/ccStatementPdfParsing.test.js`, 16 checks, all against
 real data, not invented examples). Full detail:
 [docs/features/reconciliation.md](docs/features/reconciliation.md#credit-card-statement-support-added-2026-08-25).
-**Still open**: the actual Drive API OCR call has never been run for
-real (can't execute Apps Script from outside the editor) — needs one
-real upload through the live app before this is fully trusted, same
-"real on-device test still owed" flag used elsewhere in this file.
+**Real live testing (same day) found the OCR approach itself was wrong,
+not just unverified — rebuilt around client-side text extraction
+instead, now confirmed working end-to-end.** The first live upload hit
+two Google permission/quota issues in a row (a Drive API rate limit,
+then a missing Google Docs scope) — both fixed (a retry helper, and the
+user approving a fresh permission prompt) — but the actual RESULT was
+still wrong underneath: only 8 of 16 real transaction lines came back,
+and the confirmed-missing transaction wasn't flagged missing. The user
+shared a screenshot of their real Sheet data, which confirmed the real
+gap (14 tracked transactions summing to exactly ₹6,924.37, the ₹474.49
+Google Asia Pacific charge genuinely absent) and proved the OCR
+result was undercounting. **Real root cause**: this statement is a
+digitally-generated PDF with a genuine embedded text layer (confirmed
+by inspecting the raw PDF bytes for real font/text-drawing data), not
+a scan — so OCR (re-deriving text from rendered pixels) was always the
+wrong tool for it, and explains the user's own prior bad experience
+with Google OCR on an earlier project too. **Fixed** by reading the
+PDF's real text directly in the browser instead (`index.html`, pdf.js —
+Mozilla, open-source, CDN-loaded, runs on-device, nothing uploaded for
+this step) — verified twice against the real statement before shipping
+(a local Node script using the same library, and a real live Chrome
+browser test), both reconstructing all 16 transaction lines correctly.
+The backend's OCR path is kept only as a fallback for a genuinely
+scanned PDF or an older cached frontend, proven via
+`backend/tests/ccStatementTextBypass.test.js` that it's never touched
+when the browser already sent real text. Full detail:
+[docs/features/reconciliation.md](docs/features/reconciliation.md#the-ocr-path-was-tried-live-and-turned-out-unreliable--rebuilt-same-day-pdf-handling-now-reads-real-embedded-text-client-side-instead).
+Pushed to the editor draft and `index.html`, not yet deployed live /
+committed — waiting on the user's go-ahead.
 
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
