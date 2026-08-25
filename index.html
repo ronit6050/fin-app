@@ -3002,7 +3002,18 @@
       <div id="view-reconcile" style="display:none">
         <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">Reconcile</h2>
-        <p class="pending-status">
+
+        <!-- Statement type toggle (added 2026-08-25) — same pill pattern
+             already used for Analysis's Category/Need-Want-Saving toggle.
+             Credit card added after CC Advisor's own tracked bill total
+             turned out to be missing a real swipe the SMS parser never
+             caught; see docs/features/reconciliation.md. -->
+        <div class="view-toggle" style="margin-bottom:10px;">
+          <button type="button" class="view-toggle-btn active" id="reconTypeBankBtn">Bank statement</button>
+          <button type="button" class="view-toggle-btn" id="reconTypeCcBtn">Credit card statement</button>
+        </div>
+
+        <p class="pending-status" id="reconIntroText">
           Upload your bank statement (.xls) to find transactions that
           might be missing from your Sheet — nothing gets added until
           you review and approve each one below.
@@ -3013,7 +3024,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
             <span id="reconFileLabelText">Choose bank statement (.xls)</span>
           </label>
-          <input type="file" id="reconFileInput" class="file-input-hidden" accept=".xls,.xlsx">
+          <input type="file" id="reconFileInput" class="file-input-hidden" accept=".xls,.xlsx,.pdf">
         </div>
         <button type="button" id="reconUploadButton">Check Statement</button>
 
@@ -5348,6 +5359,7 @@
           case "registerPushToken": return { ok: true }; // no-op — never worth registering a real push token while pretending
           case "getDashboard": return { ok: true, dashboard: demoComputeDashboard() };
           case "reconcileStatement": return { ok: false, error: "Bank statement upload isn't available in Demo Mode." };
+          case "reconcileCreditCardStatement": return { ok: false, error: "Credit card statement upload isn't available in Demo Mode." };
           case "insertReconciledTransactions": return { ok: false, error: "Not available in Demo Mode." };
           case "getSettings": return { ok: true, settings: demoState.settings };
           case "updateSettings": return demoUpdateSettings(data.settings);
@@ -9407,10 +9419,44 @@
     const reconFileInputEl    = document.getElementById("reconFileInput");
     const reconFileLabelEl    = document.querySelector('label[for="reconFileInput"]');
     const reconFileLabelTextEl = document.getElementById("reconFileLabelText");
-    const reconFileLabelDefaultText = reconFileLabelTextEl.textContent;
     const reconUploadButtonEl = document.getElementById("reconUploadButton");
     const reconStatusEl       = document.getElementById("reconStatus");
     const reconResultsEl      = document.getElementById("reconResults");
+    const reconIntroTextEl    = document.getElementById("reconIntroText");
+    const reconTypeBankBtnEl  = document.getElementById("reconTypeBankBtn");
+    const reconTypeCcBtnEl    = document.getElementById("reconTypeCcBtn");
+
+    // Statement type toggle (added 2026-08-25) — "bank" or "creditCard".
+    // Drives which backend action gets called, the file-picker/intro
+    // wording, and the "Source" label written on any approved row. See
+    // docs/features/reconciliation.md.
+    let reconStatementType = "bank";
+
+    function reconFileLabelDefaultText() {
+      return reconStatementType === "creditCard" ? "Choose credit card statement (.pdf or .xls)" : "Choose bank statement (.xls)";
+    }
+
+    function setReconStatementType(type) {
+      reconStatementType = type;
+      reconTypeBankBtnEl.classList.toggle("active", type === "bank");
+      reconTypeCcBtnEl.classList.toggle("active", type === "creditCard");
+      reconIntroTextEl.textContent = type === "creditCard"
+        ? "Upload your credit card statement (.pdf or .xls) to find card transactions that might be missing from your Sheet — nothing gets added until you review and approve each one below."
+        : "Upload your bank statement (.xls) to find transactions that might be missing from your Sheet — nothing gets added until you review and approve each one below.";
+      // Credit card statements (HDFC's UPI RuPay one, at least) come as
+      // a PDF, not the .xls the bank flow uses — found 2026-08-25
+      // checking a real one. Bank stays .xls-only (unchanged, proven).
+      reconFileInputEl.setAttribute("accept", type === "creditCard" ? ".pdf,.xls,.xlsx" : ".xls,.xlsx");
+      // Switching type after picking a file would upload the file under
+      // the wrong label — simplest safe behavior is to clear the pick.
+      reconFileInputEl.value = "";
+      updateReconFileLabel();
+      reconStatusEl.style.display = "none";
+      reconResultsEl.innerHTML = "";
+    }
+
+    reconTypeBankBtnEl.addEventListener("click", function () { setReconStatementType("bank"); });
+    reconTypeCcBtnEl.addEventListener("click", function () { setReconStatementType("creditCard"); });
 
     // Reflects the picked file's name on the styled label standing in
     // for the real (hidden) file input — see the .file-input-label CSS.
@@ -9420,7 +9466,7 @@
         reconFileLabelTextEl.textContent = file.name;
         reconFileLabelEl.classList.add("has-file");
       } else {
-        reconFileLabelTextEl.textContent = reconFileLabelDefaultText;
+        reconFileLabelTextEl.textContent = reconFileLabelDefaultText();
         reconFileLabelEl.classList.remove("has-file");
       }
     }
@@ -9654,7 +9700,8 @@
       callAppsScript({
         action:       "insertReconciledTransactions",
         idToken:      currentUser.idToken,
-        transactions: toSubmit
+        transactions: toSubmit,
+        source:       reconStatementType === "creditCard" ? "Credit Card Statement" : "Bank Statement"
       })
         .then(function (data) {
           if (!data.ok) {
@@ -9691,7 +9738,7 @@
         const base64 = reader.result.split(",")[1];
 
         callAppsScript({
-          action:     "reconcileStatement",
+          action:     reconStatementType === "creditCard" ? "reconcileCreditCardStatement" : "reconcileStatement",
           idToken:    currentUser.idToken,
           fileBase64: base64,
           fileName:   file.name

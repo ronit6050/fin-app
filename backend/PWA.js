@@ -178,8 +178,16 @@ function handlePwaRequest(data){
     return jsonResponse(reconcileStatementPreview(data.fileBase64, data.fileName));
   }
 
+  // Added 2026-08-25 — same idea as reconcileStatement above, but for a
+  // credit card statement instead of a bank statement. See Recon.js's
+  // reconcileCreditCardStatementPreview comment for why this is a
+  // separate action rather than a branch inside the bank one.
+  if(data.action === "reconcileCreditCardStatement"){
+    return jsonResponse(reconcileCreditCardStatementPreview(data.fileBase64, data.fileName));
+  }
+
   if(data.action === "insertReconciledTransactions"){
-    return jsonResponse(insertReconciledTransactions(data.transactions));
+    return jsonResponse(insertReconciledTransactions(data.transactions, data.source));
   }
 
   if(data.action === "getSettings"){
@@ -811,8 +819,12 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
 
   // The bill that closed on mostRecentClose — the one that's actually
   // due soon (or already overdue), not a hypothetical future one.
-  const outstandingCycleStart = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() - 1, 19);
-  const outstandingCycleEnd   = mostRecentClose;
+  // Pulled from the shared getOutstandingCCCycleWindow_() (added
+  // 2026-08-25) rather than recomputed here, so this can never drift
+  // from what isCreditCardBillPayment's amount-match uses.
+  const outstandingWindow     = getOutstandingCCCycleWindow_();
+  const outstandingCycleStart = outstandingWindow.start;
+  const outstandingCycleEnd   = outstandingWindow.end;
   const outstandingDueDate    = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() + 1, 9);
 
   // The cycle that's currently running, right after the one above.
@@ -907,7 +919,8 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
       const mode = (data[i][4] || "").toString();
       const counterparty = (data[i][7] || "").toString();
       const note = (data[i][12] || "").toString();
-      if(isCreditCardBillPayment(mode, counterparty, note)){
+      const amount = Number(data[i][5]) || 0;
+      if(isCreditCardBillPayment(mode, counterparty, note, amount, data)){
         outstandingPaid = true;
         break;
       }
@@ -1202,7 +1215,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
       // computed once per row, used below for both debit and credit.
       const modeBucket = modeBuckets[bucketKeyForMode(mode)];
 
-      if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
+      if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note, amount, txnData)) continue; // settling spend already counted, not new spend
       if(type === "debit" && isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet — the real spend gets counted separately, below, as each wallet purchase happens
       // A loan/repayment isn't spending either — you expect the money back.
       // Skipped Need/Want/Saving already, but was never actually excluded
@@ -1372,17 +1385,78 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
 // CC Advisor itself was never affected (it only ever counted
 // mode-starts-with-"card" rows), just Today/Analysis's headline totals.
 //
-// This is a best-effort keyword match on the bank's own narration text
-// — genuinely can't be fully certain without seeing real statement
-// wording, so this needs a real-world check: watch your next card bill
-// payment and confirm it's excluded from Total Spend as expected (and
-// tell me if it isn't, or if it wrongly excludes something that wasn't
-// actually a card payment).
-function isCreditCardBillPayment(mode, counterparty, note){
+// Confirmed 2026-08-25: the keyword check below alone isn't durable — a
+// real payment via the CRED app showed up as counterparty "CRED Club
+// Online", which mentions none of the phrases below, so the app still
+// asked Need/Want/Saving for a bill payment. Keyword-matching the PAYMENT
+// APP's name (e.g. hardcoding "cred") was considered and rejected — the
+// user pays from different apps, and the same app can also be used for
+// things that genuinely are spending (CRED Store, etc.), so "which app"
+// is not a reliable signal either way.
+//
+// Fixed with a second check that doesn't care which app/wording was used
+// at all: does this transaction's AMOUNT exactly match the real
+// outstanding credit card bill (computed the same way CC Advisor already
+// does, from actual card swipes in the most recently closed cycle)? A
+// bill payment always pays the exact bill total, regardless of which app
+// sends the money — this is the same "match by amount, not by name"
+// approach already used for Rent/EMI/SIP payments elsewhere in this app.
+// amount/txnData are optional — every call site that doesn't pass them
+// just falls back to the keyword check alone, same as before.
+function isCreditCardBillPayment(mode, counterparty, note, amount, txnData){
   const m = (mode || "").toString().toLowerCase();
   if(m.startsWith("card")) return false; // an actual swipe, not a bill payment — never exclude these
   const text = ((counterparty || "") + " " + (note || "")).toLowerCase();
-  return /\bcredit card\b/.test(text) || /\bcc bill\b/.test(text) || /\bcard bill\b/.test(text) || /\bcard payment\b/.test(text);
+  if(/\bcredit card\b/.test(text) || /\bcc bill\b/.test(text) || /\bcard bill\b/.test(text) || /\bcard payment\b/.test(text)) return true;
+
+  if(amount != null && amount > 0){
+    const billTotal = getOutstandingCCBillTotal(txnData);
+    // Exact match only (a rupee or so of slack for rounding) — a "close
+    // enough" fuzzy match risks hiding a real, unrelated expense that
+    // happens to land near the bill amount, which is worse than
+    // occasionally missing a genuine bill payment.
+    if(billTotal > 0 && Math.abs(amount - billTotal) < 1) return true;
+  }
+  return false;
+}
+
+// The most recently CLOSED billing cycle's date window (19th of the
+// month-before-last through the 18th of last month/this month) — the
+// bill that's actually due soon, not the brand-new cycle still
+// accumulating. Shared by getCCAdvisorData and getOutstandingCCBillTotal
+// below so the two can never disagree about which cycle "outstanding"
+// means — this exact date math had a real bug once already (see the
+// 2026-08-10 CC Advisor rebuild note in CLAUDE.md), so it now lives in
+// exactly one place.
+function getOutstandingCCCycleWindow_(){
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dayOfMonth = today.getDate();
+  const mostRecentClose = new Date(today.getFullYear(), today.getMonth() - (dayOfMonth < 18 ? 1 : 0), 18);
+  return {
+    start: new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() - 1, 19),
+    end:   mostRecentClose
+  };
+}
+
+// Just the ₹ total of the outstanding (most recently closed) credit card
+// bill — real card-mode spend in that cycle window, no breakdowns. See
+// isCreditCardBillPayment's comment above for why this exists.
+function getOutstandingCCBillTotal(txnData){
+  const data = txnData || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
+  const window = getOutstandingCCCycleWindow_();
+  let total = 0;
+  for(let i = 1; i < data.length; i++){
+    const rawDate = data[i][0];
+    if(!rawDate) continue;
+    const d = new Date(rawDate);
+    if(d < window.start || d > window.end) continue;
+    const type   = (data[i][3] || "").toString().toLowerCase();
+    const mode   = (data[i][4] || "").toString().toLowerCase();
+    const amount = Number(data[i][5]) || 0;
+    if(type === "debit" && mode.startsWith("card") && amount > 0) total += amount;
+  }
+  return total;
 }
 
 // Recognizes a transaction that's actually TOPPING UP a digital wallet
@@ -1437,12 +1511,12 @@ function getTodaySummary(txnData, cashData){
       const counterparty = txnData[i][7] || "";
       const note = txnData[i][12] || "";
       const financialEvent = (txnData[i][17] || "").toString().trim(); // column R
-      if(isCreditCardBillPayment(mode, counterparty, note)) continue; // settling spend already counted, not new spend
+      const amount   = Number(txnData[i][5]) || 0;
+      if(isCreditCardBillPayment(mode, counterparty, note, amount, txnData)) continue; // settling spend already counted, not new spend
       if(isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet
       if(isLendingTransfer(counterparty, note)) continue; // a loan/repayment isn't spending — see the matching comment in getMonthlyAnalysis
       if(financialEvent) continue; // Rent/EMI/Investment — not day-to-day spend, see financialEvents.js
 
-      const amount   = Number(txnData[i][5]) || 0;
       const category = txnData[i][13] || "Other";
       bankSpend += amount;
       totalTxn++;
@@ -1549,7 +1623,7 @@ function getPendingTransactions(txnData){
     // 2026-08-10 after this exact reasoning was double-checked against
     // the actual code together.
     const isNonSpendTransfer = txnType === "debit" &&
-      (isCreditCardBillPayment(mode, counterparty, note) || isWalletTopUp(counterparty, reference));
+      (isCreditCardBillPayment(mode, counterparty, note, amount, data) || isWalletTopUp(counterparty, reference));
 
     pending.push({
       row:               i + 1,
@@ -1699,7 +1773,7 @@ function getTransactionHistory(offset, limit){
     // sitting in column Q from before this decision (harmless either
     // way, since Analysis already ignores these rows entirely).
     t.isNonSpendTransfer = t.type === "debit" &&
-      (isCreditCardBillPayment(t.mode, t.counterparty, t.note) || isWalletTopUp(t.counterparty, t.reference));
+      (isCreditCardBillPayment(t.mode, t.counterparty, t.note, t.amount, data) || isWalletTopUp(t.counterparty, t.reference));
     if(t.isNonSpendTransfer) t.suggestedType = null;
   });
 
@@ -1931,8 +2005,9 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     // there's no real safety benefit to still asking about them — a
     // wrong detection already hides the row from every total either way.
     const savedMode = (sheet.getRange(row, 5).getValue() || "").toString(); // column E
+    const savedAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F
     const savedReference = (sheet.getRange(row, 7).getValue() || "").toString(); // column G
-    const isNonSpendTransfer = isCreditCardBillPayment(savedMode, counterparty, note) || isWalletTopUp(counterparty, savedReference);
+    const isNonSpendTransfer = isCreditCardBillPayment(savedMode, counterparty, note, savedAmount) || isWalletTopUp(counterparty, savedReference);
 
     let typeSaved = false;
     if(type && !isLendingTransfer(counterparty, note) && !effectiveFinancialEvent && !isNonSpendTransfer && !investmentInstrumentValid){

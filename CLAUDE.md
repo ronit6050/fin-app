@@ -937,8 +937,12 @@ Deployed live via `clasp deploy` (@303) on 2026-08-12 — nothing left
 pending on this fix.
 
 **Analysis payment-mode filter — backend + frontend both done
-2026-08-17, pushed, NOT yet deployed/pushed live (waiting on the
-deploy go-ahead).** A new All / Bank / Card / Wallet toggle on the
+2026-08-17, confirmed LIVE as of 2026-08-18** (it was already committed
+and `clasp push`ed, just waiting on a deploy — the Planner deploy the
+same day snapshotted and shipped it too, since `clasp deploy` ships
+whatever's currently pushed, not just the feature being asked for; this
+was caught and confirmed via `git log`/`grep`, not assumed). A new
+All / Bank / Card / Wallet toggle on the
 Analysis screen — so you can see "what did I spend just on my credit
 card this month" separately from UPI/bank transfers or wallet spend,
 instead of only ever seeing everything blended together.
@@ -967,8 +971,8 @@ appears only in "All"; a bill-payment/top-up stay excluded per bucket
 not just overall; a Rent/Investment row is excluded from that bucket's
 spend and shows up in that bucket's own fixedObligations/invested
 instead). Full existing test suite (8 files,
-299 checks) still passes. `clasp push`ed (editor draft only, not the
-live app yet — needs a `clasp deploy` go-ahead).
+299 checks) still passes. Deployed live via the 2026-08-18 Planner
+`clasp deploy` (@306).
 
 **Frontend (`index.html`): also done.** A small icon-only segmented
 pill (All / Bank / Card / Wallet) sits in the top-right of the Total
@@ -985,9 +989,8 @@ bug where a background refresh silently undid a toggle tap was caught
 by `change-reviewer` and fixed before this note was written). Demo
 Mode was also extended to compute matching Bank/Card/Wallet numbers
 from its own pretend data, so the toggle can be tried out from
-Settings → View Demo Mode before this is live. `git push` not yet
-done — pending your review and go-ahead, same as the backend's
-`clasp deploy`.
+Settings → View Demo Mode. Live — was already committed, shipped to
+GitHub Pages by the same `git push` that shipped Planner's frontend.
 
 **Planner tab — Phase 1 (started 2026-08-18): backend AND frontend both
 done and tested, not yet live.** Backend `clasp push`ed to the editor
@@ -1038,6 +1041,92 @@ checks in the browser, not just code reading) plus a transparency gap
 shown anywhere, so the parent total could look bigger than Need+Want
 added together with no explanation — fixed with a small note). Next:
 your go-ahead before `clasp deploy` (backend) / `git push` (frontend).
+
+**Two real bugs found and fixed 2026-08-25, backend-only, `clasp push`ed
+to the editor draft, NOT yet `clasp deploy`ed live:**
+
+1. **New transactions stopped reaching the app — root cause: Apps
+   Script silently needed re-authorization.** User reported transactions
+   sitting in the `Transactions` sheet but never showing up in Pending.
+   Diagnosed with a new saved helper, `diagnosePendingTransactions()`
+   (`backend/transactions.js`) — run by hand from the Apps Script editor,
+   prints a plain-English report and safely re-runs `processNewTransactions()`
+   itself as part of the check. Confirmed the `processNewTransactions`
+   timer trigger DID exist, but Google had quietly stopped running it
+   because it needed the user to re-approve the script's permissions —
+   this fails silently, before any of our own code (including the
+   per-row try/catch and `AILogs` logging) ever gets a chance to run, so
+   there was nothing in any log to point at it. The moment the user ran
+   the diagnostic function by hand and approved the permission prompt,
+   the backlog (7 rows) processed immediately and the timer started
+   working again too, since it runs under that same permission. **Keep
+   this diagnostic function around** — if this happens again (it can
+   recur any time Google decides to re-check permissions, e.g. after a
+   security checkup or a scope change), running it is the fastest way
+   to confirm the cause and often fixes it in the same step. Four older
+   rows (310, 311, 325, 359 — predate this incident) are still flagged
+   not-ready by the diagnostic; not yet investigated, low priority.
+
+2. **Credit card bill payments paid through an app (e.g. CRED) weren't
+   being recognized, so the app wrongly asked Need/Want/Saving for
+   them.** `isCreditCardBillPayment()` only recognized a bill payment by
+   keyword match on the bank narration ("credit card"/"cc bill"/"card
+   bill"/"card payment") — a real payment via CRED showed up as
+   counterparty "CRED Club Online," which matches none of those phrases.
+   Hardcoding "cred" as a keyword was considered and rejected (the user's
+   own catch): they might pay from a different app next time, and the
+   same app can genuinely be used for real spending too, so matching on
+   which app was used isn't durable either way. **Fixed with a second,
+   app-agnostic check**: does the transaction's amount exactly match the
+   real outstanding credit card bill, computed from actual card swipes in
+   the most recently closed billing cycle (the same cycle math CC Advisor
+   already uses, now factored into a shared `getOutstandingCCCycleWindow_()`
+   helper so the two can never drift apart)? A bill payment always pays
+   the exact bill total no matter which app sends the money — same
+   "match by amount, not by name" idea already used for Rent/EMI/SIP
+   elsewhere in this app. Applied everywhere `isCreditCardBillPayment` is
+   checked: `getPendingTransactions`, `getTransactionHistory`,
+   `getTodaySummary`, `getMonthlyAnalysis`, `saveTransactionNote`, and
+   `getCCAdvisorData`'s own "has the bill been paid" check. Verified with
+   a new test, `backend/tests/ccBillPaymentByAmount.test.js` (the exact
+   CRED scenario, a non-matching amount correctly NOT excluded, the old
+   keyword match still works, a real card swipe never matches even at the
+   same amount, no false match when there's no real outstanding bill, and
+   `getCCAdvisorData` itself now recognizes the payment). Full existing
+   suite (10 files, including this new one) passes. **Known limit, not
+   handled**: a *partial* bill payment won't amount-match (only an exact
+   full payment does) — flagged, not yet needed in practice.
+
+Both fixes pushed to the Apps Script editor draft. Waiting on the user's
+go-ahead for `clasp deploy` (to reach the live app) and a git commit
+(nothing committed yet either).
+
+**Credit card statement reconciliation — added 2026-08-25, backend +
+frontend both done, pushed to the editor draft, NOT yet deployed live.**
+While chasing the ₹474.63 gap above, the user asked for a way to upload
+a real credit card statement and have the app find what it's missing —
+same idea as the existing bank statement Reconcile screen, just for a
+card statement instead. Extended that exact feature (Bank/Credit card
+toggle on the Reconcile screen, reuses the same matching engine
+unchanged) rather than building something separate. Verified with a new
+test, `backend/tests/ccStatementReconciliation.test.js` (25 checks).
+
+**Caught before deploying, same day**: the user shared their actual real
+statement to test this against — good thing, since it's a **PDF**, not
+the `.xls` the first version assumed. Fixed by adding a PDF path (Drive
+API v2 OCR → text → a line-based parser built against the real
+statement's layout), alongside the original `.xls` path. **The real
+₹474.63 mystery is now solved**: a ₹474.49 UPI charge to "Google Asia
+Pacific Pte. Ltd" (30/07/2026, almost certainly a Play Store purchase)
+was a real card swipe the SMS parser silently never logged — confirmed
+by parsing the user's actual real statement text as a test fixture
+(`backend/tests/ccStatementPdfParsing.test.js`, 16 checks, all against
+real data, not invented examples). Full detail:
+[docs/features/reconciliation.md](docs/features/reconciliation.md#credit-card-statement-support-added-2026-08-25).
+**Still open**: the actual Drive API OCR call has never been run for
+real (can't execute Apps Script from outside the editor) — needs one
+real upload through the live app before this is fully trusted, same
+"real on-device test still owed" flag used elsewhere in this file.
 
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
