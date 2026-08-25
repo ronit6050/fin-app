@@ -645,12 +645,35 @@ function parseCreditCardStatementText(text){
   return txns;
 }
 
+// Google's Drive API enforces a short-lived per-user rate limit that an
+// OCR conversion can trip even on a single request (found 2026-08-25 on
+// the very first real upload — real error: "GoogleJsonResponseException:
+// ...drive.files.copy failed... User rate limit exceeded"). This is
+// normally transient (clears within seconds), so retry a few times with
+// a growing pause instead of failing on the first hiccup. Only retries
+// an error that actually looks like a rate limit — any other error
+// (a genuinely broken file, a permissions problem) fails immediately,
+// same as before, rather than uselessly retrying something that will
+// never succeed.
+function withRateLimitRetry_(fn, maxAttempts){
+  maxAttempts = maxAttempts || 4;
+  let lastErr;
+  for(let attempt = 1; attempt <= maxAttempts; attempt++){
+    try{
+      return fn();
+    }catch(err){
+      lastErr = err;
+      const looksLikeRateLimit = /rate limit|quota|User Rate Limit Exceeded/i.test(err.toString());
+      if(!looksLikeRateLimit || attempt === maxAttempts) throw err;
+      Utilities.sleep(1000 * Math.pow(2, attempt - 1)); // 1s, 2s, 4s
+    }
+  }
+  throw lastErr;
+}
+
 // Uploads a PDF and gets real text back out of it via Google Drive's own
 // OCR (Drive API v2, already enabled for this project — see
-// appsscript.json). Not previously used anywhere in this codebase, so
-// this specific step is UNVERIFIED against a live run — see
-// docs/features/reconciliation.md for what to check the first time a
-// real PDF is uploaded.
+// appsscript.json).
 function extractTextFromStatementPdf(fileBase64, fileName){
   let driveFile = null;
   let ocrDoc = null;
@@ -663,11 +686,13 @@ function extractTextFromStatementPdf(fileBase64, fileName){
     );
 
     driveFile = DriveApp.createFile(blob);
-    ocrDoc = Drive.Files.copy(
-      { title: (fileName || "cc-statement") + " (OCR)", mimeType: MimeType.GOOGLE_DOCS },
-      driveFile.getId(),
-      { ocr: true, ocrLanguage: "en" }
-    );
+    ocrDoc = withRateLimitRetry_(function(){
+      return Drive.Files.copy(
+        { title: (fileName || "cc-statement") + " (OCR)", mimeType: MimeType.GOOGLE_DOCS },
+        driveFile.getId(),
+        { ocr: true, ocrLanguage: "en" }
+      );
+    });
 
     return DocumentApp.openById(ocrDoc.id).getBody().getText();
 
