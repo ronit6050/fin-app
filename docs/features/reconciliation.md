@@ -278,8 +278,7 @@ Node script using `pdfjs-dist` (the same library, Node build), and
 once via an actual live Chrome browser test (a small standalone HTML
 page served locally, running the real CDN-hosted pdf.js against the
 real PDF file) — both reconstructed all 16 real transaction lines
-correctly, and feeding that text through the existing parser correctly
-found the real ₹474.49 gap.
+correctly.
 
 `reconcileCreditCardStatementPreview(fileBase64, fileName, statementText)`
 now takes an optional `statementText` — when the frontend already
@@ -291,3 +290,63 @@ real, load-bearing fallback — not dead code — for a genuinely
 scanned/image-only PDF, or an older cached frontend that hasn't sent
 `statementText` yet; `withRateLimitRetry_()` still protects that
 fallback path. `.xls`/`.xlsx` is completely unaffected either way.
+
+## Found a different, more important bug: wrong payment Mode (2026-08-25)
+
+With parsing finally correct (all 16 real lines read), the real live
+upload came back "16 matched, 0 missing" — which turned out to be
+**right**, not a bug: the ₹474.49 Google Asia Pacific charge was never
+actually missing from `Transactions`. It was there all along, at a real
+row, just logged with **Mode "UPI" instead of "card 8132"**.
+
+**Why**: the card is a *UPI RuPay Credit Card* — usable either as a
+normal card swipe, or paid directly over UPI rails (this charge was a
+Google Play purchase). When used the UPI way, the bank's own SMS reads
+as a plain UPI payment message, so Tasker's SMS parser logs Mode "UPI",
+not "card ####". Every place in this app that adds up card spend —
+`getOutstandingCCBillTotal`, `isCreditCardBillPayment`'s amount match,
+CC Advisor's cycle totals, Analysis's Card bucket — filters specifically
+on Mode starting with `"card"`. A transaction like this is real card
+debt that's completely invisible to all of them: worse than a missing
+row, since nothing *looks* wrong.
+
+**Diagnosed live**: added temporary `CC_MATCH_DEBUG` logging to
+`reconcileCreditCardStatementPreview` (`AILogs`) showing, for every
+parsed transaction, exactly which real Sheet row it matched and that
+row's real Mode/counterparty — the user copied the log entry back,
+which showed `row 658 mode=UPI counterparty=playstoregames1.bd@axisba`
+in one line. Removed once root-caused, per this project's usual
+temporary-debug-logging convention.
+
+**Fixed**: `previewReconciliation(bankTxns, options)` gained an
+optional `options.checkCardMode` — only ever passed `true` by
+`reconcileCreditCardStatementPreview` (bank statement reconciliation
+never sets it, so that path's behavior is 100% unchanged, confirmed by
+`backend/tests/ccWrongCardMode.test.js`). When set, a matched **DEBIT**
+transaction whose existing row's Mode doesn't start with `"card"` is
+collected into a new `wrongMode` list — deliberately DEBIT-only, since
+a matched CREDIT (a bill payment) correctly has Mode "upi" (the payment
+leaves your bank account, not "the card"); flagging those would be
+wrong. `extractCardLast4(text)` pulls the real card's last 4 digits
+from the statement's own printed masked number (`"653029XXXXXX8132"`
+→ `"8132"`) so the suggested fix is `"card 8132"` — matching the exact
+Mode value the card's other real rows already use — not a bare generic
+`"card"`. `fixTransactionMode(row, mode)` (new PWA action
+`fixCreditCardTransactionMode`) writes the single corrected cell.
+
+**UI**: Reconcile's review screen gained a third section, "Already
+tracked, but marked wrong," above Missing/Notes found — a plain-English
+explainer, one card per flagged transaction (date, amount, merchant,
+"Currently marked: X → will fix to: Y"), a checkbox, and a "Fix
+Selected" button that calls `fixCreditCardTransactionMode` once per
+approved item (same one-call-per-item pattern `submitFoundNotes`
+already uses). Verified end-to-end in a real browser (not just Node) via
+a standalone test harness extracting the real functions from
+`index.html`: rendering, status text, and the actual click → backend
+call all confirmed correct.
+
+**Known limitation, not solved here**: this only catches the mismatch
+for transactions that appear on an uploaded CC statement. Other UPI-mode
+rows from further back that are secretly card purchases (same root
+cause, different past charges) won't surface unless an older statement
+is uploaded too — not chased further in this pass.

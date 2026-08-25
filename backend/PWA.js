@@ -190,6 +190,15 @@ function handlePwaRequest(data){
     return jsonResponse(insertReconciledTransactions(data.transactions, data.source));
   }
 
+  // Added 2026-08-25 — fixes an existing transaction's Mode when a
+  // credit card statement reconcile finds it was logged under the wrong
+  // one (e.g. a UPI RuPay card purchase made over UPI rails, logged as
+  // Mode "upi" instead of "card ..."). See previewReconciliation's
+  // wrongMode comment in Recon.js.
+  if(data.action === "fixCreditCardTransactionMode"){
+    return jsonResponse(fixTransactionMode(data.row, data.mode));
+  }
+
   if(data.action === "getSettings"){
     return jsonResponse({ ok:true, settings: getSettings() });
   }

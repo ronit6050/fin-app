@@ -281,8 +281,29 @@ function insertConfirmed(){
 // smartMemoryData/typeMemoryData are read once here and reused for every
 // transaction, same fix applied to getPendingTransactions on 2026-08-08
 // (see needWantSaving.js) — avoids re-reading those sheets per row.
-function previewReconciliation(bankTxns){
+// options.checkCardMode (added 2026-08-25, credit card reconciliation
+// only — bank statement callers never pass this, so their behavior is
+// completely unchanged) — additionally flags a matched DEBIT
+// transaction whose EXISTING Sheet row's Mode doesn't start with "card"
+// as `wrongMode`, not just a plain match. Found on a real statement: a
+// UPI RuPay Credit Card can be used two ways — swiped like a normal
+// card, or paid directly over UPI (a Play Store bill, in the real case
+// that surfaced this) — when used the UPI way, the bank's own SMS is a
+// plain "UPI payment" message, so Tasker logs Mode "upi", not "card
+// ####". Every place in this app that adds up card spend (CC Advisor,
+// isCreditCardBillPayment, Analysis's Card bucket) filters specifically
+// on Mode starting with "card", so a transaction like this is real card
+// debt that's invisible to every one of those calculations — genuinely
+// worse than a missing row, since it looks like nothing's wrong. Only
+// checked for DEBIT transactions — a matched CREDIT (a bill payment)
+// correctly has Mode "upi" (the payment leaves your bank account, not
+// "the card"), so flagging those would be wrong.
+// options.correctCardMode is the Mode value to suggest as the fix
+// (e.g. "card 8132", from the real statement's own printed card
+// number — see extractCardLast4).
+function previewReconciliation(bankTxns, options){
 
+  options = options || {};
   const sheetData = getSheetData();
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -294,6 +315,7 @@ function previewReconciliation(bankTxns){
   let matched = 0;
   const missing = [];
   const notesFound = [];
+  const wrongMode = [];
 
   bankTxns.forEach(function(txn){
 
@@ -311,6 +333,18 @@ function previewReconciliation(bankTxns){
       const sheetRow         = sheetData[bestRowIndex];
       const existingNote     = (sheetRow[12] || "").toString().trim(); // column M
       const existingCategory = (sheetRow[13] || "").toString().trim(); // column N
+      const existingMode     = (sheetRow[4]  || "").toString();        // column E
+
+      if(options.checkCardMode && txn.type === "debit" && !existingMode.toLowerCase().startsWith("card")){
+        wrongMode.push({
+          row:         bestRowIndex + 1,
+          date:        Utilities.formatDate(txn.date, Session.getScriptTimeZone(), "dd MMM yyyy"),
+          amount:      Number(txn.amount),
+          name:        sheetRow[7] || txn.name,
+          currentMode: existingMode || "(blank)",
+          correctMode: options.correctCardMode || "card"
+        });
+      }
 
       // Already noted — nothing to recover, nothing to do.
       if(existingNote || !txn.note) return;
@@ -349,7 +383,32 @@ function previewReconciliation(bankTxns){
     });
   });
 
-  return { total: bankTxns.length, matched: matched, missing: missing, notesFound: notesFound };
+  return { total: bankTxns.length, matched: matched, missing: missing, notesFound: notesFound, wrongMode: wrongMode };
+}
+
+// Pulls the last 4 digits from a statement's own printed card number
+// (e.g. "653029XXXXXX8132" -> "8132"), so a wrong-Mode fix can suggest
+// "card 8132" — matching the exact Mode value already used by this
+// card's other real rows — instead of a bare generic "card". Returns
+// null if the statement text doesn't contain a recognizable masked
+// card number (the fix then falls back to a plain "card").
+function extractCardLast4(text){
+  const m = /X{2,}(\d{4})\b/.exec(text || "");
+  return m ? m[1] : null;
+}
+
+// Writes a corrected Mode for one existing Transactions row — the fix
+// for the wrongMode case above. Deliberately minimal: one cell, no
+// cascading side effects, same trust level as any other single-cell
+// edit already possible via History.
+function fixTransactionMode(row, mode){
+  try{
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    sheet.getRange(row, 5).setValue(mode); // column E
+    return { ok: true };
+  }catch(err){
+    return { ok: false, error: err.toString() };
+  }
 }
 
 // Entry point for the PWA's reconcileStatement action. The browser can't
@@ -765,12 +824,15 @@ function reconcileCreditCardStatementPreview(fileBase64, fileName, statementText
 
   try{
     let ccTxns;
+    let cardLast4 = null;
 
     if(statementText){
       ccTxns = parseCreditCardStatementText(statementText);
+      cardLast4 = extractCardLast4(statementText);
     } else if(isPdf){
       const text = extractTextFromStatementPdf(fileBase64, fileName);
       ccTxns = parseCreditCardStatementText(text);
+      cardLast4 = extractCardLast4(text);
       logAI("CC_PDF_OCR_FALLBACK", "Client-side text extraction wasn't sent — fell back to Drive OCR. Extracted " +
         text.length + " chars, parsed " + ccTxns.length + " transaction(s).");
     } else {
@@ -789,9 +851,12 @@ function reconcileCreditCardStatementPreview(fileBase64, fileName, statementText
       ccTxns = parseCreditCardSheet(sheet);
     }
 
-    const result = previewReconciliation(ccTxns);
+    const result = previewReconciliation(ccTxns, {
+      checkCardMode:   true,
+      correctCardMode: cardLast4 ? ("card " + cardLast4) : "card"
+    });
 
-    return { ok: true, total: result.total, matched: result.matched, missing: result.missing, notesFound: result.notesFound };
+    return { ok: true, total: result.total, matched: result.matched, missing: result.missing, notesFound: result.notesFound, wrongMode: result.wrongMode };
 
   }catch(err){
     logAI("CC_RECON_ERROR", err.toString());

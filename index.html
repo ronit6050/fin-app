@@ -5371,6 +5371,7 @@
           case "getDashboard": return { ok: true, dashboard: demoComputeDashboard() };
           case "reconcileStatement": return { ok: false, error: "Bank statement upload isn't available in Demo Mode." };
           case "reconcileCreditCardStatement": return { ok: false, error: "Credit card statement upload isn't available in Demo Mode." };
+          case "fixCreditCardTransactionMode": return { ok: false, error: "Not available in Demo Mode." };
           case "insertReconciledTransactions": return { ok: false, error: "Not available in Demo Mode." };
           case "getSettings": return { ok: true, settings: demoState.settings };
           case "updateSettings": return demoUpdateSettings(data.settings);
@@ -9633,13 +9634,64 @@
       return card;
     }
 
+    // A transaction already in the Sheet, correctly matched, but logged
+    // with the wrong payment Mode (added 2026-08-25 — see
+    // docs/features/reconciliation.md). Simpler than
+    // buildReviewCardShell's cards — nothing to edit, just a clear
+    // before/after and a checkbox.
+    function buildWrongModeItem(item) {
+      const card = document.createElement("div");
+      card.className = "pending-item";
+      card.innerHTML = `
+        <div class="pending-top">
+          <span class="pending-amount">₹${item.amount.toLocaleString("en-IN")}</span>
+          <label style="display:flex; align-items:center; gap:6px; font-weight:normal; font-size:0.85rem;">
+            <input type="checkbox" class="recon-include" checked> Include
+          </label>
+        </div>
+        <div class="pending-meta">${item.date} · ${escapeHtml(item.name || "Unknown")}</div>
+        <div class="pending-meta">Currently marked: <strong>${escapeHtml(item.currentMode)}</strong> → will fix to: <strong>${escapeHtml(item.correctMode)}</strong></div>
+      `;
+      card._reconRow = item.row;
+      card._correctMode = item.correctMode;
+      return card;
+    }
+
     function renderReconResults(data) {
+      const wrongMode = data.wrongMode || [];
+
       reconStatusEl.style.display = "block";
       reconStatusEl.textContent = data.matched + " already in your Sheet, " +
         data.missing.length + " missing, " +
-        data.notesFound.length + " found a note for.";
+        data.notesFound.length + " found a note for" +
+        (wrongMode.length > 0 ? ", " + wrongMode.length + " marked with the wrong payment mode." : ".");
 
       reconResultsEl.innerHTML = "";
+
+      if (wrongMode.length > 0) {
+        const heading = document.createElement("h3");
+        heading.style.cssText = "font-size:0.95rem; margin:12px 0 8px 0;";
+        heading.textContent = "Already tracked, but marked wrong (" + wrongMode.length + ")";
+        reconResultsEl.appendChild(heading);
+
+        const explainer = document.createElement("p");
+        explainer.className = "pending-status";
+        explainer.style.marginTop = "-4px";
+        explainer.textContent = "These are real card purchases (your UPI RuPay card was used over UPI, not swiped), but got logged with the wrong payment mode — so they're silently left out of your Credit Card totals until fixed.";
+        reconResultsEl.appendChild(explainer);
+
+        const itemEls = wrongMode.map(buildWrongModeItem);
+        itemEls.forEach(function (el) { reconResultsEl.appendChild(el); });
+
+        const fixButton = document.createElement("button");
+        fixButton.type = "button";
+        fixButton.textContent = "Fix Selected";
+        fixButton.style.marginTop = "8px";
+        fixButton.addEventListener("click", function () {
+          submitWrongModeFixes(itemEls, fixButton);
+        });
+        reconResultsEl.appendChild(fixButton);
+      }
 
       if (data.missing.length > 0) {
         const heading = document.createElement("h3");
@@ -9679,7 +9731,7 @@
         reconResultsEl.appendChild(saveButton);
       }
 
-      if (data.missing.length === 0 && data.notesFound.length === 0) {
+      if (data.missing.length === 0 && data.notesFound.length === 0 && wrongMode.length === 0) {
         const p = document.createElement("p");
         p.className = "pending-status";
         p.textContent = "Nothing to review — your Sheet is already up to date.";
@@ -9727,6 +9779,47 @@
         .catch(function (err) {
           reconStatusEl.textContent = "Couldn't save: " + err.message;
           saveButton.disabled = false;
+        });
+    }
+
+    // Approving here fixes one existing row's Mode column — the
+    // wrongMode case (added 2026-08-25). One call per approved item,
+    // same pattern as submitFoundNotes above.
+    function submitWrongModeFixes(itemEls, fixButton) {
+      const toSubmit = itemEls.filter(function (card) {
+        return card.querySelector(".recon-include").checked;
+      });
+
+      if (toSubmit.length === 0) {
+        reconStatusEl.textContent = "Nothing selected to fix.";
+        return;
+      }
+
+      fixButton.disabled = true;
+      reconStatusEl.style.display = "block";
+      reconStatusEl.textContent = "Fixing " + toSubmit.length + " transaction(s)...";
+
+      const promises = toSubmit.map(function (card) {
+        return callAppsScript({
+          action:   "fixCreditCardTransactionMode",
+          idToken:  currentUser.idToken,
+          row:      card._reconRow,
+          mode:     card._correctMode
+        });
+      });
+
+      Promise.all(promises)
+        .then(function (results) {
+          const failed = results.filter(function (r) { return !r.ok; }).length;
+          reconStatusEl.textContent = failed
+            ? (failed + " of " + toSubmit.length + " failed to fix.")
+            : "Fixed " + toSubmit.length + " transaction(s) — they'll now count correctly in CC Advisor and Analysis.";
+          toSubmit.forEach(function (card) { card.remove(); });
+          fixButton.disabled = false;
+        })
+        .catch(function (err) {
+          reconStatusEl.textContent = "Couldn't fix: " + err.message;
+          fixButton.disabled = false;
         });
     }
 

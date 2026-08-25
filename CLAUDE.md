@@ -1150,8 +1150,33 @@ scanned PDF or an older cached frontend, proven via
 `backend/tests/ccStatementTextBypass.test.js` that it's never touched
 when the browser already sent real text. Full detail:
 [docs/features/reconciliation.md](docs/features/reconciliation.md#the-ocr-path-was-tried-live-and-turned-out-unreliable--rebuilt-same-day-pdf-handling-now-reads-real-embedded-text-client-side-instead).
-Pushed to the editor draft and `index.html`, not yet deployed live /
-committed — waiting on the user's go-ahead.
+Deployed live (@309), committed and pushed.
+
+**Real live testing found a THIRD, more important bug — deployed live
+same day.** With parsing finally correct, the real upload came back
+"16 matched, 0 missing" — actually right, not a bug: the ₹474.49 charge
+was never missing, it was sitting in `Transactions` all along with
+**Mode "UPI" instead of "card 8132"**. Root cause: the card is a *UPI
+RuPay Credit Card* — usable as a normal swipe OR paid directly over UPI
+(this was a Google Play purchase). Used the UPI way, the bank's SMS
+reads as a plain UPI payment, so it got logged as Mode "UPI" — and
+every place that adds up card spend (CC Advisor, `isCreditCardBillPayment`,
+Analysis's Card bucket) filters specifically on Mode starting with
+"card", so this real card charge was invisible to all of them. Found by
+adding temporary `CC_MATCH_DEBUG` logging and having the user paste the
+AILogs entry back. **Fixed**: `previewReconciliation` gained an opt-in
+`checkCardMode` flag (bank reconciliation never sets it, unaffected) that
+flags a matched DEBIT transaction with a non-"card" Mode as `wrongMode`;
+Reconcile's UI gained a third section ("Already tracked, but marked
+wrong") with a one-tap fix per item, writing the corrected Mode
+(extracted from the statement's own printed card number, e.g. "card
+8132"). Verified with `backend/tests/ccWrongCardMode.test.js` and a real
+browser test extracting the actual render/submit functions from
+`index.html`. Deployed live (@311), committed and pushed. Full detail:
+[docs/features/reconciliation.md](docs/features/reconciliation.md#found-a-different-more-important-bug-wrong-payment-mode-2026-08-25).
+**Known gap, not solved**: only catches this for transactions on an
+uploaded statement — older UPI-mode rows with the same root cause,
+from statements not yet uploaded, aren't found.
 
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
