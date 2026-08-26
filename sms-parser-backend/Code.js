@@ -1,5 +1,6 @@
 const SHEET_ID = "1_vlmbWEg6KkFhU7uUdmtPBfVRP_VWDmOjzcCJxF2ruw";
 
+// Bound to the same spreadsheet the main PWA backend reads/writes.
 const TRANSACTION_SHEET = "Transactions";
 const LOG_SHEET = "Logs";
 
@@ -53,16 +54,35 @@ function doPost(e){
 
     }
 
-    if(!isDuplicate(tx.reference)){
+    // Added 2026-08-26 — real bug found live: the weekly resync job
+    // (Tasker resending a batch of past SMS to catch anything the
+    // real-time listener missed) sends many requests close together.
+    // Without a lock, two executions can both check isDuplicate() at
+    // the same moment, both see "nothing matches yet," and both call
+    // saveTransaction() — Google Sheets' appendRow() isn't safe against
+    // that race on its own, and one of the two rows can silently
+    // disappear even though this function logged "TRANSACTION SAVED"
+    // for it. A script lock makes every execution wait its turn for
+    // this specific check-then-write step, so that can't happen anymore.
+    const lock = LockService.getScriptLock();
+    lock.waitLock(25000); // comfortably under Apps Script's own execution limit — a genuinely stuck lock fails loudly into the catch below instead of hanging
 
-      saveTransaction(tx,sms,sender,timestamp);
-      logWebhook(sender,sms,raw,"TRANSACTION SAVED");
+    try{
 
-    }
-    else{
+      if(!isDuplicate(tx.reference)){
 
-      logWebhook(sender,sms,raw,"DUPLICATE IGNORED");
+        saveTransaction(tx,sms,sender,timestamp);
+        logWebhook(sender,sms,raw,"TRANSACTION SAVED");
 
+      }
+      else{
+
+        logWebhook(sender,sms,raw,"DUPLICATE IGNORED");
+
+      }
+
+    }finally{
+      lock.releaseLock();
     }
 
   }

@@ -1607,6 +1607,79 @@ which some UPI transfer confirmations use a generic sender for instead
 of the bank's own ID. Not fixed — would need the actual sender ID from
 a future top-up to confirm before touching that logic.
 
+**Weekly SMS resync — a Tasker safety net for real-time misses (added
+2026-08-26): built, real bug found and fixed live, deployed.** Root
+cause of an earlier real gap (transactions genuinely reaching the phone
+but never showing up in the app) turned out to be **Tasker itself**
+silently failing to forward specific SMS to the webhook — confirmed by
+checking this project's own `Logs` sheet and finding zero entries at
+all for the missing messages (not "rejected," not "errored" — never
+received). That's a phone-side reliability gap, not something fixable
+in this backend's code. Rather than build a whole native app (considered
+and explicitly rejected — a PWA fundamentally cannot read SMS at all,
+web platform limitation on every device; a real Android app could, but
+Play Store policy specifically restricts the `READ_SMS` permission
+unless the app IS the user's default SMS app, and a sideloaded app would
+face the exact same battery-optimization/background-kill fight Tasker
+already has — switching apps doesn't fix that on its own), the user's
+own idea: have **Tasker itself** run a second, scheduled profile that
+periodically re-sends recent SMS through the same webhook, catching
+anything the real-time listener missed.
+
+**Why this is safe to build with zero backend risk**: `doPost`'s
+existing `isDuplicate()` check (matches on the SMS's own reference
+number) already makes reprocessing a previously-saved message a safe
+no-op — a resync sending the same 150+ messages every week just
+silently skips everything already there, and only a genuine miss ever
+gets a new row. No new backend logic was needed for the resync idea
+itself, only the Tasker-side profile (Time context — no native "every
+N days" option, has to be an exact From=To instant time combined with a
+separate Day context; SQL Query action in "URI Formatted" mode reading
+`content://sms/inbox`; a For loop; Variable Split on a `~|~`-divided
+row; HTTP Request posting to the same webhook). Real Tasker quirks
+found and fixed while building this, in case they come up again:
+local variable names need 3+ characters (`%i` alone errors); the
+Variable Set action's "To" field needs its own "Do Maths" checkbox
+turned on or arithmetic like `(%TIMES-864000)*1000` is sent as a
+literal, unevaluated string; new actions always get added to the
+bottom of a task, not inserted at point of focus.
+
+**A real, separate backend bug was found DURING the first live test —
+fixed the same day.** The resync correctly found and resent a
+previously-missed transaction — the `Logs` sheet showed
+"TRANSACTION SAVED" for it — but the row never actually appeared in
+`Transactions`. Root cause: `doPost` had no locking around its
+check-if-already-saved-then-append step. With one SMS at a time (the
+real-time listener's normal load) this never mattered; with the resync
+firing many requests in a burst, two nearly-simultaneous executions
+could both see "not a duplicate yet" at the same moment and both call
+`saveTransaction()` — Google Sheets' `appendRow()` isn't safe against
+that race on its own, and one of the two writes can silently vanish
+even though the code logged success for it. **Fixed** by wrapping the
+`isDuplicate()` + `saveTransaction()` step in
+`LockService.getScriptLock()` (25s wait, released in a `finally` so a
+mid-lock error can't leak it) — every execution now waits its turn for
+that specific step. Verified with a new test,
+`sms-parser-backend/tests/lockServiceRace.test.js` (a normal single
+transaction still locks/unlocks exactly once; a genuine duplicate is
+still correctly skipped, not double-saved; the lock is provably
+released even when `saveTransaction` throws, proven by a later
+unrelated call not deadlocking). **A second, smaller mistake caught and
+fixed in the same pass**: the first `clasp push` for this fix
+accidentally uploaded the new `tests/` folder to the LIVE Apps Script
+project (this project never had a `.claspignore`, unlike `backend/`,
+since it never had a `tests/` folder before) — since Apps Script
+shares one global scope and runs every file's top-level code on every
+execution, a Node-only test file with `require()` calls would have
+broken the live webhook on its very next real SMS. Caught immediately,
+added `sms-parser-backend/.claspignore` (same pattern as `backend/`'s),
+force-pushed again, and independently confirmed via `clasp pull` into a
+scratch folder that the live project now only contains
+`appsscript.json` and `Code.js` — not just trusting the push output.
+Deployed live (`@10`). Not yet committed to git as of this note —
+waiting on confirmation the Tasker side is fully working end-to-end
+first.
+
 ## PROPOSED PLAN: Category/Type restructure + cross-tab linking (2026-08-09)
 
 **Status: Phase 1 done. Phase 2 fully done (Investment, Saving, AND
