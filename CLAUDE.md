@@ -1178,6 +1178,32 @@ browser test extracting the actual render/submit functions from
 uploaded statement — older UPI-mode rows with the same root cause,
 from statements not yet uploaded, aren't found.
 
+**CC Advisor — lead with the running cycle once paid (2026-08-25):
+done, live.** User feedback after testing live: once "Last bill — paid"
+shows, there's nothing left to act on there, so it shouldn't stay the
+first/biggest thing on screen — the running cycle (still open, still
+actionable) should. Frontend-only (`index.html`). The "This cycle so
+far" card + its own affordability check now moves to the very top
+(via DOM reorder, not a rebuild — the hero's own CSS specifically
+styles its own child element classes, so simply swapping data between
+the hero and the plain card would have produced mismatched labels; a
+real, live browser test confirmed this the safer approach) whenever
+there's nothing left to do about the outstanding bill (paid, or no
+real bill at all); the "Where this bill went" category/card breakdown
+switches to the running cycle's own numbers too, with the heading
+changing to match ("Where this cycle's spend is going"). Behavior for
+a bill that's genuinely due or overdue is completely unchanged — that
+case still leads, unaffected. Verified in a real browser (not just
+Node) via a standalone test extracting the actual `renderCCAdvisor`
+function and its dependencies from `index.html`, confirming both the
+DOM order and which cycle's numbers actually render, for both states.
+Explicitly scoped down from the user's original ask: a full month/
+cycle slider (like Analysis has) was discussed and intentionally not
+built — CC Advisor is built around exactly two special cycles
+(outstanding + current), not an arbitrary historical browser; that's
+a real backend feature, not a UI tweak, left for later if it turns out
+to be needed. `APP_VERSION` bumped to `2026-08-25-02`.
+
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
 - **PWA source**: https://github.com/ronit6050/fin-app (this repo, `D:\fin-app` — the one this file lives in). Plain HTML/CSS/JS in `index.html`, plus `sw.js` (service worker), `manifest.json`, `icons/`.
