@@ -2704,7 +2704,7 @@
             </div>
           </div>
 
-          <div class="category-row">
+          <div class="category-row" id="ccCurrentCycleBox">
             <div class="category-top">
               <span>This cycle so far</span>
               <span id="ccCurrentAmount">₹0</span>
@@ -2738,7 +2738,7 @@
             </div>
           </div>
 
-          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Where this bill went</h3>
+          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;" id="ccBreakdownHeading">Where this bill went</h3>
           <div id="ccTopCategories"></div>
 
           <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">Per Card</h3>
@@ -3209,8 +3209,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-08-25-01";
-    const APP_CHANGELOG = "Reconcile screen: upload a credit card statement (PDF or Excel) to find transactions missing from your Sheet, or logged with the wrong payment mode.";
+    const APP_VERSION = "2026-08-25-02";
+    const APP_CHANGELOG = "CC Advisor now leads with your running cycle (not the paid-off bill) once the last bill is settled.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -7079,6 +7079,8 @@
     const ccCurAffSavingsEl    = document.getElementById("ccCurAffSavings");
     const ccCardBreakdownEl    = document.getElementById("ccCardBreakdown");
     const ccTopCategoriesEl    = document.getElementById("ccTopCategories");
+    const ccCurrentCycleBoxEl  = document.getElementById("ccCurrentCycleBox");
+    const ccBreakdownHeadingEl = document.getElementById("ccBreakdownHeading");
 
     // Static elements, wired once — tap either affordability card to see
     // the full breakdown behind the verdict.
@@ -7137,6 +7139,26 @@
       ccContentEl.style.display = "block";
 
       const out = cc.outstanding;
+
+      // Lead with the running cycle once the last bill is paid — added
+      // 2026-08-25, user feedback: once "Last bill — paid" shows, there's
+      // no more action needed there, so the paid bill's own detail (and
+      // its category breakdown further down) was pushing the ACTUALLY
+      // useful info — what you're spending on the still-open cycle right
+      // now — further down the screen for no reason. Moves the "This
+      // cycle so far" card (+ its own affordability check) to the very
+      // top when there's nothing left to do about the outstanding bill;
+      // restores the normal order (outstanding bill first) whenever a
+      // real bill is still due or overdue, since that's genuinely the
+      // more urgent thing to see first in that case.
+      const leadWithCurrentCycle = !out || out.amount === 0 || out.isPaid;
+      if (leadWithCurrentCycle) {
+        ccContentEl.insertBefore(ccCurrentCycleBoxEl, ccOutstandingBoxEl);
+        ccContentEl.insertBefore(ccCurrentAffordCardEl, ccOutstandingBoxEl);
+      } else {
+        ccContentEl.insertBefore(ccOutstandingBoxEl, ccCurrentCycleBoxEl);
+        ccContentEl.insertBefore(ccAffordCardEl, ccCurrentCycleBoxEl);
+      }
 
       // Outstanding bill hero — three states: nothing owed yet, already
       // paid, or awaiting payment (possibly overdue). This is the REAL
@@ -7231,10 +7253,13 @@
         ccCurrentAffordDetailEl.style.display = "none";
       }
 
-      // Per-card breakdown — for the outstanding bill if there is one
-      // (that's the amount you're actually being asked about), falling
-      // back to the current cycle if not (e.g. very first use).
-      const cardData = (out && out.amount > 0) ? out.cardBreakdown : cc.cardBreakdown;
+      // Per-card breakdown — the outstanding bill's while it's still the
+      // primary focus (due/overdue), but the running cycle's once the
+      // last bill is paid — same leadWithCurrentCycle switch as the
+      // hero/order change above, so the heading and the numbers under it
+      // always agree about which cycle they're describing.
+      ccBreakdownHeadingEl.textContent = leadWithCurrentCycle ? "Where this cycle's spend is going" : "Where this bill went";
+      const cardData = leadWithCurrentCycle ? cc.cardBreakdown : out.cardBreakdown;
       ccCardBreakdownEl.innerHTML = "";
       if (!cardData || cardData.length === 0) {
         ccCardBreakdownEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💳</span><p>No card transactions.</p></div>";
@@ -7252,13 +7277,11 @@
         });
       }
 
-      // Top categories for the outstanding bill, tap-to-expand top
-      // transactions — same accordion pattern as Analysis's category
-      // list, reused rather than rebuilt.
-      const topCats = (out && out.amount > 0) ? out.topCategories : [];
+      // Top categories — same cycle switch as the breakdown above.
+      const topCats = leadWithCurrentCycle ? (cc.topCategories || []) : (out.topCategories || []);
       ccTopCategoriesEl.innerHTML = "";
       if (topCats.length === 0) {
-        ccTopCategoriesEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💳</span><p>No card transactions in the last bill.</p></div>";
+        ccTopCategoriesEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💳</span><p>No card transactions " + (leadWithCurrentCycle ? "yet this cycle." : "in the last bill.") + "</p></div>";
       } else {
         const maxAmount = topCats[0].amount;
         topCats.forEach(function (entry) {
