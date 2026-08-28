@@ -1676,9 +1676,180 @@ added `sms-parser-backend/.claspignore` (same pattern as `backend/`'s),
 force-pushed again, and independently confirmed via `clasp pull` into a
 scratch folder that the live project now only contains
 `appsscript.json` and `Code.js` — not just trusting the push output.
-Deployed live (`@10`). Not yet committed to git as of this note —
-waiting on confirmation the Tasker side is fully working end-to-end
-first.
+Deployed live (`@10`), committed (`44ac466`).
+
+**A real duplicate-transaction incident happened right after this
+(2026-08-26), leading to a full from-scratch rewrite (2026-08-27) —
+done, tested, NOT yet pushed/deployed.** A later live test of the
+resync task added transactions that were ALREADY in the Sheet — a real
+mistake, not a close call. The user restored the Sheet themselves from
+version history and gave a standing instruction: think from the core,
+never execute anything live-affecting without asking first. Rather than
+patch just that one bug, the user then asked for a genuine from-scratch
+review of this whole file — admittedly not something they understood
+well themselves — including going through their real, exported Google
+Sheet (`Logs`, 4,498 rows) to find real gaps, not just fix the one
+known one.
+
+What actually shipped in the rewrite (`sms-parser-backend/Code.js`,
+fully rewritten; new test file
+`sms-parser-backend/tests/smsParserRedesign.test.js`, 45 checks, all
+passing — the old `lockServiceRace.test.js` is retired, fully
+superseded by this one's broader, correctly-mocked coverage):
+
+1. **AI (Gemini) removed from this path entirely** — per the user's own
+   call ("I don't think we should rely on AI for SMS parsing"). Every
+   decision is now a plain, readable rule.
+2. **A new third outcome, alongside IGNORE and TRANSACTION: UNCERTAIN.**
+   Before, anything that didn't cleanly match a known pattern was
+   silently dropped — a genuine risk for a script no one was watching
+   closely. Now: a known bank sender with wording that doesn't match
+   anything recognized, OR an unrecognized sender with a real rupee
+   amount in the text, gets saved anyway (so it shows up in Pending like
+   any other transaction) with its Counterparty prefixed
+   `"NEEDS REVIEW: "` so it's obvious at a glance — nothing about the
+   original message is lost either way, since the full raw SMS text is
+   always kept in the row's own RawSMS column. This is what makes the
+   system adapt to a new bank, wallet app, or wording change on its own,
+   instead of silently going blind until someone happens to notice.
+3. **Real gaps fixed, found by parsing the user's actual Logs data**:
+   Jupiter (`ONJPTR` sender) and PayZapp (`PAYZAP` sender) weren't
+   recognized senders at all — their SMS never reached the parser (user
+   confirmed Jupiter is temporary, kept simple on purpose). ICICI salary
+   wording ("Credit of Rs.X has been initiated") didn't match any
+   existing credit keyword. "Paid" wasn't a recognized debit word.
+   AutoPay/subscription confirmations ("AutoPay ... Success") and
+   contactless card charges ("Rs.X without OTP/PIN ... Card") weren't
+   recognized as transactions at all. A real internal inconsistency was
+   also found and fixed: the old classifier recognized "withdrawn" as
+   proof of a real transaction, but the separate function that actually
+   set the Type column never checked for it — an ATM withdrawal SMS
+   would get saved with a blank Type. Also fixed: PAYTM/KOTAK/YES were
+   already recognized senders but never got a real Bank value written
+   (only HDFC/FEDERAL/SBI/ICICI/AXIS did). Also made real (was
+   previously unreachable dead code): a future-tense alert like "will be
+   debited on the 15th" is now actually excluded, not silently let
+   through.
+4. **Duplicate detection rebuilt — this is the fix for the actual
+   incident.** The old check only ever compared reference numbers. A
+   transaction recovered via credit-card statement reconciliation is
+   saved with a placeholder reference like `"NOREF_47"` (the main
+   backend's `Recon.js` does this when a statement line has no real
+   reference printed on it) — so when the real SMS for that same
+   transaction later arrived via resync, its real reference never
+   matched the placeholder, and it got inserted as a second row. Fixed
+   with three tiers, deliberately layered from strongest to narrowest
+   signal: **(1)** exact reference match, but only against a row that
+   has a genuine reference of its own (never a `NOREF_` one); **(2)**
+   exact raw-SMS-text match — the safest possible signal for a message
+   type that never carries a reference at all (e.g. a wallet deduction),
+   since two genuinely different real transactions essentially never
+   share byte-identical text (a different exact time, a different
+   balance shown); **(3)** same date + amount + type, but ONLY against a
+   row whose reference specifically starts with `NOREF_`, AND (added
+   after a test caught a real gap) only when the counterparty names are
+   at least a loose match too — otherwise a coincidental same-day,
+   same-amount match against a completely unrelated placeholder row
+   (different merchant) would wrongly suppress a genuinely different
+   real transaction. **Deliberately did NOT** build a blunt "same day +
+   same amount" fallback for every blank reference — that would have
+   introduced a NEW bug: two genuinely different real purchases on the
+   same day for the same amount (confirmed to happen for real — two
+   Zomato orders) would wrongly look like duplicates of each other.
+5. **Small extra fix while in this file**: the Date column now uses the
+   unambiguous `"Asia/Kolkata"` timezone name instead of the old,
+   ambiguous `"IST"` label (a few other regions also use "IST" for their
+   own timezone) — this was already flagged as an open item below,
+   fixed as part of this pass since `isDuplicate()`'s own date
+   comparison needed to use the same, unambiguous timezone anyway.
+
+The test suite specifically over-tests the duplicate-detection redesign
+given the "no goofups" directive — including the exact failure mode
+that must never regress (two different real transactions, same day,
+same amount, different real references, must both be saved) and the
+exact bug that caused the 2026-08-26 incident (a statement-reconciled
+placeholder row correctly recognized once its real SMS arrives via
+resync). Tasker's own resilience additions (a "Continue Task After
+Error" checkbox on the HTTP Request action, and a short Wait step
+inside the resync loop) — confirmed added by the user 2026-08-27.
+
+**Independent review before deploy — `change-reviewer`, 2026-08-27.**
+Given the stakes, every round of this rewrite went through
+`change-reviewer` before deploying, not just a self-check. It caught
+one real, confirmed bug on the first pass that no test had exercised:
+the tier-3 counterparty safety check only compared names when BOTH
+sides happened to have one extracted — but a very common real HDFC
+format ("Info: UPI/DR/128395408722/SWIGGY") extracts no counterparty
+at all (none of the "to"/"at"/"towards"/"for" patterns match it), so a
+genuinely different real transaction on the same day/amount as an
+unrelated statement-reconciled placeholder row could get silently
+dropped — the exact failure class this whole rewrite exists to
+prevent, just inverted. Fixed three ways: (1) tier 3 now requires a
+real counterparty on BOTH sides or refuses to match at all (missing a
+name defaults to NOT matching, since an extra recoverable row is a far
+safer mistake than a silently vanished one); (2) added a new
+counterparty-extraction fallback for the "UPI/DR/ref/MERCHANT" format
+specifically, which also improves merchant names shown generally; (3)
+also fixed a lower-confidence finding — reference numbers are now
+compared as Numbers, not strict text, since Google Sheets can silently
+convert a numeric-looking cell into an actual Number and drop a
+leading zero (the old code's loose `==` comparison tolerated this;
+the rewrite's stricter comparison didn't, until this fix).
+
+**Two real live bugs found within an hour of first deploying, both
+fixed and redeployed the same day (2026-08-27/28):**
+
+1. A real HDFC promotional SMS ("Last chance! Get a Loan on your HDFC
+   Bank Credit Card @ ZERO Processing Fee... https://1.hdfc.bank.in/
+   HDFCBK/s/V6JLK9Rx") got saved as `UNCERTAIN` minutes after deploy —
+   it used no recognized spam word and no money-movement word, so
+   "known sender + unrecognized wording" correctly-by-design saved it
+   for review rather than dropping it, but it's obviously an ad. Fixed
+   two ways: a message containing a URL is now treated exactly like a
+   spam word (blocks outright if no money word is present, forces
+   `UNCERTAIN` rather than confident `TRANSACTION` if one is) — a real
+   transaction confirmation essentially never contains a clickable
+   link, so this is a strong, general signal; and "loan" was added
+   alongside "emi" in the existing offer-blocking check, as
+   defense-in-depth for a promo with no URL at all.
+2. A second real HDFC message — an RCS "rich card" (Google's rich
+   business-messaging format: an image, a button, a whole JSON
+   payload, not plain text) for the same loan offer — still got saved,
+   because it genuinely contains BOTH a URL and a real money word
+   ("The full loan amount is credited directly to your bank account" —
+   describing what the loan would do, not something that happened).
+   Rather than try to keyword-distinguish "is credited" (real) from
+   "would be credited" (marketing copy) — a genuinely hard wording
+   problem — fixed structurally instead: if the message text, trimmed,
+   starts with `{`, it's ignored outright, before any wording logic
+   runs at all. A real bank transaction alert is always a short,
+   plain-English sentence, never a JSON object — this sidesteps the
+   wording ambiguity entirely.
+
+`change-reviewer` verified both fixes by actually running the exact
+real message through the code, not just reading the diff — each was a
+separate deploy (`@11` full rewrite, `@12` loan/URL fix, `@13` rich-card
+fix). Its own honest read on the pattern: two live misses in a row were
+both the bank's own promotional messages, sent from HDFC's own trusted
+sender ID — not really a design flaw (a deterministic classifier
+meeting real marketing-copy diversity for the first time will always
+surface a few of these), but a real structural note worth remembering:
+the safety rule "known sender + unrecognized wording → never drop it,
+default to UNCERTAIN" is correct and exactly what prevents a real
+transaction in a new format from being silently lost, but it also
+means the bank's known sender ID is a standing loophole for any
+marketing message worded in a way not seen before. **Suggested next
+step, not yet done**: check whether the user's real `Logs` sheet shows
+HDFC's promotional/RCS messages arriving from a genuinely different
+sender ID than the transactional ones (Indian banks often register
+separate DLT sender IDs for "transactional" vs "promotional" SMS) — if
+so, that'd be a much more durable positive filter ("this sender only
+ever sends real alerts") than continuing to add negative keywords one
+incident at a time.
+
+Final test suite: 61 checks, all passing
+(`sms-parser-backend/tests/smsParserRedesign.test.js`). **Deployed
+live. Not yet committed to git as of this note.**
 
 ## PROPOSED PLAN: Category/Type restructure + cross-tab linking (2026-08-09)
 
