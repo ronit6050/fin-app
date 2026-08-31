@@ -238,10 +238,21 @@ function classifySms(sms,sender){
   // like a spam word from here on: blocks outright if no money word is
   // also present, otherwise forces UNCERTAIN rather than confident
   // TRANSACTION (same ambiguous-signal handling already used below).
-  const spamWords = ["reward","points","cashback","offer"];
-  const hasSpamWord = spamWords.some(function(w){ return text.includes(w); }) || /https?:\/\//i.test(text);
+  // "minimumbalancealert" phrases added 2026-08-28 -- a real HDFC
+  // low-balance notification ("Bal in HDFC Bank A/c XX8774 has gone
+  // below minimum limit... Chat on WhatsApp Banking: hdfcbk.io/k/...")
+  // got saved as UNCERTAIN. This is a genuine, useful bank message, but
+  // it's an account-STATUS check, not a transaction -- no money moved.
+  // It also revealed the URL check above only catches an explicit
+  // "http://"/"https://" prefix, not a bare shortlink like
+  // "hdfcbk.io/k/..." -- not widened generally (a bare-domain check
+  // risks false-matching real merchant text, e.g. UPI handles like
+  // "zomato.eternaltsp.payu@hd" already seen in genuine transactions),
+  // but this specific, well-scoped phrase closes today's actual case.
+  const nonTransactionWords = ["reward","points","cashback","offer","minimum balance","minimum limit","min bal"];
+  const hasNonTransactionSignal = nonTransactionWords.some(function(w){ return text.includes(w); }) || /https?:\/\//i.test(text);
 
-  if(hasSpamWord && !hasMoneyMovementSignal(text)) return "IGNORE"; // a pure promo, no money wording at all
+  if(hasNonTransactionSignal && !hasMoneyMovementSignal(text)) return "IGNORE"; // a pure promo/notification, no money wording at all
 
   // A future-tense alert ("will be debited on the 15th") means money
   // hasn't moved YET -- must be checked before the debit-word check
@@ -273,12 +284,13 @@ function classifySms(sms,sender){
 
   // --- Step 2: confident match ------------------------------------------
   if(knownSender && hasMoneyMovementSignal(text)){
-    // A message that mixes a spam-style word with real money wording is
-    // ambiguous -- could be a real transaction with a promotional
-    // footer, or a promotional message dressed up in realistic-sounding
-    // wording. Don't confidently guess either way -- surface it for a
-    // quick human glance instead (never silently dropped either way).
-    if(hasSpamWord) return "UNCERTAIN";
+    // A message that mixes a spam/notification-style word with real
+    // money wording is ambiguous -- could be a real transaction with a
+    // promotional footer, or a promotional/notification message dressed
+    // up in realistic-sounding wording. Don't confidently guess either
+    // way -- surface it for a quick human glance instead (never
+    // silently dropped either way).
+    if(hasNonTransactionSignal) return "UNCERTAIN";
     return "TRANSACTION";
   }
 

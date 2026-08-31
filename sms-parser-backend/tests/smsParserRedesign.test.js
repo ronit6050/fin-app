@@ -514,5 +514,31 @@ function lastLogStatus(sandbox){
   assertEqual(sandbox.classifySms("Rs.500 debited from A/c XX1234 {ref: 128395408722} via UPI", "AD-HDFCBK-S"), "TRANSACTION", "a normal transaction SMS that happens to contain a '{' character mid-message (not at the very start) is still confidently recognized, unaffected by the new rich-card check");
 })();
 
+// =======================================================================
+// PART 9 -- third real live bug, found 2026-08-28: a genuine, useful
+//           bank notification (a low-balance alert) is not a
+//           transaction at all -- no money moved.
+// =======================================================================
+
+(function(){
+  const sandbox = loadSandbox();
+  const realLowBalanceSms = "UPDATE:Bal in HDFC Bank A/c XX8774 has gone below minimum limit of INR 10,000.00.Yesterday's bal:INR xxxxxx .Chat on WhatsApp Banking:hdfcbk.io/k/DUvfE8hRogl";
+
+  assertEqual(sandbox.classifySms(realLowBalanceSms, "AD-HDFCBK-S"), "IGNORE", "the exact real low-balance alert is now correctly ignored -- it's an account-status notification, not a transaction");
+
+  sandbox.doPost(mkEvent(realLowBalanceSms, "AD-HDFCBK-S", 1787500000));
+  assertEqual(sandbox.__rows.length, 0, "confirmed end-to-end: doPost never saves a row for it");
+})();
+
+(function(){
+  const sandbox = loadSandbox();
+  // A real transaction confirmation always states debited/credited/etc
+  // -- a plain "Avl Bal Rs.X" trailer on a genuine transaction message
+  // must NOT be affected by the new "minimum balance"/"minimum limit"
+  // phrases, since those are specific enough to not match a routine
+  // running-balance mention.
+  assertEqual(sandbox.classifySms("Txn Rs.109.08 On HDFC Bank Card 8132 At zomato.eternaltsp.payu@hd by UPI 128446210518 On 24-08", "AD-HDFCBK-S"), "TRANSACTION", "a normal transaction with a routine balance trailer is unaffected -- 'minimum balance'/'minimum limit' are specific phrases, not a generic 'bal' match");
+})();
+
 console.log("\n" + pass + " passed, " + fail + " failed.");
 if(fail > 0) process.exit(1);
