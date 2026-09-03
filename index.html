@@ -3513,6 +3513,11 @@
       currentUser = null;
       localStorage.removeItem(STORAGE_KEY);
       disableGoogleAutoSelectIfReady();
+      // The native app also has to be told to forget the signed-in account -
+      // otherwise the very next native sign-in attempt silently reuses it instead of
+      // actually asking again, since that's a completely separate system from this
+      // app's own web session being cleared above.
+      if (isNativeAndroidApp) window.AndroidSignIn.signOut();
       showSignedOutUI();
     });
 
