@@ -32,15 +32,25 @@
        a half-inverted mismatched look even when Light is picked in Settings. -->
   <meta name="color-scheme" content="light dark">
 
-  <!-- Google's official Sign-In script. This is Google's own code,
-       loaded straight from Google — not a 3rd-party company.
-       "defer" only (not "async" too) - guarantees this finishes running before
-       the page's own "load" event fires, which is when the code further down
-       calls google.accounts.id.initialize(). With async added back in, that
-       call could race the script still loading and crash with "google is not
-       defined" - rare on a fast cached browser, but real on a fresh cold
-       start (confirmed happening in the native app). -->
-  <script src="https://accounts.google.com/gsi/client" defer></script>
+  <!-- Google's official Sign-In script. This is Google's own code, loaded
+       straight from Google — not a 3rd-party company. Skipped entirely
+       inside the native Android app (same "FinAppNativeAndroid" user-agent
+       marker used further down): that app signs in through Android's own
+       account picker instead and never touches this script at all, and
+       loading it anyway was a real, confirmed source of trouble there — a
+       "google is not defined" race one day, an outright blocked request
+       (net::ERR_BLOCKED_BY_ORB) another. Removing it removes that whole
+       class of problem for the one context that never needed it anyway. A
+       real browser (the actual website) is completely unaffected - it
+       never sends that marker, so this always loads normally there.
+       "defer" only (not "async" too) - guarantees this finishes running
+       before the page's own "load" event fires, which is when the code
+       further down calls google.accounts.id.initialize(). -->
+  <script>
+    if (navigator.userAgent.indexOf("FinAppNativeAndroid") === -1) {
+      document.write('<script src="https://accounts.google.com/gsi/client" defer><\/script>');
+    }
+  </script>
 
   <!-- Firebase's official scripts (also Google) — used only for real
        background push notifications, arriving even when the app is closed. -->
