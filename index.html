@@ -3435,10 +3435,19 @@
       }
     }
 
+    // The native Android app marks itself in its user agent - it signs in through
+    // Android's own account picker instead (handled entirely on the native side, which
+    // calls handleCredentialResponse() directly), never through this web button. That
+    // button's own sign-in pages don't run inside any WebView (a real Google security
+    // restriction) - showing it there would just offer a real-looking way into a dead
+    // end. A real browser (the actual website) is unaffected either way.
+    const isNativeAndroidApp = navigator.userAgent.indexOf("FinAppNativeAndroid") !== -1;
+
     // Set up Google's sign-in button once the page has loaded. This part alone waits
     // on Google's script - restoring an already-signed-in session below does not, so a
     // returning user's dashboard was never supposed to depend on this succeeding.
     window.addEventListener("load", function () {
+      if (isNativeAndroidApp) return;
       whenGoogleSignInReady(function () {
         google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
