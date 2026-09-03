@@ -3443,6 +3443,21 @@
     // end. A real browser (the actual website) is unaffected either way.
     const isNativeAndroidApp = navigator.userAgent.indexOf("FinAppNativeAndroid") !== -1;
 
+    // In the native app, put a real, working button in the same spot Google's own
+    // button would normally render - needed for when a session expires or gets cleared
+    // mid-use (the one automatic sign-in attempt only ever happens once, right when the
+    // page first loads). Tapping it calls back into the native app (AndroidSignIn,
+    // added via addJavascriptInterface in MainActivity.kt), which re-runs the exact
+    // same native sign-in flow as that first automatic attempt.
+    if (isNativeAndroidApp) {
+      const nativeSignInButton = document.createElement("button");
+      nativeSignInButton.textContent = "Sign in";
+      nativeSignInButton.addEventListener("click", function () {
+        window.AndroidSignIn.triggerSignIn();
+      });
+      signInBox.appendChild(nativeSignInButton);
+    }
+
     // Set up Google's sign-in button once the page has loaded. This part alone waits
     // on Google's script - restoring an already-signed-in session below does not, so a
     // returning user's dashboard was never supposed to depend on this succeeding.
