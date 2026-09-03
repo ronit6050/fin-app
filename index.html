@@ -3416,34 +3416,45 @@
     }
 
     // Waits until Google's sign-in script has actually finished loading and defined
-    // itself before touching it. "load" firing doesn't reliably guarantee this by
-    // itself (a real "google is not defined" crash was happening right after this on
-    // a slower/first-time load, even with the script tag set to load as early as
-    // possible) - this waits for the real thing instead of assuming a timing order.
-    function whenGoogleSignInReady(callback) {
+    // itself before touching it - "load" firing doesn't reliably guarantee this by
+    // itself. Gives up after ~5 seconds rather than retrying forever, since inside an
+    // embedded app view this script may simply never fully initialize itself (Google
+    // applies its own restrictions there, similar to what blocks the OAuth sign-in
+    // page itself) - onGiveUp lets the caller still show something instead of hanging.
+    function whenGoogleSignInReady(callback, onGiveUp, attemptsLeft) {
+      if (attemptsLeft === undefined) attemptsLeft = 100;
       if (window.google && window.google.accounts && window.google.accounts.id) {
         callback();
+      } else if (attemptsLeft <= 0) {
+        console.error("Google Sign-In script never became ready - giving up.");
+        if (onGiveUp) onGiveUp();
       } else {
-        setTimeout(function () { whenGoogleSignInReady(callback); }, 50);
+        setTimeout(function () {
+          whenGoogleSignInReady(callback, onGiveUp, attemptsLeft - 1);
+        }, 50);
       }
     }
 
-    // Set up Google's sign-in button once the page has loaded
+    // Set up Google's sign-in button once the page has loaded. This part alone waits
+    // on Google's script - restoring an already-signed-in session below does not, so a
+    // returning user's dashboard was never supposed to depend on this succeeding.
     window.addEventListener("load", function () {
       whenGoogleSignInReady(function () {
-      google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleCredentialResponse
+        });
+
+        google.accounts.id.renderButton(signInBox, {
+          theme: "outline",
+          size: "large",
+          text: "signin_with"
+        });
       });
 
-      google.accounts.id.renderButton(signInBox, {
-        theme: "outline",
-        size: "large",
-        text: "signin_with"
-      });
-
-      // If we remember a real, previously-saved sign-in proof, use it
-      // directly — no popup, no waiting on Google to re-confirm anything.
+      // If we remember a real, previously-saved sign-in proof, use it directly - no
+      // popup, no waiting on Google's script to load at all, since none of this
+      // touches it.
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const savedUser = JSON.parse(saved);
@@ -3462,21 +3473,28 @@
       } else {
         showSignedOutUI();
       }
-      });
     });
 
     // "Sign out" clears what we remembered and shows the button again.
     // (It doesn't sign you out of Google itself, just out of this app.)
+    // Only tells Google's own script to stop auto-selecting an account for next time -
+    // harmless to skip if that script never loaded, so guarded rather than assumed.
+    function disableGoogleAutoSelectIfReady() {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        google.accounts.id.disableAutoSelect();
+      }
+    }
+
     signOutButton.addEventListener("click", function () {
       currentUser = null;
       localStorage.removeItem(STORAGE_KEY);
-      google.accounts.id.disableAutoSelect();
+      disableGoogleAutoSelectIfReady();
       showSignedOutUI();
     });
 
     // "Try a different account" on the not-allowed screen — same as signing out
     tryAgainButton.addEventListener("click", function () {
-      google.accounts.id.disableAutoSelect();
+      disableGoogleAutoSelectIfReady();
       showSignedOutUI();
     });
 
