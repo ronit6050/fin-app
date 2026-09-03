@@ -3509,21 +3509,27 @@
       }
     }
 
+    // The native app also has to be told to forget whichever account it just signed
+    // in - otherwise the very next native sign-in attempt silently reuses it instead
+    // of actually asking again, since that's a completely separate system from this
+    // app's own web session. Used by every button that should mean "really sign out,"
+    // including "Try a different account" - that one hit the exact same silent-reuse
+    // bug when this call was only added to the main Sign Out button and not here too.
+    function fullySignOut() {
+      disableGoogleAutoSelectIfReady();
+      if (isNativeAndroidApp) window.AndroidSignIn.signOut();
+    }
+
     signOutButton.addEventListener("click", function () {
       currentUser = null;
       localStorage.removeItem(STORAGE_KEY);
-      disableGoogleAutoSelectIfReady();
-      // The native app also has to be told to forget the signed-in account -
-      // otherwise the very next native sign-in attempt silently reuses it instead of
-      // actually asking again, since that's a completely separate system from this
-      // app's own web session being cleared above.
-      if (isNativeAndroidApp) window.AndroidSignIn.signOut();
+      fullySignOut();
       showSignedOutUI();
     });
 
     // "Try a different account" on the not-allowed screen — same as signing out
     tryAgainButton.addEventListener("click", function () {
-      disableGoogleAutoSelectIfReady();
+      fullySignOut();
       showSignedOutUI();
     });
 
