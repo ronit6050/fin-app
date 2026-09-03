@@ -3488,25 +3488,34 @@
 
       // If we remember a real, previously-saved sign-in proof, use it directly - no
       // popup, no waiting on Google's script to load at all, since none of this
-      // touches it.
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const savedUser = JSON.parse(saved);
-        if (savedUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase() && savedUser.idToken) {
-          currentUser = savedUser;
-          showSignedInUI(currentUser);
-          loadDashboard();
-          loadPendingTransactions();
-          loadInvestmentInstruments();
-          restoreLastTab();
-          setupPushNotifications();
+      // touches it. The tiny setTimeout is deliberate, not decorative: a real,
+      // confirmed bug (inside the native Android app specifically - a real
+      // WebView/rendering-engine quirk, not anything wrong with this logic itself)
+      // showed the whole page staying blank on a fresh reload/resume, but ONLY when
+      // this branch ran - the native app's own very first sign-in (a separate, later
+      // call from outside this "load" handler) never had the problem. Running this
+      // one tick later gives the WebView's own rendering pipeline a moment to actually
+      // be ready before anything tries to paint into it.
+      setTimeout(function () {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const savedUser = JSON.parse(saved);
+          if (savedUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase() && savedUser.idToken) {
+            currentUser = savedUser;
+            showSignedInUI(currentUser);
+            loadDashboard();
+            loadPendingTransactions();
+            loadInvestmentInstruments();
+            restoreLastTab();
+            setupPushNotifications();
+          } else {
+            localStorage.removeItem(STORAGE_KEY); // stale/wrong data — ignore it
+            showSignedOutUI();
+          }
         } else {
-          localStorage.removeItem(STORAGE_KEY); // stale/wrong data — ignore it
           showSignedOutUI();
         }
-      } else {
-        showSignedOutUI();
-      }
+      }, 50);
     });
 
     // "Sign out" clears what we remembered and shows the button again.
