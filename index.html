@@ -33,8 +33,14 @@
   <meta name="color-scheme" content="light dark">
 
   <!-- Google's official Sign-In script. This is Google's own code,
-       loaded straight from Google — not a 3rd-party company. -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+       loaded straight from Google — not a 3rd-party company.
+       "defer" only (not "async" too) - guarantees this finishes running before
+       the page's own "load" event fires, which is when the code further down
+       calls google.accounts.id.initialize(). With async added back in, that
+       call could race the script still loading and crash with "google is not
+       defined" - rare on a fast cached browser, but real on a fresh cold
+       start (confirmed happening in the native app). -->
+  <script src="https://accounts.google.com/gsi/client" defer></script>
 
   <!-- Firebase's official scripts (also Google) — used only for real
        background push notifications, arriving even when the app is closed. -->
