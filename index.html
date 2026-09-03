@@ -3415,8 +3415,22 @@
       setupPushNotifications();
     }
 
+    // Waits until Google's sign-in script has actually finished loading and defined
+    // itself before touching it. "load" firing doesn't reliably guarantee this by
+    // itself (a real "google is not defined" crash was happening right after this on
+    // a slower/first-time load, even with the script tag set to load as early as
+    // possible) - this waits for the real thing instead of assuming a timing order.
+    function whenGoogleSignInReady(callback) {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        callback();
+      } else {
+        setTimeout(function () { whenGoogleSignInReady(callback); }, 50);
+      }
+    }
+
     // Set up Google's sign-in button once the page has loaded
     window.addEventListener("load", function () {
+      whenGoogleSignInReady(function () {
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: handleCredentialResponse
@@ -3448,6 +3462,7 @@
       } else {
         showSignedOutUI();
       }
+      });
     });
 
     // "Sign out" clears what we remembered and shows the button again.
