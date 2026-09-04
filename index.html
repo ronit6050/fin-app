@@ -3225,8 +3225,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-09-03-01";
-    const APP_CHANGELOG = "Fixed a rare sign-in crash that could happen right after opening the app.";
+    const APP_VERSION = "2026-09-04-01";
+    const APP_CHANGELOG = "Fixed Pending sometimes showing an old transaction you already saved a note for.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -5742,6 +5742,15 @@
     function seedTabsFromDashboard(full) {
       if (!full) return;
 
+      // Pending (fix, 2026-09-04): the dashboard call already computes this
+      // exact same true pending list (it's the same backend function as
+      // getPending) — reconciling the Pending screen against it here means
+      // opening Home, which happens on every sign-in, is a third place a
+      // stuck/ghost card gets cleaned up, on top of Pending's own refresh
+      // and its 15-second background check. See reconcilePendingList's own
+      // comment for the full story on what this fixes.
+      if (full.pending) reconcilePendingList(full.pending);
+
       saveCache("today", full.today);
       if (!tabLoaded.today) { renderTodaySummary(full.today); tabLoaded.today = true; }
 
@@ -5888,6 +5897,61 @@
       pendingStatusEl.innerHTML = '<div class="empty-state"><span class="empty-icon">✅</span><p>All caught up — nothing pending.</p></div>';
     }
 
+    // Reconciles the Pending screen's on-screen list against a fresh, true
+    // list of pending rows from the server (either from getPending directly,
+    // or from getDashboard's own full.pending — same data, same shape,
+    // computed by the exact same backend function either way).
+    //
+    // Real bug this fixes (found 2026-09-04): the old code that ran on every
+    // refresh only ever ADDED a row it hadn't seen before — it never checked
+    // whether a row it already knew about had disappeared from the server's
+    // list, which can only mean one thing: it already got saved. In
+    // practice this let a "ghost" card get stuck on screen forever — e.g.
+    // tap Save, the write reaches Apps Script and succeeds, but the
+    // confirmation reply is slow/lost (Apps Script's own cold-start
+    // latency is a known thing in this app), so the phone assumes the save
+    // failed and puts the card back — and nothing ever came along
+    // afterward to say "actually, that one's done." Home's own pending
+    // count was always correct because it re-asks the server fresh every
+    // time; the Pending screen just never got that same fresh answer
+    // applied to what it was showing.
+    //
+    // Now: every time a fresh list arrives from ANYWHERE (this screen's own
+    // 15-second check, opening this screen, or opening Home), it's treated
+    // as the real truth — remove whatever the server no longer lists, add
+    // whatever's new. A stuck card now can't survive more than about 15
+    // seconds, from three different places in the app, instead of
+    // potentially sitting there until someone notices by hand.
+    function reconcilePendingList(freshTransactions, opts) {
+      opts = opts || {};
+      const freshRows = new Set(freshTransactions.map(function (t) { return t.row; }));
+
+      allPending = allPending.filter(function (t) {
+        if (freshRows.has(t.row)) return true;
+        knownRows.delete(t.row);
+        const card = pendingListEl.querySelector('[data-row="' + t.row + '"]');
+        if (card) card.remove();
+        return false;
+      });
+      shownCount = Math.min(shownCount, allPending.length);
+
+      freshTransactions.forEach(function (txn) {
+        if (knownRows.has(txn.row)) return;
+        knownRows.add(txn.row);
+        allPending.unshift(txn);
+        shownCount++;
+        pendingListEl.insertBefore(buildPendingItem(txn), pendingListEl.firstChild);
+        // Only pop a real notification from the background poll — not from
+        // opening this screen or Home, where you're already looking at (or
+        // about to look at) the list it just appeared in.
+        if (opts.notify) showNewTransactionNotification(txn);
+      });
+
+      updatePendingStatusText();
+      saveCache("pending", allPending);
+      refreshUneditedNoteSuggestions(freshTransactions);
+    }
+
     function loadPendingTransactions() {
       const cached = loadCache("pending");
 
@@ -5913,23 +5977,7 @@
             if (!data.ok) return;
 
             if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
-            saveCache("pending", data.transactions);
-
-            const newOnes = data.transactions.filter(function (t) {
-              return !knownRows.has(t.row);
-            });
-
-            newOnes.forEach(function (txn) {
-              knownRows.add(txn.row);
-              allPending.unshift(txn);
-              shownCount++;
-              pendingListEl.insertBefore(buildPendingItem(txn), pendingListEl.firstChild);
-              // No popup notification here — you're already looking at
-              // the list it just appeared in, that'd just be noise.
-            });
-
-            if (newOnes.length > 0) updatePendingStatusText();
-            refreshUneditedNoteSuggestions(data.transactions);
+            reconcilePendingList(data.transactions);
           })
           .catch(function () { /* fine — we'll just try again next time */ });
 
@@ -5965,6 +6013,17 @@
           knownRows = new Set(allPending.map(function (t) { return t.row; }));
 
           pendingListEl.innerHTML = ""; // clear the skeleton placeholders
+
+          // Reset here, not just at the top of this function (2026-09-04
+          // fix): Home's own dashboard load can resolve first and already
+          // call reconcilePendingList in the meantime, which bumps
+          // shownCount while this request is still in flight. Without
+          // this, showNextBatch below could start slicing from a
+          // shownCount that's already past the end of the real list —
+          // rendering nothing while the status text claims everything's
+          // shown. This handler always fully rebuilds the list from
+          // scratch right above, so shownCount must start at 0 again too.
+          shownCount = 0;
 
           if (allPending.length === 0) {
             showPendingCaughtUp();
@@ -6378,24 +6437,7 @@
           if (!data.ok) return; // stay quiet on errors during background checks
 
           if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
-          const newOnes = data.transactions.filter(function (t) {
-            return !knownRows.has(t.row);
-          });
-
-          newOnes.forEach(function (txn) {
-            knownRows.add(txn.row);
-            allPending.unshift(txn); // newest first, same order as the rest
-            shownCount++;
-            pendingListEl.insertBefore(buildPendingItem(txn), pendingListEl.firstChild);
-            showNewTransactionNotification(txn);
-          });
-
-          if (newOnes.length > 0) {
-            updatePendingStatusText();
-            saveCache("pending", allPending);
-          }
-
-          refreshUneditedNoteSuggestions(data.transactions);
+          reconcilePendingList(data.transactions, { notify: true });
         })
         .catch(function () { /* stay quiet — we'll just try again next minute */ });
     }
