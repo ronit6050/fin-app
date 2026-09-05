@@ -9,7 +9,6 @@ function processCashEntry(text, msgId, mode){
 
   const ss     = SpreadsheetApp.getActiveSpreadsheet();
   const sheet  = ss.getSheetByName("Cash");
-  const memory = ss.getSheetByName("CategoryMemory");
 
   const lines = text.split("\n");
 
@@ -24,7 +23,7 @@ function processCashEntry(text, msgId, mode){
     if(!amount) return;
 
     const note     = parts.slice(1).join(" ");
-    const category = getCategory(note, memory);
+    const category = getCategory(note);
 
     // ✅ FIXED: lowercase to match Analysis.js and Summary.js
     const type = (mode == "receive") ? "credit" : "debit";

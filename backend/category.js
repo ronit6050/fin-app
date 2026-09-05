@@ -39,8 +39,7 @@ function getSmartCategory(note, counterparty, amount, mode, rowIndex){
 
     if(!smartMemory){
       // Fallback to old system if SmartMemory not created yet
-      const oldMemory = ss.getSheetByName("CategoryMemory");
-      return { category: getCategory(note, oldMemory), confidence: 50 };
+      return { category: getCategory(note), confidence: 50 };
     }
 
     const memData = smartMemory.getDataRange().getValues();
