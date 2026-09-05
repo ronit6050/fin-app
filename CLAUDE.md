@@ -2318,3 +2318,183 @@ detected and routed, not picked from a category list.
 - Which phase to start with, or a different order entirely.
 - Whether any other current category feels wrongly lumped together, beyond Rent/EMI (user was asked, hasn't answered yet as of this entry).
 - Exact detection rule for "money sent to a person" vs "money sent to a business" for Phase 2's auto-Debts linking (currently the category engine already has this rough distinction via `matchByPattern`'s Lending keywords, but it's not rigorous — needs real design before Phase 2 starts).
+
+## PROPOSED PLAN: Multi-user support — friends get their own Sheet automatically (2026-09-04)
+
+**Status: not started, needs the user's go-ahead before any phase
+begins.** Discussed in chat 2026-09-04, not yet approved to build. This
+is the real design behind roadmap item 5, "(Later, optional) Support
+friends using their own sheets," and behind the [[project_android_native_app]]
+plan's own "sideload to friends first" step — both of those already
+assumed this would exist; this section is the actual how.
+
+**The ask, in the user's own words:** least intervention — as soon as a
+friend logs in, everything they need (their own Sheet) should get
+created automatically, with no manual setup from the user AND no manual
+setup from the friend beyond just signing in.
+
+**The blocker, plain terms:** right now the whole app (website + Apps
+Script backend + Android app) only knows about one person. One email
+(`ronitnadar9@gmail.com`) is hardcoded as "the only person allowed in,"
+in both `index.html` (`ALLOWED_EMAIL`) and Apps Script (`PWA_ALLOWED_EMAIL`
+in `PWA.js`), and every backend function reads/writes one Google Sheet —
+the one the Apps Script project happens to be bound to, no Sheet ID even
+needed in the code. A friend signing in today would either get blocked,
+or (worse, if the allow-check were just loosened) land inside the user's
+own real financial data.
+
+**The mechanism — a template Sheet + auto-copy on first login:**
+1. Keep one blank **template Sheet** in the user's Drive — same tabs as
+   the real one (`Transactions`, `Cash`, `Debts`, `Goals`, `Savings`,
+   `Investments`, `InvestmentInstruments`, `SmartMemory`, `TypeVotes`,
+   etc.), headers only, no rows.
+2. A small **registry** (email → that person's own Sheet ID) — simplest
+   option is a JSON blob in Script Properties, since this is a handful
+   of friends, not thousands of users.
+3. On every login, the backend checks the registry for that email.
+   Known → open that Sheet ID (`SpreadsheetApp.openById`) instead of the
+   bound one. Unknown → copy the template (`DriveApp` file copy), name
+   it something like "FinanceTracker - <email>", register the new Sheet
+   ID against that email, then proceed — all inside the same request,
+   nothing for the user to click.
+4. Since the Apps Script Web App runs "as me" (the user) regardless of
+   who's calling it, this all happens inside the user's own Drive/Google
+   account — no friend needs their own Apps Script setup, and it stays
+   free (well within free Drive storage for a handful of small Sheets).
+
+**What actually has to change (the real size of this work):**
+- The "who's allowed in" check: hardcoded single email → look up in the
+  registry, auto-create if new.
+- Nearly every backend function across `backend/*.js` currently assumes
+  "the one bound Sheet" — each has to instead work with "whichever
+  Sheet this request's user maps to." This is the biggest single piece
+  of work here — a foundational change, not a quick tweak.
+- Settings (CC limit, thresholds, monthly investment amount, etc.) —
+  currently one shared value in Script Properties for the user alone —
+  needs to become per-person.
+- The SMS-parser backend (`sms-parser-backend/Code.js`, a *separate*
+  Apps Script project, see its own section above) is currently hardcoded
+  to one `SHEET_ID` and receives from one phone. For a friend's own
+  native-app SMS forwarding to land in *their* Sheet, it needs the same
+  per-user routing — meaning each forwarded SMS needs to say which
+  person it's from (email or a per-friend token), verified before
+  writing anywhere. Not designed yet — flagged as its own decision
+  point, likely its own phase.
+
+**What can't be made automatic — SMS reading needs the friend's own
+tap.** Signing in and getting a Sheet can be 100% automatic. A friend's
+phone reading *their own* SMS cannot — Android requires an explicit
+permission grant per app, per phone, and this is genuinely a bigger ask
+of a friend than opening a normal app (reading someone's texts).
+Realistic flow: sign in (automatic) → optionally grant SMS access if
+they want auto-tracking, or enter transactions by hand otherwise.
+
+**Distribution, same constraint already known from
+[[project_android_native_app]]:** friends install via a sideloaded APK
+file (not the Play Store — Play Store restricts the `READ_SMS`
+permission to an app that IS the phone's default SMS app), so they'll
+need to tap "allow install from unknown sources." Worth a heads-up so it
+doesn't look sketchy. One APK works for everyone, since everyone hits
+the same shared backend — no per-friend build needed.
+
+**Suggested phased order (recommended, not yet confirmed by the
+user):**
+1. Build the auto-provisioning backend (template + auto-copy + per-user
+   Sheet routing) — no friends involved yet, testable as if a "new
+   user."
+2. Try it live with exactly one friend — sign-in + auto-created Sheet
+   only, manual entry, no SMS yet. Confirms the core flow actually works
+   before adding more moving parts.
+3. Once step 2 is solid, turn on native SMS reading for that one friend
+   (needs the sms-parser-backend routing design above).
+4. Only after that — decide whether to open it to more friends.
+
+**Per this project's standing rule** ("present it, get explicit
+approval on which phase/line to work on, before touching any code" —
+same rule the Category/Type restructure plan above follows): nothing
+here starts until the user picks a phase (or changes the order) in a
+future session.
+
+## Pre-multi-user cleanup (2026-09-05): done
+
+Before starting the multi-user plan above, the user asked for the
+current single-user foundation to be cleaned up first — old backend
+code/API usage that could turn into a shared-quota problem once
+multiple people hit the same backend, and a messy real Google Sheet
+(old superseded tabs sitting alongside real ones) that would otherwise
+get carried forward into every friend's auto-created template Sheet.
+All done, in 4 phases:
+
+**Phase 1 — backend dead-code audit + cleanup.** A read-only audit
+(everything in `backend/*.js`, not `sms-parser-backend/`) found no new
+dead code beyond what was already known from the 2026-08-12 pass — just
+a few unscheduled functions and a couple of stale Script Properties.
+Removed: `checkCCAlerts` and `checkCCSpendingThreshold` (`CCAdvisor.js`
+— confirmed unscheduled, and the two Script Properties they used,
+`cc_warned_25`/`cc_warned_30`, went with them), `sendWeeklyDebtNudge`
+(`DebtAdvisor.js` — also unscheduled, user confirmed they don't want a
+weekly debt nudge), and two dead `CategoryMemory` sheet fetches
+(`category.js`, `cash.js` — the sheet was fetched but the receiving
+function, `getCategory()`, completely ignores that argument). Verified
+by `change-reviewer` (confirmed zero other callers for each removed
+function, confirmed `getCategory()` truly ignores its second argument)
+and a `security-review` pass (clean — pure deletion, no new attack
+surface). Full `backend/tests/*.test.js` suite (15 files) still passes.
+Deployed live (`@312`), committed (`b84b733`).
+
+**Worth remembering for the multi-user build itself** (not fixed now,
+since neither is a real problem while it's still just one person):
+push notifications only remember one phone (`PWA_PUSH_TOKEN`, a single
+Script Property — whoever signs in last overwrites it, so a second
+person would silently steal the first person's alerts) and any bank/CC
+statement upload always spends the *account owner's* Google Drive quota
+regardless of who uploaded it (the backend runs "as you" no matter who
+calls it). Both need to become per-person as part of the actual
+multi-user work later, not before.
+
+**Phase 2/3 — real Sheet structure audit + cleanup.** Built two
+run-by-hand diagnostic/cleanup functions in `backend/Logger.js`
+(`diagnoseSheetStructure`, `archiveOldManualSheets` +
+`deleteArchivedOldManualSheets`) since there's no direct tool access to
+the live Sheet from a chat session. Found the real spreadsheet had 28
+tabs — 14 the code actually uses, plus a real mix of old junk. Cleaned
+up to the real 14 (+ `Logs`, confirmed to belong to the separate
+sms-parser-backend project, correctly left untouched):
+- **Deleted** (confirmed superseded, nothing reads them): `WishList`,
+  `CategoryMemory`, `TypeMemory`, `SmartMemory_old`, `Recon_Temp`.
+- **Archived** to a separate spreadsheet (old manual tracking that
+  predates this app entirely — a 1,071-row hand-tracked expense log
+  among them — user chose "archive, don't just delete"): `Categories`,
+  `Config`, `CategoryBudgets`, `Budget`, `Track exp`, `60k account`,
+  `Aug CC bill`, `Sep CC bil`.
+
+**A real, if quiet, bug was found and fixed along the way.** Three
+active sheets — `TypeVotes`, `NoteMemory`, `FinancialEvents` — were
+missing their header row on the live sheet (real data sat in row 1
+instead of a header). Every function that reads these sheets always
+skips row 1 assuming it's a header — so each sheet's actual first data
+row had been silently invisible to the app since it was created (e.g. a
+merchant's very first Need/Want/Saving answer, if it landed in that
+row, would never be found — the app would keep treating it as "never
+asked before"). Fixed with a one-time `addMissingHeaderRows()` function
+— inserts the correct header row at the top of each, shifting existing
+data down by one row, nothing deleted. Separately (cosmetic only, not a
+bug — the code reads `Transactions` by fixed column position, never by
+header name): columns Q/R/S (`NeedWantSaving`/`FinancialEvent`/
+`FinancialEventName`) had real data but no header label; fixed via
+`addMissingTransactionColumnHeaders()`. Also manually relabeled two more
+stale headers found while writing the schema doc below: `Savings`
+column E ("Pot" → "Destination", stale since the 2026-08-11 Savings
+rebuild) and `Investments` column B ("Type" → "Name", since that column
+actually stores the investment's name, not a type).
+
+**Phase 4 — final schema doc.** Wrote
+[docs/SHEET_SCHEMA.md](docs/SHEET_SCHEMA.md): every real tab, its exact
+columns, and known value sets (e.g. `Type` = debit/credit,
+`NeedWantSaving` = Need/Want/Saving/Investment). This supersedes the old
+`reference_transactions_sheet_schema` memory (which only ever covered
+`Transactions`, from a screenshot) and is the literal basis the
+multi-user "template Sheet" will be built from.
+
+**Next**: the multi-user plan above is now unblocked — starts whenever
+the user picks a phase from its "suggested phased order."
