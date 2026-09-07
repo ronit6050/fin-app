@@ -151,6 +151,30 @@ function hasRupeeAmount(text){
   return /rs\.?\s?\d/i.test(text) || /inr\.?\s?\d/i.test(text) || /₹\s?\d/i.test(text);
 }
 
+// Found live 2026-09-07: a broker balance report ("...reported your
+// Fund bal Rs.0.000 & Securities bal 0.000...") from an unrecognized
+// sender (GROWWINVESTTECHPRIVATELIMITED) got saved as UNCERTAIN,
+// because hasRupeeAmount() above just checks "is there a digit after
+// Rs.", and "0" is a digit. A genuine transaction is never for Rs.0,
+// so this checks the actual number found for at least one non-zero
+// digit -- deliberately narrow: a genuine (if unusual) tiny real
+// amount like "Rs.0.50" still has a non-zero digit ("5") and still
+// counts as real money here; only an amount that's ALL zeros
+// ("Rs.0", "Rs.0.00", "Rs.0.000") is treated as "no real amount."
+function hasNonZeroRupeeAmount(text){
+
+  const match =
+    text.match(/rs\.?\s?([\d,]+\.?\d*)/i) ||
+    text.match(/inr\.?\s?([\d,]+\.?\d*)/i) ||
+    text.match(/₹\s?([\d,]+\.?\d*)/i);
+
+  if(!match) return false;
+
+  const digitsOnly = match[1].replace(/[^\d]/g,"");
+  return /[1-9]/.test(digitsOnly);
+
+}
+
 // Every wording this project has confirmed (or reasonably expects) to
 // mean "money actually moved," in one place -- both classifySms() and
 // the EMI-offer safety check below share this, so a new wording only
@@ -282,6 +306,37 @@ function classifySms(sms,sender){
     return "IGNORE";
   }
 
+  // "Credited to your card" is ambiguous by itself -- found live
+  // 2026-09-07: "HDFC Bank Cardmember, Online Payment of Rs.149 vide
+  // Ref# ... was credited to your card ending 1264" got saved as a
+  // spurious ₹149 credit. This wording means the SAME thing as the
+  // "credit card ... payment ... received" block just above (a bill
+  // payment landing back on the card, already logged via the real
+  // bank-side debit -- counting it again would double-count it), just
+  // phrased differently ("credited to your card" instead of "payment
+  // ... received"). But this phrase alone can't be blocked outright:
+  // a genuine merchant refund can also read "Rs.X credited to your
+  // card ending 1264" (real money -- this project has no stance yet on
+  // whether refunds should be tracked, not decided here). The message
+  // text itself gives a real signal to tell these two apart: a refund
+  // SMS says "refund"/"refunded"/"reversed"; a bill-payment echo says
+  // "payment" and never uses refund wording. Where neither word is
+  // present, this genuinely can't be told apart from the text alone --
+  // surfaced as UNCERTAIN rather than guessed either way, same pattern
+  // as hasNonTransactionSignal above.
+  if(/credited to (your )?card/.test(text)){
+    if(text.includes("refund") || text.includes("refunded") || text.includes("reversed")){
+      // looks like a genuine refund, not a bill-payment echo -- don't
+      // block it, let normal classification below decide (Step 2/3).
+    }
+    else if(text.includes("payment")){
+      return "IGNORE"; // a bill-payment echo, already counted via the real bank-side debit
+    }
+    else{
+      return "UNCERTAIN"; // can't tell payment-echo from refund from the wording alone
+    }
+  }
+
   // --- Step 2: confident match ------------------------------------------
   if(knownSender && hasMoneyMovementSignal(text)){
     // A message that mixes a spam/notification-style word with real
@@ -302,13 +357,16 @@ function classifySms(sms,sender){
     return "UNCERTAIN";
   }
 
-  // An unrecognized sender, but the message contains a real rupee
-  // amount and wasn't caught by the spam filters above -- could be a
-  // new bank/wallet/app not in the known-sender list yet. Surface for
-  // review rather than silently ignoring it -- this is what makes the
-  // system self-adapting instead of needing a code change every time
-  // something new shows up.
-  if(hasRupeeAmount(text)){
+  // An unrecognized sender, but the message contains a real (non-zero)
+  // rupee amount and wasn't caught by the spam filters above -- could
+  // be a new bank/wallet/app not in the known-sender list yet. Surface
+  // for review rather than silently ignoring it -- this is what makes
+  // the system self-adapting instead of needing a code change every
+  // time something new shows up. Uses hasNonZeroRupeeAmount, not the
+  // plain hasRupeeAmount, so a Rs.0 report (e.g. a broker balance
+  // report) doesn't get treated as a possible transaction -- see that
+  // function's own comment for why.
+  if(hasNonZeroRupeeAmount(text)){
     return "UNCERTAIN";
   }
 

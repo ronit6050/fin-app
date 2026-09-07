@@ -1042,6 +1042,38 @@ shown anywhere, so the parent total could look bigger than Need+Want
 added together with no explanation — fixed with a small note). Next:
 your go-ahead before `clasp deploy` (backend) / `git push` (frontend).
 
+**Planner "Overview" — income + Needs/Wants/Savings big picture, backend
+done 2026-09-07, frontend not yet built.** User shared their old,
+pre-automation manual budget sheet (a top-down income → Needs/Wants/
+Savings split, compared against the standard 50/30/20 rule, with a
+"Bal" row checking everything was fully allocated) and asked how to
+bring that clarity into Planner, since the per-category-only view above
+was missing the big picture. Added a new `overview` block to
+`getPlannerData`'s response (`backend/planner.js`): total income (real,
+from Income-tagged credits, or an optional saved override for planning
+ahead of salary), Needs/Wants targets (summed automatically from the
+per-category targets already there), a Savings+Investment target
+(pulled from Settings' existing `monthlySaveGoal`/`monthlyInvestmentGoal`
+— one number, not a second parallel one), the fixed 50/30/20 reference
+split for comparison, and a single "Unallocated" number (income minus
+everything planned) — the one-number version of the old sheet's
+per-bucket Bal row. `saveBudgets` gained an optional `income` field,
+deliberately three-way (omitted = leave a saved override alone, `null`
+= clear it, a number = save it) so tweaking one category's target can
+never accidentally wipe a saved income figure. Verified with new tests
+in `backend/tests/planner.test.js` (Scenario D — income shown separately
+from actual, targets/unallocated recompute correctly, a category-only
+save doesn't wipe a saved income, explicit clear works, negative income
+rejected). Full detail:
+[docs/features/planner.md](docs/features/planner.md#overview--the-big-picture-added-2026-09-07).
+**Both pieces of Planner (per-category targets + this overview) are
+being held to ship together, not separately** — nothing here goes live
+until the overview's frontend is also built. Next: build the frontend
+(a new summary card at the top of the Planner screen — income input,
+the three bucket totals + %, the 50/30/20 reference, Unallocated),
+review, then a single go-ahead for `clasp deploy` + `git push` covering
+all of Planner at once.
+
 **Two real bugs found and fixed 2026-08-25, backend-only, `clasp push`ed
 to the editor draft, NOT yet `clasp deploy`ed live:**
 
@@ -1850,6 +1882,62 @@ incident at a time.
 Final test suite: 61 checks, all passing
 (`sms-parser-backend/tests/smsParserRedesign.test.js`). **Deployed
 live. Not yet committed to git as of this note.**
+
+**Two more real false positives found and fixed, 2026-09-07 — pushed
+to the editor draft, NOT yet deployed live (waiting on the user's
+go-ahead):**
+
+1. **"Online Payment of Rs.149 ... was credited to your card ending
+   1264" (HDFC) got saved as a spurious ₹149 credit.** This is a
+   credit-card BILL PAYMENT landing back on the card — already tracked
+   via the real bank-side debit, so logging it again double-counts it.
+   The existing rule for this (`"credit card"` + `"payment"` +
+   `"received"` → IGNORE) didn't catch it because this message uses
+   different wording ("credited to your card", not "payment ...
+   received"). **Genuinely ambiguous in general** — the same phrase
+   ("Rs.X credited to your card ending 1264") can also describe a real
+   merchant refund, and this project has no stance on whether refunds
+   should be tracked (not decided here). Fixed by reading the message
+   text for which one it actually is: if it also says "refund"/
+   "refunded"/"reversed", it's treated as a genuine credit and let
+   through normally; if it also says "payment" (and no refund wording),
+   it's treated as a bill-payment echo and ignored, same as the
+   existing rule just above it; if NEITHER word is present, this
+   genuinely can't be told apart from the wording alone, so it's
+   surfaced as UNCERTAIN (saved for a quick human glance) rather than
+   guessed either way — same ambiguous-signal pattern this file already
+   uses for the reward-points/URL cases.
+2. **A broker balance report ("...reported your Fund bal Rs.0.000 &
+   Securities bal 0.000...") from GROWWINVESTTECHPRIVATELIMITED, an
+   unrecognized sender, got saved as UNCERTAIN.** Not a transaction at
+   all — no money moved, it's a routine balance check. Root cause: the
+   "unrecognized sender + a real rupee amount → UNCERTAIN, don't
+   silently drop it" fallback used `hasRupeeAmount()`, which just
+   checks "is there a digit after Rs." — and 0 is a digit. A genuine
+   transaction is never for Rs.0. Fixed with a new
+   `hasNonZeroRupeeAmount()` that requires the actual number to contain
+   at least one non-zero digit — deliberately narrow so a genuinely
+   tiny real amount (e.g. Rs.0.50) still correctly counts as real
+   money; only an amount that's ALL zeros ("Rs.0", "Rs.0.00",
+   "Rs.0.000") is treated as "no real amount here."
+
+Both fixes verified with a new test file,
+`sms-parser-backend/tests/smsParserFalsePositives2026-09-07.test.js`
+(12 checks) — the two exact real messages now correctly IGNORE,
+end-to-end via `doPost` (no row saved); a genuine refund ("refunded"/
+"reversed" + "credited to your card") still saves as a confident
+TRANSACTION, not swallowed by the new rule; a "credited to your card"
+message with neither "payment" nor refund wording correctly comes back
+UNCERTAIN, not guessed; the original "credit card ... payment ...
+received" rule still works unchanged; and a genuine small non-zero
+amount (Rs.0.50) from an unrecognized sender still correctly surfaces
+as UNCERTAIN, confirming the zero-amount fix didn't overreach. Full
+existing suite (`smsParserRedesign.test.js`, 64 checks) still passes,
+no regressions. Pushed to the Apps Script editor draft
+(`clasp push`) — **`clasp deploy` (the step that actually reaches
+Tasker's live pinned deployment, version 9) has NOT been run**, per
+this project's standing rule that it always needs the user's explicit
+go-ahead in the same conversation.
 
 ## PROPOSED PLAN: Category/Type restructure + cross-tab linking (2026-08-09)
 
