@@ -220,7 +220,7 @@ function handlePwaRequest(data){
   }
 
   if(data.action === "saveBudgets"){
-    return jsonResponse(saveBudgets(data.month, data.budgets));
+    return jsonResponse(saveBudgets(data.month, data.budgets, data.income));
   }
 
   return jsonResponse({ ok:false, error:"Unknown action." });
@@ -913,10 +913,27 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
   const outstandingSummary = summarizeCardSpend(outstandingCycleStart, outstandingCycleEnd);
   const currentSummary     = summarizeCardSpend(currentCycleStart, today);
 
-  // Has the outstanding bill already been paid? Look for a real
-  // credit-card-bill-payment transaction (same detector used to keep
-  // Analysis from double-counting it) any time after the bill closed.
-  let outstandingPaid = false;
+  // Has the outstanding bill already been paid IN FULL? Look for every
+  // real credit-card-bill-payment transaction (same detector used to
+  // keep Analysis from double-counting it) any time after the bill
+  // closed, and ADD UP their amounts — rather than flipping "paid" the
+  // moment we see just one matching payment.
+  //
+  // TWO-CARD BUG FIX (2026-09-05, found by change-reviewer before this
+  // went live): isCreditCardBillPayment can now match a payment against
+  // just ONE card's own outstanding total (see its own comment above),
+  // which is correct for keeping that payment out of spend totals — but
+  // using that same "did we find at least one match" signal here was
+  // wrong. With two cards (say Card A owes ₹12,000 unpaid, Card B owes
+  // ₹149 just paid separately), the ₹149 payment matches Card B's own
+  // total and used to flip outstandingPaid to true for the WHOLE bill,
+  // even though ₹12,000 was still genuinely owed on Card A — which
+  // wrongly silenced isOverdue and skipped the affordability check
+  // entirely. Fixed: sum every matching payment found, and only call
+  // the outstanding bill paid once that sum actually covers the full
+  // outstandingSummary.total (same ₹1 rounding tolerance used
+  // everywhere else in this amount-matching logic).
+  let outstandingPaidTotal = 0;
   if(outstandingSummary.total > 0){
     for(let i = 1; i < data.length; i++){
       const rawDate = data[i][0];
@@ -930,11 +947,11 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
       const note = (data[i][12] || "").toString();
       const amount = Number(data[i][5]) || 0;
       if(isCreditCardBillPayment(mode, counterparty, note, amount, data)){
-        outstandingPaid = true;
-        break;
+        outstandingPaidTotal += amount;
       }
     }
   }
+  const outstandingPaid = outstandingSummary.total > 0 && outstandingPaidTotal >= outstandingSummary.total - 1;
 
   const daysUntilDue = Math.ceil((outstandingDueDate - today) / 86400000);
   const isOverdue = !outstandingPaid && outstandingSummary.total > 0 && daysUntilDue < 0;
@@ -1412,6 +1429,24 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
 // approach already used for Rent/EMI/SIP payments elsewhere in this app.
 // amount/txnData are optional — every call site that doesn't pass them
 // just falls back to the keyword check alone, same as before.
+//
+// TWO-CARD FIX (2026-09-05): the user has two separate physical credit
+// cards. Mode already stores which one for every swipe — "card 1264" vs
+// "card 8132" (see sms-parser-backend/Code.js) — but this function used
+// to add both cards' swipes into ONE combined "outstanding bill" number.
+// That's fine if you pay both cards off in a single combined payment
+// (still supported below), but the user often pays each card's bill
+// SEPARATELY — a small ₹149 payment for the card with only one small
+// charge on it never matched the big COMBINED total, so it looked like a
+// brand-new purchase instead of a bill payment (double-counting that
+// ₹149 in spend). Fixed by also checking each card's own outstanding
+// total individually, not just the combined one — see
+// getOutstandingCCBillTotalsByCard below. This deliberately does NOT try
+// to figure out WHICH card a payment is for (that would need parsing a
+// card number out of the payment's own narration, which isn't always
+// there) — matching "does this amount equal any one card's real
+// outstanding total, or the combined total of all cards" is enough to
+// recognize it as a genuine bill payment either way.
 function isCreditCardBillPayment(mode, counterparty, note, amount, txnData){
   const m = (mode || "").toString().toLowerCase();
   if(m.startsWith("card")) return false; // an actual swipe, not a bill payment — never exclude these
@@ -1419,12 +1454,23 @@ function isCreditCardBillPayment(mode, counterparty, note, amount, txnData){
   if(/\bcredit card\b/.test(text) || /\bcc bill\b/.test(text) || /\bcard bill\b/.test(text) || /\bcard payment\b/.test(text)) return true;
 
   if(amount != null && amount > 0){
-    const billTotal = getOutstandingCCBillTotal(txnData);
-    // Exact match only (a rupee or so of slack for rounding) — a "close
-    // enough" fuzzy match risks hiding a real, unrelated expense that
-    // happens to land near the bill amount, which is worse than
-    // occasionally missing a genuine bill payment.
-    if(billTotal > 0 && Math.abs(amount - billTotal) < 1) return true;
+    const perCardTotals = getOutstandingCCBillTotalsByCard(txnData);
+    const cardKeys = Object.keys(perCardTotals);
+    const combinedTotal = cardKeys.reduce(function(sum, key){ return sum + perCardTotals[key]; }, 0);
+
+    // Candidates to match against: each individual card's own outstanding
+    // total (covers "paid card A and card B separately"), plus the
+    // combined total of every card together (covers "paid both cards off
+    // in one single payment"). Exact match only (a rupee or so of slack
+    // for rounding) — a "close enough" fuzzy match risks hiding a real,
+    // unrelated expense that happens to land near a bill amount, which is
+    // worse than occasionally missing a genuine bill payment.
+    const candidates = cardKeys.map(function(key){ return perCardTotals[key]; });
+    candidates.push(combinedTotal);
+
+    for(let i = 0; i < candidates.length; i++){
+      if(candidates[i] > 0 && Math.abs(amount - candidates[i]) < 1) return true;
+    }
   }
   return false;
 }
@@ -1448,24 +1494,49 @@ function getOutstandingCCCycleWindow_(){
   };
 }
 
-// Just the ₹ total of the outstanding (most recently closed) credit card
-// bill — real card-mode spend in that cycle window, no breakdowns. See
-// isCreditCardBillPayment's comment above for why this exists.
-function getOutstandingCCBillTotal(txnData){
+// Outstanding (most recently closed cycle) card spend, grouped PER
+// DISTINCT CARD — e.g. { "card 1264": 12345, "card 8132": 149 }. Added
+// 2026-09-05 as part of the two-card fix (see isCreditCardBillPayment's
+// comment above): a card with zero real spend in the window is never
+// included, so it can't produce a spurious ₹0 bucket that would falsely
+// "match" a genuine near-zero payment.
+//
+// .trim() added 2026-09-05 (change-reviewer catch): grouping by the raw
+// Mode string with no trimming means a stray leading/trailing space in
+// a Mode value (a manual Sheet edit, or some future code path) would
+// silently create a SECOND bucket for what's really the same physical
+// card (e.g. "card 8132" vs "card 8132 ") — splitting one card's real
+// outstanding total into two smaller ones that then never amount-match
+// a real bill payment. Trimming first makes that impossible.
+function getOutstandingCCBillTotalsByCard(txnData){
   const data = txnData || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
   const window = getOutstandingCCCycleWindow_();
-  let total = 0;
+  const totals = {};
   for(let i = 1; i < data.length; i++){
     const rawDate = data[i][0];
     if(!rawDate) continue;
     const d = new Date(rawDate);
     if(d < window.start || d > window.end) continue;
     const type   = (data[i][3] || "").toString().toLowerCase();
-    const mode   = (data[i][4] || "").toString().toLowerCase();
+    const mode   = (data[i][4] || "").toString().toLowerCase().trim();
     const amount = Number(data[i][5]) || 0;
-    if(type === "debit" && mode.startsWith("card") && amount > 0) total += amount;
+    if(type === "debit" && mode.startsWith("card") && amount > 0){
+      totals[mode] = (totals[mode] || 0) + amount;
+    }
   }
-  return total;
+  return totals;
+}
+
+// Just the ₹ total of the outstanding (most recently closed) credit card
+// bill — real card-mode spend in that cycle window, ACROSS ALL CARDS
+// COMBINED, no breakdowns. Kept as a thin wrapper around the per-card
+// totals above (2026-09-05) so anything that still just wants "one
+// combined number" (e.g. a future display) doesn't need to re-sum it
+// itself. See isCreditCardBillPayment's comment above for why this
+// exists.
+function getOutstandingCCBillTotal(txnData){
+  const totals = getOutstandingCCBillTotalsByCard(txnData);
+  return Object.keys(totals).reduce(function(sum, key){ return sum + totals[key]; }, 0);
 }
 
 // Recognizes a transaction that's actually TOPPING UP a digital wallet

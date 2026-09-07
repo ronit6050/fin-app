@@ -1042,8 +1042,8 @@ shown anywhere, so the parent total could look bigger than Need+Want
 added together with no explanation — fixed with a small note). Next:
 your go-ahead before `clasp deploy` (backend) / `git push` (frontend).
 
-**Planner "Overview" — income + Needs/Wants/Savings big picture, backend
-done 2026-09-07, frontend not yet built.** User shared their old,
+**Planner "Overview" — income + Needs/Wants/Savings big picture: backend
+AND frontend both done, reviewed, and deployed live 2026-09-07.** User shared their old,
 pre-automation manual budget sheet (a top-down income → Needs/Wants/
 Savings split, compared against the standard 50/30/20 rule, with a
 "Bal" row checking everything was fully allocated) and asked how to
@@ -1066,13 +1066,24 @@ from actual, targets/unallocated recompute correctly, a category-only
 save doesn't wipe a saved income, explicit clear works, negative income
 rejected). Full detail:
 [docs/features/planner.md](docs/features/planner.md#overview--the-big-picture-added-2026-09-07).
-**Both pieces of Planner (per-category targets + this overview) are
-being held to ship together, not separately** — nothing here goes live
-until the overview's frontend is also built. Next: build the frontend
-(a new summary card at the top of the Planner screen — income input,
-the three bucket totals + %, the 50/30/20 reference, Unallocated),
-review, then a single go-ahead for `clasp deploy` + `git push` covering
-all of Planner at once.
+**Both pieces of Planner (per-category targets + this overview) shipped
+together, per the plan** — the frontend (`ui-ux-expert`) added the new
+"Big picture — this month" summary card at the top of both Planner
+views (income input, the three bucket totals + %, a 50/30/20 reference
+tick, an Unallocated status pill), reusing the app's existing Need/
+Want/Saving/Investment colors and the `.category-bar-track`/
+`.category-bar-fill` bar pattern rather than inventing anything new.
+`change-reviewer` checked the full diff (backend + frontend) before
+this went live and found one real, minor issue: the new bars sat
+outside `.category-row` (the only place `.category-bar-track` normally
+gets its visible background from) and outside any hero card's own
+inline-style override, so the empty part of each bar had no background
+at all — fixed with one new CSS rule
+(`.planner-overview-card .category-bar-track`) reusing the existing
+`--chart-track-bg` token, confirmed correct in both light (`#F1ECE1`)
+and dark (`#2E303B`) mode via actual computed styles in the browser,
+not just a code read. Deployed live via `clasp deploy` (`@313`) and
+pushed to GitHub 2026-09-07 — nothing left pending on Planner.
 
 **Two real bugs found and fixed 2026-08-25, backend-only, `clasp push`ed
 to the editor draft, NOT yet `clasp deploy`ed live:**
@@ -1235,6 +1246,46 @@ built — CC Advisor is built around exactly two special cycles
 (outstanding + current), not an arbitrary historical browser; that's
 a real backend feature, not a UI tweak, left for later if it turns out
 to be needed. `APP_VERSION` bumped to `2026-08-25-02`.
+
+**Two-card CC bill payment fix + a read-only data health check helper
+(2026-09-05): built and tested then, only written up and deployed
+2026-09-07 (alongside the Planner overview below) — this note was
+missing before, a real documentation gap.** `isCreditCardBillPayment`
+used to check a payment against ONE combined outstanding total across
+both of the user's physical cards. With two cards (Card A owing
+₹12,000 unpaid, Card B owing ₹149 just paid separately), a ₹149
+payment for Card B alone never matched the big combined total, so it
+looked like ordinary new spend instead of a bill payment — and,
+separately, `getCCAdvisorData`'s own "has the outstanding bill been
+paid" check had the opposite problem: any ONE matching payment flipped
+the whole bill to "paid," so that same ₹149 payment would have wrongly
+marked the entire ₹12,149 bill as paid even with ₹12,000 still owed on
+Card A. Fixed by grouping outstanding card spend PER CARD
+(`getOutstandingCCBillTotalsByCard`, keyed by the exact `Mode` value,
+e.g. "card 1264" vs "card 8132") and matching a payment against either
+one card's own total or the combined total — while `getCCAdvisorData`
+now sums every matching payment found and only calls the bill paid
+once that sum actually covers the full outstanding amount, not on the
+first match. `change-reviewer` caught one follow-up gap before this
+shipped: a stray space in a `Mode` value could silently split one
+card's real total into two smaller buckets that would never
+amount-match a real payment — fixed by trimming the Mode string before
+grouping. Verified with `backend/tests/ccBillPaymentTwoCards.test.js`
+(12 checks: each card's own total, the combined total, partial payment
+correctly NOT marking the whole bill paid, both cards paid separately
+correctly marking it paid, the stray-space case). Also added,
+same day: `checkDataHealth()` (`backend/Logger.js`) — a **read-only**,
+run-by-hand-from-the-editor diagnostic that scans every real sheet for
+the kind of thing that causes "something feels off" (a column holding
+an unexpected value outside its fixed set, a number or date
+accidentally saved as text, a duplicate real Reference number on
+Transactions, blank fields that shouldn't be blank) and reports counts
++ a few example row numbers — never full rows, safe to share even
+though it touches real financial data. Changes nothing; same
+"harmless to leave, useful for manual troubleshooting" category as
+this project's existing `test*`/`debug*` helpers. Both deployed live
+2026-09-07 (`@313`, same deploy as the Planner overview below) and
+committed to git the same day.
 
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/

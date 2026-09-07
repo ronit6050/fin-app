@@ -44,6 +44,18 @@ const PLANNER_CATEGORIES = Object.keys(SMART_CATEGORIES).filter(function(c){ ret
 // touching again once September/October/etc. actually happen.
 const PLANNER_RELIABLE_START = { year: 2026, month: 8 };
 
+// The standard 50/30/20 budgeting rule of thumb — shown as a REFERENCE
+// only (like your old manual budget sheet used to do), never enforced.
+// Not user-editable yet; revisit if that's ever asked for.
+const PLANNER_REFERENCE_SPLIT = { Need: 0.5, Want: 0.3, SavingsInvestment: 0.2 };
+
+// The one pseudo-"category" name used to store a saved income override in
+// the Budgets sheet, alongside real spend categories. Deliberately starts
+// with "_" so it can never collide with a real category name, and is
+// excluded from PLANNER_CATEGORIES so it's never offered as something to
+// set a spend target for.
+const PLANNER_INCOME_KEY = "_Income";
+
 /* ============================================
    SHEET ACCESS
 ============================================ */
@@ -122,6 +134,26 @@ function getCompleteReliableMonths_(today){
     if(m > 12){ m = 1; y++; }
   }
   return months;
+}
+
+// Real income (Type=credit, Category=Income) actually received in the
+// given calendar month — same rule getCCAdvisorData already uses for its
+// own "recentIncome" figure (PWA.js), just for a whole calendar month
+// instead of a rolling 35-day window. Cash entries are never Income —
+// checked against this project's real categories, income only ever
+// arrives via a bank transaction.
+function computeMonthActualIncome_(txnData, year, month){
+  let income = 0;
+  for(let i = 1; i < txnData.length; i++){
+    const rawDate = txnData[i][0];
+    if(!rawDate) continue;
+    const d = new Date(rawDate);
+    if(d.getFullYear() !== year || (d.getMonth() + 1) !== month) continue;
+    const type = (txnData[i][3] || "").toString().toLowerCase();
+    const cat  = (txnData[i][13] || "").toString().trim();
+    if(type === "credit" && cat === "Income") income += Number(txnData[i][5]) || 0;
+  }
+  return income;
 }
 
 /* ============================================
@@ -394,12 +426,85 @@ function getPlannerData(monthStr, txnData, cashData){
     };
   });
 
+  const overview = buildPlannerOverview_(categories, actualBreakdown, savedMap, txnData, targetMonth);
+
   return {
     month: targetMonth.key,
     reliableSince: formatPlannerMonth_(PLANNER_RELIABLE_START.year, PLANNER_RELIABLE_START.month),
     suggestionSource: suggestionInfo.source, // "average" or "scaledPartialMonth"
     monthsAveraged: suggestionInfo.monthsUsed || null,
-    categories: categories
+    categories: categories,
+    overview: overview
+  };
+}
+
+/* ============================================
+   OVERVIEW — the "big picture" your old manual budget sheet had: total
+   income, split into Needs/Wants/Savings+Investment, compared to the
+   standard 50/30/20 rule of thumb, plus a single "Unallocated" number
+   (income minus everything planned) — the same idea as your old sheet's
+   per-bucket "Bal" row, just one total instead of one per bucket, since
+   the Needs/Wants totals below are already summed automatically from
+   your per-category targets.
+============================================ */
+function buildPlannerOverview_(categories, actualBreakdown, savedMap, txnData, targetMonth){
+  const settings = getSettings();
+  const savingsInvestmentTarget = (settings.monthlySaveGoal || 0) + (settings.monthlyInvestmentGoal || 0);
+
+  // Needs/Wants targets = whatever's actually being planned per category
+  // right now (prefer what you saved, fall back to the suggestion) — so
+  // this total always matches what you'd get adding up the per-category
+  // numbers on screen. A category with no reliable Need/Want history yet
+  // (type: null, not split) can't be credited to either bucket — real,
+  // not silently guessed.
+  let needsTarget = 0, wantsTarget = 0;
+  categories.forEach(function(c){
+    const src = c.saved || c.suggested;
+    if(c.split){
+      needsTarget += src.need || 0;
+      wantsTarget += src.want || 0;
+    } else if(c.type === "Need"){
+      needsTarget += src.total || 0;
+    } else if(c.type === "Want"){
+      wantsTarget += src.total || 0;
+    }
+  });
+
+  const totalPlanned = needsTarget + wantsTarget + savingsInvestmentTarget;
+
+  const savedIncomeRow = savedMap[PLANNER_INCOME_KEY];
+  const savedIncome = (savedIncomeRow && savedIncomeRow.hasOwnProperty("")) ? savedIncomeRow[""] : null;
+  const actualIncome = computeMonthActualIncome_(txnData, targetMonth.year, targetMonth.month);
+  const incomeForCalc = savedIncome !== null ? savedIncome : actualIncome;
+
+  // Actual spend-by-type this month, for the Track view — sums the same
+  // per-category breakdown already computed for the requested month,
+  // across every category, rather than per-category.
+  let actualNeeds = 0, actualWants = 0, actualSaving = 0, actualInvestment = 0, actualUntagged = 0;
+  Object.keys(actualBreakdown).forEach(function(cat){
+    const b = actualBreakdown[cat];
+    actualNeeds      += b.Need;
+    actualWants      += b.Want;
+    actualSaving     += b.Saving;
+    actualInvestment += b.Investment;
+    actualUntagged   += b.Untagged;
+  });
+
+  return {
+    income: { actual: Math.round(actualIncome), saved: savedIncome === null ? null : Math.round(savedIncome) },
+    targets: {
+      needs: Math.round(needsTarget),
+      wants: Math.round(wantsTarget),
+      savingsInvestment: Math.round(savingsInvestmentTarget)
+    },
+    referenceSplit: PLANNER_REFERENCE_SPLIT, // fixed 50/30/20 reference, shown for comparison only
+    unallocated: Math.round(incomeForCalc - totalPlanned),
+    actual: {
+      needs: Math.round(actualNeeds),
+      wants: Math.round(actualWants),
+      savingsInvestment: Math.round(actualSaving + actualInvestment),
+      untagged: Math.round(actualUntagged)
+    }
   };
 }
 
@@ -410,7 +515,12 @@ function getPlannerData(monthStr, txnData, cashData){
 // existing plan. budgets is an array of either:
 //   { category: "Food", split: true, need: 4000, want: 3500 }
 //   { category: "Transport", split: false, target: 2200 }
-function saveBudgets(monthStr, budgets){
+// income is optional — undefined/null/"" means "don't save an override,
+// use real actual income instead" (getPlannerData falls back to that
+// automatically). Passing a number saves/replaces the override; passing
+// null/"" explicitly clears a previously-saved one, since this is a full
+// replace of the month's Budgets rows either way.
+function saveBudgets(monthStr, budgets, income){
   try{
     const monthKey = normalizePlannerMonth_(monthStr);
     if(!monthKey) return { ok:false, error:"Enter a valid month." };
@@ -418,7 +528,23 @@ function saveBudgets(monthStr, budgets){
       return { ok:false, error:"No budget targets received." };
     }
 
+    // Three-way: income left out of the request entirely (undefined) means
+    // "this save isn't touching income" — a previously-saved override, if
+    // any, is left completely alone. null/"" explicitly clears it. A real
+    // number saves/replaces it. This matters because "budgets" (the
+    // category targets) and income are edited from the same screen but
+    // conceptually separate things — tweaking one category's target must
+    // never silently wipe out a saved income figure just because this
+    // request happened not to mention it.
+    const incomeProvided = income !== undefined;
+    let incomeToWrite = null;
+    if(incomeProvided && income !== null && income !== ""){
+      incomeToWrite = Number(income);
+      if(!(incomeToWrite >= 0)) return { ok:false, error:"Enter a valid income amount." };
+    }
+
     const rowsToWrite = [];
+    if(incomeToWrite !== null) rowsToWrite.push([monthKey, PLANNER_INCOME_KEY, "", incomeToWrite]);
     for(let i = 0; i < budgets.length; i++){
       const b = budgets[i] || {};
       const category = (b.category || "").toString().trim();
@@ -446,14 +572,19 @@ function saveBudgets(monthStr, budgets){
     const sheet = getBudgetsSheet_();
     const data = sheet.getDataRange().getValues();
 
-    // Remove every existing row for this month first (bottom-up, so
-    // deleting doesn't shift the row numbers of rows still to be
-    // checked), THEN append the fresh set — a full replace, never
-    // leaves stale/duplicate rows behind from an earlier save.
+    // Remove every existing CATEGORY row for this month first (bottom-up,
+    // so deleting doesn't shift the row numbers of rows still to be
+    // checked), THEN append the fresh set — a full replace for the
+    // category targets, never leaves stale/duplicate rows behind from an
+    // earlier save. The saved income row (PLANNER_INCOME_KEY) is only
+    // ever removed when this call actually provided an income value
+    // (see comment above) — untouched otherwise.
     for(let r = data.length - 1; r >= 1; r--){
-      if((data[r][0] || "").toString().trim() === monthKey){
-        sheet.deleteRow(r + 1);
-      }
+      const rowMonth = (data[r][0] || "").toString().trim();
+      if(rowMonth !== monthKey) continue;
+      const rowCategory = (data[r][1] || "").toString().trim();
+      if(rowCategory === PLANNER_INCOME_KEY && !incomeProvided) continue; // leave a previously-saved income alone
+      sheet.deleteRow(r + 1);
     }
 
     rowsToWrite.forEach(function(row){ sheet.appendRow(row); });

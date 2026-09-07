@@ -1,12 +1,20 @@
-# Planner (Phase 1) — per-category monthly spend targets
+# Planner (Phase 1 + Overview) — per-category monthly spend targets
 
-**Status: backend done (`clasp push`ed, editor draft only — not yet live,
-needs a `clasp deploy` go-ahead) and frontend done (`index.html`, not yet
-`git push`ed — needs a review + go-ahead too).** Built 2026-08-18.
-Backend lives in `backend/planner.js`, wired into `handlePwaRequest`
-(`PWA.js`) as two actions: `getPlannerData` and `saveBudgets`. Frontend
-lives under More → Tools → Planner — see "Frontend" section below for
-what actually shipped.
+**Status: LIVE as of 2026-09-07** (backend `clasp deploy`ed to `@313`,
+frontend `git push`ed to GitHub Pages). Backend lives in
+`backend/planner.js`, wired into `handlePwaRequest` (`PWA.js`) as two
+actions: `getPlannerData` and `saveBudgets`. Frontend lives under
+More → Tools → Planner — see "Frontend" section below for what actually
+shipped. Built 2026-08-18 (per-category targets), extended 2026-09-07
+(the Overview below) — both pieces shipped together in one deploy, per
+the user's own call to hold them until both were ready.
+
+**Overview (income + bucket totals + 50/30/20 reference) — backend and
+frontend both built 2026-09-07, reviewed by `change-reviewer`, and live
+the same day.** See "Overview" section below for the backend shape, and
+"Frontend — Overview card" further down for what actually shipped on
+screen. This is new, on top of the per-category work above, inspired by
+the user's own pre-automation manual budget sheet.
 
 **Plain-English summary:** you set a spend TARGET per category for the
 month (e.g. "Food: ₹8,000"), and the app tracks how much you've actually
@@ -128,6 +136,86 @@ always just real data for whatever month was asked. Verified directly in
 `planner.test.js` by requesting June/July 2026 and confirming their real
 (pre-tagging-system) spend still shows up correctly.
 
+## Overview — the "big picture" (added 2026-09-07)
+
+Inspired by the user's own pre-automation manual budget sheet: every
+month they started from total income, decided how much should go to
+Needs / Wants / Savings as three big slices, checked their real split
+(e.g. 60% / 15% / 25%) against the standard 50/30/20 rule of thumb, and
+kept a running "Bal" (unallocated leftover) per slice that should hit
+zero. The per-category Planner above is genuinely better at the
+category level (auto-learned Need/Want split, suggested from real
+history) but was missing that big-picture view entirely — no income
+figure, no bucket-level rollup, no reference comparison, no "does this
+add up" check.
+
+`getPlannerData`'s response now also includes an `overview` object:
+
+```json
+"overview": {
+  "income": { "actual": 55000, "saved": 50000 },
+  "targets": { "needs": 6340, "wants": 6820, "savingsInvestment": 1000 },
+  "referenceSplit": { "Need": 0.5, "Want": 0.3, "SavingsInvestment": 0.2 },
+  "unallocated": 35840,
+  "actual": { "needs": 1000, "wants": 1100, "savingsInvestment": 0, "untagged": 1000 }
+}
+```
+
+- **`income.actual`** — real Income-tagged bank credits received in the
+  requested month (same rule `getCCAdvisorData`'s own "recentIncome"
+  already uses, just for a whole calendar month). **`income.saved`** —
+  an optional manual override (`null` if never set) for planning ahead
+  of a salary that hasn't landed yet. Both are always shown, never
+  blended into one number — same "don't hide the real numbers" rule
+  this app follows elsewhere.
+- **`targets.needs`/`targets.wants`** — the sum of whatever's currently
+  being PLANNED per category (saved if you've saved one, else the
+  suggestion) for every category with a real Need or Want portion. A
+  category with no reliable history yet (`type: null`, not split)
+  contributes to neither bucket — never silently guessed.
+- **`targets.savingsInvestment`** — pulled straight from Settings'
+  `monthlySaveGoal` + `monthlyInvestmentGoal` (per the user's own call:
+  one place manages this number, not a second parallel one in Planner).
+- **`referenceSplit`** — the fixed 50/30/20 rule of thumb, shown only
+  for comparison, never enforced. Not user-editable yet.
+- **`unallocated`** — `(income.saved ?? income.actual) - (targets.needs + targets.wants + targets.savingsInvestment)`.
+  The single-number version of the old sheet's per-bucket "Bal" row —
+  since Needs/Wants totals are already auto-summed from category
+  targets, one number for the whole plan is enough.
+- **`actual`** — real spend so far this month by type (Need/Want/
+  Saving+Investment/untagged), summed across every category, for the
+  Track view. Uses the same raw per-category breakdown the category
+  list already computes — no extra Sheet read.
+
+### Saving the income override
+
+`saveBudgets` gained an optional third field, `income`, alongside the
+existing `month`/`budgets`:
+
+```json
+{ "action": "saveBudgets", "idToken": "...", "month": "2026-08",
+  "budgets": [ { "category": "Transport", "split": false, "target": 2000 } ],
+  "income": 50000 }
+```
+
+**Three-way, deliberately not just "present or not"**: leaving the
+`income` field out of the request entirely means "this save isn't
+touching income" — a previously-saved override, if any, is left
+completely alone. Sending `null` explicitly clears it (falls back to
+`income.actual` again). Sending a number saves/replaces it. This
+matters because income and category targets are edited from the same
+screen but are conceptually separate things — **the frontend must
+always send the current income value on every save** (whatever's
+showing in the income input) so tweaking one category's target can
+never accidentally wipe out a saved income figure just because that
+particular save happened not to mention it.
+
+Verified in `backend/tests/planner.test.js`, Scenario D: actual vs.
+saved income shown separately, targets/unallocated recompute correctly
+once an override is saved, a category-only save leaves a previously-
+saved income untouched, an explicit `null` clears it, and a negative
+income is rejected before anything writes.
+
 ## Action contracts (for the frontend build)
 
 ### `getPlannerData`
@@ -222,7 +310,7 @@ past 3" behavior, and `saveBudgets`' full-replace-not-append behavior
 plus its validation. Full existing suite (`backend/tests/*.test.js`, 9
 files) re-run and still passes.
 
-## Frontend — built 2026-08-18 (`index.html`), pending `git push`
+## Frontend — built 2026-08-18 (`index.html`), live since 2026-09-07
 
 Lives under More → Tools → Planner (a new icon tile, not a 5th bottom-nav
 tab — the nav stays at 4). Two views, switched with the same `.view-toggle`
@@ -363,6 +451,116 @@ real issues, both fixed:
    messaging).
 
 Both fixes are frontend-only (`index.html`), no backend change needed.
+
+## Frontend — Overview card (built 2026-09-07, `index.html`)
+
+A new `#plannerOverviewCard` sits above the per-category list, ABOVE the
+Set targets/Track progress toggle, so it's visible no matter which
+sub-view is open — its content is fully rebuilt (`renderPlannerOverview`)
+every time the view is switched or the month reloads, since Set and Track
+show genuinely different things, not two visibility-toggled copies of the
+same markup.
+
+- **Set targets** — an editable "Monthly income" input (reuses the
+  standard `.field` + global filled-input look, just with a ₹ sign
+  overlaid via a new `.planner-income-input-wrap`/`.planner-income-
+  currency` pair) prefilled from `overview.income.saved` if not null,
+  else `overview.income.actual`, with a caption underneath ("your own
+  figure." vs. "using your real income so far this month.") that flips
+  the instant you start typing. Below it, one row per bucket (Needs/
+  Wants/Savings + Investment) showing ₹ + % of whatever's currently in
+  the income box, a bar in that bucket's own color, and a thin vertical
+  `.planner-ref-marker` tick showing where the fixed 50/30/20 reference
+  sits on the same bar (`.planner-ref-track` just adds `position:
+  relative` on top of the existing `.category-bar-track`/`.category-bar-
+  fill` pair — no new bar style). An "Unallocated" `.status-pill` at the
+  bottom — `success` (reuses the existing `--bg-success`/`--color-
+  success` tokens) when income covers everything planned, `danger` when
+  you've planned more than you're earning.
+- **Track progress** — the same three buckets, but reusing
+  `buildPlannerSubBar` UNCHANGED (the exact function the per-category
+  Need/Want sub-bars already use) to show `overview.actual.*` against
+  `overview.targets.*`, so the over/near-target status colors and pills
+  are identical to the rest of Planner, not a parallel implementation. A
+  note appears under the bars whenever `overview.actual.untagged > 0`
+  ("₹X of this month's spend isn't tagged Need, Want, Saving, or
+  Investment yet, so it isn't counted above") — same transparency rule
+  as the per-category untagged note above.
+- **Color reuse, not new tokens**: Needs → `--chart-need`/`--need-text`,
+  Wants → `--chart-want`/`--want-text` — the same tokens Home's own
+  Need/Want/Saving/Investment snapshot bar already uses. Savings +
+  Investment is ONE combined bucket (that's how the backend groups
+  `targets`/`actual`), so it gets ONE color rather than splitting
+  Saving's and Investment's own two separate tokens —
+  `--chart-saving`/`--saving-text` was picked as the closer of the two
+  ideas to "money set aside." No new color was invented anywhere in this
+  pass.
+- **Live feedback while editing, without losing input focus**: editing
+  the income box only ever patches the existing bucket rows' text/bar-
+  width/pill in place (`updatePlannerOverviewSetLive`) — it never
+  rebuilds the card's HTML while you're actively typing, since doing
+  that would recreate the `<input>` itself and drop your cursor mid-
+  keystroke. Editing any CATEGORY target input also live-updates the
+  Needs/Wants numbers the same way, reading straight from the Set
+  view's own inputs (`plannerOverviewTargetsFromCategoryInputs`) —
+  deliberately a preview only, never written into `plannerLastData.
+  overview` itself, so switching to Track progress without saving first
+  never shows progress against a number that was never actually saved.
+- **Saving**: "Save plan" now always sends a top-level `income` field
+  alongside `month`/`budgets` — blank income box → `null` (clears a
+  saved override), a number → saves/replaces it. Per the backend's own
+  three-way contract (see "Saving the income override" above), leaving
+  this field out entirely would mean "don't touch a saved override,"
+  which would be wrong here since this is the one screen that edits it.
+  Same optimistic trade-off as every other Save/Add button in this app:
+  the overview's `targets.needs`/`targets.wants`/`income.saved`/
+  `unallocated` are recomputed immediately from the just-saved category
+  values (`plannerOverviewTargetsFromCategories`, mirroring
+  `buildPlannerOverview_` exactly) and the card is rebuilt right away to
+  show the definitive post-save state (e.g. clearing the income box and
+  saving snaps it back to showing the real actual-income figure); if the
+  background `saveBudgets` call actually fails, only `plannerLastData`
+  and the Track view are reverted — the Set view's inputs (income
+  included) are deliberately left exactly as typed, same "your numbers
+  are still here, try again" behavior the category inputs already had.
+- **Demo Mode**: `demoComputePlannerOverview` (mirrors
+  `buildPlannerOverview_`) and `demoComputeMonthActualIncome` (mirrors
+  `computeMonthActualIncome_`) were added, and `demoSaveBudgets` gained
+  the same three-way `income` parameter, storing it as the same
+  `PLANNER_INCOME_KEY = "_Income"` pseudo-category row the real
+  `Budgets` sheet uses — so Settings → View Demo Mode exercises the
+  exact same code paths as the real backend/frontend contract, not a
+  simplified stand-in.
+
+### Verification
+
+1. **Node**: real `demoComputePlannerData`/`demoComputePlannerOverview`/
+   `demoComputeMonthActualIncome`/`demoSaveBudgets` functions extracted
+   verbatim from `index.html` and executed (via `vm`) against a small
+   hand-built fixture — confirmed income.actual/saved shown separately,
+   targets/unallocated math, the three-way income save contract (omit =
+   untouched, `null` = cleared, a number = saved/replaced) exactly as
+   the backend doc specifies, and that a negative income is rejected
+   before anything writes. 23 checks, all passing. A full JS syntax
+   check of both `<script>` blocks, a CSS brace-balance check, and a
+   check that every `getElementById` call has a matching `id=` (static
+   or generated) all passed too.
+2. **Real browser** (this session's preview pane actually composited
+   frames correctly, unlike several past sessions documented elsewhere
+   in this file — verified via a temporary, since-removed test-only
+   `?claudeTestBypass=1` URL hook that seeded Demo Mode directly,
+   same technique already used in an earlier pass, fully removed before
+   finishing): confirmed both views render correctly in light AND dark
+   mode with the real Demo Mode dataset, confirmed editing the income
+   box live-updates the %/bars/pill without losing input focus,
+   confirmed editing a category input live-updates the overview's
+   Needs bucket instantly, confirmed Save actually persists (Track
+   view's targets and the Set view's own caption update to "your own
+   figure." immediately), and confirmed zero console errors throughout.
+   This is a stronger live check than several previous Planner
+   verification passes in this file managed to get — not every future
+   session should assume the same result, per this project's own
+   documented preview-pane limitation.
 
 ## Not yet built (out of scope for this pass)
 

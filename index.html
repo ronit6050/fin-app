@@ -1743,6 +1743,112 @@
       font-weight: 600;
     }
 
+    /* ---------- Planner overview card (2026-09-07) ----------
+       The "big picture" summary sitting above the per-category list, in
+       BOTH the Set targets and Track progress views — income vs. the
+       50/30/20 rule of thumb, inspired by the user's own pre-automation
+       manual budget sheet. See docs/features/planner.md's "Overview"
+       section. Deliberately reuses .category-bar-track/.category-bar-fill
+       (Track view) and the existing Need/Want/Saving/Investment color
+       tokens (Set view) rather than inventing a new bar or palette. */
+    .planner-overview-card {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    /* .category-bar-track's own background only ever comes from the
+       .category-row scoping rule or a hero card's own inline style (see
+       that base rule's comment) — this card is neither, so without this
+       its bars would show only the colored fill with no visible track
+       behind it. Found by change-reviewer 2026-09-07 before this shipped. */
+    .planner-overview-card .category-bar-track {
+      background: var(--chart-track-bg);
+    }
+    .planner-overview-head {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 14px;
+    }
+    /* Income input — reuses the app's own filled-input look (see the
+       global `input` rule) via the shared .field wrapper, just with a
+       ₹ sign overlaid on top instead of a separate label/input pair. */
+    .planner-income-input-wrap {
+      position: relative;
+    }
+    .planner-income-input-wrap input {
+      width: 100%;
+      box-sizing: border-box;
+      padding-left: 28px;
+    }
+    .planner-income-currency {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-weight: 600;
+      pointer-events: none;
+    }
+    .planner-bucket-row {
+      margin-bottom: 16px;
+    }
+    .planner-bucket-row:last-of-type {
+      margin-bottom: 0;
+    }
+    .planner-bucket-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.85rem;
+      margin-bottom: 6px;
+    }
+    .planner-bucket-label {
+      font-weight: 700;
+    }
+    .planner-bucket-amt {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    .planner-bucket-pct {
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.8rem;
+    }
+    /* A thin vertical tick marking the 50/30/20 reference point on top of
+       the "planned % of income" bar. .category-bar-track has no
+       positioning context by default (reused as-is in several other
+       places), so position:relative is added here, scoped to this one
+       usage only. */
+    .planner-ref-track {
+      position: relative;
+      overflow: visible;
+    }
+    .planner-ref-marker {
+      position: absolute;
+      top: -3px;
+      bottom: -3px;
+      width: 2px;
+      border-radius: 1px;
+      background: var(--text-secondary);
+      transform: translateX(-1px);
+    }
+    .planner-unalloc-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 0.5px solid var(--border-hairline);
+    }
+    .planner-unalloc-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
     /* ---------- Category detail — top transactions shown when a
        category row on Analysis is tapped ---------- */
     .category-detail {
@@ -3159,6 +3265,14 @@
         </div>
 
         <div id="plannerContent" style="display:none">
+          <!-- Big-picture overview (2026-09-07) — income vs. the 50/30/20
+               rule of thumb, shown above the per-category list in BOTH
+               views below; content built entirely in JS since it differs
+               between Set targets (editable income + planned %) and Track
+               progress (actual spend vs. target). See
+               docs/features/planner.md's "Overview" section. -->
+          <div id="plannerOverviewCard" class="planner-overview-card"></div>
+
           <div class="view-toggle" id="plannerViewToggle" style="margin-bottom:14px;">
             <button type="button" class="view-toggle-btn" data-view="set">Set targets</button>
             <button type="button" class="view-toggle-btn" data-view="track">Track progress</button>
@@ -3225,8 +3339,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-09-04-01";
-    const APP_CHANGELOG = "Fixed Pending sometimes showing an old transaction you already saved a note for.";
+    const APP_VERSION = "2026-09-07-01";
+    const APP_CHANGELOG = "Planner now shows a big-picture summary card: your income vs. the standard 50/30/20 Need/Want/Saving split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -4439,6 +4553,13 @@
     // by Demo Mode's own pretend planner dispatcher further below.
     const PLANNER_CATEGORIES = Object.keys(CATEGORY_STYLES).filter(function (c) { return c !== "Income"; });
 
+    // Same pseudo-category name the real backend uses (PLANNER_INCOME_KEY
+    // in backend/planner.js) to store a saved income override as an
+    // ordinary-looking row alongside real category targets in the same
+    // Budgets sheet/array — starts with "_" so it can never collide with a
+    // real category name.
+    const PLANNER_INCOME_KEY = "_Income";
+
     // -----------------------------------------------------------
     // THE PRETEND DATASET — tweak the numbers/names below any time you
     // want Demo Mode to show something different. Everything else in
@@ -5064,24 +5185,112 @@
         return { category: cat, split: isSplit, type: isSplit ? null : (dominantType || null), suggested: suggested, saved: saved, actual: actual };
       });
 
+      const overview = demoComputePlannerOverview(categories, actualBreakdown, savedMap, target);
+
       return {
         month: target.key,
         reliableSince: "2026-08",
         suggestionSource: "scaledPartialMonth",
         monthsAveraged: null,
-        categories: categories
+        categories: categories,
+        overview: overview
+      };
+    }
+
+    // Real income (credit + Category "Income") actually received in the
+    // requested calendar month — mirrors computeMonthActualIncome_ in
+    // backend/planner.js, just reading demoState.transactions instead of
+    // the Transactions sheet. Cash entries are never Income, same as real.
+    function demoComputeMonthActualIncome(year, month) {
+      let income = 0;
+      demoState.transactions.forEach(function (t) {
+        if (t.type === "credit" && (t.category || "") === "Income" &&
+            t.date.getFullYear() === year && (t.date.getMonth() + 1) === month) {
+          income += t.amount;
+        }
+      });
+      return income;
+    }
+
+    // Mirrors buildPlannerOverview_ in backend/planner.js exactly (see
+    // docs/features/planner.md's "Overview" section for the field-by-field
+    // meaning) — reusing the same `categories`/`actualBreakdown`/`savedMap`
+    // demoComputePlannerData already computed above, no extra pass over
+    // demoState needed beyond the income lookup.
+    function demoComputePlannerOverview(categories, actualBreakdown, savedMap, target) {
+      const settings = demoState.settings;
+      const savingsInvestmentTarget = (settings.monthlySaveGoal || 0) + (settings.monthlyInvestmentGoal || 0);
+
+      let needsTarget = 0, wantsTarget = 0;
+      categories.forEach(function (c) {
+        const src = c.saved || c.suggested;
+        if (c.split) {
+          needsTarget += src.need || 0;
+          wantsTarget += src.want || 0;
+        } else if (c.type === "Need") {
+          needsTarget += src.total || 0;
+        } else if (c.type === "Want") {
+          wantsTarget += src.total || 0;
+        }
+      });
+      const totalPlanned = needsTarget + wantsTarget + savingsInvestmentTarget;
+
+      const savedIncomeRow = savedMap[PLANNER_INCOME_KEY];
+      const savedIncome = (savedIncomeRow && savedIncomeRow.hasOwnProperty("")) ? savedIncomeRow[""] : null;
+      const actualIncome = demoComputeMonthActualIncome(target.year, target.month);
+      const incomeForCalc = savedIncome !== null ? savedIncome : actualIncome;
+
+      let actualNeeds = 0, actualWants = 0, actualSaving = 0, actualInvestment = 0, actualUntagged = 0;
+      Object.keys(actualBreakdown).forEach(function (cat) {
+        const b = actualBreakdown[cat];
+        actualNeeds      += b.Need;
+        actualWants      += b.Want;
+        actualSaving     += b.Saving;
+        actualInvestment += b.Investment;
+        actualUntagged   += b.Untagged;
+      });
+
+      return {
+        income: { actual: Math.round(actualIncome), saved: savedIncome === null ? null : Math.round(savedIncome) },
+        targets: {
+          needs: Math.round(needsTarget),
+          wants: Math.round(wantsTarget),
+          savingsInvestment: Math.round(savingsInvestmentTarget)
+        },
+        referenceSplit: { Need: 0.5, Want: 0.3, SavingsInvestment: 0.2 },
+        unallocated: Math.round(incomeForCalc - totalPlanned),
+        actual: {
+          needs: Math.round(actualNeeds),
+          wants: Math.round(actualWants),
+          savingsInvestment: Math.round(actualSaving + actualInvestment),
+          untagged: Math.round(actualUntagged)
+        }
       };
     }
 
     // Full-replace save, mirroring saveBudgets() in backend/planner.js —
-    // every existing row for the month is dropped first, then the new
-    // set is added, so re-saving a month never leaves stale duplicates.
-    function demoSaveBudgets(monthStr, budgets) {
+    // every existing CATEGORY row for the month is dropped first, then the
+    // new set is added, so re-saving a month never leaves stale
+    // duplicates. `income` is the same three-way contract the real backend
+    // uses (see docs/features/planner.md's "Saving the income override"):
+    // undefined = leave a saved override untouched, null/"" = clear it, a
+    // number = save/replace it — stored as the same PLANNER_INCOME_KEY
+    // pseudo-category row the real Budgets sheet uses.
+    function demoSaveBudgets(monthStr, budgets, income) {
       const m = (monthStr || "").toString().trim();
       if (!/^\d{4}-\d{2}$/.test(m)) return { ok: false, error: "Enter a valid month." };
       if (!Array.isArray(budgets) || budgets.length === 0) return { ok: false, error: "No budget targets received." };
 
+      const incomeProvided = income !== undefined;
+      let incomeToWrite = null;
+      if (incomeProvided && income !== null && income !== "") {
+        incomeToWrite = Number(income);
+        if (!(incomeToWrite >= 0)) return { ok: false, error: "Enter a valid income amount." };
+      }
+
       const rows = [];
+      if (incomeToWrite !== null) rows.push({ month: m, category: PLANNER_INCOME_KEY, type: "", target: incomeToWrite });
+
       for (let i = 0; i < budgets.length; i++) {
         const b = budgets[i] || {};
         const category = (b.category || "").toString().trim();
@@ -5098,7 +5307,15 @@
         }
       }
 
-      demoState.budgets = demoState.budgets.filter(function (row) { return row.month !== m; }).concat(rows);
+      // Full replace for real category rows; the saved income row is only
+      // ever dropped when this call actually provided a fresh income value
+      // — left completely alone otherwise (same rule as the real backend).
+      demoState.budgets = demoState.budgets.filter(function (row) {
+        if (row.month !== m) return true;
+        if (row.category === PLANNER_INCOME_KEY && !incomeProvided) return true;
+        return false;
+      }).concat(rows);
+
       return { ok: true, saved: rows.length };
     }
 
@@ -5470,7 +5687,7 @@
           case "updateSettings": return demoUpdateSettings(data.settings);
           case "getTransactionHistory": return Object.assign({ ok: true }, demoComputeHistory(data.offset, data.limit), { knownDebtPeople: demoKnownDebtPeople() });
           case "getPlannerData": return { ok: true, planner: demoComputePlannerData(data.month) };
-          case "saveBudgets": return demoSaveBudgets(data.month, data.budgets);
+          case "saveBudgets": return demoSaveBudgets(data.month, data.budgets, data.income);
           default: return { ok: false, error: "Unknown action." };
         }
       } catch (err) {
@@ -10213,6 +10430,7 @@
     const plannerTrackMetaEl     = document.getElementById("plannerTrackMeta");
     const plannerTrackBarEl      = document.getElementById("plannerTrackBar");
     const plannerTrackListEl     = document.getElementById("plannerTrackList");
+    const plannerOverviewCardEl  = document.getElementById("plannerOverviewCard");
 
     let plannerYear  = now.getFullYear();
     let plannerMonth = now.getMonth() + 1;
@@ -10277,8 +10495,236 @@
         if (btn.dataset.view === plannerView) return;
         plannerView = btn.dataset.view;
         updatePlannerViewUI();
+        // The overview card's content is entirely different between the
+        // two views (editable income + planned-% bars vs. actual-spend
+        // bars) — re-render it fresh rather than trying to show/hide two
+        // pre-built copies, same reasoning as Set/Track's own lists.
+        if (plannerLastData) renderPlannerOverview(plannerLastData);
       });
     });
+
+    // ---------------------------------------------------------
+    // Overview card (2026-09-07) — the "big picture": income vs. the
+    // standard 50/30/20 rule of thumb, above the per-category list, in
+    // BOTH views. See docs/features/planner.md's "Overview" section for
+    // the exact overview JSON shape. Reuses the app's existing Need/
+    // Want/Saving/Investment color tokens (never new ones) and the
+    // existing category-bar-track/fill pattern for the Track view.
+    // ---------------------------------------------------------
+
+    // Needs -> --need-text/--chart-need, Wants -> --want-text/--chart-want.
+    // Savings + Investment is shown as ONE combined bucket (that's how the
+    // backend's own overview.targets/actual group it — see the doc), so it
+    // gets one color rather than splitting Saving/Investment's own two
+    // separate tokens; --saving-text/--chart-saving was picked since
+    // "money set aside" is the closer of the two ideas to what this bucket
+    // represents.
+    const PLANNER_OVERVIEW_BUCKETS = [
+      { key: "needs",             label: "Needs",                refKey: "Need",             fill: "var(--chart-need)",   text: "var(--need-text)" },
+      { key: "wants",             label: "Wants",                refKey: "Want",             fill: "var(--chart-want)",   text: "var(--want-text)" },
+      { key: "savingsInvestment", label: "Savings + Investment", refKey: "SavingsInvestment", fill: "var(--chart-saving)", text: "var(--saving-text)" }
+    ];
+
+    let plannerIncomeInputEl = null; // (re)assigned each time the Set view's overview card is (re)built
+
+    function plannerIncomeInputValue() {
+      if (!plannerIncomeInputEl) return 0;
+      const n = parseFloat(plannerIncomeInputEl.value);
+      return isNaN(n) ? 0 : n;
+    }
+
+    function renderPlannerOverview(p) {
+      if (!p || !p.overview) { plannerOverviewCardEl.innerHTML = ""; return; }
+      if (plannerView === "set") renderPlannerOverviewSet(p);
+      else renderPlannerOverviewTrack(p);
+    }
+
+    // "Set targets" overview — an editable income figure, then Needs/
+    // Wants/Savings+Investment shown as ₹ + % of that income figure, each
+    // with a thin marker showing where the 50/30/20 reference sits, and an
+    // Unallocated status pill at the bottom. The income input's own
+    // 'input' listener only updates numbers in place (updatePlannerOverviewSetLive)
+    // rather than rebuilding this HTML on every keystroke — rebuilding
+    // would recreate the <input> itself and throw away focus/cursor
+    // position while typing.
+    function renderPlannerOverviewSet(p) {
+      const ov = p.overview;
+      const usingSaved = ov.income.saved !== null && ov.income.saved !== undefined;
+      const incomeVal = usingSaved ? ov.income.saved : ov.income.actual;
+      const caption = usingSaved
+        ? "your own figure"
+        : "using your real income so far this month";
+
+      const bucketsHtml = PLANNER_OVERVIEW_BUCKETS.map(function (b) {
+        return `
+          <div class="planner-bucket-row" data-bucket="${b.key}">
+            <div class="planner-bucket-top">
+              <span class="planner-bucket-label" style="color:${b.text};">${b.label}</span>
+              <span class="planner-bucket-amt" data-role="amt">₹0</span>
+            </div>
+            <div class="category-bar-track planner-ref-track">
+              <div class="category-bar-fill" data-role="fill" style="width:0%; background:${b.fill};"></div>
+              <div class="planner-ref-marker" data-role="marker" style="left:0%;"></div>
+            </div>
+            <p class="planner-track-of" data-role="refnote"></p>
+          </div>
+        `;
+      }).join("");
+
+      plannerOverviewCardEl.innerHTML = `
+        <div class="planner-overview-head">Big picture — this month</div>
+        <div class="field">
+          <label for="plannerIncomeInput">Monthly income</label>
+          <div class="planner-income-input-wrap">
+            <span class="planner-income-currency">₹</span>
+            <input type="number" inputmode="numeric" min="0" step="1" id="plannerIncomeInput" value="${incomeVal}">
+          </div>
+        </div>
+        <p class="planner-suggestion-note" id="plannerIncomeCaption" style="margin:-8px 0 14px;">${caption}.</p>
+        ${bucketsHtml}
+        <div class="planner-unalloc-row">
+          <span class="planner-unalloc-label">Unallocated</span>
+          <span class="status-pill" id="plannerUnallocPill"></span>
+        </div>
+      `;
+
+      plannerIncomeInputEl = document.getElementById("plannerIncomeInput");
+      plannerIncomeInputEl.addEventListener("input", function () {
+        document.getElementById("plannerIncomeCaption").textContent = "your own figure.";
+        updatePlannerOverviewSetLive(p);
+      });
+
+      updatePlannerOverviewSetLive(p);
+    }
+
+    // Sums the Need/Want targets currently PLANNED per category — the
+    // real backend's own rule (see buildPlannerOverview_ in
+    // backend/planner.js): whatever's saved, falling back to the
+    // suggestion for a category with nothing saved yet. Used right after
+    // a successful Save, once `c.saved` has just been optimistically set
+    // for every category, so this always matches what was actually sent.
+    function plannerOverviewTargetsFromCategories(categories) {
+      let needs = 0, wants = 0;
+      categories.forEach(function (c) {
+        const src = c.saved || c.suggested;
+        if (c.split) {
+          needs += src.need || 0;
+          wants += src.want || 0;
+        } else if (c.type === "Need") {
+          needs += src.total || 0;
+        } else if (c.type === "Want") {
+          wants += src.total || 0;
+        }
+      });
+      return { needs: needs, wants: wants };
+    }
+
+    // Same idea, but reads whatever's CURRENTLY typed in the Set view's
+    // category inputs directly — used only for a live preview while
+    // you're still editing, before Save is even tapped. Deliberately never
+    // writes into plannerLastData.overview itself (see
+    // updatePlannerOverviewLiveFromCategoryInputs below for why).
+    function plannerOverviewTargetsFromCategoryInputs() {
+      if (!plannerLastData) return { needs: 0, wants: 0 };
+      const splitMap = {}, typeMap = {};
+      plannerLastData.categories.forEach(function (c) { splitMap[c.category] = c.split; typeMap[c.category] = c.type; });
+      const values = {};
+      plannerSetListEl.querySelectorAll(".planner-target-input").forEach(function (inp) {
+        const cat = inp.dataset.category, part = inp.dataset.part;
+        const num = Math.max(0, parseFloat(inp.value) || 0);
+        if (!values[cat]) values[cat] = {};
+        values[cat][part] = num;
+      });
+      let needs = 0, wants = 0;
+      Object.keys(values).forEach(function (cat) {
+        if (splitMap[cat]) {
+          needs += values[cat].need || 0;
+          wants += values[cat].want || 0;
+        } else if (typeMap[cat] === "Need") {
+          needs += values[cat].total || 0;
+        } else if (typeMap[cat] === "Want") {
+          wants += values[cat].total || 0;
+        }
+      });
+      return { needs: needs, wants: wants };
+    }
+
+    // Live-updates the overview card's Needs/Wants bars as you edit any
+    // category's target input — same "see the big picture react
+    // instantly" feel the user's old manual budget sheet had. Deliberately
+    // does NOT write the preview numbers into plannerLastData.overview
+    // (only a real Save does that, see plannerSaveButtonEl below) — if it
+    // did, switching to Track progress without saving first would show
+    // progress against numbers that were never actually saved.
+    function updatePlannerOverviewLiveFromCategoryInputs() {
+      if (!plannerLastData || !plannerLastData.overview || plannerView !== "set") return;
+      const t = plannerOverviewTargetsFromCategoryInputs();
+      updatePlannerOverviewSetLive(plannerLastData, {
+        needs: t.needs,
+        wants: t.wants,
+        savingsInvestment: plannerLastData.overview.targets.savingsInvestment
+      });
+    }
+
+    // Recomputes just the numbers (not the DOM structure) every time the
+    // income box (or a category input, via the preview above) is edited,
+    // so typing a new figure updates the %/bar/pill instantly without
+    // losing input focus. `overrideTargets`, if given, is a preview that's
+    // NOT yet saved (see updatePlannerOverviewLiveFromCategoryInputs
+    // above); otherwise this reads the real `p.overview.targets`.
+    function updatePlannerOverviewSetLive(p, overrideTargets) {
+      const ov = p.overview;
+      const targets = overrideTargets || ov.targets;
+      const income = plannerIncomeInputValue();
+      let allocated = 0;
+
+      PLANNER_OVERVIEW_BUCKETS.forEach(function (b) {
+        const target = targets[b.key] || 0;
+        allocated += target;
+        const pct = income > 0 ? Math.round((target / income) * 100) : 0;
+        const refPct = Math.round((ov.referenceSplit[b.refKey] || 0) * 100);
+        const row = plannerOverviewCardEl.querySelector('[data-bucket="' + b.key + '"]');
+        if (!row) return;
+        row.querySelector('[data-role="amt"]').innerHTML =
+          "₹" + Math.round(target).toLocaleString("en-IN") + ' <span class="planner-bucket-pct">(' + pct + '%)</span>';
+        row.querySelector('[data-role="fill"]').style.width = Math.min(pct, 100) + "%";
+        row.querySelector('[data-role="marker"]').style.left = Math.min(refPct, 100) + "%";
+        row.querySelector('[data-role="refnote"]').textContent = "Reference (50/30/20 rule): " + refPct + "%";
+      });
+
+      const unallocated = income - allocated;
+      const pill = document.getElementById("plannerUnallocPill");
+      if (!pill) return;
+      if (unallocated < 0) {
+        pill.className = "status-pill danger";
+        pill.textContent = "₹" + Math.round(Math.abs(unallocated)).toLocaleString("en-IN") + " over your income";
+      } else {
+        pill.className = "status-pill success";
+        pill.textContent = "₹" + Math.round(unallocated).toLocaleString("en-IN") + " unallocated";
+      }
+    }
+
+    // "Track progress" overview — Needs/Wants/Savings+Investment actual
+    // spend vs. the same targets shown in Set targets, using the exact
+    // same buildPlannerSubBar helper the per-category Track rows already
+    // use below (same over/near-target status colors, same bar markup —
+    // no new bar style for this pass).
+    function renderPlannerOverviewTrack(p) {
+      const ov = p.overview;
+      const rowsHtml = PLANNER_OVERVIEW_BUCKETS.map(function (b) {
+        return buildPlannerSubBar(b.label, ov.actual[b.key] || 0, ov.targets[b.key] || 0, b.fill);
+      }).join("");
+
+      const untaggedNote = ov.actual.untagged > 0
+        ? `<p class="planner-track-of" style="margin:10px 0 0;">₹${Math.round(ov.actual.untagged).toLocaleString("en-IN")} of this month's spend isn't tagged Need, Want, Saving, or Investment yet, so it isn't counted above.</p>`
+        : "";
+
+      plannerOverviewCardEl.innerHTML = `
+        <div class="planner-overview-head">Big picture — this month</div>
+        ${rowsHtml}
+        ${untaggedNote}
+      `;
+    }
 
     // Plain-English explanation of where a suggested number came from —
     // shown right next to each category's suggestion, never just a raw
@@ -10308,6 +10754,7 @@
         plannerViewDecidedForMonth = p.month;
       }
       updatePlannerViewUI();
+      renderPlannerOverview(p);
       renderPlannerSetList(p);
       renderPlannerTrack(p);
     }
@@ -10368,7 +10815,10 @@
       });
 
       plannerSetListEl.querySelectorAll(".planner-target-input").forEach(function (inp) {
-        inp.addEventListener("input", updatePlannerRunningTotal);
+        inp.addEventListener("input", function () {
+          updatePlannerRunningTotal();
+          updatePlannerOverviewLiveFromCategoryInputs();
+        });
       });
       updatePlannerRunningTotal();
     }
@@ -10530,6 +10980,18 @@
         return { category: cat, split: false, target: values[cat].total || 0 };
       });
 
+      // Income override — ALWAYS sent, whatever the box currently shows
+      // (blank means "clear a saved override", a number means "save/
+      // replace it"). Per docs/features/planner.md's "Saving the income
+      // override": leaving this field out of the request entirely would
+      // mean "don't touch a saved override" — the wrong default here,
+      // since this screen's income box is the one place that number is
+      // edited. Always sending it is what stops an ordinary category-only
+      // save from silently leaving a stale override in place, or failing
+      // to save a fresh one just typed in.
+      const incomeRaw = plannerIncomeInputEl ? plannerIncomeInputEl.value.trim() : "";
+      const incomeToSend = incomeRaw === "" ? null : Math.max(0, parseFloat(incomeRaw) || 0);
+
       const snapshot = JSON.parse(JSON.stringify(plannerLastData));
 
       plannerLastData.categories.forEach(function (c) {
@@ -10541,11 +11003,31 @@
           c.saved = { total: v.total || 0 };
         }
       });
+
+      // Optimistically update the overview too, same trade-off as the
+      // categories above — the real per-category `saved` values just set
+      // are now authoritative, so the overview's Needs/Wants totals (and
+      // the Unallocated figure they feed into) are recomputed from them
+      // directly, matching exactly what buildPlannerOverview_ would
+      // compute server-side.
+      if (plannerLastData.overview) {
+        plannerLastData.overview.income.saved = incomeToSend;
+        const t = plannerOverviewTargetsFromCategories(plannerLastData.categories);
+        plannerLastData.overview.targets.needs = t.needs;
+        plannerLastData.overview.targets.wants = t.wants;
+        const incomeForCalc = (plannerLastData.overview.income.saved !== null && plannerLastData.overview.income.saved !== undefined)
+          ? plannerLastData.overview.income.saved
+          : plannerLastData.overview.income.actual;
+        const totalPlanned = plannerLastData.overview.targets.needs + plannerLastData.overview.targets.wants + plannerLastData.overview.targets.savingsInvestment;
+        plannerLastData.overview.unallocated = Math.round(incomeForCalc - totalPlanned);
+      }
+
       saveCache("planner_" + monthKey, plannerLastData);
       renderPlannerTrack(plannerLastData); // Track view (even if not currently showing) reflects the new plan right away
+      renderPlannerOverview(plannerLastData); // always Set view here (Save only lives on that view) — rebuilds the income box to show its new definitive value (e.g. the real actual figure again if you just cleared an override)
       plannerSaveResultEl.textContent = "Saved.";
 
-      callAppsScript({ action: "saveBudgets", idToken: currentUser.idToken, month: monthKey, budgets: budgets })
+      callAppsScript({ action: "saveBudgets", idToken: currentUser.idToken, month: monthKey, budgets: budgets, income: incomeToSend })
         .then(function (data) {
           if (!data.ok) {
             plannerLastData = snapshot;

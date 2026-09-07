@@ -102,10 +102,24 @@ function makeFakeSpreadsheet(){
   };
 }
 
+// Minimal fake Script Properties — settings.js's getSettings() reads from
+// this. Starts empty on every call (so every test gets settings.js's own
+// documented defaults unless a test explicitly sets a property), same
+// idea as makeFakeSpreadsheet() giving each test its own clean sheets.
+function makeFakePropertiesService(){
+  const store = {};
+  const props = {
+    getProperty: function(key){ return store.hasOwnProperty(key) ? store[key] : null; },
+    setProperty: function(key, value){ store[key] = value; }
+  };
+  return { getScriptProperties: function(){ return props; } };
+}
+
 function loadSandbox(fixedToday){
   const fakeSpreadsheet = makeFakeSpreadsheet();
   const sandbox = {
     SpreadsheetApp: { getActiveSpreadsheet: function(){ return fakeSpreadsheet; } },
+    PropertiesService: makeFakePropertiesService(),
     Utilities: { formatDate: function(){ return ""; } },
     Session: { getScriptTimeZone: function(){ return "UTC"; } },
     Logger: { log: function(){} },
@@ -118,9 +132,10 @@ function loadSandbox(fixedToday){
   // at the TOP LEVEL (PLANNER_CATEGORIES is computed immediately on
   // load, not inside a function) — category.js must load first. PWA.js
   // supplies isCreditCardBillPayment/isWalletTopUp; needWantSaving.js
-  // supplies isLendingTransfer — planner.js's exclusion checks call all
-  // three directly, same pattern as getMonthlyAnalysis.
-  ["needWantSaving.js", "category.js", "PWA.js", "planner.js"].forEach(function(filename){
+  // supplies isLendingTransfer; settings.js supplies getSettings() (used
+  // by the Planner overview's Savings+Investment target) — planner.js
+  // calls all four directly, same pattern as getMonthlyAnalysis.
+  ["needWantSaving.js", "category.js", "settings.js", "PWA.js", "planner.js"].forEach(function(filename){
     const src = fs.readFileSync(path.join(__dirname, "..", filename), "utf8");
     vm.runInContext(src, sandbox, { filename: filename });
   });
@@ -174,7 +189,10 @@ const txnData_A = [
   mkTxnRow("2026-08-01", "debit", "neft", 15000, { note: "Rent payment", category: "Bills", financialEvent: "Rent" }),
   mkTxnRow("2026-08-01", "debit", "upi",  5000,  { note: "credit card bill payment", category: "Financial", counterparty: "HDFC CREDIT CARD" }),
   mkTxnRow("2026-08-01", "debit", "wallet", 2000, { note: "top up", category: "Financial", counterparty: "PayZapp Wallet", reference: "REF123" }),
-  mkTxnRow("2026-08-01", "debit", "upi", 750, { note: "lent to friend", category: "Financial", counterparty: "FRIEND X" })
+  mkTxnRow("2026-08-01", "debit", "upi", 750, { note: "lent to friend", category: "Financial", counterparty: "FRIEND X" }),
+
+  // Real income this month — for the overview's income figure.
+  mkTxnRow("2026-08-01", "credit", "upi", 55000, { note: "Salary", category: "Income" })
 ];
 
 const cashData_A = [
@@ -350,5 +368,82 @@ assertEqual(badNegative.ok, false, "a negative target is rejected");
 
 const badIncome = sandbox_A.saveBudgets("2026-08", [{ category: "Income", split: false, target: 100 }]);
 assertEqual(badIncome.ok, false, "Income is rejected — it's not a Planner spend category");
+
+/* =======================================================================
+   SCENARIO D — the Planner overview: total income, Needs/Wants/
+   Savings+Investment targets, the 50/30/20 reference, and the single
+   "Unallocated" number (income minus everything planned) — the "big
+   picture" the old manual budget sheet had that per-category targets
+   alone don't give you.
+======================================================================= */
+console.log("\n--- Scenario D: the Planner overview (income, bucket totals, unallocated) ---\n");
+
+// Fresh sandbox — Scenario C's saved Food/Transport budgets must not leak
+// into these assertions.
+const sandbox_D = loadSandbox(today_A);
+const planner_D1 = sandbox_D.getPlannerData("2026-08", txnData_A, cashData_A);
+
+assertEqual(planner_D1.overview.income.actual, 55000, "actual income for the month = the one real Salary credit");
+assertEqual(planner_D1.overview.income.saved, null, "no income override saved yet");
+
+// Needs target = Food.suggested.need (4340) + Transport.suggested.total
+// (1860) — categories with no reliable Need/Want type yet (Bills,
+// Financial, Health, etc.) contribute to neither bucket.
+assertEqual(planner_D1.overview.targets.needs, 6200, "Needs target sums only categories with a real Need portion (Food's Need share + Transport)");
+assertEqual(planner_D1.overview.targets.wants, 6820, "Wants target sums only categories with a real Want portion (Food's Want share)");
+// Settings were never customized in this sandbox -> defaults apply
+// (monthlySaveGoal 1000, monthlyInvestmentGoal 0 — see settings.js).
+assertEqual(planner_D1.overview.targets.savingsInvestment, 1000, "Savings+Investment target = Settings' monthlySaveGoal + monthlyInvestmentGoal defaults (1000 + 0)");
+
+assertEqual(planner_D1.overview.referenceSplit.Need, 0.5, "the reference split is the fixed 50/30/20 rule of thumb, not something computed");
+assertEqual(planner_D1.overview.referenceSplit.Want, 0.3, "reference Want = 30%");
+assertEqual(planner_D1.overview.referenceSplit.SavingsInvestment, 0.2, "reference Savings+Investment = 20%");
+
+// Unallocated = actual income (55000, nothing saved yet) - (6200+6820+1000).
+assertEqual(planner_D1.overview.unallocated, 40980, "unallocated = income minus everything currently planned");
+
+// Actual (Track view) sums the SAME raw per-category Need/Want/Saving/
+// Investment/Untagged breakdown across every category, regardless of
+// whether that category itself shows as split.
+assertEqual(planner_D1.overview.actual.needs, 1000, "actual Needs = Food's real Need spend (700) + Transport's real spend (300)");
+assertEqual(planner_D1.overview.actual.wants, 1100, "actual Wants = Food's real Want spend (900 card + 200 cash)");
+assertEqual(planner_D1.overview.actual.savingsInvestment, 0, "no Saving/Investment-tagged spend in this fixture");
+assertEqual(planner_D1.overview.actual.untagged, 1000, "actual untagged = Bills' one untagged Electricity row");
+
+// --- Saving an income override changes unallocated, and is honestly
+// reported back as `saved` rather than blended into `actual`. ---
+const saveIncome1 = sandbox_D.saveBudgets("2026-08", [{ category: "Transport", split: false, target: 2000 }], 50000);
+assertEqual(saveIncome1.ok, true, "saving budgets with an income override succeeds");
+const planner_D2 = sandbox_D.getPlannerData("2026-08", txnData_A, cashData_A);
+assertEqual(planner_D2.overview.income.saved, 50000, "the saved income override reads back correctly");
+assertEqual(planner_D2.overview.income.actual, 55000, "actual income is unaffected by the override — both are shown, never blended");
+// Needs target is now Food's suggested need (4340, unchanged) + the
+// just-saved Transport target (2000, was suggested 1860) = 6340.
+assertEqual(planner_D2.overview.targets.needs, 6340, "Needs target picks up the newly-saved Transport target, not its old suggestion");
+// Unallocated now uses the SAVED income (50000), not actual (55000):
+// 50000 - (6340 + 6820 + 1000) = 35840.
+assertEqual(planner_D2.overview.unallocated, 35840, "unallocated uses the saved income override once one exists, not actual income");
+
+// --- Saving budgets again WITHOUT mentioning income must NOT wipe the
+// previously-saved override — income and category targets are edited
+// from the same screen but are conceptually separate things. ---
+const saveNoIncome = sandbox_D.saveBudgets("2026-08", [{ category: "Transport", split: false, target: 2500 }]);
+assertEqual(saveNoIncome.ok, true, "a category-only save (no income key at all) still succeeds");
+const planner_D3 = sandbox_D.getPlannerData("2026-08", txnData_A, cashData_A);
+assertEqual(planner_D3.overview.income.saved, 50000, "the earlier saved income override survives a save that didn't mention income at all");
+
+// --- Explicitly clearing the income override (null) removes it, falling
+// back to actual income again. ---
+const clearIncome = sandbox_D.saveBudgets("2026-08", [{ category: "Transport", split: false, target: 2500 }], null);
+assertEqual(clearIncome.ok, true, "explicitly clearing the income override succeeds");
+const planner_D4 = sandbox_D.getPlannerData("2026-08", txnData_A, cashData_A);
+assertEqual(planner_D4.overview.income.saved, null, "an explicit null clears a previously-saved income override");
+assertEqual(planner_D4.overview.unallocated, 55000 - (4340 + 2500 + 6820 + 1000), "unallocated falls back to actual income once the override is cleared");
+
+// --- Validation: a negative income is rejected before anything writes. ---
+const badIncomeAmount = sandbox_D.saveBudgets("2026-08", [{ category: "Transport", split: false, target: 2000 }], -500);
+assertEqual(badIncomeAmount.ok, false, "a negative income override is rejected");
+const planner_D5 = sandbox_D.getPlannerData("2026-08", txnData_A, cashData_A);
+assertEqual(planner_D5.overview.income.saved, null, "a rejected income save leaves the previous state untouched (still cleared from the step before)");
 
 console.log("\nDone.");

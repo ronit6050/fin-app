@@ -318,3 +318,193 @@ function addMissingTransactionColumnHeaders(){
 
   return out.join("\n");
 }
+
+
+/* ============================================
+   DATA HEALTH CHECK (read-only, added 2026-09-05)
+   Run by hand from the Apps Script editor. Scans the
+   WHOLE dataset in every active sheet for the kind of
+   thing that causes "something feels off" — inconsistent
+   spellings/casing in a column that should only ever hold
+   a few fixed values, a number accidentally saved as text
+   (which can silently break math elsewhere), a date saved
+   as text, a Reference number that shows up on more than
+   one Transactions row (a possible double-logged
+   transaction), and blank fields that should never be
+   blank. Reports counts and a few example row numbers —
+   never dumps full rows — so it's safe to copy/paste back
+   even though this touches real financial data. Changes
+   nothing.
+============================================ */
+function checkDataHealth(){
+
+  const out = [];
+  const log = (s) => { out.push(s); Logger.log(s); };
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetDataCache = {};
+  function getData(name){
+    if(!(name in sheetDataCache)){
+      const sheet = ss.getSheetByName(name);
+      sheetDataCache[name] = sheet ? sheet.getDataRange().getValues() : null;
+    }
+    return sheetDataCache[name];
+  }
+
+  log("===== DATA HEALTH CHECK =====");
+  log("(Read-only — this changes nothing, just reports.)");
+  log("");
+
+  log("--- 1) Value consistency (columns that should only ever hold a few fixed values) ---");
+  const ENUM_CHECKS = [
+    { sheet: "Transactions", col: 4,  label: "Type",           expected: ["debit","credit"] },
+    { sheet: "Transactions", col: 16, label: "Processed",      expected: ["YES",""] },
+    { sheet: "Transactions", col: 17, label: "NeedWantSaving", expected: ["Need","Want","Saving","Investment",""] },
+    { sheet: "Transactions", col: 18, label: "FinancialEvent", expected: ["Rent","EMI","Investment",""] },
+    { sheet: "Cash",         col: 4,  label: "Type",           expected: ["debit","credit"] },
+    { sheet: "Debts",        col: 3,  label: "Type",           expected: ["LENT","BORROWED"] },
+    { sheet: "Debts",        col: 7,  label: "Status",         expected: ["Pending","Settled"] },
+    { sheet: "Goals",        col: 2,  label: "Type",           expected: ["OneTime","Recurring"] },
+    { sheet: "Goals",        col: 4,  label: "Status",         expected: ["Active","Done"] },
+    { sheet: "Savings",      col: 3,  label: "Type",           expected: ["auto","manual","withdraw"] },
+    { sheet: "InvestmentInstruments", col: 2, label: "Category", expected: ["SIP","One-time Fund","Stock","Gold"] },
+    { sheet: "Budgets",      col: 3,  label: "Type",           expected: ["","Need","Want"] }
+  ];
+
+  ENUM_CHECKS.forEach((check) => {
+    const data = getData(check.sheet);
+    if(!data){ log("- " + check.sheet + "." + check.label + ": tab not found, skipped."); return; }
+    const tally = {};
+    for(let i = 1; i < data.length; i++){
+      const raw = data[i][check.col - 1];
+      const val = (raw === null || raw === undefined) ? "" : raw.toString().trim();
+      tally[val] = (tally[val] || 0) + 1;
+    }
+    const values = Object.keys(tally);
+    const unexpected = values.filter((v) => check.expected.indexOf(v) === -1);
+    if(unexpected.length === 0){
+      log("- " + check.sheet + "." + check.label + ": OK — only expected values found (" +
+        values.map((v) => (v === "" ? "blank" : v) + ":" + tally[v]).join(", ") + ").");
+    } else {
+      log("- " + check.sheet + "." + check.label + ": UNEXPECTED VALUE(S) FOUND — " +
+        unexpected.map((v) => "\"" + v + "\" (" + tally[v] + " row(s))").join(", ") +
+        " — expected only: " + check.expected.map((v) => v === "" ? "blank" : v).join(" / "));
+    }
+  });
+
+  log("");
+  log("--- 1b) Transactions.Mode (no fixed list — just showing what's actually there) ---");
+  {
+    const data = getData("Transactions");
+    if(data){
+      const tally = {};
+      for(let i = 1; i < data.length; i++){
+        const val = (data[i][4] || "").toString().trim();
+        tally[val] = (tally[val] || 0) + 1;
+      }
+      const sorted = Object.keys(tally).sort((a, b) => tally[b] - tally[a]);
+      log("  " + sorted.map((v) => (v === "" ? "blank" : v) + ":" + tally[v]).join(", "));
+    }
+  }
+
+  log("");
+  log("--- 2) Numbers accidentally stored as text (can silently break totals/math) ---");
+  const NUMBER_CHECKS = [
+    { sheet: "Transactions", col: 6, label: "Amount" },
+    { sheet: "Cash", col: 5, label: "Amount" },
+    { sheet: "Debts", col: 4, label: "Amount" },
+    { sheet: "Savings", col: 2, label: "Amount" },
+    { sheet: "Investments", col: 3, label: "Amount" },
+    { sheet: "Budgets", col: 4, label: "Target" },
+    { sheet: "FinancialEvents", col: 2, label: "Amount" }
+  ];
+  NUMBER_CHECKS.forEach((check) => {
+    const data = getData(check.sheet);
+    if(!data){ log("- " + check.sheet + "." + check.label + ": tab not found, skipped."); return; }
+    const badRows = [];
+    for(let i = 1; i < data.length; i++){
+      const raw = data[i][check.col - 1];
+      if(raw === "" || raw === null || raw === undefined) continue;
+      if(typeof raw !== "number" && badRows.length < 10) badRows.push(i + 1);
+    }
+    log("- " + check.sheet + "." + check.label + ": " +
+      (badRows.length === 0 ? "OK, all real numbers." :
+        badRows.length + " row(s) stored as TEXT instead of a number — e.g. row(s) " + badRows.join(", ") + "."));
+  });
+
+  log("");
+  log("--- 3) Dates accidentally stored as text ---");
+  const DATE_CHECKS = [
+    { sheet: "Transactions", col: 1, label: "Date" },
+    { sheet: "Cash", col: 2, label: "Date" },
+    { sheet: "Debts", col: 1, label: "Date" },
+    { sheet: "Savings", col: 1, label: "Date" },
+    { sheet: "Investments", col: 1, label: "Date" },
+    { sheet: "FinancialEvents", col: 4, label: "Confirmed" },
+    { sheet: "TypeVotes", col: 4, label: "Timestamp" },
+    { sheet: "NoteMemory", col: 5, label: "LastUsed" },
+    { sheet: "SmartMemory", col: 6, label: "LastUsed" },
+    { sheet: "AILogs", col: 1, label: "Timestamp" }
+  ];
+  DATE_CHECKS.forEach((check) => {
+    const data = getData(check.sheet);
+    if(!data){ log("- " + check.sheet + "." + check.label + ": tab not found, skipped."); return; }
+    const badRows = [];
+    for(let i = 1; i < data.length; i++){
+      const raw = data[i][check.col - 1];
+      if(raw === "" || raw === null || raw === undefined) continue;
+      if(!(raw instanceof Date) && badRows.length < 10) badRows.push(i + 1);
+    }
+    log("- " + check.sheet + "." + check.label + ": " +
+      (badRows.length === 0 ? "OK, all real dates." :
+        badRows.length + " row(s) stored as TEXT instead of a real date — e.g. row(s) " + badRows.join(", ") + "."));
+  });
+
+  log("");
+  log("--- 4) Duplicate Reference numbers on Transactions (possible double-logged transaction) ---");
+  {
+    const data = getData("Transactions");
+    if(data){
+      const seen = {};
+      for(let i = 1; i < data.length; i++){
+        const ref = (data[i][6] || "").toString().trim();
+        if(!ref || ref.indexOf("NOREF_") === 0) continue;
+        if(!seen[ref]) seen[ref] = [];
+        seen[ref].push(i + 1);
+      }
+      const dupes = Object.keys(seen).filter((ref) => seen[ref].length > 1);
+      if(dupes.length === 0){
+        log("- OK, no real Reference number appears on more than one row.");
+      } else {
+        log("- FOUND " + dupes.length + " Reference number(s) appearing on more than one row:");
+        dupes.slice(0, 10).forEach((ref) => {
+          log("    Reference " + ref + " -> row(s) " + seen[ref].join(", "));
+        });
+      }
+    }
+  }
+
+  log("");
+  log("--- 5) Blank fields that shouldn't be blank ---");
+  {
+    const data = getData("Transactions");
+    if(data){
+      const blankAmount = [], blankType = [];
+      for(let i = 1; i < data.length; i++){
+        const amount = data[i][5];
+        const type = (data[i][3] || "").toString().trim();
+        if((amount === "" || amount === null || amount === undefined || Number(amount) === 0) && blankAmount.length < 10) blankAmount.push(i + 1);
+        if(!type && blankType.length < 10) blankType.push(i + 1);
+      }
+      log("- Transactions with a blank/zero Amount: " + blankAmount.length +
+        (blankAmount.length ? " — e.g. row(s) " + blankAmount.join(", ") : ""));
+      log("- Transactions with a blank Type (debit/credit): " + blankType.length +
+        (blankType.length ? " — e.g. row(s) " + blankType.join(", ") : ""));
+    }
+  }
+
+  log("");
+  log("===== END DATA HEALTH CHECK — copy everything above and share it =====");
+
+  return out.join("\n");
+}
