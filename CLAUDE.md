@@ -1083,7 +1083,48 @@ at all — fixed with one new CSS rule
 `--chart-track-bg` token, confirmed correct in both light (`#F1ECE1`)
 and dark (`#2E303B`) mode via actual computed styles in the browser,
 not just a code read. Deployed live via `clasp deploy` (`@313`) and
-pushed to GitHub 2026-09-07 — nothing left pending on Planner.
+pushed to GitHub 2026-09-07.
+
+**Fixed obligations (Rent + EMI) missing from the Overview — found by
+the user testing the live Overview the same day; backend AND frontend
+both done and reviewed 2026-09-07, not yet deployed.** User: "my rent, and
+other fixed expenses are not accounted [for]." Root cause: a confirmed
+Rent/EMI Financial Event is deliberately never blended into ordinary
+category spend (correct for the per-category list — Rent isn't a
+category) — but that also meant the Overview's Needs/Wants/Savings
+totals and `unallocated` silently missed them entirely, even though
+Rent is often the single biggest real "Need." `unallocated` in
+particular looked much bigger than reality, since Rent money is already
+spoken for. Confirmed with the user: Fixed obligations gets its own
+SEPARATE line (not folded into Needs), matching how Analysis/CC Advisor
+already show it. Backend (`backend/planner.js`): a new
+`computeFinancialEventTotals_` helper feeds `overview.targets.
+fixedObligations`/`overview.actual.fixedObligations`, with its own
+saveable override (`_FixedObligations` pseudo-row, same independent
+three-way contract as income — see [docs/features/planner.md](docs/features/planner.md#fixed-obligations-rent--emi--added-2026-09-07)).
+**One real methodology bug caught before shipping, not by a reviewer
+this time but by reasoning through the math**: the suggested figure
+deliberately does NOT get scaled up like ordinary category spend does —
+Rent is a fixed lump paid once a month, not a daily rate, so scaling a
+Rent payment seen on day 5 by 31/5 would have suggested a fictional
+₹93,000 "monthly rent" instead of the real ₹15,000. Also fixed in the
+same pass: a confirmed SIP/Investment Financial Event now counts toward
+`overview.actual.savingsInvestment`, which it didn't before (same root
+cause). New tests (`backend/tests/planner.test.js`, Scenario E) prove
+the no-scaling behavior directly and prove income/fixed-obligations
+save independently of each other. Full 16-file backend suite passes.
+**Frontend done same day**: a 4th, directly-editable row on the Big
+Picture card (Set targets) and a matching progress bar (Track
+progress), reusing existing classes/tokens — no new CSS colors. Save
+plan now always sends both `income` and `fixedObligations` together.
+`change-reviewer` checked the full diff (backend + frontend): confirmed
+the no-scaling math is real in the code (not just the comment) in both
+suggestion branches, confirmed the two overrides truly never cross-touch
+each other, confirmed no double-counting between Fixed obligations and
+ordinary category totals, ran the full test suite itself (all pass), and
+found no dark-mode/contrast issues (no new colors were even added).
+Deployed live via `clasp deploy` (`@314`) 2026-09-07 — nothing left
+pending on Planner.
 
 **Two real bugs found and fixed 2026-08-25, backend-only, `clasp push`ed
 to the editor draft, NOT yet `clasp deploy`ed live:**

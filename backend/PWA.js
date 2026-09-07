@@ -220,7 +220,7 @@ function handlePwaRequest(data){
   }
 
   if(data.action === "saveBudgets"){
-    return jsonResponse(saveBudgets(data.month, data.budgets, data.income));
+    return jsonResponse(saveBudgets(data.month, data.budgets, data.income, data.fixedObligations));
   }
 
   return jsonResponse({ ok:false, error:"Unknown action." });

@@ -3339,8 +3339,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-09-07-01";
-    const APP_CHANGELOG = "Planner now shows a big-picture summary card: your income vs. the standard 50/30/20 Need/Want/Saving split.";
+    const APP_VERSION = "2026-09-07-02";
+    const APP_CHANGELOG = "Planner's big-picture card now also shows Fixed obligations (Rent + EMI) as its own editable line, so Unallocated accounts for it too.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -4560,6 +4560,11 @@
     // real category name.
     const PLANNER_INCOME_KEY = "_Income";
 
+    // Same idea, for a saved Fixed Obligations (Rent + EMI) override —
+    // mirrors PLANNER_FIXED_OBLIGATIONS_KEY in backend/planner.js
+    // (added 2026-09-07).
+    const PLANNER_FIXED_OBLIGATIONS_KEY = "_FixedObligations";
+
     // -----------------------------------------------------------
     // THE PRETEND DATASET — tweak the numbers/names below any time you
     // want Demo Mode to show something different. Everything else in
@@ -5073,6 +5078,25 @@
       return { Need: 0, Want: 0, Saving: 0, Investment: 0, Untagged: 0, total: 0 };
     }
 
+    // Real Rent+EMI ("fixedObligations") and confirmed Investment
+    // ("invested") spend for whatever date window matchesDate(d) selects —
+    // mirrors computeFinancialEventTotals_ in backend/planner.js. These
+    // rows are DELIBERATELY skipped by demoPlannerBreakdown below (a
+    // confirmed Financial Event is never blended into ordinary category
+    // spend), so the Overview needs this separate pass to see Rent/EMI/a
+    // SIP at all (2026-09-07 — see docs/features/planner.md's "Fixed
+    // obligations" section for why).
+    function demoComputeFinancialEventTotals(matchesDate) {
+      let fixedObligations = 0, invested = 0;
+      demoState.transactions.forEach(function (t) {
+        if (t.type !== "debit" || !t.financialEvent) return;
+        if (!matchesDate(t.date)) return;
+        if (t.financialEvent === "Rent" || t.financialEvent === "EMI") fixedObligations += t.amount;
+        else if (t.financialEvent === "Investment") invested += t.amount;
+      });
+      return { fixedObligations: fixedObligations, invested: invested };
+    }
+
     function demoPlannerBreakdown(matchesDate) {
       const result = {};
       function bucketFor(cat) { if (!result[cat]) result[cat] = demoPlannerZeroBucket(); return result[cat]; }
@@ -5145,7 +5169,19 @@
       });
       const factor = dayOfMonth > 0 ? (daysInMonth / dayOfMonth) : 1;
 
+      // Suggested Fixed obligations — deliberately NOT scaled by `factor`
+      // like ordinary category spend above (Rent/EMI/a SIP is a fixed
+      // lump paid once a month, not a daily rate — see
+      // computeSuggestedTargets_'s own comment in backend/planner.js for
+      // why scaling it would invent a fictional huge "monthly rent").
+      const feSuggested = demoComputeFinancialEventTotals(function (d) {
+        return d.getFullYear() === y && (d.getMonth() + 1) === m && d.getDate() <= dayOfMonth;
+      });
+
       const actualBreakdown = demoPlannerBreakdown(function (d) {
+        return d.getFullYear() === target.year && (d.getMonth() + 1) === target.month;
+      });
+      const feActual = demoComputeFinancialEventTotals(function (d) {
         return d.getFullYear() === target.year && (d.getMonth() + 1) === target.month;
       });
 
@@ -5185,7 +5221,7 @@
         return { category: cat, split: isSplit, type: isSplit ? null : (dominantType || null), suggested: suggested, saved: saved, actual: actual };
       });
 
-      const overview = demoComputePlannerOverview(categories, actualBreakdown, savedMap, target);
+      const overview = demoComputePlannerOverview(categories, actualBreakdown, savedMap, target, feSuggested, feActual);
 
       return {
         month: target.key,
@@ -5216,8 +5252,11 @@
     // docs/features/planner.md's "Overview" section for the field-by-field
     // meaning) — reusing the same `categories`/`actualBreakdown`/`savedMap`
     // demoComputePlannerData already computed above, no extra pass over
-    // demoState needed beyond the income lookup.
-    function demoComputePlannerOverview(categories, actualBreakdown, savedMap, target) {
+    // demoState needed beyond the income lookup. `feSuggested`/`feActual`
+    // are demoComputeFinancialEventTotals() results (2026-09-07 — see that
+    // function's own comment) for the suggested/actual Fixed obligations
+    // figures respectively.
+    function demoComputePlannerOverview(categories, actualBreakdown, savedMap, target, feSuggested, feActual) {
       const settings = demoState.settings;
       const savingsInvestmentTarget = (settings.monthlySaveGoal || 0) + (settings.monthlyInvestmentGoal || 0);
 
@@ -5233,7 +5272,17 @@
           wantsTarget += src.total || 0;
         }
       });
-      const totalPlanned = needsTarget + wantsTarget + savingsInvestmentTarget;
+
+      // Fixed obligations (Rent + EMI) — a SEPARATE line from Needs, same
+      // as the real backend (buildPlannerOverview_). Prefer a saved
+      // override, else the suggested (unscaled) Rent+EMI total computed
+      // above.
+      const savedFixedRow = savedMap[PLANNER_FIXED_OBLIGATIONS_KEY];
+      const savedFixedObligations = (savedFixedRow && savedFixedRow.hasOwnProperty("")) ? savedFixedRow[""] : null;
+      const suggestedFixedObligations = (feSuggested && feSuggested.fixedObligations) || 0;
+      const fixedObligationsTarget = savedFixedObligations !== null ? savedFixedObligations : suggestedFixedObligations;
+
+      const totalPlanned = needsTarget + wantsTarget + savingsInvestmentTarget + fixedObligationsTarget;
 
       const savedIncomeRow = savedMap[PLANNER_INCOME_KEY];
       const savedIncome = (savedIncomeRow && savedIncomeRow.hasOwnProperty("")) ? savedIncomeRow[""] : null;
@@ -5250,20 +5299,29 @@
         actualUntagged   += b.Untagged;
       });
 
+      // A confirmed Investment Financial Event (a real SIP) also counts
+      // toward actual Savings+Investment, same fix as the real backend
+      // (it's a Financial Event, never a category-tagged "Investment", so
+      // actualBreakdown above never sees it).
+      const actualInvestedFE = (feActual && feActual.invested) || 0;
+      const actualFixedObligations = (feActual && feActual.fixedObligations) || 0;
+
       return {
         income: { actual: Math.round(actualIncome), saved: savedIncome === null ? null : Math.round(savedIncome) },
         targets: {
           needs: Math.round(needsTarget),
           wants: Math.round(wantsTarget),
-          savingsInvestment: Math.round(savingsInvestmentTarget)
+          savingsInvestment: Math.round(savingsInvestmentTarget),
+          fixedObligations: Math.round(fixedObligationsTarget)
         },
         referenceSplit: { Need: 0.5, Want: 0.3, SavingsInvestment: 0.2 },
         unallocated: Math.round(incomeForCalc - totalPlanned),
         actual: {
           needs: Math.round(actualNeeds),
           wants: Math.round(actualWants),
-          savingsInvestment: Math.round(actualSaving + actualInvestment),
-          untagged: Math.round(actualUntagged)
+          savingsInvestment: Math.round(actualSaving + actualInvestment + actualInvestedFE),
+          untagged: Math.round(actualUntagged),
+          fixedObligations: Math.round(actualFixedObligations)
         }
       };
     }
@@ -5271,12 +5329,14 @@
     // Full-replace save, mirroring saveBudgets() in backend/planner.js —
     // every existing CATEGORY row for the month is dropped first, then the
     // new set is added, so re-saving a month never leaves stale
-    // duplicates. `income` is the same three-way contract the real backend
-    // uses (see docs/features/planner.md's "Saving the income override"):
-    // undefined = leave a saved override untouched, null/"" = clear it, a
-    // number = save/replace it — stored as the same PLANNER_INCOME_KEY
-    // pseudo-category row the real Budgets sheet uses.
-    function demoSaveBudgets(monthStr, budgets, income) {
+    // duplicates. `income`/`fixedObligations` share the SAME three-way
+    // contract the real backend uses (see docs/features/planner.md's
+    // "Saving the income and fixed-obligations overrides"): undefined =
+    // leave a saved override untouched, null/"" = clear it, a number =
+    // save/replace it — each stored as its own pseudo-category row
+    // (PLANNER_INCOME_KEY / PLANNER_FIXED_OBLIGATIONS_KEY) the real
+    // Budgets sheet uses, completely independent of each other.
+    function demoSaveBudgets(monthStr, budgets, income, fixedObligations) {
       const m = (monthStr || "").toString().trim();
       if (!/^\d{4}-\d{2}$/.test(m)) return { ok: false, error: "Enter a valid month." };
       if (!Array.isArray(budgets) || budgets.length === 0) return { ok: false, error: "No budget targets received." };
@@ -5288,8 +5348,16 @@
         if (!(incomeToWrite >= 0)) return { ok: false, error: "Enter a valid income amount." };
       }
 
+      const fixedProvided = fixedObligations !== undefined;
+      let fixedToWrite = null;
+      if (fixedProvided && fixedObligations !== null && fixedObligations !== "") {
+        fixedToWrite = Number(fixedObligations);
+        if (!(fixedToWrite >= 0)) return { ok: false, error: "Enter a valid fixed obligations amount." };
+      }
+
       const rows = [];
       if (incomeToWrite !== null) rows.push({ month: m, category: PLANNER_INCOME_KEY, type: "", target: incomeToWrite });
+      if (fixedToWrite !== null) rows.push({ month: m, category: PLANNER_FIXED_OBLIGATIONS_KEY, type: "", target: fixedToWrite });
 
       for (let i = 0; i < budgets.length; i++) {
         const b = budgets[i] || {};
@@ -5307,12 +5375,15 @@
         }
       }
 
-      // Full replace for real category rows; the saved income row is only
-      // ever dropped when this call actually provided a fresh income value
-      // — left completely alone otherwise (same rule as the real backend).
+      // Full replace for real category rows; the saved income/fixed-
+      // obligations rows are each only ever dropped when this call
+      // actually provided that specific value — left completely alone
+      // otherwise (same rule as the real backend), independent of each
+      // other.
       demoState.budgets = demoState.budgets.filter(function (row) {
         if (row.month !== m) return true;
         if (row.category === PLANNER_INCOME_KEY && !incomeProvided) return true;
+        if (row.category === PLANNER_FIXED_OBLIGATIONS_KEY && !fixedProvided) return true;
         return false;
       }).concat(rows);
 
@@ -5687,7 +5758,7 @@
           case "updateSettings": return demoUpdateSettings(data.settings);
           case "getTransactionHistory": return Object.assign({ ok: true }, demoComputeHistory(data.offset, data.limit), { knownDebtPeople: demoKnownDebtPeople() });
           case "getPlannerData": return { ok: true, planner: demoComputePlannerData(data.month) };
-          case "saveBudgets": return demoSaveBudgets(data.month, data.budgets, data.income);
+          case "saveBudgets": return demoSaveBudgets(data.month, data.budgets, data.income, data.fixedObligations);
           default: return { ok: false, error: "Unknown action." };
         }
       } catch (err) {
@@ -10526,10 +10597,20 @@
     ];
 
     let plannerIncomeInputEl = null; // (re)assigned each time the Set view's overview card is (re)built
+    let plannerFixedObligationsInputEl = null; // same, for the Fixed obligations (Rent + EMI) input added 2026-09-07
 
     function plannerIncomeInputValue() {
       if (!plannerIncomeInputEl) return 0;
       const n = parseFloat(plannerIncomeInputEl.value);
+      return isNaN(n) ? 0 : n;
+    }
+
+    // Fixed obligations is a directly-editable figure, like income — never
+    // a computed bucket like Needs/Wants — so it's always read live from
+    // its own input, same reasoning as plannerIncomeInputValue() above.
+    function plannerFixedObligationsInputValue() {
+      if (!plannerFixedObligationsInputEl) return 0;
+      const n = parseFloat(plannerFixedObligationsInputEl.value);
       return isNaN(n) ? 0 : n;
     }
 
@@ -10571,6 +10652,31 @@
         `;
       }).join("");
 
+      // Fixed obligations (Rent + EMI) — a SEPARATE, directly-editable
+      // amount (added 2026-09-07), NOT a computed bucket like Needs/Wants/
+      // Savings+Investment above (those are read-only totals driven by the
+      // per-category cards below). Reuses .planner-bucket-row for the same
+      // spacing/rhythm as the three bucket rows, and the exact same
+      // .planner-income-input-wrap/.planner-income-currency markup the
+      // income input above already uses — no bar/reference tick here on
+      // purpose, since the backend's referenceSplit (50/30/20) deliberately
+      // only covers Needs/Wants/Savings+Investment (same reason Analysis's
+      // own "Fixed obligations" pill sits outside its Need/Want/Saving/
+      // Investment chart).
+      const fixedVal = Math.round(ov.targets.fixedObligations || 0);
+      const fixedRowHtml = `
+        <div class="planner-bucket-row" data-bucket="fixedObligations">
+          <div class="planner-bucket-top">
+            <label for="plannerFixedObligationsInput" class="planner-bucket-label">Fixed obligations (Rent + EMI)</label>
+          </div>
+          <div class="planner-income-input-wrap">
+            <span class="planner-income-currency">₹</span>
+            <input type="number" inputmode="numeric" min="0" step="1" id="plannerFixedObligationsInput" value="${fixedVal}">
+          </div>
+          <p class="planner-suggestion-note" id="plannerFixedObligationsCaption" style="margin:6px 0 0;">starts from your recent Rent/EMI payments (or your last saved figure, if you've set one) — edit any time, e.g. ahead of a rent increase.</p>
+        </div>
+      `;
+
       plannerOverviewCardEl.innerHTML = `
         <div class="planner-overview-head">Big picture — this month</div>
         <div class="field">
@@ -10582,6 +10688,7 @@
         </div>
         <p class="planner-suggestion-note" id="plannerIncomeCaption" style="margin:-8px 0 14px;">${caption}.</p>
         ${bucketsHtml}
+        ${fixedRowHtml}
         <div class="planner-unalloc-row">
           <span class="planner-unalloc-label">Unallocated</span>
           <span class="status-pill" id="plannerUnallocPill"></span>
@@ -10591,6 +10698,12 @@
       plannerIncomeInputEl = document.getElementById("plannerIncomeInput");
       plannerIncomeInputEl.addEventListener("input", function () {
         document.getElementById("plannerIncomeCaption").textContent = "your own figure.";
+        updatePlannerOverviewSetLive(p);
+      });
+
+      plannerFixedObligationsInputEl = document.getElementById("plannerFixedObligationsInput");
+      plannerFixedObligationsInputEl.addEventListener("input", function () {
+        document.getElementById("plannerFixedObligationsCaption").textContent = "your own figure.";
         updatePlannerOverviewSetLive(p);
       });
 
@@ -10692,6 +10805,13 @@
         row.querySelector('[data-role="refnote"]').textContent = "Reference (50/30/20 rule): " + refPct + "%";
       });
 
+      // Fixed obligations is its own directly-editable input, not part of
+      // PLANNER_OVERVIEW_BUCKETS/the 50/30/20 reference above — but it
+      // still counts toward what's "allocated" out of income, same as the
+      // real backend's unallocated formula (income - needs - wants -
+      // savingsInvestment - fixedObligations).
+      allocated += plannerFixedObligationsInputValue();
+
       const unallocated = income - allocated;
       const pill = document.getElementById("plannerUnallocPill");
       if (!pill) return;
@@ -10715,6 +10835,16 @@
         return buildPlannerSubBar(b.label, ov.actual[b.key] || 0, ov.targets[b.key] || 0, b.fill);
       }).join("");
 
+      // Fixed obligations (Rent + EMI) — same buildPlannerSubBar bar
+      // pattern as the three buckets above (so the over/near-target status
+      // colors are consistent), just not part of PLANNER_OVERVIEW_BUCKETS
+      // since the Set view treats it as a plain editable amount, not a
+      // %-of-income bar with a 50/30/20 reference tick. --chart-other is
+      // reused as its color — a neutral, already-vetted-for-contrast chart
+      // token — since Fixed obligations isn't a Need/Want/Saving bucket
+      // and this project deliberately never invents new color tokens.
+      const fixedRowHtml = buildPlannerSubBar("Fixed obligations (Rent + EMI)", ov.actual.fixedObligations || 0, ov.targets.fixedObligations || 0, "var(--chart-other)");
+
       const untaggedNote = ov.actual.untagged > 0
         ? `<p class="planner-track-of" style="margin:10px 0 0;">₹${Math.round(ov.actual.untagged).toLocaleString("en-IN")} of this month's spend isn't tagged Need, Want, Saving, or Investment yet, so it isn't counted above.</p>`
         : "";
@@ -10722,6 +10852,7 @@
       plannerOverviewCardEl.innerHTML = `
         <div class="planner-overview-head">Big picture — this month</div>
         ${rowsHtml}
+        ${fixedRowHtml}
         ${untaggedNote}
       `;
     }
@@ -10992,6 +11123,13 @@
       const incomeRaw = plannerIncomeInputEl ? plannerIncomeInputEl.value.trim() : "";
       const incomeToSend = incomeRaw === "" ? null : Math.max(0, parseFloat(incomeRaw) || 0);
 
+      // Fixed obligations override — same ALWAYS-sent, three-way contract
+      // as income above (docs/features/planner.md's "Saving the income and
+      // fixed-obligations overrides"), sent as its own independent field so
+      // editing one never silently touches the other.
+      const fixedRaw = plannerFixedObligationsInputEl ? plannerFixedObligationsInputEl.value.trim() : "";
+      const fixedToSend = fixedRaw === "" ? null : Math.max(0, parseFloat(fixedRaw) || 0);
+
       const snapshot = JSON.parse(JSON.stringify(plannerLastData));
 
       plannerLastData.categories.forEach(function (c) {
@@ -11015,10 +11153,24 @@
         const t = plannerOverviewTargetsFromCategories(plannerLastData.categories);
         plannerLastData.overview.targets.needs = t.needs;
         plannerLastData.overview.targets.wants = t.wants;
+        // Fixed obligations, unlike income, has no exposed "actual" figure
+        // to fall back to on the frontend (its resolved target is always
+        // whichever of saved-override/suggestion the BACKEND already
+        // picked — see docs/features/planner.md's "Fixed obligations"
+        // section). So a real number typed in can be shown optimistically
+        // right away (we know exactly what was just saved); but clearing
+        // it (fixedToSend === null) can't be — we genuinely don't know
+        // what the reverted suggested figure is without asking the server,
+        // so that one case is left showing its last-known value here and
+        // corrected by the real reload triggered in the success handler
+        // below. Same kind of deliberate "wait for the server" exception
+        // Savings' Auto Split already makes when it doesn't have a fresh
+        // preview in hand.
+        if (fixedToSend !== null) plannerLastData.overview.targets.fixedObligations = fixedToSend;
         const incomeForCalc = (plannerLastData.overview.income.saved !== null && plannerLastData.overview.income.saved !== undefined)
           ? plannerLastData.overview.income.saved
           : plannerLastData.overview.income.actual;
-        const totalPlanned = plannerLastData.overview.targets.needs + plannerLastData.overview.targets.wants + plannerLastData.overview.targets.savingsInvestment;
+        const totalPlanned = plannerLastData.overview.targets.needs + plannerLastData.overview.targets.wants + plannerLastData.overview.targets.savingsInvestment + (plannerLastData.overview.targets.fixedObligations || 0);
         plannerLastData.overview.unallocated = Math.round(incomeForCalc - totalPlanned);
       }
 
@@ -11027,13 +11179,19 @@
       renderPlannerOverview(plannerLastData); // always Set view here (Save only lives on that view) — rebuilds the income box to show its new definitive value (e.g. the real actual figure again if you just cleared an override)
       plannerSaveResultEl.textContent = "Saved.";
 
-      callAppsScript({ action: "saveBudgets", idToken: currentUser.idToken, month: monthKey, budgets: budgets, income: incomeToSend })
+      callAppsScript({ action: "saveBudgets", idToken: currentUser.idToken, month: monthKey, budgets: budgets, income: incomeToSend, fixedObligations: fixedToSend })
         .then(function (data) {
           if (!data.ok) {
             plannerLastData = snapshot;
             saveCache("planner_" + monthKey, plannerLastData);
             renderPlannerTrack(plannerLastData);
             plannerSaveResultEl.textContent = "Couldn't save (" + data.error + ") — check your connection, your numbers are still here, then try again.";
+          } else if (fixedToSend === null) {
+            // Cleared the Fixed obligations override — refetch for real so
+            // the correct reverted (suggested) figure shows, since it
+            // can't be computed from data already on the frontend (see the
+            // comment above).
+            loadPlanner();
           }
         })
         .catch(function (err) {

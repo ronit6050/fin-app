@@ -56,6 +56,11 @@ const PLANNER_REFERENCE_SPLIT = { Need: 0.5, Want: 0.3, SavingsInvestment: 0.2 }
 // set a spend target for.
 const PLANNER_INCOME_KEY = "_Income";
 
+// Same idea as PLANNER_INCOME_KEY, for a saved Fixed Obligations (Rent +
+// EMI) override — see buildPlannerOverview_'s comment for why this
+// exists as its own pseudo-category rather than folded into Needs.
+const PLANNER_FIXED_OBLIGATIONS_KEY = "_FixedObligations";
+
 /* ============================================
    SHEET ACCESS
 ============================================ */
@@ -279,6 +284,34 @@ function scaleCategoryBreakdown_(breakdown, factor){
   return out;
 }
 
+// Real Rent+EMI ("fixed obligations") and confirmed SIP/Investment
+// spend (column R, a confirmed Financial Event — see financialEvents.js)
+// for whatever date window matchesDate(d) selects. These rows are
+// DELIBERATELY skipped by computeCategoryTypeBreakdown_ above (a
+// Financial Event is never blended into ordinary category spend) — which
+// is correct for the per-category list, but means the Overview's
+// Needs/Wants/Savings totals were missing them entirely until this was
+// added (2026-09-07, found by the user testing: "my rent... are not
+// accounted for"). Cash is never involved — Rent/EMI/SIP payments are
+// always bank transactions in this app, Cash has no FinancialEvent
+// column at all.
+function computeFinancialEventTotals_(txnData, matchesDate){
+  let fixedObligations = 0, invested = 0;
+  for(let i = 1; i < txnData.length; i++){
+    const rawDate = txnData[i][0];
+    if(!rawDate) continue;
+    const d = new Date(rawDate);
+    if(!matchesDate(d)) continue;
+    const type = (txnData[i][3] || "").toString().toLowerCase();
+    if(type !== "debit") continue;
+    const amount = Number(txnData[i][5]) || 0;
+    const financialEvent = (txnData[i][17] || "").toString().trim();
+    if(financialEvent === "Rent" || financialEvent === "EMI") fixedObligations += amount;
+    else if(financialEvent === "Investment") invested += amount;
+  }
+  return { fixedObligations: fixedObligations, invested: invested };
+}
+
 /* ============================================
    SUGGESTED TARGET
    ============================================
@@ -298,16 +331,20 @@ function computeSuggestedTargets_(txnData, cashData, today){
 
   if(completeMonths.length > 0){
     let sum = {};
+    let feFixed = 0, feInvested = 0;
     completeMonths.forEach(function(ym){
-      const monthBreakdown = computeCategoryTypeBreakdown_(txnData, cashData, function(d){
-        return d.getFullYear() === ym.year && (d.getMonth() + 1) === ym.month;
-      });
+      const matchesDate = function(d){ return d.getFullYear() === ym.year && (d.getMonth() + 1) === ym.month; };
+      const monthBreakdown = computeCategoryTypeBreakdown_(txnData, cashData, matchesDate);
       sum = mergeCategoryBreakdown_(sum, monthBreakdown);
+      const fe = computeFinancialEventTotals_(txnData, matchesDate);
+      feFixed += fe.fixedObligations;
+      feInvested += fe.invested;
     });
     return {
       source: "average",
       monthsUsed: completeMonths.length,
-      breakdown: divideCategoryBreakdown_(sum, completeMonths.length)
+      breakdown: divideCategoryBreakdown_(sum, completeMonths.length),
+      financialEvents: { fixedObligations: feFixed / completeMonths.length, invested: feInvested / completeMonths.length }
     };
   }
 
@@ -317,16 +354,27 @@ function computeSuggestedTargets_(txnData, cashData, today){
   const dayOfMonth  = today.getDate();
   const daysInMonth = new Date(y, m, 0).getDate();
 
-  const partial = computeCategoryTypeBreakdown_(txnData, cashData, function(d){
+  const matchesPartial = function(d){
     return d >= reliableStart && d.getFullYear() === y && (d.getMonth() + 1) === m && d.getDate() <= dayOfMonth;
-  });
+  };
+  const partial = computeCategoryTypeBreakdown_(txnData, cashData, matchesPartial);
+  const fePartial = computeFinancialEventTotals_(txnData, matchesPartial);
   const factor = dayOfMonth > 0 ? (daysInMonth / dayOfMonth) : 1;
 
   return {
     source: "scaledPartialMonth",
     daysElapsed: dayOfMonth,
     daysInMonth: daysInMonth,
-    breakdown: scaleCategoryBreakdown_(partial, factor)
+    breakdown: scaleCategoryBreakdown_(partial, factor),
+    // Deliberately NOT scaled by `factor` like ordinary category spend
+    // above — Rent/EMI/a SIP are a fixed lump paid once (or a few fixed
+    // times) a month, not a daily rate that adds up as the month goes.
+    // Scaling a Rent payment seen on day 5 by 31/5 would suggest a
+    // fictional ₹93,000 "monthly rent" instead of the real ₹15,000.
+    // Using the raw partial total means: once it's actually posted this
+    // month, the suggestion is exactly right; before it posts, the
+    // suggestion is honestly 0 rather than a guess.
+    financialEvents: { fixedObligations: fePartial.fixedObligations, invested: fePartial.invested }
   };
 }
 
@@ -426,7 +474,7 @@ function getPlannerData(monthStr, txnData, cashData){
     };
   });
 
-  const overview = buildPlannerOverview_(categories, actualBreakdown, savedMap, txnData, targetMonth);
+  const overview = buildPlannerOverview_(categories, actualBreakdown, savedMap, txnData, targetMonth, suggestionInfo.financialEvents);
 
   return {
     month: targetMonth.key,
@@ -447,7 +495,13 @@ function getPlannerData(monthStr, txnData, cashData){
    the Needs/Wants totals below are already summed automatically from
    your per-category targets.
 ============================================ */
-function buildPlannerOverview_(categories, actualBreakdown, savedMap, txnData, targetMonth){
+// suggestedFinancialEvents = { fixedObligations, invested }, the same
+// averaged/scaled figures computeSuggestedTargets_ already computes for
+// the per-category suggestions (2026-09-07 — see computeFinancialEventTotals_'s
+// comment for why this exists as a separate input rather than something
+// derivable from `categories`/`actualBreakdown`, which never see
+// Financial Event rows at all).
+function buildPlannerOverview_(categories, actualBreakdown, savedMap, txnData, targetMonth, suggestedFinancialEvents){
   const settings = getSettings();
   const savingsInvestmentTarget = (settings.monthlySaveGoal || 0) + (settings.monthlyInvestmentGoal || 0);
 
@@ -470,7 +524,17 @@ function buildPlannerOverview_(categories, actualBreakdown, savedMap, txnData, t
     }
   });
 
-  const totalPlanned = needsTarget + wantsTarget + savingsInvestmentTarget;
+  // Fixed obligations (Rent + EMI) — a SEPARATE line from Needs, same as
+  // Analysis/CC Advisor already show it, rather than folded into Needs
+  // (confirmed with the user 2026-09-07). Prefer a saved override (in
+  // case rent just went up), else the same averaged/scaled suggestion
+  // used for every other Planner figure.
+  const savedFixedRow = savedMap[PLANNER_FIXED_OBLIGATIONS_KEY];
+  const savedFixedObligations = (savedFixedRow && savedFixedRow.hasOwnProperty("")) ? savedFixedRow[""] : null;
+  const suggestedFixedObligations = (suggestedFinancialEvents && suggestedFinancialEvents.fixedObligations) || 0;
+  const fixedObligationsTarget = savedFixedObligations !== null ? savedFixedObligations : suggestedFixedObligations;
+
+  const totalPlanned = needsTarget + wantsTarget + savingsInvestmentTarget + fixedObligationsTarget;
 
   const savedIncomeRow = savedMap[PLANNER_INCOME_KEY];
   const savedIncome = (savedIncomeRow && savedIncomeRow.hasOwnProperty("")) ? savedIncomeRow[""] : null;
@@ -490,22 +554,48 @@ function buildPlannerOverview_(categories, actualBreakdown, savedMap, txnData, t
     actualUntagged   += b.Untagged;
   });
 
+  // Real Rent+EMI and confirmed SIP/Investment spend for the REQUESTED
+  // month — a confirmed Financial Event Investment now also counts
+  // toward actual Savings+Investment (2026-09-07 fix: it didn't before,
+  // since it's a Financial Event, never a category-tagged "Investment").
+  const actualFinancialEvents = computeFinancialEventTotals_(txnData, function(d){
+    return d.getFullYear() === targetMonth.year && (d.getMonth() + 1) === targetMonth.month;
+  });
+
   return {
     income: { actual: Math.round(actualIncome), saved: savedIncome === null ? null : Math.round(savedIncome) },
     targets: {
       needs: Math.round(needsTarget),
       wants: Math.round(wantsTarget),
-      savingsInvestment: Math.round(savingsInvestmentTarget)
+      savingsInvestment: Math.round(savingsInvestmentTarget),
+      fixedObligations: Math.round(fixedObligationsTarget)
     },
-    referenceSplit: PLANNER_REFERENCE_SPLIT, // fixed 50/30/20 reference, shown for comparison only
+    referenceSplit: PLANNER_REFERENCE_SPLIT, // fixed 50/30/20 reference for Needs/Wants/Savings+Investment only — Fixed obligations sits outside that comparison, same as Analysis's own "Fixed obligations" pill sits outside its Need/Want/Saving/Investment chart
     unallocated: Math.round(incomeForCalc - totalPlanned),
     actual: {
       needs: Math.round(actualNeeds),
       wants: Math.round(actualWants),
-      savingsInvestment: Math.round(actualSaving + actualInvestment),
-      untagged: Math.round(actualUntagged)
+      savingsInvestment: Math.round(actualSaving + actualInvestment + actualFinancialEvents.invested),
+      untagged: Math.round(actualUntagged),
+      fixedObligations: Math.round(actualFinancialEvents.fixedObligations)
     }
   };
+}
+
+// Shared three-way resolution for a pseudo-category override (income,
+// fixed obligations): the field left out of the request entirely
+// (undefined) means "this save isn't touching it" — a previously-saved
+// value, if any, is left completely alone. null/"" explicitly clears it.
+// A real number saves/replaces it. Returns { provided, amount, error } —
+// `amount` is null unless a real number was given; `error` is set (and
+// nothing should be written) if a value was given but isn't valid.
+function resolvePseudoOverride_(value, label){
+  const provided = value !== undefined;
+  if(!provided) return { provided: false, amount: null, error: null };
+  if(value === null || value === "") return { provided: true, amount: null, error: null };
+  const amount = Number(value);
+  if(!(amount >= 0)) return { provided: true, amount: null, error: "Enter a valid " + label + " amount." };
+  return { provided: true, amount: amount, error: null };
 }
 
 // Saves/replaces a month's ENTIRE budget plan in one call — the
@@ -515,12 +605,13 @@ function buildPlannerOverview_(categories, actualBreakdown, savedMap, txnData, t
 // existing plan. budgets is an array of either:
 //   { category: "Food", split: true, need: 4000, want: 3500 }
 //   { category: "Transport", split: false, target: 2200 }
-// income is optional — undefined/null/"" means "don't save an override,
-// use real actual income instead" (getPlannerData falls back to that
-// automatically). Passing a number saves/replaces the override; passing
-// null/"" explicitly clears a previously-saved one, since this is a full
-// replace of the month's Budgets rows either way.
-function saveBudgets(monthStr, budgets, income){
+// income and fixedObligations are both optional pseudo-category overrides
+// (see resolvePseudoOverride_ above) — this matters because "budgets"
+// (the category targets) and these two figures are edited from the same
+// screen but are conceptually separate things — tweaking one category's
+// target must never silently wipe out a saved income/fixed-obligations
+// figure just because this particular request happened not to mention it.
+function saveBudgets(monthStr, budgets, income, fixedObligations){
   try{
     const monthKey = normalizePlannerMonth_(monthStr);
     if(!monthKey) return { ok:false, error:"Enter a valid month." };
@@ -528,23 +619,14 @@ function saveBudgets(monthStr, budgets, income){
       return { ok:false, error:"No budget targets received." };
     }
 
-    // Three-way: income left out of the request entirely (undefined) means
-    // "this save isn't touching income" — a previously-saved override, if
-    // any, is left completely alone. null/"" explicitly clears it. A real
-    // number saves/replaces it. This matters because "budgets" (the
-    // category targets) and income are edited from the same screen but
-    // conceptually separate things — tweaking one category's target must
-    // never silently wipe out a saved income figure just because this
-    // request happened not to mention it.
-    const incomeProvided = income !== undefined;
-    let incomeToWrite = null;
-    if(incomeProvided && income !== null && income !== ""){
-      incomeToWrite = Number(income);
-      if(!(incomeToWrite >= 0)) return { ok:false, error:"Enter a valid income amount." };
-    }
+    const incomeOverride = resolvePseudoOverride_(income, "income");
+    if(incomeOverride.error) return { ok:false, error: incomeOverride.error };
+    const fixedOverride = resolvePseudoOverride_(fixedObligations, "fixed obligations");
+    if(fixedOverride.error) return { ok:false, error: fixedOverride.error };
 
     const rowsToWrite = [];
-    if(incomeToWrite !== null) rowsToWrite.push([monthKey, PLANNER_INCOME_KEY, "", incomeToWrite]);
+    if(incomeOverride.amount !== null) rowsToWrite.push([monthKey, PLANNER_INCOME_KEY, "", incomeOverride.amount]);
+    if(fixedOverride.amount !== null) rowsToWrite.push([monthKey, PLANNER_FIXED_OBLIGATIONS_KEY, "", fixedOverride.amount]);
     for(let i = 0; i < budgets.length; i++){
       const b = budgets[i] || {};
       const category = (b.category || "").toString().trim();
@@ -576,14 +658,15 @@ function saveBudgets(monthStr, budgets, income){
     // so deleting doesn't shift the row numbers of rows still to be
     // checked), THEN append the fresh set — a full replace for the
     // category targets, never leaves stale/duplicate rows behind from an
-    // earlier save. The saved income row (PLANNER_INCOME_KEY) is only
-    // ever removed when this call actually provided an income value
-    // (see comment above) — untouched otherwise.
+    // earlier save. The saved income/fixed-obligations rows are each only
+    // ever removed when THIS call actually provided that specific value
+    // (see resolvePseudoOverride_ above) — untouched otherwise.
     for(let r = data.length - 1; r >= 1; r--){
       const rowMonth = (data[r][0] || "").toString().trim();
       if(rowMonth !== monthKey) continue;
       const rowCategory = (data[r][1] || "").toString().trim();
-      if(rowCategory === PLANNER_INCOME_KEY && !incomeProvided) continue; // leave a previously-saved income alone
+      if(rowCategory === PLANNER_INCOME_KEY && !incomeOverride.provided) continue;
+      if(rowCategory === PLANNER_FIXED_OBLIGATIONS_KEY && !fixedOverride.provided) continue;
       sheet.deleteRow(r + 1);
     }
 

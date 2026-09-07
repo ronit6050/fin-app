@@ -1,20 +1,15 @@
 # Planner (Phase 1 + Overview) — per-category monthly spend targets
 
-**Status: LIVE as of 2026-09-07** (backend `clasp deploy`ed to `@313`,
-frontend `git push`ed to GitHub Pages). Backend lives in
-`backend/planner.js`, wired into `handlePwaRequest` (`PWA.js`) as two
-actions: `getPlannerData` and `saveBudgets`. Frontend lives under
-More → Tools → Planner — see "Frontend" section below for what actually
-shipped. Built 2026-08-18 (per-category targets), extended 2026-09-07
-(the Overview below) — both pieces shipped together in one deploy, per
-the user's own call to hold them until both were ready.
-
-**Overview (income + bucket totals + 50/30/20 reference) — backend and
-frontend both built 2026-09-07, reviewed by `change-reviewer`, and live
-the same day.** See "Overview" section below for the backend shape, and
-"Frontend — Overview card" further down for what actually shipped on
-screen. This is new, on top of the per-category work above, inspired by
-the user's own pre-automation manual budget sheet.
+**Status: LIVE as of 2026-09-07**, including per-category targets, the
+Overview (income/Needs/Wants/Savings+Investment/50-30-20), AND Fixed
+obligations (Rent+EMI) — all deployed together in two same-day passes
+(backend `clasp deploy`ed to `@314`, frontend `git push`ed to GitHub
+Pages). Backend lives in `backend/planner.js`, wired into
+`handlePwaRequest` (`PWA.js`) as two actions: `getPlannerData` and
+`saveBudgets`. Frontend lives under More → Tools → Planner — see
+"Frontend" section below for what actually shipped, and "Fixed
+obligations" / "Frontend — Fixed obligations row" further down for the
+same-day follow-up fix once the user found Rent wasn't accounted for.
 
 **Plain-English summary:** you set a spend TARGET per category for the
 month (e.g. "Food: ₹8,000"), and the app tracks how much you've actually
@@ -154,10 +149,10 @@ add up" check.
 ```json
 "overview": {
   "income": { "actual": 55000, "saved": 50000 },
-  "targets": { "needs": 6340, "wants": 6820, "savingsInvestment": 1000 },
+  "targets": { "needs": 6340, "wants": 6820, "savingsInvestment": 1000, "fixedObligations": 15000 },
   "referenceSplit": { "Need": 0.5, "Want": 0.3, "SavingsInvestment": 0.2 },
-  "unallocated": 35840,
-  "actual": { "needs": 1000, "wants": 1100, "savingsInvestment": 0, "untagged": 1000 }
+  "unallocated": 20840,
+  "actual": { "needs": 1000, "wants": 1100, "savingsInvestment": 3000, "untagged": 1000, "fixedObligations": 15000 }
 }
 ```
 
@@ -176,45 +171,102 @@ add up" check.
 - **`targets.savingsInvestment`** — pulled straight from Settings'
   `monthlySaveGoal` + `monthlyInvestmentGoal` (per the user's own call:
   one place manages this number, not a second parallel one in Planner).
-- **`referenceSplit`** — the fixed 50/30/20 rule of thumb, shown only
-  for comparison, never enforced. Not user-editable yet.
-- **`unallocated`** — `(income.saved ?? income.actual) - (targets.needs + targets.wants + targets.savingsInvestment)`.
+- **`targets.fixedObligations`** — Rent + EMI, added 2026-09-07 (see
+  "Fixed obligations" section below). A SEPARATE line from Needs, same
+  as Analysis/CC Advisor already show it (confirmed with the user, not
+  folded in) — never blended into `targets.needs`.
+- **`referenceSplit`** — the fixed 50/30/20 rule of thumb, for Needs/
+  Wants/Savings+Investment only. Fixed obligations sits outside this
+  comparison entirely (same reason it's excluded from Analysis's own
+  Need/Want/Saving/Investment chart). Shown only for comparison, never
+  enforced. Not user-editable yet.
+- **`unallocated`** — `(income.saved ?? income.actual) - (targets.needs + targets.wants + targets.savingsInvestment + targets.fixedObligations)`.
   The single-number version of the old sheet's per-bucket "Bal" row —
   since Needs/Wants totals are already auto-summed from category
   targets, one number for the whole plan is enough.
 - **`actual`** — real spend so far this month by type (Need/Want/
-  Saving+Investment/untagged), summed across every category, for the
-  Track view. Uses the same raw per-category breakdown the category
-  list already computes — no extra Sheet read.
+  Saving+Investment/untagged/fixedObligations), for the Track view.
+  `needs`/`wants`/`untagged` sum the same raw per-category breakdown the
+  category list already computes. `savingsInvestment` also now includes
+  any confirmed Investment Financial Event (a real SIP) — see "Fixed
+  obligations" below for why that needed its own fix. `fixedObligations`
+  is real Rent+EMI spend this month, straight from the Transactions
+  sheet's own Financial Event column.
 
-### Saving the income override
+### Fixed obligations (Rent + EMI) — added 2026-09-07
 
-`saveBudgets` gained an optional third field, `income`, alongside the
-existing `month`/`budgets`:
+**The gap, found by the user testing the first version of this
+overview**: "my rent, and other fixed expenses are not accounted [for]."
+Root cause — a confirmed Rent/EMI/Investment Financial Event (column R
+on `Transactions`) is deliberately never blended into ordinary category
+spend (see `computeCategoryTypeBreakdown_`'s own `if(financialEvent)
+continue;`), which is correct for the per-category list (Rent isn't a
+category) — but it meant the Overview's Needs/Wants/Savings totals and
+`unallocated` were silently missing them entirely too, even though Rent
+is often the single biggest real "Need" expense. `unallocated` in
+particular looked far bigger than reality, since real Rent money is
+already spoken for.
+
+Fixed with a new `computeFinancialEventTotals_(txnData, matchesDate)`
+helper — the same shape as `computeCategoryTypeBreakdown_`, but for
+exactly the rows that function skips (a confirmed Rent/EMI ->
+`fixedObligations`, a confirmed Investment -> `invested`). Wired in
+two places:
+- **`targets.fixedObligations`** (suggested, or your own saved override)
+  — computed with the exact same averaging/scaling machinery as every
+  other Planner suggestion (`computeSuggestedTargets_`), **except the
+  scaling step is deliberately skipped for Financial Events**: ordinary
+  category spend gets scaled by `daysInMonth / daysElapsed` because it's
+  a daily habit you can reasonably extrapolate — Rent/EMI/a SIP are a
+  FIXED LUMP paid once (or a few fixed times) a month, not a rate. Seen
+  on day 5 and scaled by 31/5 would wrongly suggest a fictional ₹93,000
+  "monthly rent" instead of the real ₹15,000. Using the raw partial
+  total instead means: once it's actually posted this month, the
+  suggestion is exactly right; before it posts, it's honestly 0 rather
+  than a guess. The "average of the last up to 3 complete months"
+  branch needed no such fix — each complete month's total is already a
+  genuine whole-month figure, no scaling involved there either way.
+- **`actual.savingsInvestment`** — a confirmed Investment Financial
+  Event (a real SIP) now also counts here, not just category-tagged
+  "Saving"/"Investment" spend. It didn't before, for the same root-cause
+  reason as Rent above.
+
+### Saving the income and fixed-obligations overrides
+
+`saveBudgets` gained two optional fields alongside the existing
+`month`/`budgets`: `income` (added first) and `fixedObligations`
+(added with the fix above) — both share ONE resolution rule
+(`resolvePseudoOverride_` in `planner.js`), each stored as its own
+pseudo-category row (`_Income` / `_FixedObligations`) in the `Budgets`
+sheet, completely independent of each other:
 
 ```json
 { "action": "saveBudgets", "idToken": "...", "month": "2026-08",
   "budgets": [ { "category": "Transport", "split": false, "target": 2000 } ],
-  "income": 50000 }
+  "income": 50000,
+  "fixedObligations": 20000 }
 ```
 
-**Three-way, deliberately not just "present or not"**: leaving the
-`income` field out of the request entirely means "this save isn't
-touching income" — a previously-saved override, if any, is left
-completely alone. Sending `null` explicitly clears it (falls back to
-`income.actual` again). Sending a number saves/replaces it. This
-matters because income and category targets are edited from the same
-screen but are conceptually separate things — **the frontend must
-always send the current income value on every save** (whatever's
-showing in the income input) so tweaking one category's target can
-never accidentally wipe out a saved income figure just because that
-particular save happened not to mention it.
+**Three-way, deliberately not just "present or not", for EACH field
+independently**: leaving a field out of the request entirely means
+"this save isn't touching it" — a previously-saved override, if any, is
+left completely alone. Sending `null` explicitly clears it (falls back
+to the real actual/suggested figure again). Sending a number
+saves/replaces it. This matters because income, fixed obligations, and
+category targets are all edited from the same screen but are
+conceptually separate things — **the frontend must always send the
+current income AND fixed-obligations values on every save** (whatever's
+showing in each input) so tweaking one category's target, or one of
+these two fields, can never accidentally wipe out the other.
 
-Verified in `backend/tests/planner.test.js`, Scenario D: actual vs.
-saved income shown separately, targets/unallocated recompute correctly
-once an override is saved, a category-only save leaves a previously-
-saved income untouched, an explicit `null` clears it, and a negative
-income is rejected before anything writes.
+Verified in `backend/tests/planner.test.js`: Scenario D covers income
+(actual vs. saved shown separately, targets/unallocated recompute
+correctly once saved, a category-only save leaves a saved income
+untouched, an explicit `null` clears it, a negative value is rejected)
+and Scenario E covers the same full set of cases for fixed obligations,
+including the "not scaled" claim above, PLUS proving income and fixed
+obligations are saved/cleared completely independently of each other
+(saving one never touches the other, in either direction).
 
 ## Action contracts (for the frontend build)
 
@@ -561,6 +613,107 @@ same markup.
    verification passes in this file managed to get — not every future
    session should assume the same result, per this project's own
    documented preview-pane limitation.
+
+## Frontend — Fixed obligations row (added 2026-09-07)
+
+Extends the Overview card above with a 4th row for Fixed obligations
+(Rent + EMI), reusing the same `.planner-bucket-row`/`.planner-bucket-top`/
+`.planner-bucket-label` classes the three existing bucket rows already use
+— no new row style invented.
+
+- **Set targets** — unlike Needs/Wants/Savings + Investment (read-only
+  totals rolled up from the per-category cards below), Fixed obligations
+  is its OWN directly-editable ₹ amount, prefilled from
+  `overview.targets.fixedObligations` (already either your saved override
+  or the suggestion — the backend resolves that, the frontend never needs
+  to know which). Markup reuses the exact same
+  `.planner-income-input-wrap`/`.planner-income-currency` pair the income
+  input above it already uses. No bar or 50/30/20 reference tick — the
+  backend's `referenceSplit` deliberately excludes Fixed obligations (same
+  reason Analysis's own "Fixed obligations" pill sits outside its
+  Need/Want/Saving/Investment chart), so a plain amount + label is
+  correct here, not a missing feature. A caption underneath reads "starts
+  from your recent Rent/EMI payments (or your last saved figure, if
+  you've set one) — edit any time, e.g. ahead of a rent increase." —
+  worded to stay honest whether the prefilled number is currently the
+  suggestion or a saved override, since (unlike income, which exposes
+  both `actual` and `saved` separately) the backend only ever returns the
+  one already-resolved number for this field. On input, the caption
+  flips to "your own figure." exactly like the income box already does.
+- **Track progress** — a 4th `buildPlannerSubBar` row (same helper the
+  three buckets already use, so the over/near-target status colors and
+  pill wording are identical), showing `overview.actual.fixedObligations`
+  against `overview.targets.fixedObligations`. Colored with
+  `--chart-other` — a neutral, already-contrast-checked chart token —
+  since Fixed obligations isn't a Need/Want/Saving bucket and this
+  project never invents new color tokens for something like this.
+- **Live preview**: editing the Fixed obligations box recomputes
+  Unallocated instantly (`updatePlannerOverviewSetLive` now always adds
+  `plannerFixedObligationsInputValue()` — read live from the input,
+  exactly how the income figure is already read — into `allocated`),
+  without rebuilding the input's own DOM node, so typing never loses
+  cursor focus. Editing a per-category target input is unaffected: it
+  only ever recomputes the Needs/Wants buckets, and Fixed obligations
+  keeps reading its own input's current value regardless.
+- **Saving**: "Save plan" now always sends `fixedObligations` alongside
+  `income`/`month`/`budgets` — blank box → `null` (clears a saved
+  override), a number → saves/replaces it — the same three-way contract
+  as income, per the backend's own rule that both fields must always be
+  sent together from this one screen. A real number is applied
+  optimistically right away (we know exactly what was just saved). But
+  clearing it (sending `null`) is the one deliberate exception in this
+  pass: unlike income, there's no `actual`-style fallback exposed on the
+  frontend to revert to locally, so the optimistic step leaves the box
+  showing its last-known value and a real `loadPlanner()` refetch is
+  triggered right after a successful save specifically for this case —
+  the correct reverted (suggested) figure then arrives and re-renders
+  moments later. Same kind of narrow "wait for the server" carve-out
+  Savings' Auto Split already makes when it doesn't have a fresh preview
+  in hand. Verified live in the browser: typed a new Fixed obligations
+  figure, confirmed Unallocated updated instantly and the value persisted
+  after Save; separately cleared the field, saved, and confirmed the
+  screen correctly settled back on the real suggested figure (₹19,000 in
+  the Demo Mode fixture) once the follow-up refetch completed, with the
+  Unallocated pill recalculating correctly both times.
+- **Demo Mode**: `demoComputeFinancialEventTotals` (mirrors the backend's
+  `computeFinancialEventTotals_`) was added, and `demoComputePlannerOverview`/
+  `demoSaveBudgets` were extended to compute/store `fixedObligations` the
+  same way real `buildPlannerOverview_`/`saveBudgets` do — including the
+  same "not scaled" rule for the suggested figure (Rent/EMI is a fixed
+  lump, not a daily rate) and the same independent three-way save contract
+  as income, stored as its own `_FixedObligations` pseudo-category row.
+  The pretend dataset already included a ₹15,000 "Monthly rent" and a
+  ₹4,000 "Laptop EMI" Financial Event from the original Overview build, so
+  no new fixture data was needed — Demo Mode already had something real
+  for this row to show (₹19,000 combined).
+
+### Verification
+
+1. **Node**: the real `demoFreshState`/`demoComputeFinancialEventTotals`/
+   `demoComputePlannerData`/`demoComputePlannerOverview`/`demoSaveBudgets`
+   functions were extracted verbatim from `index.html` (brace-balanced
+   extraction by function name, not a guessed line range — this file
+   interleaves unrelated top-level DOM-wiring code between functions) and
+   run in Node via `vm` against the real seeded Demo Mode dataset. 17
+   checks, all passing: the dataset's real Rent/EMI rows are found,
+   `overview.targets/actual.fixedObligations` both come back as 19000
+   (15000 + 4000, correctly unscaled), `unallocated` correctly subtracts
+   `fixedObligations` too, and the full three-way `saveBudgets` contract
+   for `fixedObligations` (a real number saves/replaces it, omitting it
+   leaves a previous override untouched, `null` clears it back to the
+   suggestion, a negative value is rejected, and it saves/clears
+   completely independently of `income`).
+2. **Real browser** (this session's preview pane composited frames
+   correctly): via a temporary, since-removed `?claudeTestBypass=1`
+   test-only hook (same technique used in the original Overview build),
+   confirmed in BOTH light and dark mode: the new row renders correctly
+   in both Set targets and Track progress, the live Unallocated update
+   works while typing without losing input focus, Save actually persists
+   a typed Fixed obligations figure, and clearing + saving correctly
+   triggers the fallback refetch and settles on the right suggested
+   figure. Zero console errors throughout. A plain Node syntax check of
+   both `<script>` blocks and a check that every `getElementById` call
+   has a matching `id=` also passed.
 
 ## Not yet built (out of scope for this pass)
 

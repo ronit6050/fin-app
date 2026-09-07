@@ -192,7 +192,18 @@ const txnData_A = [
   mkTxnRow("2026-08-01", "debit", "upi", 750, { note: "lent to friend", category: "Financial", counterparty: "FRIEND X" }),
 
   // Real income this month — for the overview's income figure.
-  mkTxnRow("2026-08-01", "credit", "upi", 55000, { note: "Salary", category: "Income" })
+  mkTxnRow("2026-08-01", "credit", "upi", 55000, { note: "Salary", category: "Income" }),
+
+  // A confirmed Financial Event Investment (SIP), added 2026-09-07 —
+  // proves a real SIP now counts toward the overview's actual
+  // Savings+Investment total, which it didn't before this fix (a
+  // Financial Event was never blended into the category-tag-based
+  // Saving/Investment totals). The Rent row above (line 189, already in
+  // this fixture) is what the overview's new Fixed obligations line
+  // reads — deliberately dated day 1, inside the Scenario A partial
+  // window (Aug 1-5), to prove that suggestion does NOT get scaled up
+  // the way ordinary category spend does (see Scenario E below).
+  mkTxnRow("2026-08-01", "debit", "upi", 3000, { note: "SIP payment", category: "Financial", financialEvent: "Investment", financialEventName: "Nifty 50 SIP" })
 ];
 
 const cashData_A = [
@@ -399,16 +410,25 @@ assertEqual(planner_D1.overview.referenceSplit.Need, 0.5, "the reference split i
 assertEqual(planner_D1.overview.referenceSplit.Want, 0.3, "reference Want = 30%");
 assertEqual(planner_D1.overview.referenceSplit.SavingsInvestment, 0.2, "reference Savings+Investment = 20%");
 
-// Unallocated = actual income (55000, nothing saved yet) - (6200+6820+1000).
-assertEqual(planner_D1.overview.unallocated, 40980, "unallocated = income minus everything currently planned");
+// Fixed obligations (Rent + EMI) — added 2026-09-07. Suggested = the raw
+// Aug 1-5 Rent total (15000), NOT scaled by the 31/5 factor ordinary
+// category spend gets — Rent is a fixed lump already paid for the whole
+// month, not a daily rate to extrapolate (proven properly in Scenario E).
+assertEqual(planner_D1.overview.targets.fixedObligations, 15000, "Fixed obligations target defaults to the real Rent total, unscaled");
+
+// Unallocated = actual income (55000, nothing saved yet) - (6200+6820+1000+15000).
+assertEqual(planner_D1.overview.unallocated, 25980, "unallocated = income minus everything currently planned, Fixed obligations included");
 
 // Actual (Track view) sums the SAME raw per-category Need/Want/Saving/
 // Investment/Untagged breakdown across every category, regardless of
 // whether that category itself shows as split.
 assertEqual(planner_D1.overview.actual.needs, 1000, "actual Needs = Food's real Need spend (700) + Transport's real spend (300)");
 assertEqual(planner_D1.overview.actual.wants, 1100, "actual Wants = Food's real Want spend (900 card + 200 cash)");
-assertEqual(planner_D1.overview.actual.savingsInvestment, 0, "no Saving/Investment-tagged spend in this fixture");
+// The confirmed Investment Financial Event (the 3000 SIP) now counts
+// toward actual Savings+Investment — it didn't before this fix.
+assertEqual(planner_D1.overview.actual.savingsInvestment, 3000, "actual Savings+Investment includes the confirmed 3000 SIP Financial Event, not just category-tagged spend");
 assertEqual(planner_D1.overview.actual.untagged, 1000, "actual untagged = Bills' one untagged Electricity row");
+assertEqual(planner_D1.overview.actual.fixedObligations, 15000, "actual Fixed obligations = the one real Rent row this month");
 
 // --- Saving an income override changes unallocated, and is honestly
 // reported back as `saved` rather than blended into `actual`. ---
@@ -420,9 +440,10 @@ assertEqual(planner_D2.overview.income.actual, 55000, "actual income is unaffect
 // Needs target is now Food's suggested need (4340, unchanged) + the
 // just-saved Transport target (2000, was suggested 1860) = 6340.
 assertEqual(planner_D2.overview.targets.needs, 6340, "Needs target picks up the newly-saved Transport target, not its old suggestion");
-// Unallocated now uses the SAVED income (50000), not actual (55000):
-// 50000 - (6340 + 6820 + 1000) = 35840.
-assertEqual(planner_D2.overview.unallocated, 35840, "unallocated uses the saved income override once one exists, not actual income");
+// Unallocated now uses the SAVED income (50000), not actual (55000), and
+// includes the still-suggested (never saved) Fixed obligations of 15000:
+// 50000 - (6340 + 6820 + 1000 + 15000) = 20840.
+assertEqual(planner_D2.overview.unallocated, 20840, "unallocated uses the saved income override once one exists, not actual income");
 
 // --- Saving budgets again WITHOUT mentioning income must NOT wipe the
 // previously-saved override — income and category targets are edited
@@ -438,12 +459,67 @@ const clearIncome = sandbox_D.saveBudgets("2026-08", [{ category: "Transport", s
 assertEqual(clearIncome.ok, true, "explicitly clearing the income override succeeds");
 const planner_D4 = sandbox_D.getPlannerData("2026-08", txnData_A, cashData_A);
 assertEqual(planner_D4.overview.income.saved, null, "an explicit null clears a previously-saved income override");
-assertEqual(planner_D4.overview.unallocated, 55000 - (4340 + 2500 + 6820 + 1000), "unallocated falls back to actual income once the override is cleared");
+assertEqual(planner_D4.overview.unallocated, 55000 - (4340 + 2500 + 6820 + 1000 + 15000), "unallocated falls back to actual income once the override is cleared, still including Fixed obligations");
 
 // --- Validation: a negative income is rejected before anything writes. ---
 const badIncomeAmount = sandbox_D.saveBudgets("2026-08", [{ category: "Transport", split: false, target: 2000 }], -500);
 assertEqual(badIncomeAmount.ok, false, "a negative income override is rejected");
 const planner_D5 = sandbox_D.getPlannerData("2026-08", txnData_A, cashData_A);
 assertEqual(planner_D5.overview.income.saved, null, "a rejected income save leaves the previous state untouched (still cleared from the step before)");
+
+/* =======================================================================
+   SCENARIO E — Fixed obligations (Rent + EMI): the suggestion is NOT
+   scaled like ordinary category spend (a lump paid once a month, not a
+   daily rate), and its saved override has the exact same independent
+   three-way contract as income — proven with a FRESH sandbox so a save
+   of one never accidentally depends on the other's state.
+======================================================================= */
+console.log("\n--- Scenario E: Fixed obligations (Rent+EMI) — suggestion, save, clear, independence from income ---\n");
+
+const sandbox_E = loadSandbox(today_A);
+
+// Confirms the "not scaled" claim directly: if the 31/5 scaling factor
+// HAD been applied (like ordinary category spend), this would be 93000,
+// not the real 15000 Rent total.
+const planner_E1 = sandbox_E.getPlannerData("2026-08", txnData_A, cashData_A);
+assertEqual(planner_E1.overview.targets.fixedObligations, 15000, "suggested Fixed obligations is the raw Rent total (15000), NOT scaled by 31/5 (which would wrongly give 93000)");
+assert(planner_E1.overview.targets.fixedObligations < 93000, "explicitly not anywhere near the scaled-up figure ordinary category spend would produce");
+
+// Saving a Fixed obligations override must NOT touch a saved income (and
+// vice versa) — same independence already proven for category saves,
+// now proven for these two pseudo-fields against EACH OTHER.
+const saveFixed1 = sandbox_E.saveBudgets("2026-08", [{ category: "Transport", split: false, target: 2000 }], 50000, 20000);
+assertEqual(saveFixed1.ok, true, "saving income AND fixed obligations together succeeds");
+const planner_E2 = sandbox_E.getPlannerData("2026-08", txnData_A, cashData_A);
+assertEqual(planner_E2.overview.income.saved, 50000, "income saved correctly alongside fixed obligations");
+assertEqual(planner_E2.overview.targets.fixedObligations, 20000, "the saved Fixed obligations override reads back correctly, overriding the 15000 suggestion");
+assertEqual(planner_E2.overview.unallocated, 50000 - (6340 + 6820 + 1000 + 20000), "unallocated uses the saved Fixed obligations override, not the suggestion");
+
+// A save that only mentions income (fixedObligations left out entirely)
+// must leave the saved Fixed obligations alone — and vice versa.
+const saveFixed2 = sandbox_E.saveBudgets("2026-08", [{ category: "Transport", split: false, target: 2500 }], 51000);
+assertEqual(saveFixed2.ok, true, "an income-only save (fixedObligations omitted) succeeds");
+const planner_E3 = sandbox_E.getPlannerData("2026-08", txnData_A, cashData_A);
+assertEqual(planner_E3.overview.income.saved, 51000, "income updated correctly");
+assertEqual(planner_E3.overview.targets.fixedObligations, 20000, "fixed obligations override survives a save that only mentioned income");
+
+const saveFixed3 = sandbox_E.saveBudgets("2026-08", [{ category: "Transport", split: false, target: 2500 }], undefined, 22000);
+assertEqual(saveFixed3.ok, true, "a fixedObligations-only save (income omitted) succeeds");
+const planner_E4 = sandbox_E.getPlannerData("2026-08", txnData_A, cashData_A);
+assertEqual(planner_E4.overview.income.saved, 51000, "income override survives a save that only mentioned fixed obligations");
+assertEqual(planner_E4.overview.targets.fixedObligations, 22000, "fixed obligations updated correctly");
+
+// Explicitly clearing fixed obligations falls back to the suggestion,
+// independent of income (still saved at 51000).
+const clearFixed = sandbox_E.saveBudgets("2026-08", [{ category: "Transport", split: false, target: 2500 }], undefined, null);
+assertEqual(clearFixed.ok, true, "explicitly clearing fixed obligations succeeds");
+const planner_E5 = sandbox_E.getPlannerData("2026-08", txnData_A, cashData_A);
+assertEqual(planner_E5.overview.targets.fixedObligations, 15000, "clearing the override falls back to the 15000 suggestion again");
+assertEqual(planner_E5.overview.income.saved, 51000, "income is completely unaffected by clearing fixed obligations");
+
+// Validation — a negative fixed obligations amount is rejected before
+// anything writes.
+const badFixed = sandbox_E.saveBudgets("2026-08", [{ category: "Transport", split: false, target: 2000 }], undefined, -100);
+assertEqual(badFixed.ok, false, "a negative fixed obligations override is rejected");
 
 console.log("\nDone.");
