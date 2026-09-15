@@ -3339,8 +3339,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-09-07-02";
-    const APP_CHANGELOG = "Planner's big-picture card now also shows Fixed obligations (Rent + EMI) as its own editable line, so Unallocated accounts for it too.";
+    const APP_VERSION = "2026-09-15-01";
+    const APP_CHANGELOG = "The Category question no longer shows up for a lending note (e.g. \"lent to Krish\") — it was never actually used for those.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -6515,14 +6515,20 @@
       // row still makes sense if anyone looks at the raw sheet later —
       // harmless either way, since Analysis excludes this row from
       // every category total once column R is set, regardless of what
-      // column N holds. Not tied to lending on purpose (unlike the type
-      // toggle above) — lending's own category handling is unchanged.
-      // Also NOT tied to the investment-instrument chip — a note-matched
-      // investment purchase is still real spend for Category purposes,
-      // see docs/features/investment-instruments.md.
+      // column N holds. Also NOT tied to the investment-instrument chip
+      // — a note-matched investment purchase is still real spend for
+      // Category purposes, see docs/features/investment-instruments.md.
+      //
+      // Lending (added 2026-09-15): a "lent"/"borrowed"/"paid back" note
+      // already gets excluded from every spend/category total purely
+      // from its note text (isLendingTransfer, needWantSaving.js) — the
+      // category you'd pick here is never actually used for anything.
+      // Hidden the same way a confirmed Financial Event already is, so
+      // one less pointless question per lending entry. Checked live as
+      // you type, same as the Need/Want/Saving toggle just above.
       function updateCategoryVisibility() {
         if (!categoryField) return;
-        if (financialEvent.type) {
+        if (financialEvent.type || isLendingNote(noteInput.value)) {
           categoryField.style.display = "none";
           categorySelect.value = "Financial";
         } else {
@@ -6531,6 +6537,7 @@
         }
       }
       updateCategoryVisibility(); // apply immediately in case a confident suggestion already pre-selected one
+      noteInput.addEventListener("input", updateCategoryVisibility);
 
       // Debts auto-linking (added 2026-08-10) — live, as you type, same
       // as the lending/saving note checks above. selectedDebtPerson is
@@ -11351,13 +11358,13 @@
       }, function () { return !!financialEvent.type; }, function () { return !!investmentInstrument.name; });
 
       // Category doesn't make sense either once this is a confirmed
-      // Financial Event — see buildPendingItem's matching comment for
-      // the full reasoning. NOT tied to the investment-instrument chip
-      // — a note-matched investment purchase is still real spend for
-      // Category purposes.
+      // Financial Event, or a lending note (added 2026-09-15) — see
+      // buildPendingItem's matching comment for the full reasoning. NOT
+      // tied to the investment-instrument chip — a note-matched
+      // investment purchase is still real spend for Category purposes.
       function updateCategoryVisibility() {
         if (!categoryField) return;
-        if (financialEvent.type) {
+        if (financialEvent.type || isLendingNote(noteInput.value)) {
           categoryField.style.display = "none";
           categorySelect.value = "Financial";
         } else {
@@ -11366,6 +11373,7 @@
         }
       }
       updateCategoryVisibility();
+      noteInput.addEventListener("input", updateCategoryVisibility);
 
       // Debts auto-linking (added 2026-08-10) — see the matching
       // comment in buildPendingItem for the full reasoning. History
