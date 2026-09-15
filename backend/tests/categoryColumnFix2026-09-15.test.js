@@ -140,6 +140,13 @@ function loadSandbox(){
   };
   vm.createContext(sandbox);
 
+  // Load the REAL isLendingTransfer (needWantSaving.js) rather than a
+  // stand-in — this is the exact function the fix now reuses, and its
+  // own real word-boundary behavior (e.g. "lent" must be a whole word,
+  // not part of "excellent") matters here.
+  const needWantSavingSrc = fs.readFileSync(path.join(__dirname, "..", "needWantSaving.js"), "utf8");
+  vm.runInContext(needWantSavingSrc, sandbox, { filename: "needWantSaving.js" });
+
   const loggerSrc = fs.readFileSync(path.join(__dirname, "..", "Logger.js"), "utf8");
   vm.runInContext(loggerSrc, sandbox, { filename: "Logger.js" });
 
@@ -239,7 +246,37 @@ const HEADER = ["Date","Time","Bank","Type","Mode","Amount","Reference","Counter
 })();
 
 // ---------------------------------------------------------------------
-// Test 4 — running the backfill twice is safe (idempotent) — a second
+// Test 4 — a lending note ("lent"/"paid back") gets "Financial", never
+// a guessed spending category. Real bug caught live 2026-09-15: the
+// first version of this backfill only checked the FinancialEvent column
+// (Rent/EMI/Investment), so a real lending transaction ("Lent krish for
+// recharge") came back guessed as "Bills" in the preview — meaningless,
+// since that category is never actually used for a lending row anyway
+// (isLendingTransfer excludes it from every spend/category total
+// regardless), and inconsistent with what a NEW lending save now writes
+// (index.html, 2026-09-15 — category question hidden, forced to
+// "Financial"). This proves the backfill now matches that behavior for
+// old rows too.
+// ---------------------------------------------------------------------
+(function testLendingRowsGetFinancialNotAGuess(){
+  const { sandbox, env } = loadSandbox();
+  env.seedSheet("Transactions", [
+    HEADER,
+    blankRow({ note: "Lent krish for recharge", category: "", counterparty: "euronet services india pv", amount: 301.9 }),
+    blankRow({ note: "Vaidehi paid back brick oven lunch", category: "", counterparty: "hdfc bank a", amount: 1384 }),
+    blankRow({ note: "excellent biryani", category: "", counterparty: "some restaurant", amount: 250 }) // "excellent" must NOT false-match "lent"
+  ]);
+
+  const report = sandbox.backfillMissingCategories();
+  const rows = env.sheetsByName["Transactions"].rows;
+
+  assert(rows[1][COLS.category] === "Financial", 'the "Lent krish for recharge" row gets "Financial", got "' + rows[1][COLS.category] + '"');
+  assert(rows[2][COLS.category] === "Financial", 'the "paid back" row gets "Financial", got "' + rows[2][COLS.category] + '"');
+  assert(rows[3][COLS.category] === "Other", '"excellent biryani" is NOT treated as lending (whole-word match only), got "' + rows[3][COLS.category] + '"');
+})();
+
+// ---------------------------------------------------------------------
+// Test 5 — running the backfill twice is safe (idempotent) — a second
 // run finds nothing left to do, never overwrites what it just wrote.
 // ---------------------------------------------------------------------
 (function testBackfillIsIdempotent(){

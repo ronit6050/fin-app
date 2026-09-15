@@ -603,7 +603,14 @@ function previewMissingCategories(){
     const counterparty     = data[i][7]  || ""; // column H
     const financialEvent   = (data[i][17] || "").toString().trim(); // column R
 
-    const suggested = financialEvent ? "Financial" : getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
+    // A confirmed Rent/EMI/Investment row, OR a lending note ("lent"/
+    // "borrowed"/"paid back") gets "Financial" — matches what the app
+    // itself would write for either case (see updateCategoryVisibility,
+    // index.html, added 2026-09-15 for lending), not a guessed spending
+    // category that's never actually used for these anyway.
+    const suggested = (financialEvent || isLendingTransfer(counterparty, note))
+      ? "Financial"
+      : getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
     count++;
     log("- Row " + (i + 1) + ": \"" + note + "\" (" + (counterparty || "no counterparty") + ", Rs." + amount + ") -> " + suggested);
   }
@@ -639,7 +646,9 @@ function backfillMissingCategories(){
     const counterparty     = data[i][7]  || ""; // column H
     const financialEvent   = (data[i][17] || "").toString().trim(); // column R
 
-    const suggested = financialEvent ? "Financial" : getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
+    const suggested = (financialEvent || isLendingTransfer(counterparty, note))
+      ? "Financial"
+      : getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
 
     sheet.getRange(i + 1, 14).setValue(suggested); // column N
     count++;
