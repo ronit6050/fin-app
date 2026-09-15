@@ -508,3 +508,146 @@ function checkDataHealth(){
 
   return out.join("\n");
 }
+
+
+/* ============================================
+   CATEGORY DROPDOWN VALIDATION FIX (added 2026-09-15)
+   Real bug found 2026-09-15: the Transactions sheet's Category column
+   (N) had a dropdown (Data Validation) whose list of allowed words came
+   from the old "Categories" helper tab. That tab got archived (moved to
+   a separate spreadsheet) on 2026-09-05 as part of the pre-multi-user
+   cleanup — nothing in this app's own code ever reads that tab, so the
+   cleanup correctly saw it as safe to move, but missed that the Sheet's
+   own dropdown (a plain Google Sheets feature, invisible from any code
+   file) was still quietly pointing at it. Once "Categories" left, the
+   dropdown's list broke — since then, EVERY category the app tried to
+   save into that column was silently rejected by Google Sheets' own
+   strict validation (a red warning triangle, blank cell), even though
+   the app's own save code (saveTransactionNote, PWA.js) was working
+   correctly the whole time.
+
+   Run by hand from the Apps Script editor, once. Re-creates the
+   dropdown using a fixed, hardcoded list (the same 10 categories the
+   app itself already offers in index.html's CATEGORY_OPTIONS) instead
+   of a fragile reference to another sheet, so this can't break again
+   just because an unrelated cleanup moves a tab around. Also sets
+   "allow invalid data" (shows a warning triangle instead of silently
+   blocking the write) as a safety net — so a future mismatch would be
+   visible, not another silent data loss.
+============================================ */
+function fixCategoryColumnValidation(){
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  if(!sheet) return "Transactions tab not found — nothing to do.";
+
+  const CATEGORY_LIST = [
+    "Food", "Transport", "Bills", "Shopping", "Lifestyle",
+    "Financial", "Income", "Education", "Health", "Other"
+  ];
+
+  const lastRow = Math.max(sheet.getLastRow(), 2);
+  const range = sheet.getRange(2, 14, lastRow - 1, 1); // column N, every data row
+
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(CATEGORY_LIST, true)
+    .setAllowInvalid(true) // warn, never silently block a write again
+    .build();
+
+  range.setDataValidation(rule);
+
+  return "Done — the Category column (N) now uses a fixed 10-item list " +
+    "built into this script, no longer a link to another sheet. " +
+    "Existing category values were not touched.";
+}
+
+
+/* ============================================
+   MISSING CATEGORY BACKFILL (added 2026-09-15)
+   Fixes the DATA left behind by the broken dropdown above — every
+   transaction saved between 2026-09-05 and whenever
+   fixCategoryColumnValidation() is run has a real Note (it went through
+   Pending normally) but an empty Category, because the write was
+   silently rejected. Run previewMissingCategories() FIRST (read-only,
+   changes nothing) to see exactly what it would fill in; only run
+   backfillMissingCategories() once that list looks right. Reuses the
+   app's own real suggestion engine (getSuggestedCategoryFast, PWA.js) —
+   the same guess Pending would have shown at the time — so this isn't a
+   new, separate guess, it's the same logic already trusted elsewhere.
+   Never touches a row that already has a Category. A confirmed Rent/
+   EMI/Investment row gets "Financial" instead of a guessed spending
+   category, matching what the app itself would have written (see
+   updateCategoryVisibility in index.html).
+============================================ */
+function previewMissingCategories(){
+  const out = [];
+  const log = (s) => { out.push(s); Logger.log(s); };
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Transactions");
+  if(!sheet) return "Transactions tab not found.";
+
+  const data = sheet.getDataRange().getValues();
+  const smartMemorySheet = ss.getSheetByName("SmartMemory");
+  const smartMemoryData = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
+
+  log("===== CATEGORIES THIS WOULD FILL IN (nothing written yet) =====");
+  log("");
+
+  let count = 0;
+  for(let i = 1; i < data.length; i++){
+    const note      = (data[i][12] || "").toString().trim(); // column M
+    const category  = (data[i][13] || "").toString().trim(); // column N
+    if(!note || category) continue; // only rows with a note but no category
+
+    const mode            = data[i][4]  || ""; // column E
+    const amount           = Number(data[i][5]) || 0; // column F
+    const counterparty     = data[i][7]  || ""; // column H
+    const financialEvent   = (data[i][17] || "").toString().trim(); // column R
+
+    const suggested = financialEvent ? "Financial" : getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
+    count++;
+    log("- Row " + (i + 1) + ": \"" + note + "\" (" + (counterparty || "no counterparty") + ", Rs." + amount + ") -> " + suggested);
+  }
+
+  log("");
+  log(count === 0
+    ? "Nothing to fix — every noted transaction already has a category."
+    : count + " row(s) would be filled in. Review the list above, then run backfillMissingCategories() to actually write them.");
+
+  return out.join("\n");
+}
+
+function backfillMissingCategories(){
+  const out = [];
+  const log = (s) => { out.push(s); Logger.log(s); };
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Transactions");
+  if(!sheet) return "Transactions tab not found.";
+
+  const data = sheet.getDataRange().getValues();
+  const smartMemorySheet = ss.getSheetByName("SmartMemory");
+  const smartMemoryData = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
+
+  let count = 0;
+  for(let i = 1; i < data.length; i++){
+    const note      = (data[i][12] || "").toString().trim(); // column M
+    const category  = (data[i][13] || "").toString().trim(); // column N
+    if(!note || category) continue; // only rows with a note but no category
+
+    const mode            = data[i][4]  || ""; // column E
+    const amount           = Number(data[i][5]) || 0; // column F
+    const counterparty     = data[i][7]  || ""; // column H
+    const financialEvent   = (data[i][17] || "").toString().trim(); // column R
+
+    const suggested = financialEvent ? "Financial" : getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
+
+    sheet.getRange(i + 1, 14).setValue(suggested); // column N
+    count++;
+    log("- Row " + (i + 1) + ": \"" + note + "\" -> " + suggested);
+  }
+
+  log("");
+  log(count + " row(s) filled in. Spot-check a few in the app's History screen — anything wrong is a one-tap fix there.");
+
+  return out.join("\n");
+}
