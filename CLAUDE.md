@@ -711,6 +711,26 @@ edit note/category/amount/Need-Want-Saving in place — reuses the same
 exactly like a first-time correction would. **Full design doc:
 [docs/features/history.md](docs/features/history.md)**.
 
+**Self-learning spam filter (started 2026-09-18): backend/PWA.js piece
+done, pushed to the editor draft, NOT yet deployed live** — waiting on
+the user's go-ahead, and on the other two pieces
+(`sms-parser-backend/Code.js`'s actual matching logic, `index.html`'s
+"this isn't a real transaction" button) being confirmed done too before
+this is live end to end. Lets the user mark a Pending item that's
+obviously spam (a promotional SMS the SMS parser wrongly saved as
+`UNCERTAIN`, shown with counterparty prefixed `"NEEDS REVIEW: "`) as
+junk themselves — archives the row (`Transactions_Ignored`, full data
+kept, never deleted-and-forgotten) and, if the message text is specific
+enough, records a reusable "fingerprint" of it (`LearnedSpamPatterns`)
+so the separate `sms-parser-backend` project can recognize similar junk
+automatically next time. Same self-learning-from-your-own-corrections
+idea as Need/Want/Saving and Note Memory above, just for spam instead
+of budgeting. Safety invariant the whole feature depends on (enforced
+in the other project, not here): a learned pattern can only ever affect
+a message already classified `UNCERTAIN` — it can never override a
+confidently-detected real transaction. Full detail:
+[docs/features/spam-learning.md](docs/features/spam-learning.md).
+
 **Responsiveness + drastic visual redesign + dark mode: done**, see the
 "Responsiveness pass" and "Drastic visual redesign" notes under Step 11
 above — both happened after this Automation phase work, in the same long
@@ -2030,6 +2050,76 @@ no regressions. Pushed to the Apps Script editor draft
 Tasker's live pinned deployment, version 9) has NOT been run**, per
 this project's standing rule that it always needs the user's explicit
 go-ahead in the same conversation.
+
+**Self-learning spam filter — SMS-parser side built 2026-09-18, pushed
+to the editor draft, NOT yet deployed live.** This is the third of a
+3-piece feature (this file handles reading/recognizing; `backend/PWA.js`,
+a separate Apps Script project, handles the new button + writing the
+learned pattern — see that project's own notes for its half; `index.html`
+adds the actual "this isn't a real transaction" button). Plain-English:
+right now, when a spam/promo SMS wrongly slips past `classifySms()` and
+gets saved as UNCERTAIN (shown in Pending as "NEEDS REVIEW: ..."), the
+user has to notice it and ask in chat to get it cleaned up. This lets the
+user tap a button in the app instead, which teaches the parser to
+recognize that exact junk message automatically next time.
+
+**THE NON-NEGOTIABLE SAFETY RULE, and why it's safe to let this learn on
+its own**: a learned pattern may ONLY EVER downgrade a message
+`classifySms()` already decided is "UNCERTAIN" into "IGNORE" — it is
+never even checked against a message `classifySms()` decided is a
+confident "TRANSACTION" (enforced in `doPost()`, the check only runs
+inside the `if(classification === "UNCERTAIN")` branch). This is what
+guarantees the learning system can never cause a real transaction to be
+silently dropped: worst case, if the learning is ever wrong, a piece of
+junk just goes back to showing up once more in Pending for a human to
+check — never the reverse. A dedicated test
+(`sms-parser-backend/tests/learnedSpamPatterns2026-09-18.test.js`, PART
+1) proves this directly: constructs a message that classifies as a
+confident TRANSACTION, plants an exact-matching learned pattern for it
+anyway, and confirms the transaction still saves normally, completely
+unaffected.
+
+**How it works**: a new `normalizeForFingerprint(text)` function turns a
+message into a template by lowercasing it and replacing any URL with
+`<URL>` and any run of digits with `<NUM>` — so "Get a Loan... Rs.500...
+call 18002586161" from two slightly different messages (different
+digits/links, same underlying wording) fingerprints identically. **This
+exact function also exists independently in `backend/PWA.js`** (a
+separate Apps Script project that can't share code with this one) — the
+two must always produce byte-identical output for the same text, since
+both read/write the same shared `LearnedSpamPatterns` sheet (new sheet,
+in the same spreadsheet as `Transactions`; columns: DateLearned, Sender,
+NormalizedTemplate, ExampleRawSMS). This script only ever READS that
+sheet (opened defensively — if it doesn't exist yet, because nobody's
+used the button yet, that's treated as "no learned patterns," never
+thrown); the PWA is the one that creates it and writes to it. A match
+requires BOTH the SMS sender AND the normalized text to match a stored
+row exactly (no fuzzy matching) — plus a minimum-specificity guard
+(at least 20 characters left after normalizing) on both the incoming
+message and the stored row, as a backstop against a message that
+normalizes down to something too short/generic (e.g. "rs <NUM>
+credited") coincidentally matching an unrelated future message.
+
+Verified with a new test file,
+`sms-parser-backend/tests/learnedSpamPatterns2026-09-18.test.js` (26
+checks): the safety invariant above; a genuine UNCERTAIN message with a
+matching sender+template gets IGNORED (logged as "IGNORED (LEARNED
+PATTERN)" in the `Logs` sheet, so it's visible for troubleshooting); the
+same template but a different sender does NOT match; a close-but-not-
+exact wording variation does NOT match; the length guard blocks a too-
+short learned template (checked twice — once for a short incoming
+message, once for a short stored row, since the code re-checks both
+sides as defense-in-depth); and a missing `LearnedSpamPatterns` sheet
+never throws, just behaves as "no patterns yet." Full existing suite
+(`smsParserRedesign.test.js` 64 checks +
+`smsParserFalsePositives2026-09-07.test.js` 12 checks) still passes, no
+regressions. Pushed to the Apps Script editor draft (`clasp push`) —
+confirmed only `appsscript.json`/`Code.js` were uploaded (the
+`tests/` folder correctly stayed out, via `.claspignore`). **`clasp
+deploy` has NOT been run** — per this project's standing rule, needs the
+user's explicit go-ahead, and ideally should go out together with the
+`backend/PWA.js` `clasp deploy` and the `index.html` `git push` for the
+other two pieces of this same feature, not separately.
 
 ## PROPOSED PLAN: Category/Type restructure + cross-tab linking (2026-08-09)
 

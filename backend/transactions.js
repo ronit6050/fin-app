@@ -167,16 +167,23 @@ function diagnosePendingTransactions(){
   }
 
   // 3) Of the rows the app has already looked at, how many are actually
-  //    marked ready (column P = YES) vs stuck blank?
+  //    marked ready (column P = YES) vs stuck blank? "IGNORED" is its
+  //    own third bucket, not "stuck" — it means a user deliberately
+  //    tombstoned that row via "Not a transaction" on Pending (see
+  //    docs/features/spam-learning.md), not a real processing gap.
+  //    Lumping it into "stuck" would misleadingly suggest a backlog that
+  //    doesn't actually exist.
   const data = sheet.getDataRange().getValues();
-  let readyCount = 0, stuckCount = 0, stuckRows = [];
+  let readyCount = 0, ignoredCount = 0, stuckCount = 0, stuckRows = [];
   for(let i = 1; i < data.length; i++){
     const processed = (data[i][15] || "").toString().trim();
     if(processed === "YES") readyCount++;
+    else if(processed === "IGNORED") ignoredCount++;
     else { stuckCount++; if(stuckRows.length < 10) stuckRows.push(i + 1); }
   }
   log("");
   log("3) Across the whole sheet: " + readyCount + " row(s) marked ready, " +
+      ignoredCount + " row(s) deliberately marked \"not a transaction\" by the user, " +
       stuckCount + " row(s) NOT marked ready yet.");
   if(stuckCount > 0){
     log("   -> Row number(s) not marked ready (first 10 shown): " + stuckRows.join(", "));

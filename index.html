@@ -1233,6 +1233,40 @@
       margin-top: 4px;
     }
 
+    /* ---------- "Not a transaction" (2026-09-18) ----------
+       A small, visually secondary action on each Pending card, for the
+       rare case a spam/promotional SMS got wrongly parsed as a real
+       transaction. Deliberately NOT styled like Save (no fill, no full
+       width, no pill) — Save confirms something, this removes something,
+       so it reads as a quiet, lower-emphasis option instead of a second
+       primary button. Sits right-aligned under Save. Requires tap-again-
+       to-confirm, same shared pattern as Settle/Mark Purchased — see
+       bindConfirmAction. */
+    .pending-item .not-txn-btn {
+      width: auto;
+      margin: 10px 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 9px 6px;
+      cursor: pointer;
+    }
+    .pending-item .not-txn-btn:hover {
+      background: transparent;
+      color: var(--color-danger);
+    }
+    .pending-item .not-txn-btn[data-confirming="1"] {
+      color: var(--color-danger);
+    }
+    .pending-item .not-txn-btn svg {
+      flex-shrink: 0;
+    }
+
     .pending-result {
       font-size: 0.85rem;
       margin-top: 6px;
@@ -2375,19 +2409,22 @@
       border-radius: var(--radius-sm);
     }
 
-    /* ---------- Pending investment-log notice (2026-08-11) ----------
-       Pending's Save is optimistic — the card is gone from the screen
-       the instant you tap Save (see that handler's own comment) — so if
-       a confirmed "Log as investment" chip's actual write gets silently
-       skipped by the duplicate-avoidance guard (autoLogInvestment),
-       there's no card left to show an error ON. This is a small,
-       dismissible banner above the Pending list instead — reuses the
-       app's existing warning color pair (same one status-pill.warning
-       and CC Advisor's threshold warning already use), not a new color.
-       Manual dismiss only (no auto-hide timer) — an auto-hide could
-       expire before you've even switched back to this tab and actually
-       seen it, which would defeat the entire point of surfacing this.
-       See docs/features/investment-instruments.md. */
+    /* ---------- Pending notice banner (added 2026-08-11) ----------
+       Pending's Save/removal actions are optimistic — the card is gone
+       from the screen the instant you tap Save (see that handler's own
+       comment) — so if a confirmed "Log as investment" chip's actual
+       write gets silently skipped by the duplicate-avoidance guard
+       (autoLogInvestment), there's no card left to show an error ON.
+       This is a small, dismissible banner above the Pending list
+       instead — reuses the app's existing warning color pair (same one
+       status-pill.warning and CC Advisor's threshold warning already
+       use), not a new color. Manual dismiss only (no auto-hide timer) —
+       an auto-hide could expire before you've even switched back to
+       this tab and actually seen it, which would defeat the entire
+       point of surfacing this. See
+       docs/features/investment-instruments.md. Reused as-is (2026-09-18)
+       for "Not a transaction"'s success confirmation — same underlying
+       problem, a different feature. */
     .pending-notice {
       display: flex;
       align-items: center;
@@ -3339,8 +3376,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-09-15-01";
-    const APP_CHANGELOG = "The Category question no longer shows up for a lending note (e.g. \"lent to Krish\") — it was never actually used for those.";
+    const APP_VERSION = "2026-09-18-01";
+    const APP_CHANGELOG = "Pending: added \"Not a transaction\" for a spam/promotional SMS wrongly parsed as a real transaction — tap twice to confirm, removes it instantly.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -3694,22 +3731,35 @@
     // swaps its label to "Tap again to confirm" for a few seconds; a
     // second tap in that window runs the real action, otherwise it
     // quietly reverts and nothing happens. Added 2026-08-11.
+    //
+    // Updated 2026-09-18 for "Not a transaction": that button has a hand-
+    // drawn SVG icon alongside its text, so swapping button.textContent
+    // directly (the original approach) would silently delete the icon
+    // too. If the button has a child marked .btn-label, only that child's
+    // text swaps, leaving any icon alone; every older plain-text button
+    // (Settle, Mark Purchased) has no such child, so it falls back to the
+    // original whole-button behavior unchanged.
     function bindConfirmAction(button, handler) {
-      const originalText = button.textContent;
+      const labelEl = button.querySelector(".btn-label");
+      const originalText = labelEl ? labelEl.textContent : button.textContent;
       let revertTimer = null;
+
+      function setLabel(text) {
+        if (labelEl) labelEl.textContent = text; else button.textContent = text;
+      }
 
       button.addEventListener("click", function (e) {
         if (button.dataset.confirming === "1") {
           clearTimeout(revertTimer);
           button.dataset.confirming = "";
-          button.textContent = originalText;
+          setLabel(originalText);
           handler(e);
         } else {
           button.dataset.confirming = "1";
-          button.textContent = "Tap again to confirm";
+          setLabel("Tap again to confirm");
           revertTimer = setTimeout(function () {
             button.dataset.confirming = "";
-            button.textContent = originalText;
+            setLabel(originalText);
           }, 3000);
         }
       });
@@ -4412,7 +4462,12 @@
     // adds its own line rather than replacing a single slot, so saving
     // several duplicates back-to-back (rare, but possible) doesn't
     // silently overwrite an earlier warning you hadn't seen yet.
-    function showPendingInvestmentNotice(message) {
+    // Originally built for the investment-log duplicate-skip notice only
+    // (2026-08-11); reused as-is for "Not a transaction"'s success
+    // confirmation (2026-09-18) since it's the same shape of problem —
+    // Pending's Save/removal is optimistic, so there's no card left on
+    // screen to show a one-off confirmation on.
+    function showPendingNotice(message) {
       const notice = document.createElement("div");
       notice.className = "pending-notice";
       notice.innerHTML = `<span>${escapeHtml(message)}</span><button type="button" class="pending-notice-dismiss" aria-label="Dismiss">×</button>`;
@@ -5030,7 +5085,7 @@
 
     function demoComputePending() {
       return demoState.transactions
-        .filter(function (t) { return !t.note; })
+        .filter(function (t) { return !t.note && !t.notATransaction; })
         .slice()
         .sort(function (a, b) { return b.date - a.date; }) // newest first
         .map(function (t) {
@@ -5528,6 +5583,19 @@
       demoState.debts.push({ date: new Date(), person: person, type: type, amount: Number(amount), note: note || "", dueDate: dueDate ? new Date(dueDate) : null, status: "Pending" });
       return { ok: true };
     }
+    // Mirrors the real markNotATransaction action (being built in
+    // parallel by another agent as of 2026-09-18) — flags the row so it
+    // drops out of demoComputePending, same as a real spam/promotional
+    // SMS being removed. Doesn't delete the row outright (nothing in
+    // this app's demo data ever does), just marks it the same way
+    // saveNote marks a row noted — demoComputePending already filters
+    // on this flag below.
+    function demoMarkNotATransaction(row) {
+      const t = demoState.transactions[row - 2];
+      if (!t) return { ok: false, error: "Invalid row." };
+      t.notATransaction = true;
+      return { ok: true };
+    }
     function demoSettleDebt(row) {
       const e = demoState.debts[row - 2];
       if (!e) return { ok: false, error: "Invalid row." };
@@ -5728,6 +5796,7 @@
           case "getDebts": return { ok: true, debts: demoComputeDebts() };
           case "addDebt": return demoAddDebt(data.person, data.type, data.amount, data.note, data.dueDate);
           case "settleDebt": return demoSettleDebt(data.row);
+          case "markNotATransaction": return demoMarkNotATransaction(data.row);
           case "recordDebtPayment": return demoRecordDebtPayment(data.row, data.amount);
           case "getSavingsGoals": return { ok: true, savings: demoComputeSavingsBreakdown() };
           case "previewSavingsSplit": return demoAutoSplitPreviewCalc(data.amount);
@@ -6431,6 +6500,7 @@
         <div class="field fe-field debt-field" style="display:none"></div>
         ${typeToggleHtml}
         <button type="button" class="save-btn">Save</button>
+        <button type="button" class="not-txn-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="8.5"/><path d="M6.5 17.5l11-11"/></svg><span class="btn-label">Not a transaction</span></button>
         <div class="pending-result"></div>
       `;
 
@@ -6439,6 +6509,7 @@
       const categoryField  = card.querySelector(".category-field");
       const debtField      = card.querySelector(".debt-field");
       const saveButton     = card.querySelector(".save-btn");
+      const notTxnButton   = card.querySelector(".not-txn-btn");
       const resultEl       = card.querySelector(".pending-result");
 
       // Whatever category was showing before any Financial Event
@@ -6616,9 +6687,9 @@
               // via restoreAfterFailedSave would be misleading here —
               // nothing about the save itself failed — so this is a
               // small dismissible banner instead. See
-              // showPendingInvestmentNotice's own comment and
+              // showPendingNotice's own comment and
               // docs/features/investment-instruments.md.
-              showPendingInvestmentNotice(
+              showPendingNotice(
                 "₹" + txn.amount.toLocaleString("en-IN") + " confirmed as " + savedInvestmentInstrument +
                 ", but wasn't logged to Investments (looks like a duplicate of something already there) — check the Investments tab."
               );
@@ -6630,6 +6701,59 @@
           });
 
         function restoreAfterFailedSave(message) {
+          allPending.unshift(txn);
+          shownCount++;
+          updatePendingStatusText();
+          saveCache("pending", allPending);
+
+          resultEl.style.color = "var(--color-danger)";
+          resultEl.textContent = message;
+          pendingListEl.insertBefore(card, pendingListEl.firstChild);
+        }
+      });
+
+      // "Not a transaction" (added 2026-09-18) — for the rare case a
+      // spam/promotional SMS got wrongly parsed and landed in Pending.
+      // Needs a real second tap first, since removing it here is the
+      // only way to get rid of it — same shared confirm pattern Settle/
+      // Mark Purchased already use (bindConfirmAction, preserves this
+      // button's icon since it swaps only the .btn-label text).
+      // Optimistic, same trade-off as Save just above: the card
+      // disappears the instant you confirm, the real backend call
+      // (markNotATransaction) happens quietly after. Success shows a
+      // brief confirmation via the shared Pending notice banner (see
+      // showPendingNotice) rather than anything on the card itself,
+      // since the card is already gone by the time the response comes
+      // back. Failure puts the card back at the top with a clear error,
+      // exactly like Save's own restoreAfterFailedSave above.
+      bindConfirmAction(notTxnButton, function () {
+        const idx = allPending.findIndex(function (t) { return t.row === txn.row; });
+        if (idx !== -1) allPending.splice(idx, 1);
+        shownCount = Math.max(shownCount - 1, 0);
+        updatePendingStatusText();
+        saveCache("pending", allPending);
+        card.remove();
+
+        callAppsScript({ action: "markNotATransaction", idToken: currentUser.idToken, row: txn.row })
+          .then(function (data) {
+            if (data.ok) {
+              // patternLearned is false when the message was too short/
+              // generic to safely learn a reusable pattern from (see
+              // markNotATransaction's own comment) — don't promise a
+              // similar message will be caught next time when it
+              // wasn't actually possible to make that guarantee.
+              showPendingNotice(data.patternLearned
+                ? "Won't flag messages like this again."
+                : "Removed. (That message was too short to learn from, so a similar one might show up again.)");
+            } else {
+              restoreAfterNotTxnFailure("Couldn't remove this (" + data.error + ") — check your connection and try again.");
+            }
+          })
+          .catch(function (err) {
+            restoreAfterNotTxnFailure("Couldn't remove this (" + err.message + ") — check your connection and try again.");
+          });
+
+        function restoreAfterNotTxnFailure(message) {
           allPending.unshift(txn);
           shownCount++;
           updatePendingStatusText();

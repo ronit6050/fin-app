@@ -50,6 +50,14 @@ function handlePwaRequest(data){
     return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent, data.financialEventName, data.debtPerson, data.investmentInstrument));
   }
 
+  // Added 2026-09-18 — "self-learning spam filter." Lets the user mark
+  // a Pending item that's obviously not a real transaction (a spam SMS
+  // the SMS parser wrongly saved as UNCERTAIN) as junk themselves. See
+  // markNotATransaction's own comment and docs/features/spam-learning.md.
+  if(data.action === "markNotATransaction"){
+    return jsonResponse(markNotATransaction(data.row));
+  }
+
   if(data.action === "getTodaySummary"){
     return jsonResponse({ ok:true, summary: getTodaySummary() });
   }
@@ -2114,6 +2122,229 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
   }catch(err){
     return { ok:false, error: err.toString() };
   }
+}
+
+// "Self-learning spam filter" — added 2026-09-18. Sometimes a
+// promotional/spam SMS wrongly slips past the SMS parser (a separate
+// Apps Script project, sms-parser-backend/Code.js) and gets saved as an
+// "UNCERTAIN" transaction — shown in Pending with its Counterparty
+// prefixed "NEEDS REVIEW: " (see that project's own comments for why
+// UNCERTAIN exists: it's the safety net that means a real transaction
+// in an unrecognized format never gets silently dropped, at the cost of
+// occasionally saving something that isn't a transaction at all).
+//
+// This lets the user mark one of those "not a real transaction"
+// themselves, right from the Pending screen, in one tap. Two things
+// happen: (1) the row is ARCHIVED — copied in full to a new
+// Transactions_Ignored sheet, never deleted-and-forgotten, so nothing
+// about the original message is unrecoverable if the learning is ever
+// wrong later — and (2) if the message text is specific enough to
+// safely generalize from, a "fingerprint" of it is saved to a new
+// LearnedSpamPatterns sheet.
+//
+// CAUGHT BY change-reviewer BEFORE THIS SHIPPED (2026-09-18): the first
+// version of this used sheet.deleteRow(row) to remove the original —
+// but EVERY row number this whole app hands out (Pending, History) is
+// just "this transaction's current position in the sheet." Deleting a
+// row shifts every row below it up by one, so any other Pending card or
+// History entry already on screen, whose row number was below the one
+// just removed, would silently start pointing at the WRONG transaction
+// — a later Save on one of those could attach a note/category/tag to a
+// completely unrelated real transaction with no error shown. This is
+// the first action in the whole app that would have removed a row at
+// all (every other action only ever edits a row's own columns in
+// place), so this exact danger never existed before it.
+//
+// Fixed at the root instead of patched around: this clears the row's
+// own cells in place (same row number, same position, nothing below it
+// moves) rather than deleting it. A cleared row is harmless everywhere
+// else that reads Transactions — getPendingTransactions/
+// getTransactionHistory both require column P ("Processed") to equal
+// "YES" before showing anything, and getTodaySummary/getMonthlyAnalysis
+// both skip any row with a blank date (`if(!rawDate) continue`) — so a
+// cleared row simply becomes invisible everywhere, permanently, with no
+// risk of ever being silently counted as real spend. The one accepted
+// trade-off: the now-empty row stays physically present in Transactions
+// forever (a small cosmetic cost), instead of the sheet shrinking —
+// worth it, since re-numbering every row below it is exactly the
+// mechanism that caused the bug in the first place.
+//
+// SECOND ROUND — change-reviewer caught a further, more severe gap in
+// the fix above (2026-09-18): Google Sheets' getLastRow() reports "the
+// last row that has ANY content" — so if the row being cleared happens
+// to be the sheet's actual trailing row (nothing after it), a plain
+// clearContent() genuinely makes getLastRow() drop by one, even though
+// the row still physically exists. The separate sms-parser-backend
+// project's saveTransaction() uses appendRow(), which always targets
+// "current last row + 1" — so a brand-new REAL transaction arriving
+// right after could land on that exact same, just-recycled row number.
+// Since the cleared row already had Processed="YES" (required by the
+// guard above), processNewTransactions()'s own row bookmark
+// (lastCheckedRow, in backend/transactions.js) had already moved past
+// that row number — so the new transaction landing there would never
+// be scanned again: never marked Processed, never pushed, never shown
+// anywhere. Silent, total loss of a real transaction — worse than the
+// original bug, and specifically the one failure mode this whole
+// SMS-ingestion subsystem exists to prevent.
+//
+// Fixed by never letting the row go fully blank: column P (Processed)
+// is explicitly set to "IGNORED" — never "YES", never blank — instead
+// of being cleared along with everything else. This alone guarantees
+// the row always has content, so getLastRow() can never shrink past it,
+// no matter which row it is. "IGNORED" still fails every existing
+// `!== "YES"` / `=== "YES"` check exactly like blank did (see
+// getPendingTransactions/getTransactionHistory), so nothing about
+// visibility changes — and it doubles as a self-documenting trace for
+// anyone looking at the raw Sheet later, instead of an unexplained
+// empty row.
+//
+// IMPORTANT — this function only RECORDS the removal + the learned
+// pattern. The actual "does a new incoming SMS match a learned
+// pattern, so should it be silently ignored" check lives entirely in
+// the OTHER project, sms-parser-backend/Code.js (a separate Apps
+// Script project that reads/writes this same spreadsheet) — this file
+// never checks LearnedSpamPatterns itself. The safety guarantee the
+// whole feature depends on: that other project's check may only ever
+// affect a message it already classified UNCERTAIN — it can never
+// override a confidently-detected real transaction. See
+// docs/features/spam-learning.md for the full design, including why
+// that guarantee matters.
+function markNotATransaction(row){
+  try{
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+
+    if(!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()){
+      return { ok:false, error:"Invalid row." };
+    }
+
+    const data = sheet.getDataRange().getValues();
+    const rowValues = data[row - 1];
+
+    // Same guard getPendingTransactions() uses to decide what still
+    // counts as "pending" — defends against a stale row number sent
+    // from the frontend (e.g. the Pending list changed underneath the
+    // user, or this row was already noted, before the tap landed).
+    // Never archive/delete a row that isn't genuinely still untouched.
+    const processed = (rowValues[15] || "").toString().trim(); // column P
+    const note       = (rowValues[12] || "").toString().trim(); // column M
+    if(processed !== "YES" || note){
+      return { ok:false, error:"This one isn't pending anymore (it looks like it was already noted, or isn't a real row) — nothing was changed." };
+    }
+
+    // Read RawSMS/Sender fresh from the row itself — never trust the
+    // frontend to send these, same "always re-read from the sheet"
+    // rule the rest of this file already follows for anything that
+    // matters (e.g. saveTransactionNote re-reads Mode/Reference itself).
+    const rawSms = (rowValues[10] || "").toString(); // column K
+    const sender = (rowValues[11] || "").toString(); // column L
+
+    // 1. Archive the FULL row, exactly as it is, before touching
+    // anything else — this is a move, not a delete-and-forget.
+    const ignoredSheet = getTransactionsIgnoredSheet_();
+    ignoredSheet.appendRow(rowValues);
+
+    // 2. Try to learn a reusable spam pattern from it — only when
+    // there's real text to learn from, AND the normalized template is
+    // specific enough to safely generalize from (a minimum-specificity
+    // guard: a very short/generic template — e.g. just "<NUM>" left
+    // over after stripping numbers/links/whitespace — could
+    // coincidentally match a completely unrelated future message, so
+    // it's deliberately skipped rather than trusted). The row is still
+    // archived and removed either way — the user's immediate "get this
+    // out of Pending" result never depends on whether a learning rule
+    // could safely be created from it.
+    let patternLearned = false;
+    if(rawSms && sender){
+      const template = normalizeForFingerprint(rawSms);
+      if(template.length >= 20){
+        const patternsSheet = getLearnedSpamPatternsSheet_();
+        patternsSheet.appendRow([new Date(), sender, template, rawSms]);
+        patternLearned = true;
+      }
+    }
+
+    // 3. Clear the original row's cells — see the comment above this
+    // function for why this clears in place rather than deleting the
+    // row outright. The data now lives in Transactions_Ignored; this
+    // row becomes permanently invisible to every screen that reads
+    // Transactions, without shifting anything below it.
+    //
+    // Column P (Processed, 1-based column 16) is deliberately NOT left
+    // blank like every other column — it's set to "IGNORED" instead, so
+    // the row can never look fully empty to Google Sheets. See the
+    // "SECOND ROUND" comment above this function for exactly why that
+    // matters (getLastRow() shrinking on a cleared trailing row, and a
+    // brand-new real transaction silently landing on the recycled row
+    // number). "IGNORED" still fails every existing Processed==="YES"
+    // check in this codebase exactly like blank did — visibility is
+    // completely unaffected, only the emptiness-detection risk is.
+    const tombstoneRow = new Array(rowValues.length).fill("");
+    tombstoneRow[15] = "IGNORED"; // column P — see comment above
+    sheet.getRange(row, 1, 1, rowValues.length).setValues([tombstoneRow]);
+
+    // Tells the frontend whether a reusable pattern was actually
+    // learned (the message might have been too short/generic to safely
+    // generalize from, per the guard above) — so it can be honest about
+    // whether a similar message is guaranteed to be caught automatically
+    // next time, rather than always claiming so. Same "don't let two
+    // different outcomes look identical" rule this app already applies
+    // elsewhere (e.g. saveTransactionNote's typeSaved/investmentLogged).
+    return { ok:true, patternLearned: patternLearned };
+  }catch(err){
+    return { ok:false, error: err.toString() };
+  }
+}
+
+// Auto-creates Transactions_Ignored the first time it's needed, with
+// the exact same header row Transactions currently has — same
+// "auto-create on first use" pattern already used elsewhere in this
+// codebase (e.g. investmentInstruments.js's getInvestmentInstrumentsSheet_()).
+function getTransactionsIgnoredSheet_(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("Transactions_Ignored");
+  if(!sheet){
+    sheet = ss.insertSheet("Transactions_Ignored");
+    const txnSheet = ss.getSheetByName("Transactions");
+    const header = txnSheet.getDataRange().getValues()[0];
+    sheet.appendRow(header);
+  }
+  return sheet;
+}
+
+// Auto-creates LearnedSpamPatterns the first time it's needed.
+function getLearnedSpamPatternsSheet_(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("LearnedSpamPatterns");
+  if(!sheet){
+    sheet = ss.insertSheet("LearnedSpamPatterns");
+    sheet.appendRow(["DateLearned", "Sender", "NormalizedTemplate", "ExampleRawSMS"]);
+  }
+  return sheet;
+}
+
+// Turns a raw SMS into a generalized "template" for matching similar
+// future messages — strips out the parts that differ between two
+// otherwise-identical messages (a link, a changing number like an
+// amount or a promo code) so e.g. two copies of the same promotional
+// SMS sent with two different phone numbers/amounts still normalize to
+// the exact same template.
+//
+// MUST STAY BYTE-IDENTICAL to the separate copy of this same function
+// in sms-parser-backend/Code.js (a different Apps Script project) — the
+// two scripts can't share code directly, but both read/write the same
+// LearnedSpamPatterns sheet on the same shared spreadsheet, so if the
+// two implementations ever drift apart, a pattern learned here could
+// fail to match the exact same message when the other project checks
+// it later (or vice versa). Keep any future edit to this function in
+// sync with that copy. See docs/features/spam-learning.md.
+function normalizeForFingerprint(text) {
+  return (text || "")
+    .toString()
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, "<URL>")
+    .replace(/\d+/g, "<NUM>")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function verifyGoogleIdToken(idToken){

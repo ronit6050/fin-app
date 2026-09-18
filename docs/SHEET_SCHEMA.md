@@ -233,6 +233,33 @@ see "Known past issue" below.)*
 
 ---
 
+## Transactions_Ignored
+Archive of transactions the user marked "not a real transaction" from
+Pending (added 2026-09-18, see
+[docs/features/spam-learning.md](features/spam-learning.md)). Exact same
+columns as `Transactions` above — a full copy of the original row,
+never a delete-and-forget. Auto-created on first use.
+
+---
+
+## LearnedSpamPatterns
+Reusable "fingerprints" of spam messages the user has flagged, so the
+separate `sms-parser-backend` project can recognize near-identical
+future messages automatically (added 2026-09-18, see
+[docs/features/spam-learning.md](features/spam-learning.md)).
+Auto-created on first use. Only ever affects a message already
+classified `UNCERTAIN` by that other project — can never override a
+confidently-detected real transaction.
+
+| Col | Name | Meaning |
+|---|---|---|
+| A | DateLearned | |
+| B | Sender | SMS sender ID |
+| C | NormalizedTemplate | `normalizeForFingerprint(RawSMS)` — must stay byte-identical between this project's copy and `sms-parser-backend/Code.js`'s copy |
+| D | ExampleRawSMS | Original, untouched raw SMS text |
+
+---
+
 ## AILogs
 Error/event log, useful for debugging (e.g. `PUSH_SENT`/`PUSH_ERROR`,
 `PROCESS_TXN_ERROR` entries).

@@ -4,6 +4,95 @@ const SHEET_ID = "1_vlmbWEg6KkFhU7uUdmtPBfVRP_VWDmOjzcCJxF2ruw";
 const TRANSACTION_SHEET = "Transactions";
 const LOG_SHEET = "Logs";
 
+// Self-learning spam filter (added 2026-09-18). Plain-English: when a
+// promotional/spam SMS slips past classifySms() and gets saved as
+// UNCERTAIN ("NEEDS REVIEW: ..." in Pending), the PWA now has a button
+// letting the user say "this isn't a real transaction" -- that write
+// goes to this same sheet (LearnedSpamPatterns) from the OTHER Apps
+// Script project (backend/PWA.js), and this script only ever READS it,
+// to recognize the same junk automatically next time.
+//
+// THE NON-NEGOTIABLE SAFETY RULE: this check may ONLY ever downgrade a
+// message classifySms() already decided is "UNCERTAIN" into "IGNORE".
+// It must NEVER be checked against, or able to affect, a message
+// classifySms() decided is a confident "TRANSACTION" -- see doPost()
+// below, where this is only ever called inside the UNCERTAIN branch.
+// That's what guarantees the learning system can never cause a real,
+// confidently-detected transaction to be silently dropped -- worst case
+// if the learning is ever wrong, a junk message just goes back to
+// showing up once more in Pending for a human to check, never the
+// reverse.
+const LEARNED_SPAM_SHEET = "LearnedSpamPatterns";
+const MIN_FINGERPRINT_LENGTH = 20; // backstop against a degenerate, too-generic fingerprint (e.g. "rs <NUM> credited") coincidentally matching an unrelated future message
+
+// KEEP THIS EXACTLY IN SYNC with the identically-named copy of this
+// function in the main backend's PWA.js (a separate Apps Script
+// project) -- both projects read/write the same LearnedSpamPatterns
+// sheet in the same spreadsheet, so their output must be byte-identical
+// for the same input text, or a learned pattern written by one project
+// could silently never match here. If this ever needs to change, change
+// both copies together.
+function normalizeForFingerprint(text) {
+  return (text || "")
+    .toString()
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, "<URL>")
+    .replace(/\d+/g, "<NUM>")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Reads the LearnedSpamPatterns sheet defensively -- returns null if it
+// doesn't exist yet (nobody has used the "not a real transaction" button
+// yet) or can't be opened for any reason, never throws. This script
+// only ever READS this sheet -- the main PWA backend (a separate Apps
+// Script project) is the one that creates it and writes new learned
+// patterns to it.
+function getLearnedSpamPatternsSheet(){
+  try{
+    return getSheet(LEARNED_SPAM_SHEET);
+  }catch(err){
+    return null;
+  }
+}
+
+// See the safety-rule comment above LEARNED_SPAM_SHEET -- only ever
+// call this for a message already classified "UNCERTAIN".
+function matchesLearnedSpamPattern(sender, sms){
+
+  const sheet = getLearnedSpamPatternsSheet();
+  if(!sheet) return false;
+
+  const lastRow = sheet.getLastRow();
+  if(lastRow < 2) return false;
+
+  const normalizedIncoming = normalizeForFingerprint(sms);
+
+  // Same minimum-specificity backstop the writer applies before ever
+  // learning a pattern -- repeated here (defense in depth) in case that
+  // guard is ever missing or wrong in the other project.
+  if(normalizedIncoming.length < MIN_FINGERPRINT_LENGTH) return false;
+
+  // Columns A-D: DateLearned, Sender, NormalizedTemplate, ExampleRawSMS
+  const rows = sheet.getRange(2,1,lastRow-1,4).getValues();
+
+  for(let i=0;i<rows.length;i++){
+
+    const rowSender = String(rows[i][1] || "");
+    const rowTemplate = String(rows[i][2] || "");
+
+    if(rowTemplate.length < MIN_FINGERPRINT_LENGTH) continue; // same backstop, applied to the stored row too
+
+    if(rowSender === sender && rowTemplate === normalizedIncoming){
+      return true;
+    }
+
+  }
+
+  return false;
+
+}
+
 // Redesigned from scratch 2026-08-27. What changed and why (plain
 // English, so this stays understandable without re-reading old chat
 // history):
@@ -62,6 +151,18 @@ function doPost(e){
     if(classification === "IGNORE"){
 
       logWebhook(sender,sms,raw,"NOT TRANSACTION");
+      return ContentService.createTextOutput("IGNORED");
+
+    }
+
+    // Self-learning spam filter (added 2026-09-18) -- ONLY ever checked
+    // when classification is "UNCERTAIN", never "TRANSACTION". See the
+    // safety-rule comment above LEARNED_SPAM_SHEET for why this order is
+    // non-negotiable. Checked before ruleParser() even runs, since a
+    // matched message is ignored outright, same as a plain IGNORE.
+    if(classification === "UNCERTAIN" && matchesLearnedSpamPattern(sender, sms)){
+
+      logWebhook(sender,sms,raw,"IGNORED (LEARNED PATTERN)");
       return ContentService.createTextOutput("IGNORED");
 
     }

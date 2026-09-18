@@ -358,7 +358,7 @@ function checkDataHealth(){
   log("--- 1) Value consistency (columns that should only ever hold a few fixed values) ---");
   const ENUM_CHECKS = [
     { sheet: "Transactions", col: 4,  label: "Type",           expected: ["debit","credit"] },
-    { sheet: "Transactions", col: 16, label: "Processed",      expected: ["YES",""] },
+    { sheet: "Transactions", col: 16, label: "Processed",      expected: ["YES","IGNORED",""] }, // "IGNORED" = tombstoned by markNotATransaction (PWA.js) — see docs/features/spam-learning.md, not a real anomaly
     { sheet: "Transactions", col: 17, label: "NeedWantSaving", expected: ["Need","Want","Saving","Investment",""] },
     { sheet: "Transactions", col: 18, label: "FinancialEvent", expected: ["Rent","EMI","Investment",""] },
     { sheet: "Cash",         col: 4,  label: "Type",           expected: ["debit","credit"] },
