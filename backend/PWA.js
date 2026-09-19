@@ -1768,6 +1768,45 @@ function getPendingTransactions(txnData){
   return pending.reverse(); // newest first
 }
 
+// Decides whether a brand-new transaction is safe to offer a one-tap
+// "Confirm" button on its push notification (added 2026-09-19) — see
+// docs/features/quick-confirm-notification.md. Deliberately conservative:
+// only offered for a plain debit with a CONFIDENT remembered note AND
+// category, and only when none of the special cases that need a real
+// follow-up question apply (a Rent/EMI/Investment match, or a wallet
+// top-up) — those still need the real Pending screen, since a single
+// button tap can't ask "which EMI is this?" the way the app normally
+// would. Returns null when no button should be shown; otherwise
+// { note, category, type } (type may be "" — no confident guess yet,
+// same as Pending leaving that toggle unset).
+//
+// A credit-card-bill-payment check is deliberately NOT included here
+// (unlike getPendingTransactions' isNonSpendTransfer) — it needs the
+// whole Transactions sheet to compute the outstanding bill total, too
+// expensive to read on every single trigger run just for this. Leaving
+// it out is harmless: saveTransactionNote() re-checks that from the
+// real saved row (mode/counterparty/note/amount) before touching any
+// spend total or the Need/Want/Saving column, completely independent of
+// whatever note/category this button happened to save.
+function getQuickConfirmSuggestion(type, counterparty, amount, mode, reference, smartMemoryData, noteMemoryData, financialEventsData, typeVotesData){
+  if(type !== "debit") return null;
+
+  const category = getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
+  const note = getSuggestedNote(counterparty, amount, noteMemoryData);
+  if(!note || !category) return null;
+
+  const financialEvent = suggestFinancialEvent(counterparty, amount, financialEventsData, "");
+  if(financialEvent) return null;
+
+  if(isWalletTopUp(counterparty, reference)) return null;
+
+  return {
+    note: note,
+    category: category,
+    type: getSuggestedType(type, category, counterparty, amount, typeVotesData, "") || ""
+  };
+}
+
 // Already-noted transactions (the opposite filter from
 // getPendingTransactions) for the History screen's browse-and-edit flow.
 // offset/limit paginate, newest first — defaults to the first 20.

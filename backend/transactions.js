@@ -25,6 +25,20 @@ function processNewTransactions() {
   // Read only the new rows — not the entire sheet
   const data = sheet.getRange(startRow + 1, 1, numRows, 17).getValues();
 
+  // Lookup sheets for the "Confirm" notification button (added
+  // 2026-09-19) — read once here, same reason getPendingTransactions()
+  // reads them once outside its own loop. See
+  // docs/features/quick-confirm-notification.md.
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const smartMemorySheet = ss.getSheetByName("SmartMemory");
+  const smartMemoryData  = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
+  const typeVotesSheet = ss.getSheetByName("TypeVotes");
+  const typeVotesData  = typeVotesSheet ? typeVotesSheet.getDataRange().getValues() : [];
+  const noteMemorySheet = ss.getSheetByName("NoteMemory");
+  const noteMemoryData  = noteMemorySheet ? noteMemorySheet.getDataRange().getValues() : [];
+  const financialEventsSheet = ss.getSheetByName("FinancialEvents");
+  const financialEventsData  = financialEventsSheet ? financialEventsSheet.getDataRange().getValues() : [];
+
   for(let i = 0; i < data.length; i++){
 
     const processed = data[i][15];
@@ -95,10 +109,28 @@ Reply to add a note for this transaction.`;
           messageId = result.result.message_id;
         }
 
+        // ── "Confirm" notification button (added 2026-09-19) ──
+        // See getQuickConfirmSuggestion's own comment (PWA.js) for the
+        // full reasoning on when this is offered.
+        const quickConfirm = getQuickConfirmSuggestion(
+          type, counterparty, amount, mode, reference,
+          smartMemoryData, noteMemoryData, financialEventsData, typeVotesData
+        );
+        if(quickConfirm) quickConfirm.row = rowIndex;
+
         // ── Real push notification — the main alert now that Telegram is off ──
         const pushBody = "₹" + Number(amount).toLocaleString('en-IN') + " · " + bank +
-          (counterparty ? " · " + counterparty : "");
-        sendPushNotification("💳 New Transaction", pushBody);
+          (counterparty ? " · " + counterparty : "") +
+          (quickConfirm ? ("\nTap Confirm to save as \"" + quickConfirm.note + "\" (" + quickConfirm.category + ")") : "");
+
+        sendPushNotification("💳 New Transaction", pushBody, quickConfirm ? {
+          quickConfirm:  "1",
+          row:           quickConfirm.row,
+          note:          quickConfirm.note,
+          category:      quickConfirm.category,
+          counterparty:  counterparty,
+          type:          quickConfirm.type
+        } : null);
 
         // Save messageId (empty if Telegram is off) and mark as processed
         sheet.getRange(rowIndex, 15).setValue(messageId);

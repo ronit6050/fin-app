@@ -711,25 +711,57 @@ edit note/category/amount/Need-Want-Saving in place — reuses the same
 exactly like a first-time correction would. **Full design doc:
 [docs/features/history.md](docs/features/history.md)**.
 
-**Self-learning spam filter (started 2026-09-18): backend/PWA.js piece
-done, pushed to the editor draft, NOT yet deployed live** — waiting on
-the user's go-ahead, and on the other two pieces
-(`sms-parser-backend/Code.js`'s actual matching logic, `index.html`'s
-"this isn't a real transaction" button) being confirmed done too before
-this is live end to end. Lets the user mark a Pending item that's
-obviously spam (a promotional SMS the SMS parser wrongly saved as
-`UNCERTAIN`, shown with counterparty prefixed `"NEEDS REVIEW: "`) as
-junk themselves — archives the row (`Transactions_Ignored`, full data
-kept, never deleted-and-forgotten) and, if the message text is specific
-enough, records a reusable "fingerprint" of it (`LearnedSpamPatterns`)
-so the separate `sms-parser-backend` project can recognize similar junk
+**Self-learning spam filter (started 2026-09-18): done, deployed live
+2026-09-18.** All three pieces (`backend/PWA.js`, `sms-parser-backend/
+Code.js`, `index.html`) shipped together — main backend `clasp deploy`d
+(`@315`), sms-parser project `clasp deploy`d (`@16`), commit `99ed216`
+pushed to GitHub. Lets the user mark a Pending item that's obviously
+spam (a promotional SMS the SMS parser wrongly saved as `UNCERTAIN`,
+shown with counterparty prefixed `"NEEDS REVIEW: "`) as junk themselves
+— archives the row (`Transactions_Ignored`, full data kept, never
+deleted-and-forgotten) and, if the message text is specific enough,
+records a reusable "fingerprint" of it (`LearnedSpamPatterns`) so the
+separate `sms-parser-backend` project can recognize similar junk
 automatically next time. Same self-learning-from-your-own-corrections
 idea as Need/Want/Saving and Note Memory above, just for spam instead
 of budgeting. Safety invariant the whole feature depends on (enforced
 in the other project, not here): a learned pattern can only ever affect
 a message already classified `UNCERTAIN` — it can never override a
-confidently-detected real transaction. Full detail:
-[docs/features/spam-learning.md](docs/features/spam-learning.md).
+confidently-detected real transaction.
+
+**Two review rounds by `change-reviewer` caught real bugs before this
+shipped, both fixed same day**: the first version deleted the marked
+row outright, which would have shifted every row below it and risked a
+later Save silently landing on the wrong transaction — fixed by
+clearing the row's cells in place instead. That fix then exposed a
+second, more severe gap: if the cleared row happened to be the sheet's
+actual last row, it could make Google Sheets' `getLastRow()` shrink,
+letting a brand-new real transaction silently land on that same
+recycled row number and never be picked up at all — fixed by leaving a
+non-blank `"IGNORED"` marker in the Processed column so the row can
+never look fully empty. Both fixes are directly proven by tests that
+were confirmed to fail against the earlier, buggy version first (not
+just written and trusted). `APP_VERSION` bumped to `2026-09-18-01`.
+Full detail: [docs/features/spam-learning.md](docs/features/spam-learning.md).
+
+**Quick-confirm notification button (2026-09-19): built, tested, NOT yet
+live.** User's idea: reply to a transaction notification instead of
+opening the app. Real technical limit: Android web-push notifications
+can't take typed text, only tap-able buttons — so when the app already
+has a confident remembered note+category for a transaction (and it
+isn't a Rent/EMI/Investment/wallet-top-up special case), the
+notification now shows a one-tap "Confirm" button that saves it via
+the existing `saveNote` action, with the app never opening. Known,
+honest limitation: the service worker can only use whatever Google
+sign-in proof was last saved on the phone (~1 hour lifetime) — a stale
+token shows a clear "couldn't save automatically, open the app" message
+instead of silently failing. `backend/tests/quickConfirmNotification.test.js`
+(16 checks) + full suite (595 checks) pass. `APP_VERSION` bumped to
+`2026-09-19-01`. Full detail:
+[docs/features/quick-confirm-notification.md](docs/features/quick-confirm-notification.md).
+Backend `clasp push`ed to the editor draft only; frontend not yet
+`git push`ed — both need a go-ahead, plus real on-device testing (this
+environment can't render an actual Android push notification).
 
 **Responsiveness + drastic visual redesign + dark mode: done**, see the
 "Responsiveness pass" and "Drastic visual redesign" notes under Step 11
@@ -2051,8 +2083,8 @@ Tasker's live pinned deployment, version 9) has NOT been run**, per
 this project's standing rule that it always needs the user's explicit
 go-ahead in the same conversation.
 
-**Self-learning spam filter — SMS-parser side built 2026-09-18, pushed
-to the editor draft, NOT yet deployed live.** This is the third of a
+**Self-learning spam filter — SMS-parser side built 2026-09-18, deployed
+live the same day (`@16`).** This is the third of a
 3-piece feature (this file handles reading/recognizing; `backend/PWA.js`,
 a separate Apps Script project, handles the new button + writing the
 learned pattern — see that project's own notes for its half; `index.html`

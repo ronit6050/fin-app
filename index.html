@@ -3376,8 +3376,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-09-18-01";
-    const APP_CHANGELOG = "Pending: added \"Not a transaction\" for a spam/promotional SMS wrongly parsed as a real transaction — tap twice to confirm, removes it instantly.";
+    const APP_VERSION = "2026-09-19-01";
+    const APP_CHANGELOG = "New transaction notifications can now show a \"Confirm\" button that saves the note/category right from the notification, no need to open the app.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -3531,6 +3531,49 @@
       }
     });
 
+    // Hands the current sign-in proof to the service worker (added
+    // 2026-09-19, for the notification "Confirm" button — see
+    // docs/features/quick-confirm-notification.md). A service worker
+    // can't read localStorage at all, only IndexedDB — so this copies
+    // the same idToken already saved above into a tiny IndexedDB
+    // database the service worker can open for itself later, even while
+    // this page is fully closed. Best-effort only: if anything here
+    // fails, the button in sw.js just falls back to "open the app
+    // instead" — nothing else in the app depends on this succeeding.
+    function syncAuthTokenForServiceWorker(user) {
+      try {
+        if (!("indexedDB" in window)) return;
+        const openReq = indexedDB.open("finAppAuth", 1);
+        openReq.onupgradeneeded = function () {
+          openReq.result.createObjectStore("tokens", { keyPath: "id" });
+        };
+        openReq.onsuccess = function () {
+          const db = openReq.result;
+          const tx = db.transaction("tokens", "readwrite");
+          tx.objectStore("tokens").put({ id: "current", idToken: user.idToken, email: user.email });
+          tx.oncomplete = function () { db.close(); };
+        };
+      } catch (e) { /* best-effort, see comment above */ }
+    }
+
+    // Removes the copy above when signing out, so the notification
+    // "Confirm" button can't keep quietly saving things after that.
+    function clearAuthTokenForServiceWorker() {
+      try {
+        if (!("indexedDB" in window)) return;
+        const openReq = indexedDB.open("finAppAuth", 1);
+        openReq.onupgradeneeded = function () {
+          openReq.result.createObjectStore("tokens", { keyPath: "id" });
+        };
+        openReq.onsuccess = function () {
+          const db = openReq.result;
+          const tx = db.transaction("tokens", "readwrite");
+          tx.objectStore("tokens").delete("current");
+          tx.oncomplete = function () { db.close(); };
+        };
+      } catch (e) { /* best-effort, see syncAuthTokenForServiceWorker */ }
+    }
+
     // Google calls this function automatically after someone signs in
     // (either by clicking the button, or being silently re-signed-in).
     // It hands us a "credential" — a signed proof of who just logged in.
@@ -3556,6 +3599,10 @@
       // Remember this browser is signed in — including the actual proof —
       // so refreshing the page doesn't need to ask Google again at all.
       localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
+
+      // Also hand the sign-in proof to the service worker (added
+      // 2026-09-19) — see that function's own comment for why.
+      syncAuthTokenForServiceWorker(currentUser);
 
       showSignedInUI(currentUser);
 
@@ -3653,6 +3700,7 @@
           const savedUser = JSON.parse(saved);
           if (savedUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase() && savedUser.idToken) {
             currentUser = savedUser;
+            syncAuthTokenForServiceWorker(currentUser);
             showSignedInUI(currentUser);
             loadDashboard();
             loadPendingTransactions();
@@ -3693,6 +3741,7 @@
     signOutButton.addEventListener("click", function () {
       currentUser = null;
       localStorage.removeItem(STORAGE_KEY);
+      clearAuthTokenForServiceWorker();
       fullySignOut();
       showSignedOutUI();
     });
@@ -5888,6 +5937,7 @@
     function handleSessionExpired() {
       currentUser = null;
       localStorage.removeItem(STORAGE_KEY);
+      clearAuthTokenForServiceWorker();
       showSignedOutUI();
     }
 

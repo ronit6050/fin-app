@@ -7,7 +7,14 @@
 
 // Sends one push notification to the registered device.
 // Safe to call even if nothing is registered yet — it just does nothing.
-function sendPushNotification(title, body){
+// extraData (added 2026-09-19, for the "Confirm" notification button —
+// see docs/features/quick-confirm-notification.md) is optional — an
+// object of extra fields the service worker needs to save a note
+// straight from the notification, with no app-opening involved. Every
+// value gets converted to plain text before sending, since FCM's "data"
+// message format only accepts strings — it silently rejects the whole
+// send otherwise.
+function sendPushNotification(title, body, extraData){
   try{
     const props = PropertiesService.getScriptProperties();
     const deviceToken = props.getProperty("PWA_PUSH_TOKEN");
@@ -19,10 +26,19 @@ function sendPushNotification(title, body){
     const serviceAccount = JSON.parse(props.getProperty("FIREBASE_SERVICE_ACCOUNT"));
     const url = "https://fcm.googleapis.com/v1/projects/" + serviceAccount.project_id + "/messages:send";
 
+    const dataPayload = { title: title, body: body };
+    if(extraData){
+      Object.keys(extraData).forEach(function(key){
+        if(extraData[key] !== null && extraData[key] !== undefined){
+          dataPayload[key] = String(extraData[key]);
+        }
+      });
+    }
+
     const payload = {
       message: {
         token: deviceToken,
-        data: { title: title, body: body }
+        data: dataPayload
       }
     };
 
