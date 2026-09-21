@@ -511,6 +511,113 @@ function checkDataHealth(){
 
 
 /* ============================================
+   PUSH NOTIFICATION DIAGNOSTIC (read-only, added 2026-09-21)
+   Run by hand from the Apps Script editor. Answers "why aren't my
+   push notifications landing?" directly from code instead of guessing:
+   1) Lists every trigger ACTUALLY scheduled right now (via
+      ScriptApp.getProjectTriggers() — the real, current answer, not a
+      screenshot that can go stale, like the 2026-08-12 Triggers-page
+      check this project relied on before).
+   2) Confirms the two secrets sendPushNotification() needs
+      (PWA_PUSH_TOKEN, FIREBASE_SERVICE_ACCOUNT) are actually present
+      — never prints their real values.
+   3) Actually exercises getFirebaseAccessToken() to confirm the saved
+      Firebase service-account key still works right now, not just
+      that it exists.
+   4) Counts recent AILogs entries for PUSH_SENT / PUSH_ERROR /
+      PUSH_TOKEN_ERROR, and shows the most recent of each — so you can
+      see whether pushes are actually being attempted, and since when
+      they stopped (if they have).
+   Changes nothing.
+============================================ */
+function diagnosePushNotifications(){
+
+  const out = [];
+  const log = (s) => { out.push(s); Logger.log(s); };
+
+  log("===== PUSH NOTIFICATION DIAGNOSTIC =====");
+  log("(Read-only — this changes nothing, just reports.)");
+  log("");
+
+  // ── 1) What's actually scheduled right now ──
+  log("--- 1) Triggers actually scheduled right now ---");
+  const triggers = ScriptApp.getProjectTriggers();
+  const KNOWN_PUSH_SENDERS = [
+    "processNewTransactions", "checkDebtDueDates",
+    "sendDailyCashCheckin", "sendSundaySavingsReminder"
+  ];
+  if(triggers.length === 0){
+    log("- NONE. No time-based triggers are scheduled at all — every");
+    log("  proactive notification below is silently never running.");
+  } else {
+    triggers.forEach((t) => {
+      const fn = t.getHandlerFunction();
+      const isKnown = KNOWN_PUSH_SENDERS.indexOf(fn) !== -1;
+      log("- \"" + fn + "\"" + (isKnown ? " (a known push-sending function)" : ""));
+    });
+    KNOWN_PUSH_SENDERS.forEach((fn) => {
+      const scheduled = triggers.some((t) => t.getHandlerFunction() === fn);
+      if(!scheduled){
+        log("- MISSING: \"" + fn + "\" exists in the code but has NO trigger");
+        log("  scheduled for it right now — it will never run on its own.");
+      }
+    });
+  }
+
+  log("");
+  log("--- 2) Required secrets present? (values never shown) ---");
+  const props = PropertiesService.getScriptProperties();
+  const hasToken = !!props.getProperty("PWA_PUSH_TOKEN");
+  const hasServiceAccount = !!props.getProperty("FIREBASE_SERVICE_ACCOUNT");
+  log("- PWA_PUSH_TOKEN (your phone's push address): " + (hasToken ? "present" : "MISSING — no phone is registered, every push silently no-ops"));
+  log("- FIREBASE_SERVICE_ACCOUNT (server's Firebase key): " + (hasServiceAccount ? "present" : "MISSING — sendPushNotification can never succeed"));
+
+  log("");
+  log("--- 3) Does the Firebase key actually still work? ---");
+  if(hasServiceAccount){
+    const accessToken = getFirebaseAccessToken();
+    log(accessToken
+      ? "- OK — successfully exchanged the saved key for a real Firebase access token just now."
+      : "- FAILED — the saved key did not work just now (see PUSH_TOKEN_ERROR in AILogs below for the real reason).");
+  } else {
+    log("- Skipped (no key saved to test).");
+  }
+
+  log("");
+  log("--- 4) Recent AILogs activity for push sends ---");
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName("AILogs");
+  if(!logSheet){
+    log("- No AILogs tab found at all.");
+  } else {
+    const data = logSheet.getDataRange().getValues();
+    const TYPES = ["PUSH_SENT", "PUSH_ERROR", "PUSH_TOKEN_ERROR"];
+    TYPES.forEach((type) => {
+      let count = 0, lastRow = null;
+      for(let i = 1; i < data.length; i++){
+        if((data[i][1] || "").toString().trim() === type){
+          count++;
+          lastRow = data[i];
+        }
+      }
+      if(count === 0){
+        log("- " + type + ": 0 entries ever.");
+      } else {
+        log("- " + type + ": " + count + " entries total. Most recent: " +
+          Utilities.formatDate(new Date(lastRow[0]), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm") +
+          " — " + (lastRow[2] || "").toString().substring(0, 150));
+      }
+    });
+  }
+
+  log("");
+  log("===== END DIAGNOSTIC — copy everything above and share it =====");
+
+  return out.join("\n");
+}
+
+
+/* ============================================
    CATEGORY DROPDOWN VALIDATION FIX (added 2026-09-15)
    Real bug found 2026-09-15: the Transactions sheet's Category column
    (N) had a dropdown (Data Validation) whose list of allowed words came

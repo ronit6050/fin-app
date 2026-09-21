@@ -523,6 +523,172 @@ function testRepaymentPlan(){
   sendRepaymentPlan(youOwe, totalYouOwe);
 }
 
+/* =======================================
+   DEBT PAYOFF / COLLECTION TRAJECTORY (added 2026-09-21)
+   Plain-English: instead of just "you owe ₹10,000," this works out
+   "at the rate you've actually been paying it down, you'll be
+   debt-free by around March 2027" — and the mirror version for money
+   owed TO you ("on pace to collect it all by ~<date>"). Pushed only
+   right after a real payment/settlement changes something (see
+   applyDebtPayment/settleDebtRow in PWA.js, which call
+   pushDebtPaymentUpdate below) — never on a schedule, since there's
+   nothing new to say until something actually changes.
+======================================= */
+
+// A running log of every real debt payment ever made/received — added
+// 2026-09-21 because, until now, the Debts sheet only ever stored the
+// CURRENT outstanding amount (reduced in place by applyDebtPayment),
+// with no record of past payments to compute a real "pace" from. One
+// row per payment, auto-created the same way every other sheet in this
+// app self-creates on first use (see e.g. getFinancialEventsSheet in
+// financialEvents.js).
+function getDebtPaymentsSheet_(){
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("DebtPayments");
+  if(!sheet){
+    sheet = ss.insertSheet("DebtPayments");
+    sheet.appendRow(["Date", "Row", "Person", "Type", "AmountPaid"]);
+  }
+  return sheet;
+}
+
+// Records one real payment (a partial payment OR a full settlement —
+// both count as "money that actually moved just now"). "Row" is the
+// Debts sheet row this payment was against — kept for traceability,
+// not used by the pace math itself (which only cares about date/type/
+// amount).
+function logDebtPayment_(row, person, type, amountPaid){
+  var sheet = getDebtPaymentsSheet_();
+  sheet.appendRow([new Date(), row, person || "", type, Number(amountPaid) || 0]);
+}
+
+// The actual trajectory math for one direction. direction must be
+// "BORROWED" (what you owe) or "LENT" (what's owed to you) — matches
+// the Debts sheet's own Type values exactly.
+//
+// outstanding: total still Pending for this direction, read straight
+//   from Debts (a SPLIT-type row, a rare legacy value, is counted
+//   alongside LENT here — same grouping getDebtsData already uses for
+//   "totalTheyOwe", so this number always agrees with what the Debts
+//   screen itself shows).
+// monthlyPace: real ₹ actually paid/collected in the last ~90 days,
+//   averaged to a per-month rate (÷3). Deliberately NOT an all-time
+//   average — a pace from 2 years ago says nothing about whether
+//   you're keeping it up now.
+// projectedDate: today + (outstanding ÷ monthlyPace) months, using an
+//   average month length (30.44 days) — a rough "by ~Month Year"
+//   estimate, not a precise day-level countdown, which is honest about
+//   what this number actually is.
+// If there's nothing outstanding, or no real repayment/collection
+// activity in the last 90 days, this deliberately does NOT invent a
+// fake date — see hasProjection/message below.
+function getDebtTrajectory(direction){
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var debtSheet = ss.getSheetByName("Debts");
+  var debtsData = debtSheet ? debtSheet.getDataRange().getValues() : [];
+
+  var outstanding = 0;
+  var count = 0;
+  for(var i = 1; i < debtsData.length; i++){
+    var type = (debtsData[i][2] || "").toString().trim().toUpperCase();
+    var amount = Number(debtsData[i][3]) || 0;
+    var status = (debtsData[i][6] || "Pending").toString().trim();
+    if(status === "Settled" || !amount) continue;
+    var matchesDirection = (type === direction) || (direction === "LENT" && type === "SPLIT");
+    if(!matchesDirection) continue;
+    outstanding += amount;
+    count++;
+  }
+
+  var paymentsSheet = ss.getSheetByName("DebtPayments");
+  var paymentsData = paymentsSheet ? paymentsSheet.getDataRange().getValues() : [];
+
+  var since = new Date();
+  since.setDate(since.getDate() - 90);
+
+  var recentPaid = 0;
+  for(var j = 1; j < paymentsData.length; j++){
+    var pDateRaw = paymentsData[j][0];
+    var pType = (paymentsData[j][3] || "").toString().trim().toUpperCase();
+    if(!pDateRaw || pType !== direction) continue;
+    var pDate = new Date(pDateRaw);
+    if(pDate < since) continue;
+    recentPaid += Number(paymentsData[j][4]) || 0;
+  }
+
+  var monthlyPace = recentPaid / 3; // ~90 days of real activity, turned into a monthly rate
+
+  var result = {
+    direction: direction,
+    outstanding: outstanding,
+    count: count,
+    recentPaid90d: recentPaid,
+    monthlyPace: monthlyPace,
+    hasProjection: false,
+    projectedDate: null,
+    projectedLabel: null,
+    message: null
+  };
+
+  if(outstanding <= 0){
+    result.message = direction === "BORROWED" ? "You're debt-free!" : "Fully collected — nothing left owed to you.";
+    return result;
+  }
+
+  if(monthlyPace <= 0){
+    result.message = "no " + (direction === "BORROWED" ? "repayments" : "collections") + " in the last 3 months, can't project a date yet";
+    return result;
+  }
+
+  var monthsNeeded = outstanding / monthlyPace;
+  var projected = new Date();
+  projected.setDate(projected.getDate() + Math.round(monthsNeeded * 30.44));
+
+  result.hasProjection = true;
+  result.projectedDate = projected;
+  result.projectedLabel = Utilities.formatDate(projected, Session.getScriptTimeZone(), "MMMM yyyy");
+
+  return result;
+}
+
+// Builds and sends the actual push, right after a real payment/
+// settlement is saved (called from applyDebtPayment/settleDebtRow in
+// PWA.js). Only ever pushes the ONE side that actually just changed —
+// the caller passes the exact direction of the debt that was just
+// paid/settled, so a BORROWED payment can never accidentally push the
+// LENT ("owed to you") trajectory or vice versa.
+function pushDebtPaymentUpdate(direction, personLabel, amountPaid){
+  try{
+    var trajectory = getDebtTrajectory(direction);
+    var fmt = function(n){ return Math.round(n).toLocaleString('en-IN'); };
+
+    var headline = direction === "BORROWED"
+      ? "✅ ₹" + fmt(amountPaid) + " repaid to " + personLabel
+      : "✅ ₹" + fmt(amountPaid) + " collected from " + personLabel;
+
+    var body;
+    if(trajectory.outstanding <= 0){
+      body = trajectory.message;
+    } else {
+      var countLabel = trajectory.count === 1 ? "1 debt" : (trajectory.count + " debts");
+      var totalLabel = direction === "BORROWED"
+        ? "₹" + fmt(trajectory.outstanding) + " left across " + countLabel
+        : "₹" + fmt(trajectory.outstanding) + " still owed to you across " + countLabel;
+
+      if(trajectory.hasProjection){
+        var actionWord = direction === "BORROWED" ? "debt-free" : "fully collected";
+        body = totalLabel + " — on pace to be " + actionWord + " by ~" + trajectory.projectedLabel + ".";
+      } else {
+        body = totalLabel + " — " + trajectory.message + ".";
+      }
+    }
+
+    sendMessage(headline + "\n\n" + body);
+  }catch(err){
+    logAI("DEBT_TRAJECTORY_PUSH_ERROR", err.toString());
+  }
+}
+
 function debugRepaymentPlan(){
   try{
     const ss       = SpreadsheetApp.getActiveSpreadsheet();

@@ -739,6 +739,14 @@ function addDebtEntryFromApp(person, type, amount, note, dueDate){
 }
 
 // Marks one debt row as fully settled
+//
+// Added 2026-09-21 — also logs this as a real payment (DebtPayments,
+// DebtAdvisor.js) and pushes an updated payoff/collection trajectory,
+// same as a partial payment below. A full settlement means "whatever
+// was still outstanding just got paid off in one go" — so the amount
+// still sitting in column D right before it flips to Settled IS the
+// real payment amount for trajectory purposes. See
+// docs/features/debt-trajectory.md.
 function settleDebtRow(row){
   try{
     const debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
@@ -747,10 +755,34 @@ function settleDebtRow(row){
       return { ok:false, error:"Invalid row." };
     }
 
+    const person       = (debtSheet.getRange(row, 2).getValue() || "").toString().trim();
+    const debtType     = (debtSheet.getRange(row, 3).getValue() || "").toString().trim().toUpperCase();
+    const amount       = Number(debtSheet.getRange(row, 4).getValue()) || 0;
+    const alreadySettled = (debtSheet.getRange(row, 7).getValue() || "").toString().trim() === "Settled";
+
     const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
     debtSheet.getRange(row, 7).setValue("Settled");
     debtSheet.getRange(row, 8).setValue(today);
+
+    // Logging the payment + pushing the trajectory update are both
+    // "extra, on top of" the real settlement above — wrapped in their
+    // own try/catch (found by change-reviewer 2026-09-21) so a hiccup
+    // here (e.g. creating the DebtPayments sheet for the very first
+    // time) can never make this function report failure after the real
+    // settlement already succeeded, which would invite a retry that
+    // re-settles/double-logs the same debt. Also skipped entirely if
+    // this row was ALREADY Settled before this call (a double-tap or
+    // retry), so calling this twice can't log a duplicate payment or
+    // send a duplicate "repaid" push.
+    if(!alreadySettled && (debtType === "BORROWED" || debtType === "LENT") && amount > 0){
+      try{
+        logDebtPayment_(row, person, debtType, amount);
+        pushDebtPaymentUpdate(debtType, person || "them", amount);
+      }catch(trajectoryErr){
+        logAI("DEBT_TRAJECTORY_LOG_ERROR", trajectoryErr.toString());
+      }
+    }
 
     return { ok: true };
   }catch(err){
@@ -768,6 +800,13 @@ function settleDebtRow(row){
 // financialEvents.js) — one function, so a partial repayment behaves
 // identically whether you typed it in here or it was recognized from a
 // transaction note.
+// Added 2026-09-21 — also logs this real payment (DebtPayments,
+// DebtAdvisor.js) and pushes an updated payoff/collection trajectory
+// right after it's saved, using the debt row's own Person/Type so a
+// BORROWED payment only ever pushes the BORROWED trajectory (what you
+// still owe overall) and a LENT payment only ever pushes the LENT one
+// (what's still owed to you) — never both. See
+// docs/features/debt-trajectory.md.
 function applyDebtPayment(row, amount){
   try{
     const debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
@@ -780,18 +819,39 @@ function applyDebtPayment(row, amount){
       return { ok:false, error:"Enter a valid amount." };
     }
 
+    const person   = (debtSheet.getRange(row, 2).getValue() || "").toString().trim();
+    const debtType = (debtSheet.getRange(row, 3).getValue() || "").toString().trim().toUpperCase();
+
     const currentAmount = Number(debtSheet.getRange(row, 4).getValue()) || 0; // column D
     const remaining = currentAmount - paid;
     const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
+    let settled = false;
     if(remaining <= 0){
       debtSheet.getRange(row, 7).setValue("Settled"); // column G
       debtSheet.getRange(row, 8).setValue(today);      // column H
-      return { ok: true, settled: true, remaining: 0 };
+      settled = true;
+    } else {
+      debtSheet.getRange(row, 4).setValue(remaining); // reduce in place, stays Pending
     }
 
-    debtSheet.getRange(row, 4).setValue(remaining); // reduce in place, stays Pending
-    return { ok: true, settled: false, remaining: remaining };
+    // Same reasoning as settleDebtRow above: wrapped in its own
+    // try/catch (found by change-reviewer 2026-09-21) so a failure here
+    // can never turn a real, already-saved payment into a reported
+    // failure — which would invite a retry that reduces the real
+    // remaining balance a second time for the same payment.
+    if(debtType === "BORROWED" || debtType === "LENT"){
+      try{
+        logDebtPayment_(row, person, debtType, paid);
+        pushDebtPaymentUpdate(debtType, person || "them", paid);
+      }catch(trajectoryErr){
+        logAI("DEBT_TRAJECTORY_LOG_ERROR", trajectoryErr.toString());
+      }
+    }
+
+    return settled
+      ? { ok: true, settled: true, remaining: 0 }
+      : { ok: true, settled: false, remaining: remaining };
   }catch(err){
     return { ok: false, error: err.toString() };
   }

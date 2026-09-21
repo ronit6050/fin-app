@@ -763,6 +763,34 @@ Backend `clasp push`ed to the editor draft only; frontend not yet
 `git push`ed — both need a go-ahead, plus real on-device testing (this
 environment can't render an actual Android push notification).
 
+**Two more push-notification features (2026-09-21): built, tested,
+backend `clasp push`ed to the editor draft only — NOT yet
+deployed live.** (1) **Upcoming Fixed-Obligation Reminder**
+(`backend/obligationReminders.js`, new file) — Rent/EMI/SIP payments
+used to only ever be recognized AFTER they happened; this looks at the
+real history already sitting in `FinancialEvents`, works out the usual
+day-of-month for each named obligation, and sends one heads-up push 3
+days before it's expected (idempotent — never sends the same
+obligation's reminder twice in one month). **Needs a NEW manual
+trigger added by hand**: function `checkUpcomingObligations`,
+time-driven, day timer, suggested 8-9am — see the doc for exact steps.
+(2) **Debt Payoff/Collection Trajectory** (`backend/DebtAdvisor.js` +
+`backend/PWA.js`) — the Debts screen used to only show a static "you
+owe ₹X"; now, right after a real payment or settlement is saved
+(never on a schedule), a push shows real progress in whichever
+direction just changed — e.g. "₹10,000 left across 2 debts — on pace
+to be debt-free by ~March 2027," or an honest "can't project a date
+yet" if there's been no recent activity. Found and fixed a real gap
+while building this: the `Debts` sheet never kept a log of past
+payments, only the current balance — added a new `DebtPayments` sheet
+(auto-created, same pattern as other self-creating sheets in this
+app) that both payment paths now write to, which the pace/projection
+math reads from. New tests:
+`backend/tests/upcomingObligationReminder.test.js` (19 checks) and
+`backend/tests/debtTrajectory.test.js` (30 checks); full suite (21
+files) passes. Full detail:
+[docs/features/push-obligation-and-debt-trajectory.md](docs/features/push-obligation-and-debt-trajectory.md).
+
 **Responsiveness + drastic visual redesign + dark mode: done**, see the
 "Responsiveness pass" and "Drastic visual redesign" notes under Step 11
 above — both happened after this Automation phase work, in the same long
