@@ -560,3 +560,41 @@ code fix only. Verified with a Node test,
   categories) — agreed in principle during design discussion, not yet
   implemented; `category.js`'s `SMART_CATEGORIES` list is unchanged in
   this slice beyond the specific keyword fixes above.
+
+## Fixed 2026-10-06 — an amount match alone no longer decides EMI/Investment
+
+**What went wrong (found from the user's real data):** a Rs.4,000
+payment to the user's dad for the laptop EMI (7 Sep and again 5 Oct)
+was offered in Pending as "Is this HDFC Mid Cap Fund?" — only because
+that SIP is also Rs.4,000. `suggestFinancialEvent` matched Investment by
+amount first and never looked at who the money went to. The same flaw
+also offered a Rs.1,427 shop purchase as "Laptop EMI"
+because the laptop EMI had once been Rs.1,427.
+
+**Fix (`financialEvents.js`):** `matchRecurringNamedEvent` takes an
+optional 5th argument, `counterparty`. An AMOUNT match is only accepted
+if the payee shares at least one meaningful word with a payee already
+recorded for that event name (`payeeFitsNamedEvent_`). Real bank payee
+text is messy ("ICCL - Mutual Funds" / "mutual funds iccl on" /
+"MUTUAL FUNDS ICCL"), so it never asks for an exact match. It errs on the
+side of dropping the guess — in doubt it says "doesn't fit", so a wrong
+tag can't hide a real payment from spend totals. Cost: a genuine payee
+spelled in a way that shares nothing with past ones loses its chip (the
+payment then just shows as ordinary spend). The glued-vs-split case
+("NSECLEARINGLIMITED" vs "NSE Clearing Limited") is handled by a
+squashed-text comparison (`payeesSameWhenSquashed_`).
+Deliberately unchanged: the note-text match (the user's own words are
+never payee-checked), a payment with no payee at all, an event with no
+payee recorded anywhere (seeded SIP rows), and Rent.
+
+**Verified two ways:** `backend/tests/payeeAwareEventMatch.test.js`
+(synthetic data, 14 checks) and a local replay of all 876 real debit
+rows (not committed — real data): old logic made 39 suggestions, the
+new logic changes exactly 3, all three wrong guesses; every real
+SIP/Rent/EMI suggestion is unchanged.
+
+**Still open (a UI gap, not fixed here):** when the app's guess is wrong,
+the only button is "No, regular spend". There is no way to say "no, this
+is my Laptop EMI" — a payment the app doesn't guess as EMI/Rent/SIP has
+no chip row at all. Planned as part of the tagging redesign: one quiet
+"Mark as EMI / Rent / SIP / Saving…" control reachable on any card.

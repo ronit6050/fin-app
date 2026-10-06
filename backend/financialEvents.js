@@ -72,6 +72,64 @@ function eventKeywordFromName(name){
   return (name || "").toString().toLowerCase().replace(/\bemi\b/g, "").trim();
 }
 
+// ---- Payee check (added 2026-10-06) ----
+// An AMOUNT match alone is not proof two payments are the same thing:
+// a Rs.4,000 payment to your dad for a laptop EMI was being offered as
+// "HDFC Mid Cap Fund?" only because that SIP is also Rs.4,000. The
+// payee (who the money went to) is the missing clue. Payee text is
+// messy in real bank SMS ("ICCL - Mutual Funds", "mutual funds iccl
+// on", "MUTUAL FUNDS ICCL" are all the same payee), so this never asks
+// for an exact match — only that the two names share at least one
+// meaningful word.
+var PAYEE_FILLER_WORDS_ = { on: 1, upi: 1, the: 1, and: 1, of: 1, to: 1, from: 1, pvt: 1, ltd: 1, private: 1, limited: 1 };
+
+function payeeWords_(text){
+  return (text || "").toString().toLowerCase().split(/[^a-z0-9]+/).filter(function(w){
+    return w.length >= 3 && !PAYEE_FILLER_WORDS_[w];
+  });
+}
+
+// The same payee is sometimes written as one glued word and sometimes as
+// separate words ("NSECLEARINGLIMITED" vs "NSE Clearing Limited"), which
+// share no whole word. So two payees also count as the same when one,
+// with spaces/punctuation removed, contains the other (the shorter one
+// at least 5 letters, so a short fragment can't match by accident).
+function payeesSameWhenSquashed_(a, b){
+  var x = (a || "").toString().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  var y = (b || "").toString().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if(x.length < 5 || y.length < 5) return false;
+  return x.indexOf(y) !== -1 || y.indexOf(x) !== -1;
+}
+
+// Does this payment's payee fit a named event we already know about?
+// - No payee on this payment (e.g. a wallet debit) -> nothing to compare,
+//   so we can't rule it out: returns true (old behavior kept).
+// - The event has NO payee recorded anywhere (a seeded row) -> same,
+//   can't judge, returns true.
+// - Otherwise it must share a meaningful word with at least one payee
+//   ever recorded for that event name (a seeded blank row doesn't count
+//   as a recorded payee — later confirmations of the same name do).
+// Fails safe: when in doubt it says "doesn't fit", which just means the
+// app asks instead of guessing — never a silently wrong tag.
+function payeeFitsNamedEvent_(type, name, counterparty, financialEventsData){
+  var incoming = payeeWords_(counterparty);
+  if(incoming.length === 0) return true;
+
+  var sawAnyRecordedPayee = false;
+  for(var i = 1; i < financialEventsData.length; i++){
+    if(financialEventsData[i][0] !== type) continue;
+    if((financialEventsData[i][4] || "").toString() !== name) continue;
+    var known = payeeWords_(financialEventsData[i][2]);
+    if(known.length === 0) continue;
+    sawAnyRecordedPayee = true;
+    for(var k = 0; k < known.length; k++){
+      if(incoming.indexOf(known[k]) !== -1) return true;
+    }
+    if(payeesSameWhenSquashed_(counterparty, financialEventsData[i][2])) return true;
+  }
+  return !sawAnyRecordedPayee;
+}
+
 // Tries every previously-confirmed named event of this Type, amount
 // first (works for anything at a genuinely fixed amount), then note-
 // text (works when the amount varies, as long as the name's
@@ -82,7 +140,12 @@ function eventKeywordFromName(name){
 // version so Investment (which can also have more than one — separate
 // SIPs, stocks, etc.) can reuse the exact same mechanism instead of a
 // duplicate copy.
-function matchRecurringNamedEvent(type, amount, note, financialEventsData){
+//
+// counterparty (optional, added 2026-10-06): when given, an AMOUNT match
+// is only accepted if the payee also fits (see payeeFitsNamedEvent_).
+// The note-text match below is deliberately NOT payee-checked — the
+// note is the user's own words, the most trustworthy signal there is.
+function matchRecurringNamedEvent(type, amount, note, financialEventsData, counterparty){
   var noteText = (note || "").toString().toLowerCase();
   var seenNames = {};
 
@@ -91,6 +154,7 @@ function matchRecurringNamedEvent(type, amount, note, financialEventsData){
     var name = (financialEventsData[i][4] || "").toString();
     if(!name || seenNames[name]) continue;
     if(amountsMatch(financialEventsData[i][1], amount)){
+      if(counterparty !== undefined && !payeeFitsNamedEvent_(type, name, counterparty, financialEventsData)) continue;
       return { name: name };
     }
   }
@@ -145,11 +209,11 @@ function suggestFinancialEvent(counterparty, amount, financialEventsData, note){
   if(matchRecurringFinancialEvent("Rent", amount, financialEventsData)){
     return { type: "Rent", confident: true };
   }
-  var investMatch = matchRecurringNamedEvent("Investment", amount, note, financialEventsData);
+  var investMatch = matchRecurringNamedEvent("Investment", amount, note, financialEventsData, counterparty || "");
   if(investMatch){
     return { type: "Investment", name: investMatch.name, confident: true };
   }
-  var emiMatch = matchRecurringNamedEvent("EMI", amount, note, financialEventsData);
+  var emiMatch = matchRecurringNamedEvent("EMI", amount, note, financialEventsData, counterparty || "");
   if(emiMatch){
     return { type: "EMI", name: emiMatch.name, confident: true };
   }
