@@ -146,11 +146,17 @@ function doPost(e){
 
     logWebhook(sender,sms,raw,"RECEIVED");
 
-    const classification = classifySms(sms,sender);
+    // classifyDetail() is the same decision as classifySms(), plus a short
+    // plain-English reason when one of the newer, narrow IGNORE rules
+    // (2026-10-10: junk / service notices / scam links / future-dated
+    // notices) is what blocked the message -- so the Logs sheet can show
+    // WHY something was skipped, not just that it was.
+    const detail = classifyDetail(sms,sender);
+    const classification = detail.result;
 
     if(classification === "IGNORE"){
 
-      logWebhook(sender,sms,raw,"NOT TRANSACTION");
+      logWebhook(sender,sms,raw, detail.reason ? ("NOT TRANSACTION (" + detail.reason + ")") : "NOT TRANSACTION");
       return ContentService.createTextOutput("IGNORED");
 
     }
@@ -294,7 +300,7 @@ function hasMoneyMovementSignal(text){
   if(text.includes("credit of")) return true; // e.g. "Credit of Rs.45000 has been initiated" (salary-style ICICI wording)
   if(text.includes("txn") && (text.includes("card") || text.includes("upi") || text.includes("atm"))) return true; // e.g. HDFC's "Txn Rs.109.08 On HDFC Bank Card..."
   if(text.includes("autopay") && text.includes("success")) return true; // e.g. "AutoPay (E-mandate) Success for Rs.199"
-  if(text.includes("without otp")) return true; // e.g. "Rs.89 without OTP/PIN HDFC Bank Card x1264 At..."
+  if(text.includes("without otp")) return true; // e.g. "Rs.89 without OTP/PIN HDFC Bank Card x5555 At..."
 
   return false;
 
@@ -306,6 +312,127 @@ function hasMoneyMovementSignal(text){
 // recognize -- save it flagged for review rather than guess or drop
 // it).
 function classifySms(sms,sender){
+  return classifyDetail(sms,sender).result;
+}
+
+// ---------------------------------------------------------------------
+// Junk-filter helpers added 2026-10-10 ("the app should only ask me about
+// things only I know"). Each one is deliberately NARROW -- see the
+// comment above each for exactly what it catches and why it can't
+// swallow a real transaction.
+// ---------------------------------------------------------------------
+
+// Third-party link shorteners. A real bank / wallet alert never carries a
+// link from one of these -- banks use their OWN domains (e.g.
+// 1.hdfc.bank.in, hdfcbk.io), which are NOT in this list and are
+// unaffected. A shortener inside a message that ALSO talks about money
+// ("Credited: Rs.26083 ... View Now: bit.ly/xyz") is the classic
+// phishing/scam shape: it borrows bank-looking wording to get you to tap
+// a link. So unlike the ordinary URL check (which only forces UNCERTAIN
+// when money words are present), a shortener link is IGNORED outright
+// even with money words. The domain must be followed by "/" and must not
+// be glued onto a longer word (so "ticket.co/..." or "habit.ly" don't
+// trip it).
+function hasThirdPartyShortLink(text){
+  return /(?:^|[^a-z0-9.@-])(?:bit\.ly|tinyurl\.com|goo\.gl|rb\.gy|is\.gd|cutt\.ly|t\.co|ow\.ly|shorturl\.at|tiny\.cc|rebrand\.ly|buff\.ly)\/\S/i.test(text);
+}
+
+// Future-tense notices: money has NOT moved yet. The original three
+// phrases are always treated as future-dated. The newer "deducted" /
+// "auto-debited" family (found live 2026-09-10: HDFC's "E-Mandate!
+// Rs.3000.00 will be deducted on 10/09/26 ... Maintain Balance") is
+// treated as future-dated UNLESS the same message also states something
+// already happened in the past tense ("has been debited", "was
+// deducted", "successfully debited") -- that guard exists so a real
+// debit that merely MENTIONS a future charge (e.g. a fee note) can never
+// be swallowed by this rule. The REAL debit for such a mandate arrives
+// later as a separate "UPI Mandate: Sent Rs.X ..." SMS, which contains
+// none of these phrases and is untouched.
+function isFutureDatedNotice(text){
+
+  if(text.includes("will be debited") || text.includes("will be charged") || text.includes("scheduled to be debited")){
+    return true;
+  }
+
+  const futureWillRe = /(?<![a-z0-9])will\s+(?:be|get)\s+(?:auto[\s-]?)?(?:debited|deducted|charged)(?![a-z0-9])/g;
+  const futureDueRe = /(?<![a-z0-9])(?:scheduled|due)\s+to\s+be\s+(?:auto[\s-]?)?(?:debited|deducted|charged)(?![a-z0-9])/g;
+
+  const futureNew = futureWillRe.test(text) || futureDueRe.test(text);
+
+  if(!futureNew) return false;
+
+  // GUARD (widened after review, 2026-10-10): a real transaction can
+  // MENTION a future charge ("Rs.5000 debited from A/c ... GST will be
+  // deducted at month end"). So, with the future phrase itself cut out,
+  // if the REST of the message still contains any past-tense money word
+  // (debited, deducted, charged, spent, withdrawn, paid, credited,
+  // deposited, sent), the message describes something that already
+  // happened -> do NOT ignore it. The genuine advance notice ("E-Mandate!
+  // Rs.3000 will be deducted on <date> For <fund> - Autopay mandate ...
+  // Maintain Balance") has none of those words once its own "will be
+  // deducted" is removed, so it is still ignored.
+  const withoutFuturePhrase = text.replace(futureWillRe, " ").replace(futureDueRe, " ");
+  const alreadyHappened =
+    /(?<![a-z0-9])(?:debited|deducted|charged|spent|withdrawn|paid|credited|deposited|sent)(?![a-z0-9])/.test(withoutFuturePhrase);
+
+  return !alreadyHappened;
+
+}
+
+// Service / security / receipt messages that describe NO movement of the
+// user's money. Returns a short reason string if the message is one of
+// these, otherwise "". Each rule below only fires when the message has NO
+// rupee amount at all (login / biometric / link-request notices never
+// carry one), so a real transaction -- which always has an amount -- can
+// not be caught just because it happens to contain the word "login" or
+// "receipt" somewhere. The one rule that DOES involve an amount (the
+// payment receipt) is tied to very specific receipt wording instead.
+function serviceNoticeReason(text){
+
+  const hasAmount = hasRupeeAmount(text);
+
+  if(!hasAmount){
+
+    // "Login Alert! We noticed that there was a login to your NetBanking..."
+    if(/(?<![a-z0-9])login alert(?![a-z0-9])/.test(text) || /(?<![a-z0-9])login to your (?:net ?banking|mobile ?banking|internet banking|account|app)(?![a-z0-9])/.test(text)){
+      return "login/security alert, no money moved";
+    }
+
+    // "UPI Biometric Authentication has been enabled on <app> for A/c ..."
+    if(/(?<![a-z0-9])biometric(?![a-z0-9])/.test(text) && /(?<![a-z0-9])(?:enabled|disabled|activated|deactivated|registered)(?![a-z0-9])/.test(text)){
+      return "biometric/UPI setting change notice, no money moved";
+    }
+
+    // "Update: We got a request to link your ... Credit Card 4444 to UPI. Not you? Call..."
+    if(/(?<![a-z0-9])request to (?:link|add|register|enable|set ?up)(?![a-z0-9])/.test(text) && /(?<![a-z0-9])upi(?![a-z0-9])/.test(text)){
+      return "request-to-link-card/UPI notice, no money moved";
+    }
+
+  }
+
+  // Payment RECEIPT from a biller for money the user themselves SENT,
+  // e.g. "Hi <name>, we have received a payment of Rs. 488.82 for your
+  // One Airtel Plan ... To download the payment receipt, click ...".
+  // The real debit was already logged from the user's bank SMS, and
+  // "received" here would wrongly read as money coming IN. Requires BOTH
+  // the biller's "we have received a payment" phrasing AND the
+  // "payment receipt" wording, and is skipped if the message also says
+  // the user's own account was credited/debited.
+  if(/(?<![a-z0-9])we(?:'ve| have) received (?:a |your )?payment(?![a-z0-9])/.test(text) &&
+     /(?<![a-z0-9])payment receipt(?![a-z0-9])/.test(text) &&
+     !/(?<![a-z0-9])(?:credited to|debited from|credited in|debited in)(?![a-z0-9])/.test(text)){
+    return "biller payment receipt (user's own payment, already logged from the bank SMS)";
+  }
+
+  return "";
+
+}
+
+// Returns {result, reason}. result is exactly what classifySms() has
+// always returned ("IGNORE" / "TRANSACTION" / "UNCERTAIN"); reason is a
+// short plain-English explanation, only set for the newer narrow IGNORE
+// rules (so the Logs sheet shows why they fired).
+function classifyDetail(sms,sender){
 
   const text = sms.toLowerCase();
   const knownSender = isKnownSender(sender);
@@ -324,7 +451,7 @@ function classifySms(sms,sender){
   // payloads again (or any other structured, non-SMS content), it's
   // recognized and ignored here before any wording logic even runs.
   if(text.trim().charAt(0) === "{"){
-    return "IGNORE";
+    return {result:"IGNORE", reason:""};
   }
 
   // --- Step 1: hard blocks, checked regardless of sender ---------------
@@ -334,7 +461,36 @@ function classifySms(sms,sender){
   // "without OTP/PIN" (e.g. a small contactless tap) -- that's a
   // completed transaction, not an OTP code being sent, so it must not
   // be blocked here.
-  if(text.includes("otp") && !text.includes("without otp")) return "IGNORE";
+  if(text.includes("otp") && !text.includes("without otp")) return {result:"IGNORE", reason:""};
+
+  // Scam / phishing text (added 2026-10-10): a third-party link shortener
+  // anywhere in the message -> ignore, even if it uses bank-sounding money
+  // words. See hasThirdPartyShortLink() for the full reasoning. Real
+  // example shape: "Dear Member, Important Notice: A/c ... Credited:
+  // Rs.26083 ... View Now: bit.ly/xxxx" from a non-bank sender.
+  //
+  // ONLY for senders that are NOT a recognised bank/wallet (changed after
+  // review, 2026-10-10): a known bank sender must never have a message
+  // silently dropped just for odd wording -- the file's own "known
+  // sender + unusual wording -> never silently drop" rule. For a known
+  // sender, a shortener link instead pushes a money-wording message to
+  // UNCERTAIN (saved, flagged NEEDS REVIEW, see Step 2 below), and any
+  // other known-sender message is handled exactly as before.
+  const knownSenderShortLink = knownSender && hasThirdPartyShortLink(text);
+
+  if(!knownSender && hasThirdPartyShortLink(text)){
+    return {result:"IGNORE", reason:"third-party short link from an unrecognised sender (likely scam/promo)"};
+  }
+
+  // Service / security / receipt notices with no money movement (added
+  // 2026-10-10) -- login alerts, biometric/UPI setting changes, a
+  // request-to-link-card notice, a biller's payment receipt. See
+  // serviceNoticeReason() for why each is narrow and cannot catch a real
+  // transaction.
+  const serviceReason = serviceNoticeReason(text);
+  if(serviceReason){
+    return {result:"IGNORE", reason:serviceReason};
+  }
 
   // A real transaction confirmation can legitimately mention "reward
   // points" as a footer (some banks append "earn X reward points on
@@ -364,7 +520,7 @@ function classifySms(sms,sender){
   // also present, otherwise forces UNCERTAIN rather than confident
   // TRANSACTION (same ambiguous-signal handling already used below).
   // "minimumbalancealert" phrases added 2026-08-28 -- a real HDFC
-  // low-balance notification ("Bal in HDFC Bank A/c XX8774 has gone
+  // low-balance notification ("Bal in HDFC Bank A/c XX6666 has gone
   // below minimum limit... Chat on WhatsApp Banking: hdfcbk.io/k/...")
   // got saved as UNCERTAIN. This is a genuine, useful bank message, but
   // it's an account-STATUS check, not a transaction -- no money moved.
@@ -377,15 +533,15 @@ function classifySms(sms,sender){
   const nonTransactionWords = ["reward","points","cashback","offer","minimum balance","minimum limit","min bal"];
   const hasNonTransactionSignal = nonTransactionWords.some(function(w){ return text.includes(w); }) || /https?:\/\//i.test(text);
 
-  if(hasNonTransactionSignal && !hasMoneyMovementSignal(text)) return "IGNORE"; // a pure promo/notification, no money wording at all
+  if(hasNonTransactionSignal && !hasMoneyMovementSignal(text)) return {result:"IGNORE", reason:""}; // a pure promo/notification, no money wording at all
 
   // A future-tense alert ("will be debited on the 15th") means money
   // hasn't moved YET -- must be checked before the debit-word check
   // below, since "debited" is a substring of "will be debited" and
   // would otherwise match first (this exact check existed before but
   // was unreachable dead code for that reason -- fixed here).
-  if(text.includes("will be debited") || text.includes("will be charged") || text.includes("scheduled to be debited")){
-    return "IGNORE";
+  if(isFutureDatedNotice(text)){
+    return {result:"IGNORE", reason:"future-dated notice, money has not moved yet"};
   }
 
   // "emi"/"loan" almost always show up in a loan/EMI *offer* ("Get
@@ -397,19 +553,19 @@ function classifySms(sms,sender){
   // genuine future EMI-debit confirmation (not seen in real data yet,
   // but possible) isn't silently dropped just for containing the word.
   if((text.includes("emi") || text.includes("loan")) && !hasMoneyMovementSignal(text)){
-    return "IGNORE";
+    return {result:"IGNORE", reason:""};
   }
 
   // A "credit card payment received" confirmation just echoes a bill
   // payment that's already tracked via the real bank-side debit --
   // showing it too would double-count it.
   if(text.includes("credit card") && text.includes("payment") && text.includes("received")){
-    return "IGNORE";
+    return {result:"IGNORE", reason:""};
   }
 
   // "Credited to your card" is ambiguous by itself -- found live
   // 2026-09-07: "HDFC Bank Cardmember, Online Payment of Rs.149 vide
-  // Ref# ... was credited to your card ending 1264" got saved as a
+  // Ref# ... was credited to your card ending 5555" got saved as a
   // spurious ₹149 credit. This wording means the SAME thing as the
   // "credit card ... payment ... received" block just above (a bill
   // payment landing back on the card, already logged via the real
@@ -417,7 +573,7 @@ function classifySms(sms,sender){
   // phrased differently ("credited to your card" instead of "payment
   // ... received"). But this phrase alone can't be blocked outright:
   // a genuine merchant refund can also read "Rs.X credited to your
-  // card ending 1264" (real money -- this project has no stance yet on
+  // card ending 5555" (real money -- this project has no stance yet on
   // whether refunds should be tracked, not decided here). The message
   // text itself gives a real signal to tell these two apart: a refund
   // SMS says "refund"/"refunded"/"reversed"; a bill-payment echo says
@@ -431,10 +587,10 @@ function classifySms(sms,sender){
       // block it, let normal classification below decide (Step 2/3).
     }
     else if(text.includes("payment")){
-      return "IGNORE"; // a bill-payment echo, already counted via the real bank-side debit
+      return {result:"IGNORE", reason:""}; // a bill-payment echo, already counted via the real bank-side debit
     }
     else{
-      return "UNCERTAIN"; // can't tell payment-echo from refund from the wording alone
+      return {result:"UNCERTAIN", reason:""}; // can't tell payment-echo from refund from the wording alone
     }
   }
 
@@ -446,8 +602,8 @@ function classifySms(sms,sender){
     // up in realistic-sounding wording. Don't confidently guess either
     // way -- surface it for a quick human glance instead (never
     // silently dropped either way).
-    if(hasNonTransactionSignal) return "UNCERTAIN";
-    return "TRANSACTION";
+    if(hasNonTransactionSignal || knownSenderShortLink) return {result:"UNCERTAIN", reason:""};
+    return {result:"TRANSACTION", reason:""};
   }
 
   // --- Step 3: uncertain, needs a human's eyes ---------------------------
@@ -455,7 +611,7 @@ function classifySms(sms,sender){
   // we recognize -- could be a new message format. Don't guess, surface
   // it for review instead of silently dropping it.
   if(knownSender){
-    return "UNCERTAIN";
+    return {result:"UNCERTAIN", reason:""};
   }
 
   // An unrecognized sender, but the message contains a real (non-zero)
@@ -468,10 +624,10 @@ function classifySms(sms,sender){
   // report) doesn't get treated as a possible transaction -- see that
   // function's own comment for why.
   if(hasNonZeroRupeeAmount(text)){
-    return "UNCERTAIN";
+    return {result:"UNCERTAIN", reason:""};
   }
 
-  return "IGNORE";
+  return {result:"IGNORE", reason:""};
 
 }
 
@@ -599,7 +755,60 @@ function ruleParser(sms,sender){
       obj.reference = ref[1];
 
 
-  // COUNTERPARTY DETECTION
+  // COUNTERPARTY DETECTION (rewritten into extractCounterparty() below,
+  // 2026-10-10 -- see its comment for the "Block" bug it fixes)
+  const cp = extractCounterparty(text);
+  if(cp) obj.counterparty = cp;
+
+  return obj;
+
+}
+
+// Words that are bank boilerplate ("Not You? To Block+Reissue Call ... /
+// SMS BLOCK CC 4444 to ..."), never a merchant. Found 2026-10-10: the
+// generic "to <name>" pattern below grabs the first "to " it sees, and on
+// HDFC card alerts the first one is the footer's "To Block+Reissue
+// Call", so the merchant was being saved as "block" / "block reissue
+// call". Matched against the cleaned (letters/digits only) name, so
+// "Block+Reissue" arrives here as "blockreissue ...".
+function isBoilerplateCounterparty(name){
+  return /^(?:block(?:reissue)?|reissue|not\s*you|not\s*u)(?:\s|$)/i.test(name || "");
+}
+
+// The text before the "Not You? ..." footer that every HDFC alert ends
+// with (the footer holds only helpline numbers and "SMS BLOCK ..." words,
+// never a merchant). If there is no footer, the text comes back unchanged.
+function stripNotYouFooter(text){
+  const m = text.match(/not\s*(?:you|u)\s*\?/i);
+  return m ? text.slice(0, m.index) : text;
+}
+
+// Merchant name on the three HDFC CARD alert shapes that were being
+// mis-parsed (all use invented merchant names in the tests):
+//   a. "Spent Rs.2129 On HDFC Bank Card 4444 At SAMPLESHOP On 2026-09-24:19:11:35.Not You? ..."
+//   b. "Rs.149 without OTP/PIN HDFC Bank Card x5555 At DEMOSTREAMING On 2026-09-11:11:35:34..."
+//      (same "At <merchant> On <yyyy-mm-dd>" shape as a)
+//   c. "AutoPay (E-mandate) Success! For DemoStream Txn Amt:INR149.00 Dt:..."
+// Each pattern is anchored on a very specific neighbour ("On" followed by
+// an ISO date; "Txn Amt") so it cannot grab anything from the other,
+// differently-shaped alerts (UPI "To NAME On dd/mm/yy", "UPI/DR/ref/NAME",
+// Federal "to NAME.Ref:", "At <vpa>@bank by UPI" ...) -- those still go
+// through the original generic patterns, unchanged.
+function extractCardMerchant(text){
+  const m =
+    text.match(/(?<![a-z0-9])at\s+([a-z0-9][a-z0-9 .&'_-]*?)\s+on\s+\d{4}-\d{2}-\d{2}/i) ||
+    text.match(/(?<![a-z0-9])for\s+([a-z0-9][a-z0-9 .&'_-]*?)\s+txn\s+amt(?![a-z0-9])/i);
+  if(!m) return "";
+  // Light clean only: keep letters/digits/spaces (the heavier
+  // cleanCounterparty would cut a merchant like "Jupiter" at "upi").
+  return m[1].replace(/[^a-zA-Z0-9\s]/g,"").replace(/\s+/g," ").trim();
+}
+
+// The original generic extraction, byte-for-byte what ruleParser did
+// before 2026-10-10 (first match of "to ", else "at ", "towards ", "for
+// ", else the UPI/DR/ref/NAME form). Kept unchanged so every
+// non-card-alert format extracts exactly as before.
+function genericCounterparty(text){
 
   let name = text.match(/to\s([a-z0-9\s\.@_-]+)/i);
 
@@ -627,10 +836,26 @@ function ruleParser(sms,sender){
     name = text.match(/upi\/(?:dr|cr)\/\d+\/([a-z0-9]+)/i);
   }
 
-  if(name)
-      obj.counterparty = cleanCounterparty(name[1]);
+  return name ? cleanCounterparty(name[1]) : "";
 
-  return obj;
+}
+
+// Picks the merchant/person for a message. Order: (1) the three specific
+// card-alert shapes; (2) the original generic extraction; (3) if (2)
+// came back as bank boilerplate ("block ..."), try again on the text with
+// the "Not You?" footer removed; if that is still boilerplate, return
+// nothing rather than a wrong merchant ("never take Block as a
+// merchant").
+function extractCounterparty(text){
+
+  const card = extractCardMerchant(text);
+  if(card && !isBoilerplateCounterparty(card)) return card;
+
+  const generic = genericCounterparty(text);
+  if(!isBoilerplateCounterparty(generic)) return generic;
+
+  const retry = genericCounterparty(stripNotYouFooter(text));
+  return isBoilerplateCounterparty(retry) ? "" : retry;
 
 }
 
@@ -746,7 +971,142 @@ function isDuplicate(tx, sms, timestamp){
 
   }
 
+  // Tier 4 -- the "bank sent two texts for ONE card charge" echo
+  // (added 2026-10-10). See isCardEchoDuplicate() for the full rule and
+  // the reasoning for how narrow it is.
+  for(let i=0;i<rows.length;i++){
+    if(isCardEchoDuplicate(tx, sms, timestamp, rows[i])){
+      return {duplicate:true, reason:"echo of the same card charge (two bank texts for one purchase)"};
+    }
+  }
+
   return {duplicate:false};
+
+}
+
+// The last 4 digits of the card named in a message ("Card 4444",
+// "Card x5555", "Bank CC 5555", "card ending 5555"), or "".
+function extractCardLast4(text){
+  const m = String(text || "").toLowerCase().match(/(?:card|cc)\s*(?:ending\s*)?x*(\d{4})(?![0-9])/);
+  return m ? m[1] : "";
+}
+
+// The two kinds of card text the bank is known to send TOGETHER for ONE
+// charge (found live 2026-09-11: one subscription charge produced both,
+// one second apart, with no reference number on either, so both were
+// saved as separate Rs.149 rows):
+//   * "autopay" kind  -- an AutoPay / e-mandate SUCCESS text;
+//   * "no-otp" kind   -- a "Rs.X without OTP/PIN ... Card ..." text.
+// They are mutually exclusive here: a text is one kind, the other, or
+// neither.
+function isAutoPaySuccessText(text){
+  const t = String(text || "").toLowerCase();
+  return /autopay|e-?mandate/.test(t) && t.includes("success") && !t.includes("without otp");
+}
+
+function isWithoutOtpCardText(text){
+  return String(text || "").toLowerCase().includes("without otp");
+}
+
+// True ONLY for the one pairing the bank really sends as an echo: exactly
+// one text is the AutoPay-success kind and the other is the
+// "without OTP/PIN" kind. Two texts of the SAME kind (two metro taps, two
+// coffee buys), or a plain "Spent ..." text next to a "without OTP" one,
+// are NOT a pair -- they are separate purchases and must both save
+// (tightened after review, 2026-10-10).
+function isAutoPayAndNoOtpPair(smsA, smsB){
+  return (isAutoPaySuccessText(smsA) && isWithoutOtpCardText(smsB)) ||
+         (isWithoutOtpCardText(smsA) && isAutoPaySuccessText(smsB));
+}
+
+// "HH:mm:ss" (or "HH:mm") text -> seconds since midnight, or null.
+function clockToSeconds(str){
+  const m = String(str || "").match(/^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$/);
+  if(!m) return null;
+  return Number(m[1])*3600 + Number(m[2])*60 + Number(m[3] || 0);
+}
+
+// A sheet "Time" cell comes back from Google Sheets either as text or --
+// because the cell is time-formatted -- as a Date object. Both are
+// turned into seconds since midnight, India time. Anything unreadable
+// returns null, and a null makes the echo rule stay silent (the safe
+// direction: keeping an extra row is recoverable, dropping a real
+// transaction is not). Date detection uses toString rather than
+// instanceof so it works regardless of which JS realm built the Date.
+function timeCellToSeconds(cell){
+  if(Object.prototype.toString.call(cell) === "[object Date]"){
+    if(isNaN(cell.getTime())) return null;
+    return clockToSeconds(Utilities.formatDate(cell, "Asia/Kolkata", "HH:mm:ss"));
+  }
+  return clockToSeconds(cell);
+}
+
+// Loose "do these two merchant names plausibly mean the same place?":
+// one contains the other, or they start with the same word (>=4 letters),
+// e.g. "DemoStream" vs "DEMOSTREAMING". Used only to make the echo rule
+// MORE careful, never less.
+function counterpartyNamesLikelyMatch(a, b){
+  const x = String(a || "").toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
+  const y = String(b || "").toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
+  if(!x || !y) return true; // a missing name can't contradict -- the other checks carry the decision
+  if(x.indexOf(y) !== -1 || y.indexOf(x) !== -1) return true;
+  const fx = x.split(" ")[0], fy = y.split(" ")[0];
+  return fx.length >= 4 && fx === fy;
+}
+
+// Is the incoming message just the second text of a card charge already
+// saved in `row`? ALL of these must hold, otherwise the answer is "no,
+// keep it":
+//   * both are debits for the same amount;
+//   * neither has a real reference number (anything with a reference is
+//     handled by tier 1 and is too trustworthy to second-guess here);
+//   * both texts name the same card (last 4 digits);
+//   * same calendar date, and the two texts arrived within 2 minutes of
+//     each other;
+//   * exactly one text is an AutoPay/e-mandate-success text and the other
+//     is a "without OTP/PIN" text -- the only pairing the bank is known
+//     to send;
+//   * if both texts name a merchant, the names plausibly match.
+// WHY SO STRICT: wrongly treating a real purchase as an echo makes it
+// vanish with no trace; wrongly keeping an echo costs one tap to remove
+// in the app. So every doubt resolves to "keep it". Two genuinely
+// different same-amount purchases hours apart, or on different cards,
+// or minutes apart on different shapes, all still save.
+function isCardEchoDuplicate(tx, sms, timestamp, row){
+
+  if(!tx.amount || String(tx.type).toLowerCase() !== "debit" || tx.reference || !timestamp) return false;
+
+  if(String(row[3] || "").toLowerCase() !== "debit") return false;
+  if(Math.abs(Number(row[5]) - Number(tx.amount)) >= 0.01) return false;
+
+  const existingRef = String(row[6] || "").trim();
+  if(existingRef) return false; // has any reference (real or NOREF_ placeholder) -> not an echo candidate
+
+  const existingSms = String(row[10] || "");
+  if(!existingSms || existingSms === "-") return false;
+
+  const newLast4 = extractCardLast4(sms);
+  const oldLast4 = extractCardLast4(existingSms);
+  if(!newLast4 || newLast4 !== oldLast4) return false;
+
+  if(!isAutoPayAndNoOtpPair(sms, existingSms)) return false;
+
+  if(!counterpartyNamesLikelyMatch(tx.counterparty, row[7])) return false;
+
+  // Same date...
+  const msgDate = new Date(Number(timestamp)*1000);
+  const msgDateStr = Utilities.formatDate(msgDate, "Asia/Kolkata", "yyyy-MM-dd");
+  const rowDateRaw = row[0];
+  const rowDateStr = (Object.prototype.toString.call(rowDateRaw) === "[object Date]") ? Utilities.formatDate(rowDateRaw, "Asia/Kolkata", "yyyy-MM-dd") : String(rowDateRaw);
+  if(rowDateStr !== msgDateStr) return false;
+
+  // ...and within 2 minutes.
+  const msgSecs = clockToSeconds(Utilities.formatDate(msgDate, "Asia/Kolkata", "HH:mm:ss"));
+  const rowSecs = timeCellToSeconds(row[1]);
+  if(msgSecs === null || rowSecs === null) return false;
+  if(Math.abs(msgSecs - rowSecs) > 120) return false;
+
+  return true;
 
 }
 
