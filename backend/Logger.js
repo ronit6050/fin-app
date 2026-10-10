@@ -300,7 +300,8 @@ function addMissingTransactionColumnHeaders(){
   const EXPECTED = [
     [17, "NeedWantSaving"],
     [18, "FinancialEvent"],
-    [19, "FinancialEventName"]
+    [19, "FinancialEventName"],
+    [20, "AutoSettled"]   // added 2026-10-10, see autoSettle.js
   ];
 
   EXPECTED.forEach(([col, label]) => {

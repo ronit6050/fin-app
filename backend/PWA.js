@@ -1469,6 +1469,26 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   };
 }
 
+// WORDING-ONLY half of the bill-payment check (split out 2026-10-10 for
+// autoSettle.js): true only when the payment's own text says it is a credit
+// card bill ("credit card", "cc bill", "cc billpay", ...). It never looks at
+// amounts. The silent auto-settle path uses ONLY this half - an amount that
+// merely equals the outstanding bill can be a coincidence (a Rs.149
+// subscription vs a Rs.149 card total), which a silent action must not act
+// on. isCreditCardBillPayment below = this wording check OR the amount match,
+// exactly as before.
+function isCreditCardBillWording_(mode, counterparty, note){
+  const m = (mode || "").toString().toLowerCase();
+  if(m.startsWith("card")) return false; // an actual swipe, not a bill payment - never exclude these
+  const text = ((counterparty || "") + " " + (note || "")).toLowerCase();
+  if(/\bcredit card\b/.test(text) || /\bcc bill\b/.test(text) || /\bcard bill\b/.test(text) || /\bcard payment\b/.test(text)) return true;
+  // "cc billpay" / "card bill pay" - the glued-together wording some bank
+  // narrations use, which the phrases above miss because "billpay" has no
+  // word boundary after "bill". Added 2026-10-10.
+  if(/\b(cc|card)\s*bill\s*pay/.test(text)) return true;
+  return false;
+}
+
 // Recognizes a transaction that's actually a CREDIT CARD BILL PAYMENT —
 // money settling card swipes already counted as spend when they
 // happened, not new spending. Found during a full-app review 2026-08-10:
@@ -1517,9 +1537,8 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
 // recognize it as a genuine bill payment either way.
 function isCreditCardBillPayment(mode, counterparty, note, amount, txnData){
   const m = (mode || "").toString().toLowerCase();
-  if(m.startsWith("card")) return false; // an actual swipe, not a bill payment — never exclude these
-  const text = ((counterparty || "") + " " + (note || "")).toLowerCase();
-  if(/\bcredit card\b/.test(text) || /\bcc bill\b/.test(text) || /\bcard bill\b/.test(text) || /\bcard payment\b/.test(text)) return true;
+  if(m.startsWith("card")) return false; // an actual swipe, not a bill payment - never exclude these
+  if(isCreditCardBillWording_(mode, counterparty, note)) return true;
 
   if(amount != null && amount > 0){
     const perCardTotals = getOutstandingCCBillTotalsByCard(txnData);
@@ -2004,6 +2023,56 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
   }
 }
 
+// Everything that happens when a Financial Event (Rent / EMI / Investment /
+// Saving) is confirmed for a row, EXCEPT writing the Note and Category
+// cells (the caller does those). Shared by saveTransactionNote (a human
+// confirmed it) and autoSettle.js (the app was already sure) so the two
+// stay identical:
+//   1. writes the event type into column R (and the name into column S
+//      for EMI/Investment — more than one of each can exist, so each
+//      needs its own name, e.g. "Laptop EMI");
+//   2. for Rent/EMI/Investment, remembers the amount/payee in the
+//      FinancialEvents sheet so the next one is recognized (Saving is
+//      re-detected from the note each time, no memory needed);
+//   3. logs it into the real Investments / Savings tab, unless a
+//      likely-duplicate manual entry already sits nearby in time (see
+//      hasLikelyDuplicateInvestment / hasLikelyDuplicateSaving).
+function applyFinancialEventToRow_(sheet, row, financialEvent, financialEventName, counterparty, note){
+  writeFinancialEventCells_(sheet, row, financialEvent, financialEventName);
+  runFinancialEventSideEffects_(sheet, row, financialEvent, financialEventName, counterparty, note, true);
+}
+
+// Step 1 of the above: just the two cells (column R, and column S for a
+// named EMI/Investment). Split out 2026-10-10 so the silent auto-settle path
+// can write ALL cells first and run the side effects last.
+function writeFinancialEventCells_(sheet, row, financialEvent, financialEventName){
+  sheet.getRange(row, 18).setValue(financialEvent); // column R
+  if((financialEvent === "EMI" || financialEvent === "Investment") && financialEventName){
+    sheet.getRange(row, 19).setValue(financialEventName); // column S
+  }
+}
+
+// Step 2: everything that lives OUTSIDE the row - the FinancialEvents
+// memory (only when recordMemory is true: a human confirmation teaches the
+// app; the silent auto-settle path passes false so a wrongly-settled payee
+// can never be remembered) and the Investments/Savings auto-log.
+function runFinancialEventSideEffects_(sheet, row, financialEvent, financialEventName, counterparty, note, recordMemory){
+  const feAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects any edit made just before
+
+  if(recordMemory && (financialEvent === "Rent" || financialEvent === "EMI" || financialEvent === "Investment")){
+    recordFinancialEvent(financialEvent, feAmount, counterparty, financialEventName);
+  }
+
+  const txnDateRaw = sheet.getRange(row, 1).getValue(); // column A
+  const txnDateStr = Utilities.formatDate(new Date(txnDateRaw), Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+  if(financialEvent === "Investment"){
+    autoLogInvestment(txnDateStr, financialEventName, feAmount, note);
+  } else if(financialEvent === "Saving"){
+    autoLogSaving(txnDateStr, feAmount, note);
+  }
+}
+
 // Writes the note + category you typed back into the right row.
 // Writes the note + category you typed back into the right row, and
 // teaches the smart category engine this merchant -> category mapping
@@ -2051,36 +2120,11 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     const effectiveFinancialEventName = financialEvent ? financialEventName : null;
 
     if(effectiveFinancialEvent){
-      sheet.getRange(row, 18).setValue(effectiveFinancialEvent); // column R
-      // financialEventName (column S) only means something for EMI/
-      // Investment — more than one of each can exist, so each needs its
-      // own name (e.g. "Laptop EMI", "Mutual Fund") to stay distinct.
-      if((effectiveFinancialEvent === "EMI" || effectiveFinancialEvent === "Investment") && effectiveFinancialEventName){
-        sheet.getRange(row, 19).setValue(effectiveFinancialEventName); // column S
-      }
-      const feAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
-
-      // Only Rent/EMI/Investment use the amount/note-matching memory —
-      // Saving is re-detected fresh from the note every time, no memory
-      // needed (same as Lending).
-      if(effectiveFinancialEvent === "Rent" || effectiveFinancialEvent === "EMI" || effectiveFinancialEvent === "Investment"){
-        recordFinancialEvent(effectiveFinancialEvent, feAmount, counterparty, effectiveFinancialEventName);
-      }
-
-      // Auto-log into the real Investments/Savings tab (added
-      // 2026-08-10) — so a recognized investment or a note-detected
-      // saving doesn't ALSO need typing in by hand a second time.
-      // Skipped if a likely-duplicate manual entry already exists
-      // nearby in time — see hasLikelyDuplicateInvestment/
-      // hasLikelyDuplicateSaving in financialEvents.js.
-      const txnDateRaw = sheet.getRange(row, 1).getValue(); // column A
-      const txnDateStr = Utilities.formatDate(new Date(txnDateRaw), Session.getScriptTimeZone(), "yyyy-MM-dd");
-
-      if(effectiveFinancialEvent === "Investment"){
-        autoLogInvestment(txnDateStr, effectiveFinancialEventName, feAmount, note);
-      } else if(effectiveFinancialEvent === "Saving"){
-        autoLogSaving(txnDateStr, feAmount, note);
-      }
+      // Moved into a shared helper 2026-10-10 so the automatic "settle
+      // known transactions" path (autoSettle.js) runs exactly the same
+      // steps as a human tapping "Yes" on the chip — the two can never
+      // drift apart. Behavior here is unchanged.
+      applyFinancialEventToRow_(sheet, row, effectiveFinancialEvent, effectiveFinancialEventName, counterparty, note);
     }
 
     // Debts auto-linking (added 2026-08-10) — a lending-flavored note

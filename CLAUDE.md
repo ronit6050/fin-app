@@ -763,9 +763,9 @@ Backend `clasp push`ed to the editor draft only; frontend not yet
 `git push`ed — both need a go-ahead, plus real on-device testing (this
 environment can't render an actual Android push notification).
 
-**Two more push-notification features (2026-09-21): built, tested,
-backend `clasp push`ed to the editor draft only — NOT yet
-deployed live.** (1) **Upcoming Fixed-Obligation Reminder**
+**Two more push-notification features (2026-09-21): done, deployed live
+(`@318`), committed and pushed; the `checkUpcomingObligations` trigger was
+added by the user and confirmed running 2026-09-21.** (1) **Upcoming Fixed-Obligation Reminder**
 (`backend/obligationReminders.js`, new file) — Rent/EMI/SIP payments
 used to only ever be recognized AFTER they happened; this looks at the
 real history already sitting in `FinancialEvents`, works out the usual
@@ -2828,3 +2828,79 @@ multi-user "template Sheet" will be built from.
 
 **Next**: the multi-user plan above is now unblocked — starts whenever
 the user picks a phase from its "suggested phased order."
+
+## Session checkpoint — 2026-10-10 (paused, user travelling)
+
+**Live and pushed to GitHub:**
+- Payee-aware EMI/SIP matching (commit `39d1f10`, backend `@319`): a Rs.4,000
+  payment to the user's dad (laptop EMI) was being offered as "HDFC Mid Cap
+  Fund?" only because that SIP is also Rs.4,000. An amount match now also
+  needs the payee to fit. Replayed on 876 real debits: only 3 suggestions
+  changed, all wrong guesses. See docs/features/financial-events.md.
+- SMS reader junk filter (commit `8933243`, sms-parser `@17`): ignores login/
+  biometric/link-card notices, biller receipts, advance "will be deducted"
+  mandate notices and link-shortener scam/promo texts; fixes the wrong
+  merchant "block" on HDFC card alerts; saves the bank's double text for one
+  AutoPay charge once. Independently reviewed twice (round 1 found 3 real
+  "could drop a genuine purchase" bugs, all fixed and re-verified). Full
+  detail: docs/features/sms-junk-and-echo-filter.md.
+
+**DEPLOYED LIVE `@320` on 2026-10-10 (commit pending when written):** auto-settle
+and health monitor (`backend/autoSettle.js`, `backend/appHealth.js`, edits in
+`transactions.js` + `PWA.js` + `Logger.js`, new Transactions column T
+"AutoSettled", `docs/SHEET_SCHEMA.md`, tests `autoSettle.test.js` /
+`appHealth.test.js` / `_fakeSheetsKit.js`, doc `docs/features/auto-settle-and-health.md`).
+A first independent review found real problems (silent settle could misfile
+card/wallet spending as Rent/SIP; loose amount tolerance; a real reference in
+a public test file) — all fixed by the author; a SECOND review pass
+re-ran every failing probe and returned **safe to deploy** (2026-10-10): all
+misfile cases now stay in Pending, saveTransactionNote differential clean,
+failure injection leaves no orphan rows, real-data replay of 888 debits settles
+11 live-style (all genuine), full suite 24 files pass, pinned deployment still
+@319 before deploy. The user gave the go-ahead and it is live as `@320`.
+Still to do by the user: add the `checkAppHealth` trigger, run
+`previewAutoSettle()` then `autoSettlePendingNow()`. The "AutoSettled"
+header in column T of Transactions is added automatically the first time a
+row is settled. After deploying, the user must add one trigger by
+hand: `checkAppHealth`, time-driven, day timer, 9-10am (silent unless
+something is wrong). Then run `previewAutoSettle()` and, if it only lists the
+two PayZapp card-bill payments, `autoSettlePendingNow()`.
+
+**Private data rule:** `local-data/` (git-ignored) holds the user's real
+exported workbook (`EXP-TRACK-latest.xlsx`) and Transactions CSV. It is for
+local analysis only — NEVER commit it, never copy real names/references/
+amounts/card digits into tests, docs or comments (the repo is PUBLIC). Throwaway
+analysis scripts live in the scratchpad, not the repo.
+
+**Agreed direction (automation pipeline) — steps 1-2 above; 3-5 not started:**
+only ask the user what only they know. (1) clean inputs [SMS reader — done],
+(2) auto-settle the knowns [built, pending deploy], (3) learn Need/Want from
+the user's note words (real-data replay: would auto-fill 41% of tagged payments
+at 95% accuracy; "tea" = Want 63/64), plus a "Not sure" button for truly mixed
+cases like "lunch" (7 Need / 9 Want) and a small "Mark as EMI / Rent / SIP /
+Saving" link on every card (today there is NO way to mark an EMI by hand — the
+chip only appears when the app guesses), (4) answer from the notification with
+the top-2 guesses as buttons, (5) weekly "what I did for you" digest +
+plan-vs-actual loop. Rule for all of it: learn ONLY from the user's own
+confirmations, never from the app's guesses. Show a mockup before building 3-5.
+
+**Open items / known gaps:**
+- 59 payments (Rs.35,041) from 5-15 Sep have no category (the dropdown bug);
+  the fix works since 15 Sep but the one-time backfill was never run: run
+  `previewMissingCategories` then `backfillMissingCategories` (Logger.js).
+- Pending had 8 rows: two Rs.4,000 payments to the dad (should be marked
+  EMI — type "Laptop EMI" as the note, then confirm in History), a duplicate
+  YouTube Rs.149, a scam credit (mark "not a transaction"; user confirmed no
+  KR Choksey account), an Airtel receipt, Rs.40 to a small payee, and two
+  PayZapp card-bill payments (auto-settle will take these once deployed).
+- Card charges that arrive as AutoPay or "Card xNNNN" texts get Mode "other",
+  so CC Advisor misses them (small SMS-parser fix, not done).
+- "IPIN reset" notices still arrive as UNCERTAIN junk; shops already saved as
+  "block" were not cleaned up (only new messages are fixed).
+- Old rows stuck unprocessed forever: 310, 311, 325, 359 (May); row 828 (the
+  Sept salary, Rs.45,000) has a note but no category and was never processed,
+  so it may be missing from income totals.
+- `isWalletTopUp` also fires on wallet purchases that carry a reference (e.g.
+  a plain "Paid through wallet" purchase), wrongly excluding them from spend.
+- The SMS echo-duplicate check assumes the sheet's Time column is India time;
+  watch the first real double-text after the deploy.

@@ -39,6 +39,10 @@ function processNewTransactions() {
   const financialEventsSheet = ss.getSheetByName("FinancialEvents");
   const financialEventsData  = financialEventsSheet ? financialEventsSheet.getDataRange().getValues() : [];
 
+  // Shared holder for auto-settle's big sheet reads (autoSettle.js) -
+  // filled in lazily, only if a new DEBIT row actually shows up this run.
+  const autoSettleHolder = { ctx: null, tried: false };
+
   for(let i = 0; i < data.length; i++){
 
     const processed = data[i][15];
@@ -54,6 +58,20 @@ function processNewTransactions() {
       // (happened 2026-08-08). Catching per-row means one bad row just
       // gets skipped and logged, instead of jamming the whole pipeline.
       try{
+
+        // ── Auto-settle the KNOWNS first (added 2026-10-10) ──
+        // A credit card bill payment, a wallet top-up, or a recurring
+        // Rent/EMI/SIP the app has already seen and confirmed before is
+        // settled silently - no notification, nothing in Pending, and it
+        // never teaches the learning systems. If it returns false (not a
+        // known type, or anything went wrong - it never throws), the row
+        // carries on down the normal path below exactly as before. See
+        // autoSettle.js / docs/features/auto-settle-and-health.md.
+        if(tryAutoSettleNewRow_(sheet, rowIndex, data[i], autoSettleHolder)){
+          sheet.getRange(rowIndex, 15).setValue("");
+          sheet.getRange(rowIndex, 16).setValue("YES");
+          continue;
+        }
 
         const date   = Utilities.formatDate(
           new Date(data[i][0]), Session.getScriptTimeZone(), "dd MMM yyyy"

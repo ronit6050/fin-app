@@ -32,7 +32,7 @@ note/category/tags to existing rows via Pending/History/Reconcile.
 | B | Time | Transaction time |
 | C | Bank | e.g. `HDFC` |
 | D | Type | `debit` or `credit` — reliable signal for money leaving vs. entering, independent of category/note |
-| E | Mode | `upi`, `card <last 4 digits>` (e.g. `card 8132`), `wallet`, `neft`, `atm`, etc. |
+| E | Mode | `upi`, `card <last 4 digits>` (e.g. `card 1111`), `wallet`, `neft`, `atm`, etc. |
 | F | Amount | Numeric |
 | G | Reference | Bank reference/UTR number, or a `NOREF_...` placeholder for a statement-recovered row with no real reference printed |
 | H | Counterparty | Raw payee/payer name from the bank SMS/statement |
@@ -47,6 +47,7 @@ note/category/tags to existing rows via Pending/History/Reconcile.
 | Q | NeedWantSaving | `Need` / `Want` / `Saving` / `Investment`, or blank if not yet tagged/not applicable (credits, lending transfers, confirmed Financial Events all skip this) |
 | R | FinancialEvent | `Rent` / `EMI` / `Investment`, or blank |
 | S | FinancialEventName | Only meaningful when column R is `EMI` or `Investment` — the specific named loan/investment (e.g. "Home Loan EMI") |
+| T | AutoSettled | Added 2026-10-10. Blank for anything a human handled. A short reason code when the app settled the row by itself (see [auto-settle-and-health.md](features/auto-settle-and-health.md)): `ccbill`, `wallet-topup`, `fe:Rent`, or `fe:<event name>` (e.g. `fe:Laptop EMI`). Rows written by the SMS reader / Recon only have 16-17 values, so this cell is simply empty for them — nothing depends on the row being 20 wide |
 
 ---
 
