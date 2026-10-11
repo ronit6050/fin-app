@@ -17,6 +17,14 @@ function processNewTransactions() {
   }
 }
 
+// A row with neither a date nor an amount is a blank/placeholder row, never a
+// real transaction (see the comment in the loop below).
+function isEmptyTransactionRow_(row){
+  const hasDate = row[0] !== "" && row[0] !== null && row[0] !== undefined;
+  const hasAmount = row[5] !== "" && row[5] !== null && row[5] !== undefined;
+  return !hasDate && !hasAmount;
+}
+
 function processNewTransactionsCore_() {
 
   const {BOT_TOKEN, CHAT_ID} = getConfig();
@@ -62,7 +70,16 @@ function processNewTransactionsCore_() {
 
     const processed = data[i][15];
 
-    if(processed !== "YES"){
+    // Skip rows that are NOT real new transactions (fixed 2026-10-11):
+    // - "IGNORED" is the marker left by the "not a transaction" button (the
+    //   row is cleared in place, never deleted). The old rule here was just
+    //   "anything that isn't YES is new", so after a bank-statement
+    //   reconcile re-sorted the sheet, those placeholder rows landed below
+    //   this function's bookmark, were treated as new transactions, and had
+    //   their IGNORED marker overwritten with YES - showing up in Pending as
+    //   Rs.0 phantoms. 11 of them appeared on 2026-10-11.
+    // - A completely empty row (no date, no amount) is never a transaction.
+    if(processed !== "YES" && processed !== "IGNORED" && !isEmptyTransactionRow_(data[i])){
 
       const rowIndex = startRow + i + 1; // Actual row number in sheet
 

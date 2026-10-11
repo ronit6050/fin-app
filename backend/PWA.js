@@ -1762,6 +1762,10 @@ function getPendingTransactions(txnData){
 
     if(processed !== "YES") continue; // hasn't even been alerted yet
     if(note) continue;                // already has a note
+    // A placeholder/empty row (no date, no amount) is never a pending
+    // transaction, whatever its Processed marker says. Added 2026-10-11 after
+    // 11 empty rows stamped YES showed up as Rs.0 phantoms in Pending.
+    if(isEmptyTransactionRow_(data[i])) continue;
 
     const bank        = data[i][2] || "";
     const txnType     = data[i][3] || ""; // "debit" or "credit"
