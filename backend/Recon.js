@@ -338,6 +338,7 @@ function previewReconciliation(bankTxns, options){
       if(options.checkCardMode && txn.type === "debit" && !existingMode.toLowerCase().startsWith("card")){
         wrongMode.push({
           row:         bestRowIndex + 1,
+          fp:          rowFingerprint_(sheetRow),   // stale-card safeguard (PWA.js)
           date:        Utilities.formatDate(txn.date, Session.getScriptTimeZone(), "dd MMM yyyy"),
           amount:      Number(txn.amount),
           name:        sheetRow[7] || txn.name,
@@ -355,6 +356,7 @@ function previewReconciliation(bankTxns, options){
 
       notesFound.push({
         row:               bestRowIndex + 1, // sheet rows are 1-indexed
+        fp:                rowFingerprint_(sheetRow),   // stale-card safeguard (PWA.js)
         date:              Utilities.formatDate(txn.date, Session.getScriptTimeZone(), "dd MMM yyyy"),
         amount:            Number(txn.amount),
         type:              txn.type,
@@ -401,9 +403,16 @@ function extractCardLast4(text){
 // for the wrongMode case above. Deliberately minimal: one cell, no
 // cascading side effects, same trust level as any other single-cell
 // edit already possible via History.
-function fixTransactionMode(row, mode){
+function fixTransactionMode(row, mode, expectFp){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    // This used to write to ANY row number it was given. Same row check as
+    // saveTransactionNote, plus the stale-card safeguard (see rowFingerprint_
+    // in PWA.js) added 2026-10-11.
+    if(!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()){
+      return { ok:false, error:"Invalid row." };
+    }
+    if(!rowStillMatches_(sheet, row, expectFp)) return staleRowResponse_();
     sheet.getRange(row, 5).setValue(mode); // column E
     return { ok: true };
   }catch(err){

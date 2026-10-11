@@ -66,6 +66,8 @@ function loadSandbox(transactionsHolder){
             if(name === "Transactions"){
               return {
                 getDataRange: function(){ return { getValues: function(){ return transactionsHolder.rows; } }; },
+                // fixTransactionMode now checks the row is inside the sheet (added 2026-10-11)
+                getLastRow: function(){ return 1000; },
                 getRange: function(row, col){
                   return { setValue: function(val){ sheetWrites.push({ row: row, col: col, val: val }); } };
                 }

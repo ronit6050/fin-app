@@ -187,7 +187,11 @@ Reply to add a note for this transaction.`;
           note:          quickConfirm.note,
           category:      quickConfirm.category,
           counterparty:  counterparty,
-          type:          quickConfirm.type
+          type:          quickConfirm.type,
+          // Stale-card safeguard (PWA.js rowFingerprint_): a notification can
+          // sit on the phone for hours; if the sheet was re-sorted meanwhile,
+          // the Confirm button must not write to the wrong row.
+          fp:            rowFingerprint_(data[i])
         } : null);
 
         // Save messageId (empty if Telegram is off) and mark as processed

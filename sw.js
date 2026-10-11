@@ -105,7 +105,8 @@ function confirmFromNotification(data) {
         note:         data.note,
         category:     data.category,
         counterparty: data.counterparty,
-        type:         data.type || undefined
+        type:         data.type || undefined,
+        fp:           data.fp || undefined
       })
     })
       .then(function (response) { return response.json(); })
@@ -117,7 +118,9 @@ function confirmFromNotification(data) {
           });
         }
         return self.registration.showNotification("Couldn't save automatically", {
-          body: (result && result.error) ? result.error : "Open the app to add this note instead."
+          body: (result && result.stale)
+            ? "This transaction moved or changed, so nothing was saved. Open the app to add the note."
+            : ((result && result.error) ? result.error : "Open the app to add this note instead.")
         });
       })
       .catch(function () {

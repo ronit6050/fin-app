@@ -57,7 +57,7 @@ function handlePwaRequestCore_(data){
   }
 
   if(data.action === "saveNote"){
-    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent, data.financialEventName, data.debtPerson, data.investmentInstrument));
+    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent, data.financialEventName, data.debtPerson, data.investmentInstrument, data.fp));
   }
 
   // Added 2026-09-18 — "self-learning spam filter." Lets the user mark
@@ -65,7 +65,7 @@ function handlePwaRequestCore_(data){
   // the SMS parser wrongly saved as UNCERTAIN) as junk themselves. See
   // markNotATransaction's own comment and docs/features/spam-learning.md.
   if(data.action === "markNotATransaction"){
-    return jsonResponse(markNotATransaction(data.row));
+    return jsonResponse(markNotATransaction(data.row, data.fp));
   }
 
   if(data.action === "getTodaySummary"){
@@ -214,7 +214,7 @@ function handlePwaRequestCore_(data){
   // Mode "upi" instead of "card ..."). See previewReconciliation's
   // wrongMode comment in Recon.js.
   if(data.action === "fixCreditCardTransactionMode"){
-    return jsonResponse(fixTransactionMode(data.row, data.mode));
+    return jsonResponse(fixTransactionMode(data.row, data.mode, data.fp));
   }
 
   if(data.action === "getSettings"){
@@ -1808,6 +1808,7 @@ function getPendingTransactions(txnData){
 
     pending.push({
       row:               i + 1,
+      fp:                rowFingerprint_(data[i]),   // stale-card safeguard, see rowFingerprint_
       date:              Utilities.formatDate(new Date(data[i][0]), Session.getScriptTimeZone(), "dd MMM yyyy"),
       time:              Utilities.formatDate(new Date(data[i][1]), Session.getScriptTimeZone(), "HH:mm"),
       bank:              bank,
@@ -1930,6 +1931,7 @@ function getTransactionHistory(offset, limit){
 
     noted.push({
       row:          i + 1,
+      fp:           rowFingerprint_(data[i]),   // stale-card safeguard, see rowFingerprint_
       date:         Utilities.formatDate(new Date(data[i][0]), Session.getScriptTimeZone(), "dd MMM yyyy"),
       time:         Utilities.formatDate(new Date(data[i][1]), Session.getScriptTimeZone(), "HH:mm"),
       bank:         data[i][2] || "",
@@ -2098,7 +2100,63 @@ function runFinancialEventSideEffects_(sheet, row, financialEvent, financialEven
 // teach SmartMemory/TypeVotes exactly like a first-time correction does
 // (confirmed with the user 2026-08-08) — reusing this function is what
 // gets that for free instead of writing a second, parallel code path.
-function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName, debtPerson, investmentInstrument){
+// ---------------------------------------------------------------------
+// STALE-CARD SAFEGUARD (added 2026-10-11)
+//
+// PLAIN-ENGLISH: the app saves a note by ROW NUMBER ("write this to row 412").
+// But row numbers move: a bank-statement reconcile re-sorts the whole sheet,
+// and a card left open on a backgrounded app, a second device, or an old
+// notification still holds the OLD number - so its save could land on a
+// DIFFERENT transaction. To stop that, every card the backend sends now
+// carries a "fingerprint" (fp): a short code made ONLY from details that are
+// never edited after a transaction arrives (date, time, direction, bank,
+// reference, merchant). When the app saves, it sends the fingerprint back; the
+// backend recomputes it for the target row and refuses the save if they differ,
+// with a message that the list is out of date.
+//
+// Deliberately NOT part of the fingerprint: amount, note, category, type and
+// mode, because the app itself lets you edit those - including them would
+// cause false alarms after your own edits.
+// A request WITHOUT a fingerprint (an old cached copy of the app, a demo
+// card) is allowed through exactly as before.
+// ---------------------------------------------------------------------
+function rowFingerprint_(r){
+  const tz = Session.getScriptTimeZone();
+  const part = function(v, fmt){
+    if(v instanceof Date && !isNaN(v.getTime())) return Utilities.formatDate(v, tz, fmt);
+    return (v === null || v === undefined) ? "" : String(v).trim();
+  };
+  const ref = (r[6] === null || r[6] === undefined ? "" : String(r[6])).trim().replace(/^0+(?=\d)/, "");
+  const cp  = (r[7] === null || r[7] === undefined ? "" : String(r[7])).toLowerCase().replace(/\s+/g, " ").trim();
+  const text = [
+    part(r[0], "yyyy-MM-dd"), part(r[1], "HH:mm"),
+    String(r[3] || "").trim().toLowerCase(), String(r[2] || "").trim().toLowerCase(), ref, cp
+  ].join("|");
+  let h = 0x811c9dc5;                       // FNV-1a, 32-bit
+  for(let i = 0; i < text.length; i++){
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
+
+// The refusal sent back when a card no longer matches its row.
+function staleRowResponse_(){
+  return {
+    ok: false, stale: true,
+    error: "This list was out of date (the sheet changed since it loaded), so nothing was saved. It has been refreshed - please try again."
+  };
+}
+
+// true = the row at this number is still the transaction the card showed
+// (or no fingerprint was sent, i.e. an older app version).
+function rowStillMatches_(sheet, row, expectFp){
+  if(expectFp === undefined || expectFp === null || expectFp === "") return true;
+  const live = sheet.getRange(row, 1, 1, 8).getValues()[0];
+  return rowFingerprint_(live) === String(expectFp);
+}
+
+function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName, debtPerson, investmentInstrument, expectFp){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
 
@@ -2108,6 +2166,9 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     if(!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()){
       return { ok:false, error:"Invalid row." };
     }
+
+    // Stale-card safeguard (see rowFingerprint_): refuse BEFORE touching anything.
+    if(!rowStillMatches_(sheet, row, expectFp)) return staleRowResponse_();
 
     sheet.getRange(row, 13).setValue(note);     // column M
     sheet.getRange(row, 14).setValue(category); // column N
@@ -2366,7 +2427,7 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
 // override a confidently-detected real transaction. See
 // docs/features/spam-learning.md for the full design, including why
 // that guarantee matters.
-function markNotATransaction(row){
+function markNotATransaction(row, expectFp){
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
 
@@ -2376,6 +2437,11 @@ function markNotATransaction(row){
 
     const data = sheet.getDataRange().getValues();
     const rowValues = data[row - 1];
+
+    // Stale-card safeguard (see rowFingerprint_): the card must still be this row.
+    if(expectFp !== undefined && expectFp !== null && expectFp !== "" && rowFingerprint_(rowValues) !== String(expectFp)){
+      return staleRowResponse_();
+    }
 
     // Same guard getPendingTransactions() uses to decide what still
     // counts as "pending" — defends against a stale row number sent

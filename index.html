@@ -3376,8 +3376,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-09-19-01";
-    const APP_CHANGELOG = "New transaction notifications can now show a \"Confirm\" button that saves the note/category right from the notification, no need to open the app.";
+    const APP_VERSION = "2026-10-11-01";
+    const APP_CHANGELOG = "Safer saving: if a list is out of date (for example right after you reconcile a bank statement), the app now refuses the save and refreshes instead of risking a note landing on the wrong transaction.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -6331,10 +6331,17 @@
     // potentially sitting there until someone notices by hand.
     function reconcilePendingList(freshTransactions, opts) {
       opts = opts || {};
-      const freshRows = new Set(freshTransactions.map(function (t) { return t.row; }));
+      const freshByRow = {};
+      freshTransactions.forEach(function (t) { freshByRow[t.row] = t; });
+      // Rows whose card on screen is a DIFFERENT transaction than the fresh list
+      // now has at that row number (the sheet was re-sorted, e.g. by a Reconcile),
+      // or an old saved card that never had a fingerprint. Those get replaced.
+      const replacedRows = new Set();
 
       allPending = allPending.filter(function (t) {
-        if (freshRows.has(t.row)) return true;
+        const fresh = freshByRow[t.row];
+        if (fresh && (!fresh.fp || fresh.fp === t.fp)) return true;
+        if (fresh) replacedRows.add(t.row);
         knownRows.delete(t.row);
         const card = pendingListEl.querySelector('[data-row="' + t.row + '"]');
         if (card) card.remove();
@@ -6351,7 +6358,7 @@
         // Only pop a real notification from the background poll — not from
         // opening this screen or Home, where you're already looking at (or
         // about to look at) the list it just appeared in.
-        if (opts.notify) showNewTransactionNotification(txn);
+        if (opts.notify && !replacedRows.has(txn.row)) showNewTransactionNotification(txn);
       });
 
       updatePendingStatusText();
@@ -6705,6 +6712,7 @@
           note:         savedNote,
           category:     savedCategory,
           counterparty: txn.counterparty,
+          fp:           txn.fp,
           type:         savedType,
           financialEvent:       savedFinancialEvent,
           financialEventName:   savedFinancialEventName,
@@ -6713,6 +6721,15 @@
         })
           .then(function (data) {
             if (!data.ok) {
+              if (data.stale) {
+                // The sheet changed since this card loaded (e.g. a statement
+                // reconcile re-sorted it), so its row number now points at a
+                // DIFFERENT transaction. The backend refused and wrote nothing.
+                // Don't put this stale card back - reload the real list.
+                showPendingNotice(data.error);
+                loadPendingTransactions();
+                return;
+              }
               restoreAfterFailedSave("Couldn't save (" + data.error + ") — check your connection and tap Save again.");
               return;
             }
@@ -6784,7 +6801,7 @@
         saveCache("pending", allPending);
         card.remove();
 
-        callAppsScript({ action: "markNotATransaction", idToken: currentUser.idToken, row: txn.row })
+        callAppsScript({ action: "markNotATransaction", idToken: currentUser.idToken, row: txn.row, fp: txn.fp })
           .then(function (data) {
             if (data.ok) {
               // patternLearned is false when the message was too short/
@@ -6795,6 +6812,9 @@
               showPendingNotice(data.patternLearned
                 ? "Won't flag messages like this again."
                 : "Removed. (That message was too short to learn from, so a similar one might show up again.)");
+            } else if (data.stale) {
+              showPendingNotice(data.error);   // see the stale-card note on Pending's Save
+              loadPendingTransactions();
             } else {
               restoreAfterNotTxnFailure("Couldn't remove this (" + data.error + ") — check your connection and try again.");
             }
@@ -10257,6 +10277,7 @@
       const metaLine = `${item.date} · ${escapeHtml(item.name || "Unknown")} · already in your Sheet`;
       const card = buildReviewCardShell(item.amount, metaLine, item.note, item.suggestedCategory, item.type, item.suggestedType);
       card._reconRow = item.row;
+      card._reconFp = item.fp;
       card._reconName = item.name;
       return card;
     }
@@ -10280,6 +10301,7 @@
         <div class="pending-meta">Currently marked: <strong>${escapeHtml(item.currentMode)}</strong> → will fix to: <strong>${escapeHtml(item.correctMode)}</strong></div>
       `;
       card._reconRow = item.row;
+      card._reconFp = item.fp;
       card._correctMode = item.correctMode;
       return card;
     }
@@ -10387,6 +10409,7 @@
           action:       "saveNote",
           idToken:      currentUser.idToken,
           row:          card._reconRow,
+          fp:           card._reconFp,
           note:         card.querySelector(".recon-note").value,
           category:     card.querySelector(".recon-category").value,
           counterparty: card._reconName,
@@ -10397,8 +10420,10 @@
       Promise.all(promises)
         .then(function (results) {
           const failed = results.filter(function (r) { return !r.ok; }).length;
+          const anyStale = results.some(function (r) { return r.stale; });
           reconStatusEl.textContent = failed
-            ? (failed + " of " + toSubmit.length + " failed to save.")
+            ? (failed + " of " + toSubmit.length + " failed to save." +
+               (anyStale ? " The sheet changed since this preview (nothing wrong was written) — upload the statement again." : ""))
             : "Saved " + toSubmit.length + " note(s).";
           toSubmit.forEach(function (card) { card.remove(); });
           saveButton.disabled = false;
@@ -10431,6 +10456,7 @@
           action:   "fixCreditCardTransactionMode",
           idToken:  currentUser.idToken,
           row:      card._reconRow,
+          fp:       card._reconFp,
           mode:     card._correctMode
         });
       });
@@ -10438,8 +10464,10 @@
       Promise.all(promises)
         .then(function (results) {
           const failed = results.filter(function (r) { return !r.ok; }).length;
+          const anyStaleFix = results.some(function (r) { return r.stale; });
           reconStatusEl.textContent = failed
-            ? (failed + " of " + toSubmit.length + " failed to fix.")
+            ? (failed + " of " + toSubmit.length + " failed to fix." +
+               (anyStaleFix ? " The sheet changed since this preview (nothing wrong was written) — upload the statement again." : ""))
             : "Fixed " + toSubmit.length + " transaction(s) — they'll now count correctly in CC Advisor and Analysis.";
           toSubmit.forEach(function (card) { card.remove(); });
           fixButton.disabled = false;
@@ -11609,6 +11637,7 @@
           note:         sentNote,
           category:     sentCategory,
           counterparty: txn.counterparty,
+          fp:           txn.fp,
           type:         sentType,
           amount:       sentAmount,
           financialEvent:       financialEvent.type,
@@ -11618,7 +11647,17 @@
         })
           .then(function (data) {
             if (!data.ok) {
-              revert("Couldn't save (" + data.error + ") — check your connection and tap Save again.");
+              if (data.stale) {
+                // Stale card: nothing was written. Undo the optimistic edit and
+                // reload the list so the card shows the real, current row.
+                revert(data.error);
+                loadHistory();
+                // loadHistory clears the list, which would wipe the message above;
+                // keep it and show it once the fresh list has loaded.
+                historyStaleNotice = data.error;
+              } else {
+                revert("Couldn't save (" + data.error + ") — check your connection and tap Save again.");
+              }
             } else if (data.typeRequested && !data.typeSaved) {
               // Note/category/amount genuinely saved fine, but the type
               // specifically didn't (e.g. recognized as a loan/repayment
@@ -11650,6 +11689,9 @@
 
       return card;
     }
+
+    // Set when a save was refused as out of date; shown once after the reload.
+    let historyStaleNotice = "";
 
     function loadHistory() {
       historyOffset = 0;
@@ -11696,6 +11738,10 @@
           historyStatusEl.textContent = (historyOffset === 0 && data.total === 0)
             ? "No transactions noted yet."
             : "Showing " + historyOffset + " of " + data.total;
+          if (historyStaleNotice) {
+            historyStatusEl.textContent = historyStaleNotice + " — " + historyStatusEl.textContent;
+            historyStaleNotice = "";
+          }
 
           historyShowMoreEl.style.display = (historyOffset < data.total) ? "block" : "none";
         })

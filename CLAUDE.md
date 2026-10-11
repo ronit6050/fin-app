@@ -2947,3 +2947,20 @@ Why the plan changed: sizing Phase 1 showed 214 places in `backend/*.js` that re
 **Incident 2026-10-11 (fixed + data repaired):** `Recon.js insertReconciledTransactions` appends rows then SORTS the whole Transactions sheet by date; empty-date IGNORED tombstones sort to the bottom and landed below the timer's bookmark (`lastCheckedRow`); the timer's rule "anything not YES is new" processed 11 of them and overwrote IGNORED with YES, so Pending listed Rs.0 phantoms (and probably junk notifications). Fix: the timer skips IGNORED rows and rows with no date and no amount (`isEmptyTransactionRow_`), and `getPendingTransactions` never lists an empty row (`backend/tests/timerSkipsPlaceholderRows.test.js`). **STILL OPEN (do next, small):** the same sort can shift a REAL, not-yet-alerted row above the bookmark so it is never alerted. Options: stop sorting and write rows in place, or run processNewTransactions first, or reset the bookmark after the sort to just before the first row whose Processed is blank.
 
 **Next:** Phase 2/3 = the app starts READING `views/*` (Firebase Auth via the existing Google sign-in, Firestore security rules allowing only ronitnadar9@gmail.com, then turn on the inline publish switch); more views (Pending, Analysis, CC Advisor...). Product work queued by the user: SPLITS ("Split with Vaidehi/Utsal": own share = spend, friend's share to Debts as owed; Firestore-native), note-word learning (`backend/noteWordModel.js`, 96% accurate on real history, built and used for the one-time backfill only), "Mark as EMI/Rent/SIP/Saving" control + "Not sure" button, a weekly/monthly report push, answering from the notification.
+
+## Stale-card safeguard (2026-10-11): DEPLOYED LIVE (backend @323, frontend via git push)
+Problem: the app saves by sheet ROW NUMBER, and a Reconcile re-sorts the sheet, so a
+card left open (or an old notification "Confirm" button) could save a note onto a
+DIFFERENT transaction. Fix: every Pending/History/Reconcile card and the quick-confirm
+push carries `fp`, a fingerprint of the never-edited details (date, time, type, bank,
+reference, counterparty — NOT amount/note/category/mode, which users edit).
+`saveTransactionNote`, `markNotATransaction`, `fixTransactionMode` re-read the live row
+and refuse with `{ok:false, stale:true}` BEFORE writing if it differs. No `fp` = old
+behaviour (old cached app copies keep working). Pending's background refresh now also
+replaces on-screen cards whose fingerprint changed (or that have none), without a false
+notification. `fixTransactionMode` also now validates the row number (it used to write
+anywhere). Tests: `backend/tests/staleCardSafeguard.test.js` (33 checks, proven to fail
+with the guard off); full suite 29 files pass. Independent `change-reviewer`: safe to
+deploy (checked against 982 real rows: no false alarms, no fingerprint collisions).
+Known/accepted: requests without `fp` are not guarded; tiny gap between check and write
+(no lock); Reconcile removes its cards even when a save fails (shows a message).
