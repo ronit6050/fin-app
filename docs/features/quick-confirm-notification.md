@@ -145,3 +145,38 @@ the token really is stale) — the same category of "owed to the user on
 a real phone" verification flagged for other recent frontend changes in
 this project, since this environment's browser preview can't render a
 real Android push notification at all.
+
+## Update 2026-10-11 - top two guesses + reply box
+
+**Why this was needed:** since 2026-09-03 the phone's notifications are shown by the NATIVE Android
+app (`FinAppFirebaseMessagingService`), which used to show only a title and text and ignored the
+`quickConfirm` data - so the original single "Confirm" button (built for the website's service worker)
+never appeared there.
+
+**What changed**
+- Backend: `getQuickConfirmOptions` (PWA.js) returns up to TWO guesses `[{note, category, type}]` from
+  `getSuggestedNotes` (noteMemory.js: best two remembered notes for this shop; same trust rules - used 2+
+  times for the shop and amount band, another band's note needs 3+) plus `replyCategory`. Need/Want comes
+  from the note's own words first (note-word table), then the older per-shop guess. Nothing is offered
+  for a credit, a Rent/EMI/SIP look-alike or a wallet top-up. `getQuickConfirmSuggestion` is kept as a
+  thin wrapper (guess 1) so older callers/tests are unchanged.
+- Push payload (transactions.js): `guesses` (JSON text), `replyEnabled`, `replyCategory`, `row`, `fp`,
+  `counterparty`, and still the OLD `note/category/type` (= guess 1) with `quickConfirm: "1"` when there is
+  at least one guess. The body text says what the buttons do ("Save as "Tea" or "Coffee"?").
+- `saveNote` accepts `autoType: true` (a typed reply): the server fills Need/Want ONLY when the words of the
+  note have a clear history (same rule as the Pending card); a `type` that is sent always wins.
+- Website service worker (`sw.js`): shows up to two buttons ("Tea . Want"); `confirm0` / `confirm1` save that
+  guess; falls back to the old single "Confirm" for an older backend.
+- Native app (`D:\Fin-app Application`, its own git repo): `FinAppFirebaseMessagingService` builds up to two
+  guess buttons + an "Add note" reply box (RemoteInput); `NotificationActionReceiver` (not exported) swaps the
+  notification for "Saving..." and queues `ConfirmNoteWorker`, which gets a FRESH Google sign-in silently
+  (so it does not expire after an hour like the website's button) and calls `saveNote` with the stale-card
+  fingerprint; the result ("Saved", "Not saved", "moved or changed") replaces the notification.
+  `NotificationHelper` holds the shared channel/status code. Compiles (`gradlew :app:compileDebugKotlin`).
+
+**Tests:** `backend/tests/notificationGuesses.test.js` (29 checks, invented data). **Needs a real phone:** the
+native part can only be proven on the device (build/install from Android Studio).
+
+**Known limits:** an Android notification shows at most 3 buttons (2 guesses + reply). A typed reply is saved
+under the shop's usual category (or "Other") with no Need/Want unless its words have a clear history.
+

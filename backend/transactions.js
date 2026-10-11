@@ -183,29 +183,44 @@ Reply to add a note for this transaction.`;
         // ── "Confirm" notification button (added 2026-09-19) ──
         // See getQuickConfirmSuggestion's own comment (PWA.js) for the
         // full reasoning on when this is offered.
-        const quickConfirm = getQuickConfirmSuggestion(
+        // Updated 2026-10-11 ("top two guesses"): up to two remembered-note buttons,
+        // plus (native app only) a reply box for typing your own note. The first
+        // guess is also sent in the old single-button fields so an older app/browser
+        // keeps working exactly as before.
+        const options = getQuickConfirmOptions(
           type, counterparty, amount, mode, reference,
           smartMemoryData, noteMemoryData, financialEventsData, typeVotesData, getNoteTypeModelOnce()
         );
-        if(quickConfirm) quickConfirm.row = rowIndex;
+        const guesses = options ? options.guesses : [];
 
         // ── Real push notification — the main alert now that Telegram is off ──
+        let hintLine = "";
+        if(guesses.length === 1) hintLine = "\nTap to save as \"" + guesses[0].note + "\" (" + guesses[0].category + ")";
+        if(guesses.length === 2) hintLine = "\nSave as \"" + guesses[0].note + "\" or \"" + guesses[1].note + "\"?";
         const pushBody = "₹" + Number(amount).toLocaleString('en-IN') + " · " + bank +
-          (counterparty ? " · " + counterparty : "") +
-          (quickConfirm ? ("\nTap Confirm to save as \"" + quickConfirm.note + "\" (" + quickConfirm.category + ")") : "");
+          (counterparty ? " · " + counterparty : "") + hintLine;
 
-        sendPushNotification("💳 New Transaction", pushBody, quickConfirm ? {
-          quickConfirm:  "1",
-          row:           quickConfirm.row,
-          note:          quickConfirm.note,
-          category:      quickConfirm.category,
-          counterparty:  counterparty,
-          type:          quickConfirm.type,
-          // Stale-card safeguard (PWA.js rowFingerprint_): a notification can
-          // sit on the phone for hours; if the sheet was re-sorted meanwhile,
-          // the Confirm button must not write to the wrong row.
-          fp:            rowFingerprint_(data[i])
-        } : null);
+        let pushExtra = null;
+        if(options){
+          pushExtra = {
+            row:           rowIndex,
+            counterparty:  counterparty,
+            // Stale-card safeguard (PWA.js rowFingerprint_): a notification can
+            // sit on the phone for hours; if the sheet was re-sorted meanwhile,
+            // a button must not write to the wrong row.
+            fp:            rowFingerprint_(data[i]),
+            replyEnabled:  "1",
+            replyCategory: options.replyCategory
+          };
+          if(guesses.length){
+            pushExtra.quickConfirm = "1";
+            pushExtra.guesses      = JSON.stringify(guesses);
+            pushExtra.note         = guesses[0].note;      // old single-button fields (guess 1)
+            pushExtra.category     = guesses[0].category;
+            pushExtra.type         = guesses[0].type;
+          }
+        }
+        sendPushNotification("💳 New Transaction", pushBody, pushExtra);
 
         // Save messageId (empty if Telegram is off) and mark as processed
         sheet.getRange(rowIndex, 15).setValue(messageId);

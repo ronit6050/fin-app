@@ -2984,3 +2984,11 @@ Also done 2026-10-11: SMS parser echo fix (sms-parser `@18`, HDFC's newer "witho
 authentication" wording), and `tools/ignore_rows.py` (removes junk/duplicate rows like the app's own
 button: archive to Transactions_Ignored, optional learn-as-junk, clear in place, verify).
 
+## Notification top-two-guesses + reply box (2026-10-11): DEPLOYED (backend @326, web via git push); native app committed locally - user must install it from Android Studio
+Found: notifications are shown by the NATIVE Android app, which ignored the old web "Confirm" button data.
+Now: backend sends up to two guesses + reply details (`getQuickConfirmOptions`, `getSuggestedNotes`),
+`saveNote` takes `autoType`, `sw.js` shows two buttons, and the native app (D:\Fin-app Application, own git
+repo) shows two guess buttons + an inline reply box that save via a background worker with a fresh sign-in.
+Backend tests 32 files pass; Kotlin compiles. Full doc: [docs/features/quick-confirm-notification.md](docs/features/quick-confirm-notification.md).
+The user must rebuild/install the Android app to get the buttons (Android Studio > Run). APP_VERSION `2026-10-11-04`.
+

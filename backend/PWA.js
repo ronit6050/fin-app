@@ -64,7 +64,23 @@ function handlePwaRequestCore_(data){
   }
 
   if(data.action === "saveNote"){
-    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent, data.financialEventName, data.debtPerson, data.investmentInstrument, data.fp));
+    // autoType (added 2026-10-11): a note typed straight into a notification has no
+    // Need/Want choice with it, so the server fills one in ONLY when the words of the
+    // note have a clear history (same rule as the Pending card); otherwise no tag.
+    let noteType = data.type;
+    if(data.autoType && !noteType){
+      try{
+        const allTxn = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
+        const guess = explainNoteWordPrediction_(buildNoteTypeModel_(allTxn), data.note);
+        if(guess && guess.kind === "confident") noteType = guess.answer;
+      }catch(autoTypeErr){ noteType = data.type; }
+    }
+    // A note typed into a notification: the category is the shop's usual one (or "Other")
+    // and the tag came from the app's own history, so neither is YOUR confirmation - they
+    // must not teach the shop's category memory or add a Need/Want vote. The typed note
+    // itself is still remembered (you really did type it).
+    const replyOpts = data.autoType ? { learnCategory: false, learnTypeVote: false } : {};
+    return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, noteType, data.amount, data.financialEvent, data.financialEventName, data.debtPerson, data.investmentInstrument, data.fp, replyOpts));
   }
 
   // Added 2026-09-18 — "self-learning spam filter." Lets the user mark
@@ -1892,26 +1908,44 @@ function getPendingTransactions(txnData){
 // spend total or the Need/Want/Saving column, completely independent of
 // whatever note/category this button happened to save.
 function getQuickConfirmSuggestion(type, counterparty, amount, mode, reference, smartMemoryData, noteMemoryData, financialEventsData, typeVotesData, noteTypeModel){
-  if(type !== "debit") return null;
+  const options = getQuickConfirmOptions(type, counterparty, amount, mode, reference, smartMemoryData, noteMemoryData, financialEventsData, typeVotesData, noteTypeModel);
+  return (options && options.guesses.length) ? options.guesses[0] : null;
+}
 
-  const category = getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
-  const note = getSuggestedNote(counterparty, amount, noteMemoryData);
-  if(!note || !category) return null;
+// The notification's action buttons (added 2026-10-11, "top two guesses"):
+// returns null when no button is safe (a credit, a Rent/EMI/SIP look-alike or a
+// wallet top-up all need the real Pending screen), otherwise
+//   { guesses: [ {note, category, type}, ... up to 2 ], replyCategory }
+// - guesses: the two best remembered notes for this merchant (getSuggestedNotes),
+//   each with this merchant's category and a Need/Want/Saving that comes from the
+//   note's own words first (your tagging history), then the older per-merchant
+//   guess, else "" (no tag). A guess with no category is dropped.
+// - replyCategory: the category a typed reply ("inline reply" in the native app)
+//   will be saved under - the merchant's guess, or "Other".
+// Every guess is only a suggestion until you tap it; nothing is saved here.
+function getQuickConfirmOptions(type, counterparty, amount, mode, reference, smartMemoryData, noteMemoryData, financialEventsData, typeVotesData, noteTypeModel){
+  if(type !== "debit") return null;
 
   const financialEvent = suggestFinancialEvent(counterparty, amount, financialEventsData, "");
   if(financialEvent) return null;
-
   if(isWalletTopUp(counterparty, reference)) return null;
 
-  // The words of the remembered note get the first say on Need/Want/Saving
-  // (the same rule the Pending card uses); otherwise the older per-merchant guess.
-  const noteWordType = noteTypeModel ? explainNoteWordPrediction_(noteTypeModel, note) : null;
-  const confidentWordType = (noteWordType && noteWordType.kind === "confident") ? noteWordType.answer : "";
-  return {
-    note: note,
-    category: category,
-    type: confidentWordType || getSuggestedType(type, category, counterparty, amount, typeVotesData, "") || ""
-  };
+  const category = getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
+  const guesses = [];
+  if(category){
+    getSuggestedNotes(counterparty, amount, noteMemoryData, 2).forEach(function(note){
+      // The words of the remembered note get the first say on Need/Want/Saving
+      // (the same rule the Pending card uses); otherwise the older per-merchant guess.
+      const noteWordType = noteTypeModel ? explainNoteWordPrediction_(noteTypeModel, note) : null;
+      const confidentWordType = (noteWordType && noteWordType.kind === "confident") ? noteWordType.answer : "";
+      guesses.push({
+        note: note,
+        category: category,
+        type: confidentWordType || getSuggestedType(type, category, counterparty, amount, typeVotesData, "") || ""
+      });
+    });
+  }
+  return { guesses: guesses, replyCategory: category || "Other" };
 }
 
 // Already-noted transactions (the opposite filter from
@@ -2169,7 +2203,12 @@ function rowStillMatches_(sheet, row, expectFp){
   return rowFingerprint_(live) === String(expectFp);
 }
 
-function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName, debtPerson, investmentInstrument, expectFp){
+// opts (added 2026-10-11, all optional): { learnCategory: false } skips teaching the
+// merchant's category memory; { learnTypeVote: false } skips adding a Need/Want vote.
+// Used by a note typed into a notification, where the category and tag are the
+// app's guesses rather than your own choices (see the saveNote route).
+function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName, debtPerson, investmentInstrument, expectFp, opts){
+  opts = opts || {};
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
 
@@ -2183,6 +2222,18 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     // Stale-card safeguard (see rowFingerprint_): refuse BEFORE touching anything.
     if(!rowStillMatches_(sheet, row, expectFp)) return staleRowResponse_();
 
+    // Saving the SAME note, category and tag again (a double tap, or a notification
+    // button retried after a lost reply) must not count as a second confirmation:
+    // each save adds +1 to the note memory and a vote for the tag, and a note used
+    // twice becomes "confident". Detected from what the row already holds.
+    const prevNote = (sheet.getRange(row, 13).getValue() || "").toString().trim().toLowerCase();
+    const prevCategory = (sheet.getRange(row, 14).getValue() || "").toString().trim();
+    const prevType = (sheet.getRange(row, 17).getValue() || "").toString().trim();
+    const isRepeatSave = prevNote !== "" &&
+      prevNote === (note || "").toString().trim().toLowerCase() &&
+      prevCategory === (category || "").toString().trim() &&
+      prevType === (type || "").toString().trim();
+
     sheet.getRange(row, 13).setValue(note);     // column M
     sheet.getRange(row, 14).setValue(category); // column N
 
@@ -2190,7 +2241,7 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       sheet.getRange(row, 6).setValue(Number(amount)); // column F
     }
 
-    if(counterparty){
+    if(counterparty && !isRepeatSave && opts.learnCategory !== false){
       handleCategoryCorrection(counterparty, category, "Other");
     }
 
@@ -2336,7 +2387,7 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       // The per-merchant learning pool genuinely needs a merchant name to
       // attribute the vote to — skip it (but still keep the column Q
       // save above) when there isn't one.
-      if(counterparty){
+      if(counterparty && !isRepeatSave && opts.learnTypeVote !== false){
         const voteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
         recordTypeVote(counterparty, voteAmount, type);
       }
@@ -2344,12 +2395,12 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
 
     // Remember this note against the merchant (+ amount band) so it can be
     // suggested again later — see noteMemory.js / docs/features/note-memory.md.
-    if(counterparty && note){
+    if(counterparty && note && !isRepeatSave){
       const noteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
       recordNoteUsage(counterparty, noteAmount, note);
     }
 
-    return { ok:true, typeRequested: !!type, typeSaved: typeSaved, investmentLogged: investmentLogged };
+    return { ok:true, typeRequested: !!type, typeSaved: typeSaved, savedType: typeSaved ? type : "", investmentLogged: investmentLogged };
   }catch(err){
     return { ok:false, error: err.toString() };
   }

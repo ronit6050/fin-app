@@ -47,11 +47,33 @@ messaging.onBackgroundMessage(function (payload) {
   const options = { body: body, data: payload.data || {} };
 
   if (payload.data && payload.data.quickConfirm === "1") {
-    options.actions = [{ action: "confirm", title: "Confirm" }];
+    // "Top two guesses" (added 2026-10-11): one button per remembered note, e.g.
+    // "Tea · Want" and "Coffee · Want". Browsers show at most two buttons. An older
+    // backend that only sends the single note/category falls back to one "Confirm".
+    const guesses = parseGuesses(payload.data);
+    if (guesses.length) {
+      options.actions = guesses.slice(0, 2).map(function (g, i) {
+        return { action: "confirm" + i, title: g.note + (g.type ? " · " + g.type : "") };
+      });
+    } else {
+      options.actions = [{ action: "confirm", title: "Confirm" }];
+    }
   }
 
   self.registration.showNotification(title, options);
 });
+
+// The guesses the backend attached: [{note, category, type}, ...]. Returns []
+// for an older message that only has the single note/category fields, or if the
+// text can't be read (never throws).
+function parseGuesses(data) {
+  try {
+    const list = JSON.parse(data.guesses || "[]");
+    return Array.isArray(list) ? list.filter(function (g) { return g && g.note && g.category; }) : [];
+  } catch (e) {
+    return [];
+  }
+}
 
 // Reads the signed-in user's Google sign-in proof back out of IndexedDB.
 // Only IndexedDB, not localStorage, can be read from inside a service
@@ -156,6 +178,19 @@ self.addEventListener("notificationclick", function (event) {
   if (event.action === "confirm") {
     event.waitUntil(confirmFromNotification(data));
     return;
+  }
+
+  // "confirm0" / "confirm1" = the first / second guess button.
+  const guessMatch = /^confirm([01])$/.exec(event.action || "");
+  if (guessMatch) {
+    const guess = parseGuesses(data)[Number(guessMatch[1])];
+    if (guess) {
+      event.waitUntil(confirmFromNotification({
+        row: data.row, counterparty: data.counterparty, fp: data.fp,
+        note: guess.note, category: guess.category, type: guess.type
+      }));
+      return;
+    }
   }
 
   event.waitUntil(
