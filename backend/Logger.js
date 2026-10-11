@@ -696,6 +696,11 @@ function previewMissingCategories(){
   const data = sheet.getDataRange().getValues();
   const smartMemorySheet = ss.getSheetByName("SmartMemory");
   const smartMemoryData = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
+  // Learned from YOUR own labelled notes (noteWordModel.js): "cab" -> Transport,
+  // "milk" -> Food, etc. Only trusted for words with a clear track record in
+  // the last ~4 months. Added 2026-10-11 after the shop-name guesser sent 24
+  // of 59 obvious payments ("Lunch", "Cab", "Fruits") to "Other".
+  const noteModel = buildNoteWordModel_(data, 13, NOTE_MODEL_CATEGORIES_, new Date(Date.now() - 120 * 86400000));
 
   log("===== CATEGORIES THIS WOULD FILL IN (nothing written yet) =====");
   log("");
@@ -707,6 +712,7 @@ function previewMissingCategories(){
     if(!note || category) continue; // only rows with a note but no category
 
     const mode            = data[i][4]  || ""; // column E
+    const txnType         = (data[i][3] || "").toString().trim().toLowerCase(); // column D: debit / credit
     const amount           = Number(data[i][5]) || 0; // column F
     const counterparty     = data[i][7]  || ""; // column H
     const financialEvent   = (data[i][17] || "").toString().trim(); // column R
@@ -716,9 +722,16 @@ function previewMissingCategories(){
     // itself would write for either case (see updateCategoryVisibility,
     // index.html, added 2026-09-15 for lending), not a guessed spending
     // category that's never actually used for these anyway.
+    // Added 2026-10-11: money COMING IN with "salary" in the note is Income.
+    // Found when a Rs.45,000 salary row had its note but no category, which
+    // made that whole month's income show as zero in the reports. The
+    // spending-category guesser below is built for purchases and has no
+    // idea what a salary is.
     const suggested = (financialEvent || isLendingTransfer(counterparty, note))
       ? "Financial"
-      : getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
+      : (txnType === "credit" && /\bsalary\b/i.test(note))
+        ? "Income"
+        : (predictFromNoteWords_(noteModel, note) || getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData));
     count++;
     log("- Row " + (i + 1) + ": \"" + note + "\" (" + (counterparty || "no counterparty") + ", Rs." + amount + ") -> " + suggested);
   }
@@ -742,6 +755,11 @@ function backfillMissingCategories(){
   const data = sheet.getDataRange().getValues();
   const smartMemorySheet = ss.getSheetByName("SmartMemory");
   const smartMemoryData = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
+  // Learned from YOUR own labelled notes (noteWordModel.js): "cab" -> Transport,
+  // "milk" -> Food, etc. Only trusted for words with a clear track record in
+  // the last ~4 months. Added 2026-10-11 after the shop-name guesser sent 24
+  // of 59 obvious payments ("Lunch", "Cab", "Fruits") to "Other".
+  const noteModel = buildNoteWordModel_(data, 13, NOTE_MODEL_CATEGORIES_, new Date(Date.now() - 120 * 86400000));
 
   let count = 0;
   for(let i = 1; i < data.length; i++){
@@ -750,13 +768,21 @@ function backfillMissingCategories(){
     if(!note || category) continue; // only rows with a note but no category
 
     const mode            = data[i][4]  || ""; // column E
+    const txnType         = (data[i][3] || "").toString().trim().toLowerCase(); // column D: debit / credit
     const amount           = Number(data[i][5]) || 0; // column F
     const counterparty     = data[i][7]  || ""; // column H
     const financialEvent   = (data[i][17] || "").toString().trim(); // column R
 
+    // Added 2026-10-11: money COMING IN with "salary" in the note is Income.
+    // Found when a Rs.45,000 salary row had its note but no category, which
+    // made that whole month's income show as zero in the reports. The
+    // spending-category guesser below is built for purchases and has no
+    // idea what a salary is.
     const suggested = (financialEvent || isLendingTransfer(counterparty, note))
       ? "Financial"
-      : getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
+      : (txnType === "credit" && /\bsalary\b/i.test(note))
+        ? "Income"
+        : (predictFromNoteWords_(noteModel, note) || getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData));
 
     sheet.getRange(i + 1, 14).setValue(suggested); // column N
     count++;

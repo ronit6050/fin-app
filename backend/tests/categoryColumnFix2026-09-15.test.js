@@ -147,6 +147,11 @@ function loadSandbox(){
   const needWantSavingSrc = fs.readFileSync(path.join(__dirname, "..", "needWantSaving.js"), "utf8");
   vm.runInContext(needWantSavingSrc, sandbox, { filename: "needWantSaving.js" });
 
+  // The backfill now also learns from the user's own note words (added
+  // 2026-10-11), so its helper file has to be loaded here too.
+  const noteWordModelSrc = fs.readFileSync(path.join(__dirname, "..", "noteWordModel.js"), "utf8");
+  vm.runInContext(noteWordModelSrc, sandbox, { filename: "noteWordModel.js" });
+
   const loggerSrc = fs.readFileSync(path.join(__dirname, "..", "Logger.js"), "utf8");
   vm.runInContext(loggerSrc, sandbox, { filename: "Logger.js" });
 

@@ -2845,7 +2845,7 @@ the user picks a phase from its "suggested phased order."
   "could drop a genuine purchase" bugs, all fixed and re-verified). Full
   detail: docs/features/sms-junk-and-echo-filter.md.
 
-**DEPLOYED LIVE `@320` on 2026-10-10 (commit pending when written):** auto-settle
+**DEPLOYED LIVE `@320` on 2026-10-10, committed `f706391` and pushed:** auto-settle
 and health monitor (`backend/autoSettle.js`, `backend/appHealth.js`, edits in
 `transactions.js` + `PWA.js` + `Logger.js`, new Transactions column T
 "AutoSettled", `docs/SHEET_SCHEMA.md`, tests `autoSettle.test.js` /
@@ -2872,9 +2872,9 @@ local analysis only — NEVER commit it, never copy real names/references/
 amounts/card digits into tests, docs or comments (the repo is PUBLIC). Throwaway
 analysis scripts live in the scratchpad, not the repo.
 
-**Agreed direction (automation pipeline) — steps 1-2 above; 3-5 not started:**
+**Agreed direction (automation pipeline) — steps 1-2 done and live; 3-5 not started (a mockup of step 3's Pending card was shown 2026-10-11, awaiting the user's approval):**
 only ask the user what only they know. (1) clean inputs [SMS reader — done],
-(2) auto-settle the knowns [built, pending deploy], (3) learn Need/Want from
+(2) auto-settle the knowns [done, live @320], (3) learn Need/Want from
 the user's note words (real-data replay: would auto-fill 41% of tagged payments
 at 95% accuracy; "tea" = Want 63/64), plus a "Not sure" button for truly mixed
 cases like "lunch" (7 Need / 9 Want) and a small "Mark as EMI / Rent / SIP /
@@ -2904,3 +2904,28 @@ confirmations, never from the app's guesses. Show a mockup before building 3-5.
   a plain "Paid through wallet" purchase), wrongly excluding them from spend.
 - The SMS echo-duplicate check assumes the sheet's Time column is India time;
   watch the first real double-text after the deploy.
+
+## DECISION RECORD — v2 foundation: move storage from Google Sheets to Firestore (2026-10-11)
+
+**Approved by the user.** Why: the user wants me to see/fix live data myself (no more Excel exports or "run this function in the editor"), faster screens (taps currently wait on Apps Script reading whole sheets), and a clean base for splits, learning, reports and later friends. Sheets as a database caused a whole family of bugs (silent dropdown that rejected categories, lost rows from simultaneous writes, missing headers, fixed-column fragility).
+
+**Chosen architecture = "Option A", cost Rs.0 (Firebase Spark plan, no card):**
+- Database: **Firestore**, project `fin-app-76c40` (the existing Firebase project), region **asia-south1 (Mumbai)**.
+- **Apps Script stays as the background worker + "brain"** (SMS parser, scheduled checks, push, learning). It also precomputes each screen (Home, Pending, Analysis, CC Advisor, Planner...) and stores it as a "view" document in Firestore.
+- The **PWA reads those view documents directly from Firestore** (instant, cached offline) via Firebase Auth (Google sign-in), protected by security rules that allow only the owner's email. Writes still go through Apps Script actions; the UI is already optimistic so the delay is hidden.
+- Reserve options if ever needed: B = Cloud Functions on the Blaze plan (card on file, ~Rs.0-50/month, 1-3 s cold start); C = one always-warm server (~$5-10 / Rs.450-900 per month).
+- History is NOT thrown away (it is the learning fuel). It is migrated, not restarted.
+
+**Phases (each ends with a user go/no-go; Sheets stays the source of truth until each piece is verified; every phase reversible):**
+0. Setup: user creates the Firestore DB + a "robot" service account + shares the sheet read-only; I take a full backup (to `local-data/backups/`, never git).
+1. Foundation: "one door to the data" (a data layer so code stops calling SpreadsheetApp directly), Firestore REST client for Apps Script (batched), usage meter, compare tools.
+2. Shadow copy: import all history to Firestore; dual-write new rows; daily compare Sheet vs Firestore.
+3. Fast screens: PWA switches screen by screen to view documents behind a Settings switch (instant rollback). New sign-in via Firebase Auth; old path kept until proven.
+4. Flip the source of truth table by table (new features built Firestore-native from day one: splits, note-word learning, activity log, reports; memory tables, debts, savings, investments, cash; Transactions + SMS parser LAST with a dual-write period). Transactions get deterministic document IDs so a duplicate SMS can only overwrite itself.
+5. Retire: Sheets becomes a read-only archive; remove dead code.
+
+**Known limits to design around:** Firestore free quota 50,000 reads / 20,000 writes per day (view documents keep reads tiny; exceeding it pauses, never bills, on Spark); Apps Script allows ~20,000 outgoing fetches/day (batch every Firestore call); Spark has no Cloud Functions.
+
+**Secrets rule:** the robot's key file lives OUTSIDE the repo (`~/.fin-app/`), is never pasted in chat, never committed. Access starts READ-ONLY on the sheet; upgrade to edit only with the user's say-so. Every write by me: backup first, show a plain-English preview, log it.
+
+**Status:** Phase 0 DONE 2026-10-11. Firestore (Standard edition, production/locked rules, asia-south1 Mumbai, free Spark plan, no scheduled backups since those need Blaze) created in `fin-app-76c40`; Google Sheets API enabled; robot service account `fin-app-claude@fin-app-76c40.iam.gserviceaccount.com` (role Cloud Datastore User) with its key at `~/.fin-app/claude-sa-key.json` (outside the repo, never read or printed); the live sheet is shared with the robot as VIEWER (read-only). Helper scripts in `tools/`: `firestore_ping.py` (connection test, passes) and `sheets_backup.py` (full live backup to `local-data/backups/<time>/`; first one taken 2026-10-11 09:05: 17 tabs, Transactions 985 rows incl. header). To make a fix on live data I need the robot upgraded to Editor on the sheet (user's say-so), then: backup, preview, user approval, write, log. NEXT: Phase 1 (data layer + Firestore REST client for Apps Script + compare tools).
