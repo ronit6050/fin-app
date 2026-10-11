@@ -2972,3 +2972,15 @@ saves (hold + builtAt rule + dirty marker). Settings -> Speed -> Fast loading sw
 limits and deploy order: [docs/features/fast-views.md](docs/features/fast-views.md). Deploy order:
 backend `clasp push`+`clasp deploy` FIRST, then `git push`. Real-device test of Google->Firebase
 sign-in still owed (APP_VERSION `2026-10-11-02`).
+
+## Note-word auto-fill + Not sure + Mark as... (2026-10-11): DEPLOYED (backend @325, app via git push)
+Pending card: Need/Want/Saving fills in from the user's own note-word history with a one-line reason;
+a "Not sure" button (no tag, no learning); a "Mark as EMI / Rent / SIP / Saving" link (sets the same
+Financial Event the chips set). Backend `noteWordModel.js` builds a small table sent with `getPending`
+and `full.noteWordModel`; the phone does the live lookup. Tests: `backend/tests/noteTypeModel.test.js`
+(proves phone and server agree), full suite 31 files. Full doc: [docs/features/note-word-autofill.md](docs/features/note-word-autofill.md).
+Deploy order: backend `clasp push`+`clasp deploy` first, then `git push` (APP_VERSION `2026-10-11-03`).
+Also done 2026-10-11: SMS parser echo fix (sms-parser `@18`, HDFC's newer "without any additional
+authentication" wording), and `tools/ignore_rows.py` (removes junk/duplicate rows like the app's own
+button: archive to Transactions_Ignored, optional learn-as-junk, clear in place, verify).
+

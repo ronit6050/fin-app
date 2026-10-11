@@ -109,3 +109,79 @@ function predictFromNoteWords_(model, note, minUses, minAgreement){
   });
   return (winner && !tie) ? winner : null;
 }
+
+// ============================================================================
+// NEED / WANT / SAVING FROM NOTE WORDS (added 2026-10-11)
+// ============================================================================
+// PLAIN-ENGLISH: the Pending card now fills in Need / Want / Saving by itself
+// when the words in your note have a clear track record ("tea" was Want 63 of
+// 64 times). The phone does the lookup live as you type, so the server only
+// has to hand it a small table: for every word that has been tagged at least 3
+// times, how many times each answer was chosen.
+//
+// WHAT IT LEARNS FROM: only payments where YOU saved a note AND a Need / Want /
+// Saving tag (column Q), from the date the tagging system became reliable.
+// "Not sure" saves write no tag, so they teach it nothing, and the app's own
+// guesses are never written anywhere except when you press Save with them.
+
+// The tagging system only became trustworthy in August 2026 (see
+// docs/features/need-want-saving.md) - older rows are not used.
+var NOTE_TYPE_MODEL_SINCE_ = "2026-08-11";
+var NOTE_TYPE_ANSWERS_ = ["Need", "Want", "Saving"];
+
+// Compact table sent to the app: { word: { Need: n, Want: n, Saving: n } },
+// only for words seen at least 3 times (anything rarer can never be trusted).
+function buildNoteTypeModel_(txnData){
+  var full = buildNoteWordModel_(txnData || [], 16, NOTE_TYPE_ANSWERS_, NOTE_TYPE_MODEL_SINCE_);
+  var out = {};
+  Object.keys(full).forEach(function(w){
+    var counts = full[w];
+    var total = 0;
+    Object.keys(counts).forEach(function(a){ total += counts[a]; });
+    if(total >= 3) out[w] = counts;
+  });
+  return out;
+}
+
+// Explains what the table says about one note, in the same shape the app
+// shows it. Returns one of:
+//   { kind: "confident", answer: "Want", word: "tea", count: 63, total: 64 }
+//   { kind: "mixed",     word: "lunch", counts: { Need: 7, Want: 9 } }
+//   null   (no word in the note has enough history)
+// "confident" follows exactly the rules of predictFromNoteWords_ (each word
+// with >=3 uses and >=90% agreement casts one vote; a tie means no answer).
+// The app has its own copy of this function (index.html, predictNoteType);
+// backend/tests/noteTypeModel.test.js proves both give identical answers.
+function explainNoteWordPrediction_(model, note, minUses, minAgreement){
+  minUses = minUses || 3;
+  minAgreement = minAgreement || 0.9;
+  var votes = {};      // answer -> number of words voting for it
+  var bestWord = {};   // answer -> the strongest voting word (for the hint text)
+  var mixed = null;
+  noteWords_(note).forEach(function(w){
+    var counts = model[w];
+    if(!counts) return;
+    var total = 0, best = null, bestCount = 0;
+    Object.keys(counts).forEach(function(a){
+      total += counts[a];
+      if(counts[a] > bestCount){ bestCount = counts[a]; best = a; }
+    });
+    if(total < minUses) return;
+    if(bestCount / total >= minAgreement){
+      votes[best] = (votes[best] || 0) + 1;
+      if(!bestWord[best] || total > bestWord[best].total) bestWord[best] = { word: w, count: bestCount, total: total };
+    } else if(!mixed || total > mixed.total){
+      mixed = { kind: "mixed", word: w, counts: counts, total: total };
+    }
+  });
+  var winner = null, winnerVotes = 0, tie = false;
+  Object.keys(votes).forEach(function(a){
+    if(votes[a] > winnerVotes){ winner = a; winnerVotes = votes[a]; tie = false; }
+    else if(votes[a] === winnerVotes){ tie = true; }
+  });
+  if(winner && !tie){
+    return { kind: "confident", answer: winner, word: bestWord[winner].word, count: bestWord[winner].count, total: bestWord[winner].total };
+  }
+  if(mixed) return { kind: "mixed", word: mixed.word, counts: mixed.counts };
+  return null;
+}

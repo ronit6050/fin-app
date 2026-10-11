@@ -57,7 +57,10 @@ function handlePwaRequestCore_(data){
   }
 
   if(data.action === "getPending"){
-    return jsonResponse({ ok:true, transactions: getPendingTransactions(), knownDebtPeople: getKnownDebtPeople() });
+    // Read the sheet once and share it: the pending list AND the note-word
+    // table (Need/Want auto-fill, see noteWordModel.js) come from the same data.
+    const pendingTxnData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
+    return jsonResponse({ ok:true, transactions: getPendingTransactions(pendingTxnData), knownDebtPeople: getKnownDebtPeople(), noteWordModel: buildNoteTypeModel_(pendingTxnData) });
   }
 
   if(data.action === "saveNote"){
@@ -315,7 +318,9 @@ function getDashboardData(){
       debts:       debts,
       savingsGoals: savingsGoalsData,
       investments: investments,
-      pending:     pending
+      pending:     pending,
+      // Need/Want/Saving auto-fill table (noteWordModel.js); the app does the lookup live.
+      noteWordModel: buildNoteTypeModel_(txnData)
     }
   };
 }
@@ -1886,7 +1891,7 @@ function getPendingTransactions(txnData){
 // real saved row (mode/counterparty/note/amount) before touching any
 // spend total or the Need/Want/Saving column, completely independent of
 // whatever note/category this button happened to save.
-function getQuickConfirmSuggestion(type, counterparty, amount, mode, reference, smartMemoryData, noteMemoryData, financialEventsData, typeVotesData){
+function getQuickConfirmSuggestion(type, counterparty, amount, mode, reference, smartMemoryData, noteMemoryData, financialEventsData, typeVotesData, noteTypeModel){
   if(type !== "debit") return null;
 
   const category = getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData);
@@ -1898,10 +1903,14 @@ function getQuickConfirmSuggestion(type, counterparty, amount, mode, reference, 
 
   if(isWalletTopUp(counterparty, reference)) return null;
 
+  // The words of the remembered note get the first say on Need/Want/Saving
+  // (the same rule the Pending card uses); otherwise the older per-merchant guess.
+  const noteWordType = noteTypeModel ? explainNoteWordPrediction_(noteTypeModel, note) : null;
+  const confidentWordType = (noteWordType && noteWordType.kind === "confident") ? noteWordType.answer : "";
   return {
     note: note,
     category: category,
-    type: getSuggestedType(type, category, counterparty, amount, typeVotesData, "") || ""
+    type: confidentWordType || getSuggestedType(type, category, counterparty, amount, typeVotesData, "") || ""
   };
 }
 

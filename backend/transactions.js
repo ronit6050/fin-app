@@ -65,6 +65,19 @@ function processNewTransactionsCore_() {
   const smartMemoryData  = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
   const typeVotesSheet = ss.getSheetByName("TypeVotes");
   const typeVotesData  = typeVotesSheet ? typeVotesSheet.getDataRange().getValues() : [];
+  // Need/Want/Saving table learned from your own tagged notes (noteWordModel.js).
+  // Built lazily, at most once per run, and only when a new transaction is
+  // actually being alerted (it needs the whole Transactions sheet, while
+  // `data` above is just the new rows). Best-effort: if it cannot be built,
+  // notifications simply keep the older guess.
+  let noteTypeModelCache;
+  function getNoteTypeModelOnce(){
+    if(noteTypeModelCache === undefined){
+      try{ noteTypeModelCache = buildNoteTypeModel_(sheet.getDataRange().getValues()); }
+      catch(modelErr){ noteTypeModelCache = null; }
+    }
+    return noteTypeModelCache;
+  }
   const noteMemorySheet = ss.getSheetByName("NoteMemory");
   const noteMemoryData  = noteMemorySheet ? noteMemorySheet.getDataRange().getValues() : [];
   const financialEventsSheet = ss.getSheetByName("FinancialEvents");
@@ -172,7 +185,7 @@ Reply to add a note for this transaction.`;
         // full reasoning on when this is offered.
         const quickConfirm = getQuickConfirmSuggestion(
           type, counterparty, amount, mode, reference,
-          smartMemoryData, noteMemoryData, financialEventsData, typeVotesData
+          smartMemoryData, noteMemoryData, financialEventsData, typeVotesData, getNoteTypeModelOnce()
         );
         if(quickConfirm) quickConfirm.row = rowIndex;
 

@@ -1272,6 +1272,62 @@
       flex-shrink: 0;
     }
 
+    /* Note-word auto-fill (2026-10-11): the one-line explanation under the
+       Need/Want/Saving buttons, the small "Not sure" text button beside it,
+       and the "Mark as..." link + panel. Text-button look copied from
+       .not-txn-btn above so they never read as primary actions. */
+    .pending-item .type-hint-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .pending-item .type-hint {
+      flex: 1;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      color: var(--text-secondary);
+    }
+    .pending-item .type-hint b {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    .pending-item .link-btn {
+      width: auto;
+      background: transparent;
+      border: none;
+      color: var(--color-primary);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 6px 4px;
+      flex-shrink: 0;
+    }
+    .pending-item .link-btn:hover {
+      background: transparent;
+      text-decoration: underline;
+    }
+    .pending-item .mark-link {
+      display: block;
+      margin: 2px 0 0;
+      text-align: left;
+    }
+    .pending-item .mark-opts {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .pending-item .mark-opts .mark-opt {
+      min-width: 0;
+      padding: 10px 0;
+    }
+    .pending-item .mark-panel {
+      margin: 6px 0 10px;
+      padding: 10px;
+      background: var(--surface-inset);
+      border-radius: var(--radius-sm);
+    }
+
     .pending-result {
       font-size: 0.85rem;
       margin-top: 6px;
@@ -3397,8 +3453,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-11-02";
-    const APP_CHANGELOG = "Faster: Home and your other screens now load a ready-made copy in about a second, and new transactions appear the moment they arrive. You can turn this off in Settings > Speed.";
+    const APP_VERSION = "2026-10-11-03";
+    const APP_CHANGELOG = "Smarter Pending: Need / Want now fills in by itself when your note words have a clear history (for example tea), with a short reason. New Not sure button, and a Mark as EMI / Rent / SIP / Saving link on every payment.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -6429,6 +6485,8 @@
     // whether it's actually shown on screen.
     function seedTabsFromDashboard(full, pendingOpts) {
       if (!full) return;
+      // Need/Want auto-fill table (see NOTE-WORD AUTO-FILL above buildPendingItem).
+      if (full.noteWordModel) setNoteWordModel(full.noteWordModel);
 
       // Pending (fix, 2026-09-04): the dashboard call already computes this
       // exact same true pending list (it's the same backend function as
@@ -6680,6 +6738,7 @@
             if (!data.ok) return;
 
             if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
+            if (data.noteWordModel) setNoteWordModel(data.noteWordModel);
             reconcilePendingList(data.transactions);
           })
           .catch(function () { /* fine — we'll just try again next time */ });
@@ -6709,6 +6768,7 @@
 
           allPending = data.transactions;
           if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
+          if (data.noteWordModel) setNoteWordModel(data.noteWordModel);
           saveCache("pending", allPending);
 
           // Remember the ENTIRE backlog as "already known" right away,
@@ -6765,6 +6825,80 @@
     showMoreButtonEl.addEventListener("click", showNextBatch);
 
     // Builds one transaction "card": details + a note field + category + Save button
+    // ---------------------------------------------------------
+    // NOTE-WORD AUTO-FILL (added 2026-10-11)
+    // ---------------------------------------------------------
+    // The backend sends a small table of your own tagging history,
+    // { word: { Need: n, Want: n, Saving: n } } (words used 3+ times; see
+    // backend/noteWordModel.js). Everything below runs on the phone, live,
+    // as you type. predictNoteType MUST give the same answers as the
+    // backend's explainNoteWordPrediction_ - backend/tests/noteTypeModel.test.js
+    // runs both on the same notes and compares them.
+    let noteWordModel = null;
+
+    function getNoteWordModel() {
+      if (demoMode) return null;   // Demo Mode must never show your real tagging history
+      if (!noteWordModel) noteWordModel = loadCache("noteWordModel");
+      return noteWordModel;
+    }
+
+    function setNoteWordModel(model) {
+      if (demoMode) return;
+      if (!model || typeof model !== "object") return;
+      noteWordModel = model;
+      saveCache("noteWordModel", model);
+    }
+
+    const NOTE_MODEL_STOP_WORDS = {
+      me: 1, and: 1, with: 1, for: 1, the: 1, to: 1, from: 1, paid: 1, through: 1, via: 1,
+      but: 1, will: 1, be: 1, refunded: 1, after: 1, of: 1, in: 1, on: 1, at: 1, a: 1, an: 1
+    };
+
+    function noteWordsOf(note) {
+      const cleaned = String(note || "").toLowerCase().replace(/[^a-z ]/g, " ");
+      const out = [];
+      cleaned.split(" ").forEach(function (w) {
+        if (w.length >= 3 && !NOTE_MODEL_STOP_WORDS[w]) out.push(w);
+      });
+      return out;
+    }
+
+    // Returns { kind: "confident", answer, word, count, total },
+    // { kind: "mixed", word, counts } or null. Rules: a word needs 3+ uses
+    // and 90%+ agreement to vote; the answer with most votes wins; a tie is no answer.
+    function predictNoteType(note) {
+      const model = getNoteWordModel();
+      if (!model) return null;
+      const votes = {};
+      const bestWord = {};
+      let mixed = null;
+      noteWordsOf(note).forEach(function (w) {
+        const counts = model[w];
+        if (!counts) return;
+        let total = 0, best = null, bestCount = 0;
+        Object.keys(counts).forEach(function (a) {
+          total += counts[a];
+          if (counts[a] > bestCount) { bestCount = counts[a]; best = a; }
+        });
+        if (total < 3) return;
+        if (bestCount / total >= 0.9) {
+          votes[best] = (votes[best] || 0) + 1;
+          if (!bestWord[best] || total > bestWord[best].total) bestWord[best] = { word: w, count: bestCount, total: total };
+        } else if (!mixed || total > mixed.total) {
+          mixed = { kind: "mixed", word: w, counts: counts, total: total };
+        }
+      });
+      let winner = null, winnerVotes = 0, tie = false;
+      Object.keys(votes).forEach(function (a) {
+        if (votes[a] > winnerVotes) { winner = a; winnerVotes = votes[a]; tie = false; }
+        else if (votes[a] === winnerVotes) { tie = true; }
+      });
+      if (winner && !tie) {
+        return { kind: "confident", answer: winner, word: bestWord[winner].word, count: bestWord[winner].count, total: bestWord[winner].total };
+      }
+      return mixed ? { kind: "mixed", word: mixed.word, counts: mixed.counts } : null;
+    }
+
     function buildPendingItem(txn) {
       const card = document.createElement("div");
       card.className = "pending-item";
@@ -6809,6 +6943,32 @@
             <button type="button" class="type-btn" data-type="Want">Want</button>
             <button type="button" class="type-btn" data-type="Saving">Saving</button>
           </div>
+          <div class="type-hint-row">
+            <div class="type-hint"></div>
+            <button type="button" class="link-btn not-sure-btn">Not sure</button>
+          </div>
+        </div>
+      ` : "";
+
+      // "Mark as EMI / Rent / SIP / Saving" (added 2026-10-11): a manual way
+      // to do what the Rent/EMI/SIP chips do when the app guesses - for the
+      // payments it did NOT recognise on its own. Credits and wallet/card-bill
+      // transfers are never any of these, so they don't get the link.
+      const showMarkLink = txn.type !== "credit" && !txn.isNonSpendTransfer;
+      const markHtml = showMarkLink ? `
+        <div class="mark-wrap">
+          <button type="button" class="link-btn mark-link">Mark as EMI, Rent, SIP or Saving…</button>
+          <div class="mark-panel" style="display:none">
+            <div class="pending-status" style="margin:0 0 6px;">This payment is a…</div>
+            <div class="type-toggle mark-opts">
+              <button type="button" class="fe-btn mark-opt" data-mark="EMI">EMI</button>
+              <button type="button" class="fe-btn mark-opt" data-mark="Rent">Rent</button>
+              <button type="button" class="fe-btn mark-opt" data-mark="SIP">SIP</button>
+              <button type="button" class="fe-btn mark-opt" data-mark="Saving">Saving</button>
+            </div>
+            <div class="mark-name" style="display:none; margin-top:8px;"></div>
+            <div class="pending-status mark-state" style="display:none; margin-top:8px;"></div>
+          </div>
         </div>
       ` : "";
 
@@ -6845,6 +7005,7 @@
         ${invChipHtml}
         <div class="field fe-field debt-field" style="display:none"></div>
         ${typeToggleHtml}
+        ${markHtml}
         <button type="button" class="save-btn">Save</button>
         <button type="button" class="not-txn-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="8.5"/><path d="M6.5 17.5l11-11"/></svg><span class="btn-label">Not a transaction</span></button>
         <div class="pending-result"></div>
@@ -6871,17 +7032,28 @@
       // (if we have one), and clicking a button just moves the selection.
       // Staying unselected is fine — it's optional, not required to Save.
       let selectedType = null;
+      // Where the current selection came from: "auto" (the app filled it in),
+      // "user" (you tapped one), "unsure" (you tapped Not sure) or null (none).
+      // Declared here, before anything below can call onHide, so it exists
+      // by the time any callback touches it. The app never overrides a
+      // choice of yours.
+      let typeSource = null;
+      const typeHintEl = card.querySelector(".type-hint");
+      function showTypeHint(html) { if (typeHintEl) typeHintEl.innerHTML = html; }
       if (showTypeToggle) {
         const typeButtons = card.querySelectorAll(".type-btn");
         typeButtons.forEach(function (btn) {
           if (txn.suggestedType && btn.dataset.type === txn.suggestedType) {
             btn.classList.add("active");
             selectedType = txn.suggestedType;
+            typeSource = "auto";
           }
           btn.addEventListener("click", function () {
             typeButtons.forEach(function (b) { b.classList.remove("active"); });
             btn.classList.add("active");
             selectedType = btn.dataset.type;
+            typeSource = "user";
+            showTypeHint("You chose <b>" + btn.dataset.type + "</b>. Saving teaches the app.");
           });
         });
       }
@@ -6900,6 +7072,11 @@
       const financialEvent = setupFinancialEventField(card, initialFe, function () {
         updateTypeVisibility();
         updateCategoryVisibility();
+        // A chip was tapped: any "Marked as ..." line from the manual panel is now stale,
+        // and if "No, regular spend" was tapped the Need/Want field needs its auto-fill back.
+        const staleMark = card.querySelector(".mark-state");
+        if (staleMark) staleMark.style.display = "none";
+        if (!financialEvent.type) applyNoteWordType();
       });
 
       // Note-based investment instrument — pre-selected only when the
@@ -6922,8 +7099,138 @@
       // instead of just running once.
       const updateTypeVisibility = wireLendingAwareToggle(card, noteInput, function () {
         selectedType = null;
+        typeSource = null;
+        showTypeHint("");
         card.querySelectorAll(".type-field .type-btn").forEach(function (b) { b.classList.remove("active"); });
       }, function () { return !!financialEvent.type; }, function () { return !!investmentInstrument.name; });
+
+      // ---- Note-word auto-fill, "Not sure" and "Mark as..." (added 2026-10-11) ----
+      const typeFieldEl = card.querySelector(".type-field");
+
+      function setTypeSelection(t, source) {
+        selectedType = t;
+        typeSource = source;
+        card.querySelectorAll(".type-field .type-btn").forEach(function (b) {
+          b.classList.toggle("active", b.dataset.type === t);
+        });
+      }
+
+      // Looks at the words in the note and, if your own history is clear
+      // about them, picks Need/Want/Saving and says why. Never touches a
+      // choice you made yourself (or a Not sure).
+      function applyNoteWordType() {
+        if (!showTypeToggle || !typeFieldEl || typeFieldEl.style.display === "none") return;
+        if (typeSource === "user" || typeSource === "unsure") return;
+        const p = predictNoteType(noteInput.value);
+        const word = p ? escapeHtml(p.word) : "";
+        if (p && p.kind === "confident" && (p.answer === "Need" || p.answer === "Want" || p.answer === "Saving")) {
+          setTypeSelection(p.answer, "auto");
+          showTypeHint("Filled in <b>" + p.answer + "</b> because you've tagged &ldquo;" + word + "&rdquo; that way " + p.count + " of " + p.total + " times. Tap another to change it.");
+          return;
+        }
+        // Nothing clear from the words: fall back to the older per-shop guess (if any).
+        if (txn.suggestedType) {
+          setTypeSelection(txn.suggestedType, "auto");
+        } else {
+          setTypeSelection(null, null);
+        }
+        if (p && p.kind === "mixed") {
+          const c = p.counts || {};
+          const parts = ["Need", "Want", "Saving"].filter(function (k) { return c[k]; }).map(function (k) { return k + " " + c[k]; });
+          showTypeHint("Mixed: &ldquo;" + word + "&rdquo; has been <b>" + parts.join(", ") + "</b>. Your call, or tap Not sure.");
+        } else if (txn.suggestedType) {
+          showTypeHint("Guessed <b>" + txn.suggestedType + "</b> from this shop's past payments. Tap another to change it.");
+        } else {
+          showTypeHint("");
+        }
+      }
+      noteInput.addEventListener("input", applyNoteWordType);
+      applyNoteWordType(); // the remembered note that starts in the box gets the same treatment
+
+      const notSureBtn = card.querySelector(".not-sure-btn");
+      if (notSureBtn) {
+        notSureBtn.addEventListener("click", function () {
+          setTypeSelection(null, "unsure");
+          showTypeHint("No Need/Want tag will be saved, and the app <b>won't learn a tag</b> from this one.");
+        });
+      }
+
+      // Mark as EMI / Rent / SIP / Saving: sets the same financialEvent
+      // the confirm chips set, so saving, spend totals and Fixed obligations
+      // all work exactly as they do for a recognised one.
+      const markLink = card.querySelector(".mark-link");
+      if (markLink) {
+        const markPanel = card.querySelector(".mark-panel");
+        const markOpts = card.querySelectorAll(".mark-opt");
+        const markNameEl = card.querySelector(".mark-name");
+        const markStateEl = card.querySelector(".mark-state");
+
+        function afterMarkChange() {
+          updateTypeVisibility();
+          updateCategoryVisibility();
+          if (!financialEvent.type) applyNoteWordType();
+        }
+        function clearChipHighlights() {
+          card.querySelectorAll(".fe-field:not(.debt-field) .fe-btn.active").forEach(function (b) { b.classList.remove("active"); });
+        }
+        function showMarked(label) {
+          markNameEl.style.display = "none";
+          markNameEl.innerHTML = "";
+          markStateEl.style.display = "";
+          markStateEl.innerHTML = 'Marked as <b>' + escapeHtml(label) + '</b>. It skips Need/Want and counts under Fixed obligations or Savings. <button type="button" class="link-btn mark-undo">Undo</button>';
+          markStateEl.querySelector(".mark-undo").addEventListener("click", function () {
+            financialEvent.type = null;
+            financialEvent.name = null;
+            markStateEl.style.display = "none";
+            markOpts.forEach(function (b) { b.classList.remove("active"); });
+            afterMarkChange();
+          });
+        }
+        function chooseMark(kind, name) {
+          clearChipHighlights();
+          financialEvent.type = (kind === "SIP") ? "Investment" : kind;
+          financialEvent.name = name || null;
+          afterMarkChange();
+          showMarked(kind + (name ? " - " + name : ""));
+        }
+
+        markLink.addEventListener("click", function () {
+          markPanel.style.display = markPanel.style.display === "none" ? "block" : "none";
+        });
+
+        markOpts.forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            markOpts.forEach(function (b) { b.classList.remove("active"); });
+            btn.classList.add("active");
+            markStateEl.style.display = "none";
+            const kind = btn.dataset.mark;
+            if (kind === "Rent" || kind === "Saving") {
+              markNameEl.style.display = "none";
+              chooseMark(kind, null);
+              return;
+            }
+            markNameEl.style.display = "block";
+            if (kind === "EMI") {
+              markNameEl.innerHTML = '<input type="text" class="mark-emi-name" placeholder="Name this EMI (e.g. Laptop EMI)">' +
+                '<button type="button" class="fe-btn mark-confirm" style="margin-top:8px;">Mark as this EMI</button>';
+              markNameEl.querySelector(".mark-confirm").addEventListener("click", function () {
+                const typed = markNameEl.querySelector(".mark-emi-name").value.trim();
+                if (!typed) { markNameEl.querySelector(".mark-emi-name").focus(); return; }
+                chooseMark("EMI", typed);
+              });
+            } else {
+              markNameEl.innerHTML = '<div class="instrument-picker">' + instrumentPickerHtml("mark-sip-select") + '</div>' +
+                '<button type="button" class="fe-btn mark-confirm" style="margin-top:8px;">Mark as this SIP</button>';
+              const getPicked = wireInstrumentPicker(markNameEl.querySelector(".instrument-picker"));
+              markNameEl.querySelector(".mark-confirm").addEventListener("click", function () {
+                const picked = getPicked();
+                if (!picked) return;
+                chooseMark("SIP", picked);
+              });
+            }
+          });
+        });
+      }
 
       // Category doesn't make sense either once this is a confirmed
       // Financial Event — "what kind of spending" isn't a meaningful
@@ -7203,6 +7510,9 @@
         if (newAutoNote !== card.dataset.autoNote) {
           noteInput.value = newAutoNote;
           card.dataset.autoNote = newAutoNote;
+          // Programmatic changes fire no input event; trigger it so the Need/Want
+          // auto-fill, hint and other note-driven checks follow the new text.
+          noteInput.dispatchEvent(new Event("input", { bubbles: true }));
         }
       });
     }
@@ -7215,6 +7525,7 @@
           if (!data.ok) return; // stay quiet on errors during background checks
 
           if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
+          if (data.noteWordModel) setNoteWordModel(data.noteWordModel);
           reconcilePendingList(data.transactions, { notify: true });
         })
         .catch(function () { /* stay quiet — we'll just try again next minute */ });
@@ -12029,6 +12340,7 @@
           if (isFirstPage) historyListEl.innerHTML = ""; // clear the skeleton
 
           if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
+          if (data.noteWordModel) setNoteWordModel(data.noteWordModel);
           data.transactions.forEach(function (txn) {
             historyListEl.appendChild(buildHistoryItem(txn));
           });

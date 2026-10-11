@@ -153,6 +153,7 @@ function loadBackendSandbox(){
     "investmentInstruments.js",
     "savingsGoals.js",
     "category.js",
+    "noteWordModel.js",
     "PWA.js"
   ];
   files.forEach(function(filename){
