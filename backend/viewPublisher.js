@@ -49,7 +49,14 @@ var V2_WRITE_ACTIONS_ = [
 // Builds the Home screen exactly as the app's own "getDashboard" action would
 // and stores it as ONE document: views/dashboard. The screen is stored as
 // text (JSON) so it comes back identical to what the app already receives.
+// The moment the most recent publish STARTED building (milliseconds). The app
+// uses it to tell a copy built before one of its own saves from one built after.
+var V2_LAST_BUILT_AT_ = 0;
+
 function publishDashboardView_(reason){
+  // Taken BEFORE reading the sheet: anything saved earlier than this moment is
+  // guaranteed to be inside the copy.
+  var builtAt = Date.now();
   var json = JSON.stringify(getDashboardData());
   // Firestore's limit counts BYTES; a rupee sign is 3 bytes, so count properly.
   var bytes = encodeURIComponent(json).replace(/%[0-9A-F]{2}/g, "x").length;
@@ -60,9 +67,11 @@ function publishDashboardView_(reason){
     json: json,
     bytes: bytes,
     updatedAt: new Date(),
+    builtAt: builtAt,
     reason: String(reason || ""),
-    version: 1
+    version: 2
   });
+  V2_LAST_BUILT_AT_ = builtAt;
 }
 
 // One error line per hour at most, so a broken connection can't flood the log.
@@ -148,4 +157,15 @@ function publishAfterAction_(action, response){
 // Run by hand from the Apps Script editor (or by me) to publish right now.
 function publishViewsNow(){
   return publishViewsBestEffort_("manual", true);
+}
+
+// The app asks for this right after it saves something, so the copy it reads
+// from Firestore is rebuilt now instead of waiting for the 5-minute timer.
+// Returns the moment the rebuilt copy started building (builtAt): the app then
+// ignores any copy older than that, so an old copy can never bring a
+// just-saved card back. Never throws; if publishing failed, published is false
+// and the app falls back to asking for the screen directly.
+function refreshViewsFromApp_(){
+  var published = publishViewsBestEffort_("refresh", true);
+  return { ok: true, published: published, builtAt: published ? V2_LAST_BUILT_AT_ : 0 };
 }

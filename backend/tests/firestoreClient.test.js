@@ -169,7 +169,7 @@ console.log("\n--- 5. Publishing the Home screen ---");
   assert(w.sb.publishViewsBestEffort_("test", false) === true, "publish succeeds");
   const doc = w.sb.fsDecodeFields_(w.docs["views/dashboard"]);
   assert(doc.json === JSON.stringify(w.dash), "the stored screen is exactly what getDashboard returns");
-  assert(doc.bytes === doc.json.length && doc.reason === "test" && doc.version === 1 && typeof doc.updatedAt === "string", "size, reason, version and time are saved with it");
+  assert(doc.bytes === doc.json.length && doc.reason === "test" && doc.version === 2 && typeof doc.updatedAt === "string", "size, reason, version and time are saved with it");
 
   assert(w.sb.publishViewsBestEffort_("again", false) === false && w.writes().length === 1, "a second publish within 15 seconds is skipped (throttle)");
   assert(w.cache.V2_DIRTY === "1", "...and a 'changed' flag is left so the timer catches up");
@@ -301,6 +301,37 @@ console.log("\n--- 11. The health monitor now watches for publish errors ---");
 {
   const w = world();
   assert(w.sb.HEALTH_ERROR_LOG_TYPES.indexOf("V2_PUBLISH_ERROR") !== -1, "V2_PUBLISH_ERROR is on the watched list");
+}
+
+console.log("\n--- 12. refreshViews: rebuilds the copy now and reports when it started building ---");
+{
+  const stub = function(w){
+    w.sb.verifyGoogleIdToken = function(){ return { email: w.who || "ronitnadar9@gmail.com", name: "T" }; };
+    w.sb.jsonResponse = function(o){ return { getContent: function(){ return JSON.stringify(o); } }; };
+    return w;
+  };
+  const call = function(w){ return JSON.parse(w.sb.handlePwaRequest({ action: "refreshViews", idToken: "t" }).getContent()); };
+  const w = stub(world());
+  const before = Date.now();
+  const out = call(w);
+  const after = Date.now();
+  const doc = w.sb.fsDecodeFields_(w.docs["views/dashboard"]);
+  assert(out.ok === true && out.published === true, "refreshViews publishes and says so");
+  assert(out.builtAt >= before && out.builtAt <= after, "it reports when the build started (a real moment)");
+  assert(doc.builtAt === out.builtAt && doc.reason === "refresh" && doc.version === 2, "the stored copy carries the same builtAt, reason 'refresh', version 2");
+
+  w.cache.V2_THROTTLE = "1";
+  const again = call(w);
+  assert(again.published === true && again.builtAt >= out.builtAt, "it ignores the 15-second throttle (a save must never wait on it)");
+
+  const down = stub(world([], "fail500"));
+  const bad = call(down);
+  assert(bad.ok === true && bad.published === false && bad.builtAt === 0, "Firestore down: no crash, published:false, builtAt 0 (the app then asks Apps Script directly)");
+
+  const wrong = stub(world());
+  wrong.who = "someone@else.com";
+  const no = call(wrong);
+  assert(no.ok === false && wrong.writes().length === 0, "another account cannot trigger it");
 }
 
 console.log("\nDone.");

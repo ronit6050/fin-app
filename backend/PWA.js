@@ -52,6 +52,10 @@ function handlePwaRequestCore_(data){
     return jsonResponse({ ok:true, message:"Hello " + verified.name + ", you're verified!" });
   }
 
+  if(data.action === "refreshViews"){
+    return jsonResponse(refreshViewsFromApp_());
+  }
+
   if(data.action === "getPending"){
     return jsonResponse({ ok:true, transactions: getPendingTransactions(), knownDebtPeople: getKnownDebtPeople() });
   }

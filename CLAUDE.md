@@ -2964,3 +2964,13 @@ with the guard off); full suite 29 files pass. Independent `change-reviewer`: sa
 deploy (checked against 982 real rows: no false alarms, no fingerprint collisions).
 Known/accepted: requests without `fp` are not guarded; tiny gap between check and write
 (no lock); Reconcile removes its cards even when a save fails (shows a message).
+
+## Phase 3 "Fast views" (2026-10-11): DEPLOYED (backend @324, app via git push); real-device sign-in test still owed
+The phone now reads the ready-made Home copy (`views/dashboard`, carries every tab's data) straight
+from Firestore (about 0.5 s vs 3-10 s), falling back to Apps Script on any problem. Console setup
+done (Google sign-in on, app's client ID safelisted, owner-only read rules published; anonymous read
+verified 403). New backend action `refreshViews`; copy has `builtAt`. Old copies can never undo your own
+saves (hold + builtAt rule + dirty marker). Settings -> Speed -> Fast loading switch. Full design,
+limits and deploy order: [docs/features/fast-views.md](docs/features/fast-views.md). Deploy order:
+backend `clasp push`+`clasp deploy` FIRST, then `git push`. Real-device test of Google->Firebase
+sign-in still owed (APP_VERSION `2026-10-11-02`).

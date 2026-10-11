@@ -56,6 +56,11 @@
        background push notifications, arriving even when the app is closed. -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+  <!-- Fast loading (added 2026-10-11): sign in to Firebase quietly with the Google
+       sign-in you already did, and read the ready-made Home screen copy straight
+       from Firestore instead of waiting for Apps Script. Read-only, owner-only. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <!-- pdf.js (Mozilla, open-source, free) — added 2026-08-25 for the
        Reconcile screen's credit card statement upload. Reads a PDF
@@ -3220,6 +3225,22 @@
         </div>
 
         <div class="settings-group">
+          <div class="settings-group-title">Speed</div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Fast loading</label>
+            <select id="settingsFastViews">
+              <option value="on">On (recommended)</option>
+              <option value="off">Off - always ask the server directly</option>
+            </select>
+          </div>
+          <p class="pending-status" style="margin-top:8px;">
+            On: the app reads a ready-made copy of your screens, so fresh numbers
+            appear in about a second. Off: the old way (slower, but identical
+            data). Takes effect next time you open the app.
+          </p>
+        </div>
+
+        <div class="settings-group">
           <div class="settings-group-title">Credit card</div>
           <p class="pending-status" style="margin-top:-2px;">Used by the CC Advisor screen.</p>
           <div class="field">
@@ -3376,8 +3397,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-11-01";
-    const APP_CHANGELOG = "Safer saving: if a list is out of date (for example right after you reconcile a bank statement), the app now refuses the save and refreshes instead of risking a note landing on the wrong transaction.";
+    const APP_VERSION = "2026-10-11-02";
+    const APP_CHANGELOG = "Faster: Home and your other screens now load a ready-made copy in about a second, and new transactions appear the moment they arrive. You can turn this off in Settings > Speed.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -3595,6 +3616,7 @@
         name: payload.name,
         idToken: response.credential // sent to Apps Script with every request
       };
+      fastBroken = false;   // a fresh sign-in gets a fresh chance at Fast loading
 
       // Remember this browser is signed in — including the actual proof —
       // so refreshing the page doesn't need to ask Google again at all.
@@ -3739,6 +3761,7 @@
     }
 
     signOutButton.addEventListener("click", function () {
+      stopFastViews(false);
       currentUser = null;
       localStorage.removeItem(STORAGE_KEY);
       clearAuthTokenForServiceWorker();
@@ -4562,13 +4585,24 @@
       if (demoMode) {
         return demoHandleRequest(payload);
       }
+      // Fast loading bookkeeping: a data-changing action is "in flight" until it
+      // answers; see the FAST VIEWS block near loadDashboard().
+      const isWrite = FAST_WRITE_ACTIONS.indexOf(payload.action) !== -1;
+      const counted = isWrite ? fastWriteStarted() : false;
       return fetch(APPS_SCRIPT_URL, {
         method: "POST",
         // text/plain avoids the browser's extra "permission check" request
         // (a CORS preflight) that Apps Script doesn't handle well.
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify(payload)
-      }).then(function (response) { return response.json(); });
+      }).then(function (response) { return response.json(); })
+        .then(function (data) {
+          if (isWrite) fastWriteFinished(!!(data && data.ok), counted);
+          return data;
+        }, function (err) {
+          if (isWrite) fastWriteFinished(false, counted);
+          throw err;
+        });
     }
 
     // ===========================================================
@@ -5935,6 +5969,8 @@
     }
 
     function handleSessionExpired() {
+      stopFastViews(true);   // keep Firebase's own sign-in; only the Google proof expired
+      fastApplied = false;   // after signing in again, the 4-second fallback must work again
       currentUser = null;
       localStorage.removeItem(STORAGE_KEY);
       clearAuthTokenForServiceWorker();
@@ -6101,7 +6137,226 @@
       });
     }
 
-    function loadDashboard() {
+    // ===========================================================
+    // FAST VIEWS (Phase 3, added 2026-10-11)
+    // ===========================================================
+    // The backend keeps a ready-made copy of the Home screen (which also
+    // carries every other tab's data) in Firestore, rebuilt whenever something
+    // changes. Reading that copy takes about half a second, versus 3-10 seconds
+    // to wake Apps Script and read the sheet. Rules of the road:
+    //  - Read-only. All saving still goes to Apps Script, exactly as before.
+    //  - Only your Google account can read the copy (Firestore rules).
+    //  - If anything about it fails, or the copy is missing/stale, the app asks
+    //    Apps Script directly - the old way - so it can never be worse.
+    //  - Old copies must never undo your own saves: while a save is running (and
+    //    until the server confirms a fresh copy was built AFTER it), incoming
+    //    copies are held back and older ones are dropped (see fastMinBuiltAt).
+    //  - Settings -> Fast loading = Off switches all of this off.
+    const FAST_WRITE_ACTIONS = [
+      "saveNote", "markNotATransaction", "addDebt", "settleDebt", "recordDebtPayment",
+      "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
+      "deleteSavingsEntry", "addSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
+      "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
+      "addCashEntry", "updateCashEntry", "insertReconciledTransactions",
+      "fixCreditCardTransactionMode", "updateSettings", "saveBudgets"
+    ];
+    const FAST_STALE_MS = 40 * 60 * 1000;   // the backend refreshes at least every 30 minutes
+    const FAST_WAIT_MS = 4000;              // how long to wait for the copy before asking Apps Script
+
+    let fastBroken = false;        // gave up for this visit (sign-in/permission problem)
+    let fastAuthUnsub = null;      // stops watching Firebase sign-in state
+    let fastListenerUnsub = null;  // stops watching the Home copy
+    let fastApplied = false;       // a fresh copy has been shown this visit
+    let fastMinBuiltAt = 0;        // ignore copies built before this moment (server clock, ms)
+    let fastWritesInFlight = 0;
+    let fastNeedRefresh = false;   // a save succeeded; a fresh copy is owed
+    let fastRefreshTimer = null;
+    let fastRefreshesRunning = 0;  // how many "rebuild the copy" requests are still waiting for an answer
+    let fastHighestBuiltAt = 0;    // newest copy seen so far (server clock) - used if a rebuild fails
+    let fastHeldSnap = null;       // newest copy that arrived while we were holding back
+
+    // A save succeeded but the rebuilt copy has not been confirmed yet. Kept on the
+    // phone so that if the app is closed in that gap, the NEXT open does not trust a
+    // possibly-old copy (it asks Apps Script directly and rebuilds the copy first).
+    function fastIsDirty() {
+      try { return !!localStorage.getItem("fastDirty"); } catch (e) { return false; }
+    }
+    function fastSetDirty(on) {
+      try {
+        if (on) localStorage.setItem("fastDirty", String(Date.now()));
+        else localStorage.removeItem("fastDirty");
+      } catch (e) { /* ignore */ }
+    }
+
+    function fastViewsEnabled() {
+      try {
+        if (localStorage.getItem("fastViews") === "off") return false;
+      } catch (e) { /* default On */ }
+      return !demoMode && !fastBroken && !!(window.firebase && firebase.auth && firebase.firestore);
+    }
+
+    function fastFail(where, err) {
+      fastBroken = true;
+      console.warn("Fast loading off for this visit (" + where + "):", err && err.message ? err.message : err);
+      stopFastViews(true);
+      if (currentUser && !fastApplied) loadDashboard({ forceNetwork: true });
+    }
+
+    function startFastViews() {
+      if (fastAuthUnsub || fastListenerUnsub || !fastViewsEnabled()) return;
+      try {
+        const db = firebase.firestore();
+        // Long-polling auto-detect helps inside the Android WebView / behind proxies.
+        try { db.settings({ experimentalAutoDetectLongPolling: true, merge: true }); } catch (e) { /* already configured */ }
+        const auth = firebase.auth();
+        fastAuthUnsub = auth.onAuthStateChanged(function (user) {
+          if (user && user.email && user.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
+            attachFastListener(db);
+          } else if (!user && currentUser && currentUser.idToken) {
+            // Not signed in to Firebase yet: reuse the Google sign-in proof we already hold.
+            const credential = firebase.auth.GoogleAuthProvider.credential(currentUser.idToken);
+            auth.signInWithCredential(credential).catch(function (err) { fastFail("sign-in", err); });
+          }
+        });
+      } catch (err) {
+        fastFail("start", err);
+      }
+    }
+
+    function attachFastListener(db) {
+      if (fastListenerUnsub) return;
+      fastListenerUnsub = db.collection("views").doc("dashboard").onSnapshot(function (snap) {
+        if (!snap.exists) return;
+        onFastSnapshot(snap.data());
+      }, function (err) {
+        fastListenerUnsub = null;
+        fastFail("listen", err);
+      });
+    }
+
+    function stopFastViews(keepAuth) {
+      if (fastListenerUnsub) { try { fastListenerUnsub(); } catch (e) { /* ignore */ } fastListenerUnsub = null; }
+      if (fastAuthUnsub) { try { fastAuthUnsub(); } catch (e) { /* ignore */ } fastAuthUnsub = null; }
+      if (fastRefreshTimer) { clearTimeout(fastRefreshTimer); fastRefreshTimer = null; }
+      fastHeldSnap = null;
+      if (!keepAuth) {
+        fastNeedRefresh = false;
+        fastApplied = false;
+        fastMinBuiltAt = 0;
+        try { if (window.firebase && firebase.auth) firebase.auth().signOut(); } catch (e) { /* ignore */ }
+      }
+    }
+
+    function fastHoldBack() {
+      return fastWritesInFlight > 0 || fastRefreshTimer !== null || fastRefreshesRunning > 0;
+    }
+
+    function onFastSnapshot(d) {
+      if (demoMode || !currentUser) return;          // never paint real data over Demo Mode / signed-out
+      fastHighestBuiltAt = Math.max(fastHighestBuiltAt, Number(d.builtAt) || 0);
+      if (fastHoldBack()) { fastHeldSnap = d; return; }
+      applyFastSnapshot(d);
+    }
+
+    function applyFastSnapshot(d) {
+      const builtAt = Number(d.builtAt) || 0;
+      if (builtAt < fastMinBuiltAt) return;          // built before our own latest save: would undo it
+      const updated = Date.parse(d.updatedAt);
+      if (isFinite(updated) && Date.now() - updated > FAST_STALE_MS) return;   // too old to trust
+      let dash = null;
+      try { dash = JSON.parse(d.json); } catch (e) { return; }
+      if (!dash || typeof dash !== "object" || !dash.full) return;
+      const notify = fastApplied;                    // the very first copy is "opening the app", not news
+      fastApplied = true;
+      applyDashboardData(dash, { addOnly: true, notify: notify });
+    }
+
+    function releaseFastHold() {
+      if (fastHoldBack()) return;
+      if (fastHeldSnap) {
+        const d = fastHeldSnap;
+        fastHeldSnap = null;
+        applyFastSnapshot(d);
+      }
+    }
+
+    // Returns true when this save was counted, so callAppsScript can decrement
+    // exactly the ones it counted (a save that began before we were watching is not).
+    function fastWriteStarted() {
+      if (!fastListenerUnsub) return false;
+      fastWritesInFlight++;
+      return true;
+    }
+
+    function fastWriteFinished(ok, counted) {
+      if (counted !== false) fastWritesInFlight = Math.max(0, fastWritesInFlight - 1);
+      if (!fastViewsEnabled()) return;
+      if (ok) { fastNeedRefresh = true; fastSetDirty(true); }
+      if (fastWritesInFlight > 0) return;
+      if (fastNeedRefresh) {
+        // Wait a moment so a burst of quick saves causes ONE rebuild, not ten.
+        if (fastRefreshTimer) clearTimeout(fastRefreshTimer);
+        fastRefreshTimer = setTimeout(runFastRefresh, 1500);
+      } else {
+        releaseFastHold();
+      }
+    }
+
+    function fastRefreshDone(ok, builtAt) {
+      fastRefreshesRunning = Math.max(0, fastRefreshesRunning - 1);
+      if (ok) {
+        fastMinBuiltAt = Math.max(fastMinBuiltAt, builtAt);
+        if (!fastNeedRefresh && fastWritesInFlight === 0 && fastRefreshesRunning === 0) fastSetDirty(false);
+      } else {
+        // The server could not rebuild the copy: ignore every copy seen so far
+        // (server clock, so a wrong phone clock cannot poison this) and ask Apps
+        // Script for the screen directly.
+        fastMinBuiltAt = Math.max(fastMinBuiltAt, fastHighestBuiltAt + 1);
+        if (currentUser) loadDashboard({ forceNetwork: true });   // signed out meanwhile: nothing to load
+      }
+      releaseFastHold();
+    }
+
+    function runFastRefresh() {
+      fastRefreshTimer = null;
+      if (fastWritesInFlight > 0 || !currentUser || demoMode) return;   // the next finished save will schedule it again
+      fastNeedRefresh = false;
+      fastRefreshesRunning++;
+      let abortTimer = null;
+      const init = {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ action: "refreshViews", idToken: currentUser.idToken })
+      };
+      // Do not let a hung request hold screens back forever.
+      if (typeof AbortController !== "undefined") {
+        const controller = new AbortController();
+        init.signal = controller.signal;
+        abortTimer = setTimeout(function () { controller.abort(); }, 20000);
+      }
+      fetch(APPS_SCRIPT_URL, init)
+        .then(function (response) { return response.json(); })
+        .then(function (res) {
+          if (abortTimer) clearTimeout(abortTimer);
+          const good = !!(res && res.ok && res.published && res.builtAt);
+          fastRefreshDone(good, good ? res.builtAt : 0);
+        })
+        .catch(function () {
+          if (abortTimer) clearTimeout(abortTimer);
+          fastRefreshDone(false, 0);
+        });
+    }
+
+    // Shows one finished Home screen (from Firestore or from Apps Script) and
+    // seeds every other tab from it.
+    function applyDashboardData(dash, pendingOpts) {
+      saveCache("dashboard", dash);
+      renderDashboard(dash);
+      seedTabsFromDashboard(dash.full, pendingOpts);
+    }
+
+    function loadDashboard(opts) {
+      opts = opts || {};
       const cached = loadCache("dashboard");
       if (cached) {
         renderDashboard(cached);
@@ -6117,6 +6372,34 @@
         homeContentEl.style.display = "none";
       }
 
+      // Fast path: let the Firestore copy fill the screen. If it has not
+      // arrived within a few seconds, fall through to asking Apps Script.
+      if (!opts.forceNetwork && fastViewsEnabled()) {
+        if (fastIsDirty()) {
+          // A save was made last time but the rebuilt copy was never confirmed
+          // (the app was closed in between). Do not trust the copy yet: rebuild it
+          // and show the screen straight from Apps Script this once.
+          fastNeedRefresh = true;
+          if (!fastRefreshTimer) fastRefreshTimer = setTimeout(runFastRefresh, 0);
+          startFastViews();
+          loadDashboard({ forceNetwork: true });
+          return;
+        }
+        startFastViews();
+        // Home no longer calls Apps Script on this path, so check the sign-in
+        // is still valid with one cheap call (an expired Google sign-in must still
+        // send you back to the login screen, exactly as before).
+        callAppsScript({ action: "ping", idToken: currentUser.idToken })
+          .then(function (data) {
+            if (data && !data.ok && isAuthError(data.error)) handleSessionExpired();
+          })
+          .catch(function () { /* offline etc.: nothing to decide here */ });
+        setTimeout(function () {
+          if (!fastApplied && currentUser && !demoMode) loadDashboard({ forceNetwork: true });
+        }, FAST_WAIT_MS);
+        return;
+      }
+
       callAppsScript({ action: "getDashboard", idToken: currentUser.idToken })
         .then(function (data) {
           if (!data.ok) {
@@ -6128,9 +6411,7 @@
             return;
           }
 
-          saveCache("dashboard", data.dashboard);
-          renderDashboard(data.dashboard);
-          seedTabsFromDashboard(data.dashboard.full);
+          applyDashboardData(data.dashboard);
         })
         .catch(function (err) {
           if (cached) return;
@@ -6146,7 +6427,7 @@
     // before it's visible: each render function only ever sets its own
     // inner content div, never the outer tab container that controls
     // whether it's actually shown on screen.
-    function seedTabsFromDashboard(full) {
+    function seedTabsFromDashboard(full, pendingOpts) {
       if (!full) return;
 
       // Pending (fix, 2026-09-04): the dashboard call already computes this
@@ -6156,14 +6437,19 @@
       // stuck/ghost card gets cleaned up, on top of Pending's own refresh
       // and its 15-second background check. See reconcilePendingList's own
       // comment for the full story on what this fixes.
-      if (full.pending) reconcilePendingList(full.pending);
+      if (full.pending) reconcilePendingList(full.pending, pendingOpts);
 
       saveCache("today", full.today);
       if (!tabLoaded.today) { renderTodaySummary(full.today); tabLoaded.today = true; }
 
-      const analysisCacheKey = "analysis_" + analysisYear + "_" + analysisMonth;
-      saveCache(analysisCacheKey, full.month);
-      if (!tabLoaded.analysis) { renderMonthlyAnalysis(full.month); tabLoaded.analysis = true; }
+      // full.month is always the CURRENT calendar month; only seed Analysis when that
+      // is the month being looked at (otherwise a past month's cache gets overwritten).
+      const nowForAnalysis = new Date();
+      if (analysisYear === nowForAnalysis.getFullYear() && analysisMonth === nowForAnalysis.getMonth() + 1) {
+        const analysisCacheKey = "analysis_" + analysisYear + "_" + analysisMonth;
+        saveCache(analysisCacheKey, full.month);
+        if (!tabLoaded.analysis) { renderMonthlyAnalysis(full.month); tabLoaded.analysis = true; }
+      }
 
       saveCache("cc", full.cc);
       if (!tabLoaded.cc) { renderCCAdvisor(full.cc); tabLoaded.cc = true; }
@@ -6338,7 +6624,10 @@
       // or an old saved card that never had a fingerprint. Those get replaced.
       const replacedRows = new Set();
 
-      allPending = allPending.filter(function (t) {
+      // opts.addOnly (Fast loading, 2026-10-11): the ready-made copy may be a few
+      // seconds older than a direct check, so it is only trusted to ADD cards,
+      // never to remove or replace one. Removals still come from the direct checks.
+      if (!opts.addOnly) allPending = allPending.filter(function (t) {
         const fresh = freshByRow[t.row];
         if (fresh && (!fresh.fp || fresh.fp === t.fp)) return true;
         if (fresh) replacedRows.add(t.row);
@@ -10618,6 +10907,16 @@
         localStorage.setItem("themePreference", choice);
         document.documentElement.setAttribute("data-theme", choice);
       }
+    });
+
+    // Fast loading switch (local to this phone, applies on next open).
+    const settingsFastViewsEl = document.getElementById("settingsFastViews");
+    try { settingsFastViewsEl.value = localStorage.getItem("fastViews") === "off" ? "off" : "on"; } catch (e) { /* default On */ }
+    settingsFastViewsEl.addEventListener("change", function () {
+      try {
+        if (settingsFastViewsEl.value === "off") localStorage.setItem("fastViews", "off");
+        else localStorage.removeItem("fastViews");
+      } catch (e) { /* ignore */ }
     });
 
     function loadSettings() {
