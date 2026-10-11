@@ -102,3 +102,7 @@ real DemoStream echo pair.
   Advisor. A separate, small fix, not done here.
 - Remaining junk seen but out of scope: IPIN/password-reset notices
   ("Your IPIN reset is complete ... Not you?") still arrive as UNCERTAIN.
+
+## Update 2026-10-11 - the bank changed the wording of the second text
+
+HDFC now sends the card-charge text as `Amount Spent: Rs.X with HDFC Bank Credit Card NNNN at <MERCHANT> ... completed without any additional authentication factor mandated by RBI.` instead of `... without OTP/PIN ...`. The echo rule only knew the old wording, so one YouTube AutoPay charge was saved twice. `isWithoutOtpCardText` now accepts both wordings; every other condition is unchanged. Tests: PART 6 of `junkAndEchoFilter2026-10-10.test.js` (invented data). Replay of all 985 real rows: old rule flagged 0, new rule flagged exactly the one real pair. Deployed as sms-parser `@18`.

@@ -448,3 +448,61 @@ const CARDTXT = "Rs.149 without OTP/PIN HDFC Bank Card x2222 At TESTSTREAMGOOGLE
 
 console.log("\n" + pass + " passed, " + fail + " failed.");
 if(fail > 0) process.exit(1);
+
+// =======================================================================
+// PART 6 -- the bank's NEWER wording for the second text (found live 2026-10-11)
+// "Amount Spent: Rs.149 with HDFC Bank Credit Card 2222 at <MERCHANT> on <date>
+//  ... completed without any additional authentication factor mandated by RBI."
+// The old check only knew "without OTP/PIN", so one AutoPay charge was saved twice.
+// All names/numbers below are invented.
+// =======================================================================
+
+const NEWCARDTXT = "Amount Spent: Rs.149 with HDFC Bank Credit Card 2222 at TESTSTREAMGOOGLE on 2026-09-11:11:35:34 This transaction was completed without any additional authentication factor mandated by RBI. Not You? To Block and Reissue, please call 18002586161 or SMS BLOCK CC 2222 to 7308080808";
+
+// 6a. the real order seen live: AutoPay text first, newer-wording card text 4s later -> ONE row
+(function(){
+  const sb = loadSandbox();
+  sb.doPost(mkEvent(AUTOPAY, "AD-HDFCBK-S", ts(2026,9,11,11,35,34)));
+  sb.doPost(mkEvent(NEWCARDTXT, "AD-HDFCBK-S", ts(2026,9,11,11,35,38)));
+  assertEqual(sb.__rows.length, 1, "echo (new wording): AutoPay then 'Amount Spent ... without any additional authentication' 4s later -> one row");
+  assert(sb.__logged.some(function(r){ return String(r[4]).indexOf("DUPLICATE IGNORED (echo") === 0; }), "the skip is logged with its reason");
+})();
+
+// 6b. reverse order
+(function(){
+  const sb = loadSandbox();
+  sb.doPost(mkEvent(NEWCARDTXT, "AD-HDFCBK-S", ts(2026,9,11,11,35,34)));
+  sb.doPost(mkEvent(AUTOPAY, "AD-HDFCBK-S", ts(2026,9,11,11,35,40)));
+  assertEqual(sb.__rows.length, 1, "echo (new wording): reverse order -> still one row");
+})();
+
+// 6c. SAFETY: the newer wording on its own, twice (two real purchases), both save
+(function(){
+  const sb = loadSandbox();
+  sb.doPost(mkEvent(NEWCARDTXT, "AD-HDFCBK-S", ts(2026,9,11,11,35,34)));
+  sb.doPost(mkEvent(NEWCARDTXT.replace("11:35:34", "11:36:30"), "AD-HDFCBK-S", ts(2026,9,11,11,36,30)));
+  assertEqual(sb.__rows.length, 2, "SAFETY: two newer-wording card texts 56s apart (same kind) both save");
+})();
+
+// 6d. SAFETY: different merchant / amount / card / far apart -> both save
+(function(){
+  const a = loadSandbox();
+  a.doPost(mkEvent(AUTOPAY, "AD-HDFCBK-S", ts(2026,9,11,11,35,34)));
+  a.doPost(mkEvent(NEWCARDTXT.replace("TESTSTREAMGOOGLE", "CORNERCAFE"), "AD-HDFCBK-S", ts(2026,9,11,11,35,38)));
+  assertEqual(a.__rows.length, 2, "SAFETY: clearly different merchant -> both save");
+
+  const b = loadSandbox();
+  b.doPost(mkEvent(AUTOPAY, "AD-HDFCBK-S", ts(2026,9,11,11,35,34)));
+  b.doPost(mkEvent(NEWCARDTXT.replace("Rs.149", "Rs.150"), "AD-HDFCBK-S", ts(2026,9,11,11,35,38)));
+  assertEqual(b.__rows.length, 2, "SAFETY: different amount -> both save");
+
+  const c = loadSandbox();
+  c.doPost(mkEvent(AUTOPAY, "AD-HDFCBK-S", ts(2026,9,11,11,35,34)));
+  c.doPost(mkEvent(NEWCARDTXT.replace(/2222/g, "3333"), "AD-HDFCBK-S", ts(2026,9,11,11,35,38)));
+  assertEqual(c.__rows.length, 2, "SAFETY: different card -> both save");
+
+  const d = loadSandbox();
+  d.doPost(mkEvent(AUTOPAY, "AD-HDFCBK-S", ts(2026,9,11,11,35,34)));
+  d.doPost(mkEvent(NEWCARDTXT.replace("11:35:34", "11:50:00"), "AD-HDFCBK-S", ts(2026,9,11,11,50,0)));
+  assertEqual(d.__rows.length, 2, "SAFETY: 15 minutes apart -> both save");
+})();

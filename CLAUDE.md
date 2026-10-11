@@ -2885,9 +2885,7 @@ plan-vs-actual loop. Rule for all of it: learn ONLY from the user's own
 confirmations, never from the app's guesses. Show a mockup before building 3-5.
 
 **Open items / known gaps:**
-- 59 payments (Rs.35,041) from 5-15 Sep have no category (the dropdown bug);
-  the fix works since 15 Sep but the one-time backfill was never run: run
-  `previewMissingCategories` then `backfillMissingCategories` (Logger.js).
+- ~~59 payments (Rs.35,041) from 5-15 Sep have no category~~ — DONE: the categories were written during the 2026-10-11 live-fix routine; re-checked 2026-10-11 afternoon (fresh backup + `category_backfill.py preview`): 0 payments with a note but no category.
 - Pending had 8 rows: two Rs.4,000 payments to the dad (should be marked
   EMI — type "Laptop EMI" as the note, then confirm in History), a duplicate
   YouTube Rs.149, a scam credit (mark "not a transaction"; user confirmed no

@@ -1004,8 +1004,17 @@ function isAutoPaySuccessText(text){
   return /autopay|e-?mandate/.test(t) && t.includes("success") && !t.includes("without otp");
 }
 
+// The bank has used two wordings for the same kind of card text:
+//   * older:  "Rs.149 without OTP/PIN HDFC Bank Card x2222 At <MERCHANT> ..."
+//   * newer (seen live 2026-10-11): "Amount Spent: Rs.149 with HDFC Bank Credit
+//     Card 2222 at <MERCHANT> ... completed without any additional
+//     authentication factor mandated by RBI." -- the old check missed this one,
+//     so one subscription charge was saved twice.
+// Both mean "a card charge that needed no extra authentication", which is
+// exactly what an AutoPay/e-mandate charge is.
 function isWithoutOtpCardText(text){
-  return String(text || "").toLowerCase().includes("without otp");
+  const t = String(text || "").toLowerCase();
+  return t.includes("without otp") || t.includes("without any additional authentication");
 }
 
 // True ONLY for the one pairing the bank really sends as an echo: exactly
