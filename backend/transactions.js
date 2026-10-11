@@ -17,6 +17,14 @@ function processNewTransactions() {
   }
 }
 
+// True for a real row the timer has not processed yet. ONE definition used by
+// the timer's loop and by Reconcile's bookmark repair, so they can never
+// disagree. (IGNORED = tombstone left by the "not a transaction" button.)
+function isUnprocessedTransactionRow_(row){
+  const processed = row[15];
+  return processed !== "YES" && processed !== "IGNORED" && !isEmptyTransactionRow_(row);
+}
+
 // A row with neither a date nor an amount is a blank/placeholder row, never a
 // real transaction (see the comment in the loop below).
 function isEmptyTransactionRow_(row){
@@ -79,7 +87,7 @@ function processNewTransactionsCore_() {
     //   their IGNORED marker overwritten with YES - showing up in Pending as
     //   Rs.0 phantoms. 11 of them appeared on 2026-10-11.
     // - A completely empty row (no date, no amount) is never a transaction.
-    if(processed !== "YES" && processed !== "IGNORED" && !isEmptyTransactionRow_(data[i])){
+    if(isUnprocessedTransactionRow_(data[i])){
 
       const rowIndex = startRow + i + 1; // Actual row number in sheet
 

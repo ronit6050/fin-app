@@ -458,11 +458,36 @@ function reconcileStatementPreview(fileBase64, fileName){
 // recovery reads "Credit Card Statement" instead of the bank flow's
 // "Bank Statement" — optional, defaults to the original bank wording so
 // every existing call site is unaffected.
+// See the call site above. Only ever LOWERS the bookmark (a lower bookmark just
+// re-scans already-processed rows, which the timer skips; a higher one would
+// hide an unprocessed row).
+function resetBookmarkAfterSort_(sheet){
+  const lastRow = sheet.getLastRow();
+  if(lastRow < 2) return;
+  const data = sheet.getRange(2, 1, lastRow - 1, 16).getValues();
+  let firstUnprocessedRow = 0;
+  for(let i = 0; i < data.length; i++){
+    if(isUnprocessedTransactionRow_(data[i])){ firstUnprocessedRow = i + 2; break; }
+  }
+  if(!firstUnprocessedRow) return;
+  const props = PropertiesService.getScriptProperties();
+  const current = Number(props.getProperty("lastCheckedRow") || 1);
+  if(current >= firstUnprocessedRow){
+    props.setProperty("lastCheckedRow", String(firstUnprocessedRow - 1));
+  }
+}
+
 function insertReconciledTransactions(txns, source){
 
   try{
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
     const formattedTime = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "HH:mm:ss");
+
+    // BEFORE any row moves (added 2026-10-11): alert/mark any real transaction
+    // that has arrived but the timer has not reached yet, so nothing real is
+    // "in flight" while the sheet is re-sorted below. Best-effort: a failure
+    // here must not block the reconcile.
+    try{ processNewTransactions(); }catch(ignore){}
 
     let added = 0;
 
@@ -507,6 +532,12 @@ function insertReconciledTransactions(txns, source){
       sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn())
         .sort([{column: 1, ascending: true}]);
     }
+
+    // AFTER the sort (added 2026-10-11): the sort moves rows, but the timer's
+    // bookmark (lastCheckedRow) is just a row NUMBER, so it can end up below
+    // a real, not-yet-alerted row that the sort shifted UP - which would never
+    // be alerted. Pull the bookmark back to just above the first such row.
+    try{ resetBookmarkAfterSort_(sheet); }catch(ignore){}
 
     return { ok: true, added: added };
 

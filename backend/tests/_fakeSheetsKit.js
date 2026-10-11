@@ -75,7 +75,14 @@ FakeSheet.prototype.getRange = function(r, c, nr, nc){
       const col = specs[0].column - 1, asc = specs[0].ascending !== false;
       const slice = self.rows.slice(r - 1, r - 1 + nr);
       slice.sort(function(a, b){
+        // Google Sheets always puts blank cells LAST when sorting ascending
+        // (and first when descending). The incident of 2026-10-11 depended on this.
+        const isBlank = function(v){ return v === "" || v === null || v === undefined; };
         const x = a[col], y = b[col];
+        if(isBlank(x) || isBlank(y)){
+          if(isBlank(x) && isBlank(y)) return 0;
+          return (isBlank(x) ? 1 : -1) * (asc ? 1 : -1);
+        }
         return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1);
       });
       for(let i = 0; i < slice.length; i++) self.rows[r - 1 + i] = slice[i];
