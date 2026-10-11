@@ -2,7 +2,22 @@
    TRANSACTIONS ENGINE
 ============================================ */
 
+// The timer entry point (the trigger calls this name). It runs the real work
+// FIRST, so a new-transaction notification is never delayed by anything else,
+// and only AFTERWARDS refreshes the Home screen copy in Firestore if something
+// changed or the copy is over 30 minutes old (viewPublisher.js, added
+// 2026-10-11). The try/finally + try/catch are insurance, even against the
+// publisher function being missing altogether: nothing about the publisher
+// may ever stop a transaction being processed.
 function processNewTransactions() {
+  try{
+    processNewTransactionsCore_();
+  }finally{
+    try{ publishViewsIfNeeded_(); }catch(ignore){}
+  }
+}
+
+function processNewTransactionsCore_() {
 
   const {BOT_TOKEN, CHAT_ID} = getConfig();
 
@@ -162,6 +177,11 @@ Reply to add a note for this transaction.`;
 
   // ── Remember how far we've checked ──
   props.setProperty("lastCheckedRow", String(lastRow));
+
+  // New transactions were processed: publish the Home screen again now so
+  // the copy includes them (force = skip the 15-second throttle; this runs
+  // once per timer run). Added 2026-10-11, best-effort, never throws.
+  try{ publishViewsBestEffort_("new-transactions", true); }catch(ignore){}
 }
 
 /* ===============================

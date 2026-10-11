@@ -52,3 +52,13 @@ def check_write_access():
     current = read_tab("Transactions")[0][0]
     n = write_cells([("'Transactions'!A1", current)])
     return n == 1
+
+
+def append_row(tab, values):
+    """Adds one row at the bottom of a tab (used for log-style tabs)."""
+    r = requests.post(API + "/values/" + _quote(tab) + ":append", headers=_headers(), timeout=120,
+                      params={"valueInputOption": "RAW", "insertDataOption": "INSERT_ROWS"},
+                      json={"values": [values]})
+    if r.status_code != 200:
+        raise RuntimeError("append failed HTTP %s: %s" % (r.status_code, r.text[:300]))
+    return r.json().get("updates", {}).get("updatedRows", 0)

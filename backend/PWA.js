@@ -10,7 +10,17 @@ const PWA_ALLOWED_EMAIL = "ronitnadar9@gmail.com";
 // Must match the Client ID used in the PWA's webpage.
 const PWA_CLIENT_ID = "1090460874478-0mnc81l34b10hi7n0u6bl9bkv9a45862.apps.googleusercontent.com";
 
+// The action handler's public door. It wraps the real handler below so that,
+// after any action that CHANGES data, the finished screens are refreshed in
+// Firestore (viewPublisher.js, added 2026-10-11). The refresh is best-effort:
+// it can never change the response, delay a failure, or throw.
 function handlePwaRequest(data){
+  const response = handlePwaRequestCore_(data);
+  try{ publishAfterAction_(data && data.action, response); }catch(ignore){}
+  return response;
+}
+
+function handlePwaRequestCore_(data){
 
   // Ask Google directly: is this sign-in proof real, and whose is it?
   const verified = verifyGoogleIdToken(data.idToken);
