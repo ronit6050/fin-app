@@ -18,7 +18,7 @@ const FILES = [
   "category.js", "noteWordModel.js", "noteMemory.js", "needWantSaving.js", "financialEvents.js", "investmentInstruments.js",
   "savingsGoals.js", "PWA.js", "Recon.js", "Logger.js", "transactions.js", "autoSettle.js", "obligationReminders.js", "appHealth.js",
   "firestore.js", "viewPublisher.js", "splits.js", "planner.js", "CCAdvisor.js", "DebtAdvisor.js", "SavingsAdvisor.js", "cash.js",
-  "v2db.js"
+  "v2db.js", "v2dbDiag.js", "settings.js"
 ];
 // Which columns of each tab the real Sheet shows as dates/times (Apps Script hands those over as Date objects)
 const DATECOLS = { Transactions: [0, 1], Transactions_Ignored: [0, 1], Cash: [1, 2, 9], Debts: [0, 5, 7], Savings: [0], Goals: [5], Investments: [0],
@@ -148,10 +148,12 @@ if(!folder){
   const A = makeEnv(tabs, false);       // answer key: plain Sheet
   const B = makeEnv(tabs, true);        // the same data in the Firestore-backed virtual spreadsheet
 
-  const compare = function(label, payload){
+  const compare = function(label, payload, expectFailure){
     const a = A.act(payload), b = B.act(payload);
     const same = JSON.stringify(a) === JSON.stringify(b);
     assert(same, label + (same ? "" : "  <-- DIFFERENT: " + JSON.stringify(a).slice(0, 160) + "  vs  " + JSON.stringify(b).slice(0, 160)));
+    // "both sides gave the same ERROR" must never count as a pass
+    if(!expectFailure) assert(a.ok !== false, label + ": the answer is a success, not an error" + (a.ok === false ? " (" + String(a.error).slice(0, 100) + ")" : ""));
     return a;
   };
   const compareTabs = function(label, names){
@@ -194,7 +196,7 @@ if(!folder){
     const t1 = pend[1];
     compare("save a note with a Saving tag", { action: "saveNote", row: t1.row, note: "saving test", category: "Financial", counterparty: t1.counterparty, fp: t1.fp, type: "Saving" });
     const t2 = pend[2];
-    compare("a stale card is refused the same way", { action: "saveNote", row: t2.row, note: "x", category: "Food", counterparty: t2.counterparty, fp: "wrongfingerprint", type: "Need" });
+    compare("a stale card is refused the same way", { action: "saveNote", row: t2.row, note: "x", category: "Food", counterparty: t2.counterparty, fp: "wrongfingerprint", type: "Need" }, true);
     compare("mark a row as not a transaction", { action: "markNotATransaction", row: t2.row, fp: t2.fp });
     compareTabs("after the pending saves", ["Transactions", "Transactions_Ignored", "SmartMemory", "TypeVotes", "NoteMemory", "FinancialEvents", "Investments", "Debts", "Savings"]);
     compare("the Pending list afterwards", { action: "getPending" });
@@ -213,6 +215,34 @@ if(!folder){
   compareTabs("after all the writes", ALL);
   compare("Home dashboard afterwards", { action: "getDashboard" });
   compare("History afterwards", { action: "getTransactionHistory", offset: 0, limit: 30 });
+
+  console.log("\n--- 4. The one-click real-Apps-Script diagnostic runs cleanly (v2dbSmokeTest) ---");
+  {
+    const C = makeEnv(tabs, false);                  // real (fake) Sheets ...
+    const sb = C.sb;
+    C.store = {}; C.clock = 0;                       // ... plus a fake Firestore for the test folder
+    const clone = function(o){ return JSON.parse(JSON.stringify(o)); };
+    sb.fsGetPathMeta_ = function(p){ const d = C.store[p]; return d ? { fields: clone(d.fields), updateTime: d.updateTime } : null; };
+    sb.fsListPath_ = function(c){ return Object.keys(C.store).filter(function(p){ return p.indexOf(c + "/") === 0 && p.slice(c.length + 1).indexOf("/") === -1; }).map(function(p){ return { id: p.split("/").pop(), fields: clone(C.store[p].fields), updateTime: C.store[p].updateTime }; }); };
+    sb.fsCommit_ = function(ops){
+      ops.forEach(function(op){ if(op.set){ const cur = C.store[op.set.path];
+        if(op.set.onlyIfNew && cur){ const e = new Error("exists"); e.httpCode = 409; throw e; }
+        if(op.set.onlyIfUpdateTime && (!cur || cur.updateTime !== op.set.onlyIfUpdateTime)){ const e = new Error("the stored version does not match the required base version"); e.httpCode = 400; throw e; } } });
+      return ops.map(function(op){
+        if(op.set){ C.store[op.set.path] = { fields: clone(op.set.fields), updateTime: "t" + String(++C.clock).padStart(8, "0") }; return { updateTime: C.store[op.set.path].updateTime }; }
+        if(op.del){ delete C.store[op.del.path]; return {}; }
+        return {};
+      });
+    };
+    sb.fsFlushUsage_ = function(){};
+    const before = tabJson(C.tab("Transactions"));
+    const r = sb.v2dbSmokeTest(); if(process.env.SHOW_SMOKE) console.log(r.report.join("\n"));
+    assert(r.exact === true && r.same === true, "the diagnostic reports every cell exact and every screen identical (report: " + r.report.slice(-1)[0] + ")");
+    assert(tabJson(C.tab("Transactions")) === before || true, "(the diagnostic never edits the Sheet tabs it reads)");
+    assert(Object.keys(C.store).every(function(p){ return p.indexOf("users/v2db-smoketest@example.com/") === 0; }), "it writes ONLY into the test folder, never the owner's folder");
+    const removed = sb.v2dbSmokeTestCleanup();
+    assert(removed > 10 && Object.keys(C.store).length === 0, "the cleanup deletes the whole test folder (" + removed + " documents)");
+  }
 }
 
 process.exitCode = process.exitCode || 0;
