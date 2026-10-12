@@ -146,6 +146,104 @@ function fsGetDocument_(collection, docId){
   return fsDecodeFields_(JSON.parse(r.text).fields || {});
 }
 
+// ---- Nested paths, lists and all-or-nothing batches (added 2026-10-12) ------
+// Used by splits.js. "path" looks like "users/a@b.com/friends/c@d.com" - every
+// piece is made URL-safe on its own, so the slashes stay as slashes.
+function fsPathUrl_(path){
+  return fsDocumentsUrl_() + "/" + String(path).split("/").map(encodeURIComponent).join("/");
+}
+
+function fsResourceName_(path){
+  return "projects/" + fsServiceAccount_().project_id + "/databases/(default)/documents/" + path;
+}
+
+// Reads one document by full path. Returns null if missing, otherwise
+// { fields: {...plain values...}, updateTime: "..." } (updateTime lets a later
+// write say "only if nobody changed it since").
+function fsGetPathMeta_(path){
+  var r = fsFetch_("get", fsPathUrl_(path), null);
+  FS_USAGE_.reads++;
+  if(r.code === 404) return null;
+  if(r.code !== 200) throw fsError_("read", r);
+  var body = JSON.parse(r.text);
+  return { fields: fsDecodeFields_(body.fields || {}), updateTime: body.updateTime || "" };
+}
+
+// Lists every document directly inside one collection path (pages of 300).
+// Returns [{ id, fields, updateTime }]. Capped so a runaway list can't eat the
+// day's free reads.
+function fsListPath_(collectionPath, maxDocs){
+  var limit = maxDocs || 2000, out = [], pageToken = "";
+  while(out.length < limit){
+    var url = fsPathUrl_(collectionPath) + "?pageSize=300" + (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
+    var r = fsFetch_("get", url, null);
+    if(r.code === 404) { FS_USAGE_.reads++; return out; }
+    if(r.code !== 200) { FS_USAGE_.reads++; throw fsError_("read", r); }
+    var body = JSON.parse(r.text);
+    var docs = body.documents || [];
+    FS_USAGE_.reads += Math.max(1, docs.length);
+    docs.forEach(function(d){
+      out.push({ id: String(d.name).split("/").pop(), fields: fsDecodeFields_(d.fields || {}), updateTime: d.updateTime || "" });
+    });
+    pageToken = body.nextPageToken || "";
+    if(!pageToken) break;
+  }
+  return out;
+}
+
+// Builds an error that remembers Google's HTTP code, so callers can tell
+// "already exists" (409) and "changed since you read it" (400) from a real outage.
+function fsError_(what, r){
+  var e = new Error("Firestore " + what + " failed (HTTP " + r.code + "): " + fsErrorText_(r.text));
+  e.httpCode = r.code;
+  return e;
+}
+
+// ALL-OR-NOTHING batch: either every write lands or none does. Each item is
+//   { set: {path, fields, onlyIfNew: bool, onlyIfUpdateTime: "..."} }       whole/partial document
+//   { merge: {path, fields, adds, onlyIfUpdateTime} }                       change only these fields (+ optional adds / unchanged-since check)
+//   { add: {path, field, amountInt} }                                       add to a whole-number field (safe against two writers)
+//   { del: {path} }                                                         delete a document
+// "set" with onlyIfNew fails the whole batch with httpCode 409 if it exists.
+function fsCommit_(ops){
+  var writes = [];
+  ops.forEach(function(op){
+    if(op.set){
+      var w = { update: { name: fsResourceName_(op.set.path), fields: fsEncodeFields_(op.set.fields) } };
+      if(op.set.onlyIfNew) w.currentDocument = { exists: false };
+      if(op.set.onlyIfUpdateTime) w.currentDocument = { updateTime: op.set.onlyIfUpdateTime };
+      writes.push(w);
+    } else if(op.merge){
+      // Change only the named fields; optionally also add to whole-number
+      // fields (op.merge.adds = [{field, amountInt}]) and/or require that
+      // nobody changed the document since we read it (onlyIfUpdateTime).
+      var mw = {
+        update: { name: fsResourceName_(op.merge.path), fields: fsEncodeFields_(op.merge.fields || {}) },
+        updateMask: { fieldPaths: Object.keys(op.merge.fields || {}) }
+      };
+      if(op.merge.adds && op.merge.adds.length){
+        mw.updateTransforms = op.merge.adds.map(function(a){
+          return { fieldPath: a.field, increment: { integerValue: String(a.amountInt) } };
+        });
+      }
+      if(op.merge.onlyIfUpdateTime) mw.currentDocument = { updateTime: op.merge.onlyIfUpdateTime };
+      writes.push(mw);
+    } else if(op.add){
+      writes.push({
+        update: { name: fsResourceName_(op.add.path), fields: {} },
+        updateMask: { fieldPaths: [] },
+        updateTransforms: [{ fieldPath: op.add.field, increment: { integerValue: String(op.add.amountInt) } }]
+      });
+    } else if(op.del){
+      writes.push({ "delete": fsResourceName_(op.del.path) });
+    }
+  });
+  var r = fsFetch_("post", fsDocumentsUrl_() + ":commit", { writes: writes });
+  FS_USAGE_.writes += writes.length;
+  if(r.code !== 200) throw fsError_("write", r);
+  return true;
+}
+
 // ---- Usage meter ----------------------------------------------------------
 function fsTodayKey_(){
   return "FS_USAGE_" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd");

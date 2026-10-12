@@ -1,0 +1,40 @@
+rules_version = '2';
+
+// Firestore security rules for fin-app-76c40.
+//
+// PLAIN ENGLISH: the app's phone can READ only what belongs to the signed-in
+// person, and can never WRITE anything directly. All writing is done by the
+// backend "robot" (service account), which is not affected by these rules.
+//
+// HOW TO PUBLISH (rules are not deployed by git): Firebase console ->
+// Firestore Database -> Rules -> paste this whole file -> Publish.
+// Last published version must match this file. Changed 2026-10-12: added the
+// users/{email} block for splits; the views block is unchanged.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The ready-made Home screen copy: owner only (unchanged since 2026-10-11).
+    match /views/{doc} {
+      allow read: if request.auth != null
+                  && request.auth.token.email == 'ronitnadar9@gmail.com'
+                  && request.auth.token.email_verified == true;
+      allow write: if false;
+    }
+
+    // Friends, balances and split history. Everything is stored under the
+    // person's own email, so "your email == the folder name" is the whole rule.
+    // This is what keeps Vaidehi from ever reading yours, or you hers.
+    match /users/{email}/{document=**} {
+      allow read: if request.auth != null
+                  && request.auth.token.email_verified == true
+                  && request.auth.token.email.lower() == email;
+      allow write: if false;
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

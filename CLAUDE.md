@@ -2745,6 +2745,16 @@ same rule the Category/Type restructure plan above follows): nothing
 here starts until the user picks a phase (or changes the order) in a
 future session.
 
+## Going public / splits with friends (started 2026-10-12)
+Plan and decisions are in memory (`project_going_public_plan`) and [docs/features/splits.md](docs/features/splits.md).
+Short version: Vaidehi first (SMS allowed), then a few friends, then maybe public. Blaze plan approved with a
+Rs 300/month ceiling (not yet needed). **Splits slice 1 built 2026-10-12, NOT deployed:** `backend/splits.js`
+(friends, splits, payments, undo; Firestore-only, one running balance per friend), new batch/list helpers in
+`backend/firestore.js`, six routes in `PWA.js`, `firestore.rules` (must be pasted into the Firebase console by hand
+before any friend can read their side), `backend/tests/splits.test.js` (122 checks). Screens (Pending "Split"
+button, Debts "people" list) and "my spend counts only my share" are NOT built yet. Needs: change-reviewer, then
+the user's go-ahead for `clasp push`/`deploy`.
+
 ## Pre-multi-user cleanup (2026-09-05): done
 
 Before starting the multi-user plan above, the user asked for the

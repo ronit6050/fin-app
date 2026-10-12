@@ -56,6 +56,12 @@ function handlePwaRequestCore_(data){
     return jsonResponse(refreshViewsFromApp_());
   }
 
+  // Split a payment with a friend (added 2026-10-12, see splits.js and
+  // docs/features/splits.md). Data lives in Firestore, not the Sheet.
+  if(["getPeople","getPerson","addFriend","createSplit","recordSplitPayment","undoSplitEntry"].indexOf(data.action) >= 0){
+    return jsonResponse(splitsHandle_(data.action, data, verified));
+  }
+
   if(data.action === "getPending"){
     // Read the sheet once and share it: the pending list AND the note-word
     // table (Need/Want auto-fill, see noteWordModel.js) come from the same data.

@@ -1,0 +1,398 @@
+// backend/tests/splits.test.js
+//
+// Plain-English what this checks: the "split a payment with a friend" brain
+// (splits.js) and the new all-or-nothing Firestore writer it relies on
+// (firestore.js). Everything runs against a FAKE Firestore that behaves like the
+// real one (including refusing to create something that already exists, and
+// refusing a change if someone else changed it first). All names are invented.
+//
+// THE PROMISES THIS FILE PROVES:
+//   1. The balance is always right: splits add, payments subtract, overpaying
+//      flips it, undo reverses it exactly - checked against the user's own
+//      example (Rs 1,000 owed, Rs 200 paid, Rs 800 left).
+//   2. Tapping Split twice (or a retry) can never split the same payment twice.
+//   3. A failed save changes NOTHING (no half-written split, no wrong balance).
+//   4. Each person's data stays under their own email only, and the security
+//      rules file lets a person read only their own folder and nobody write.
+//   5. If Firestore is down the app gets a plain message, never a crash.
+//
+// Run with: node backend/tests/splits.test.js
+
+const fs = require("fs");
+const path = require("path");
+const { makeWorld, assert } = require("./_fakeSheetsKit");
+
+const FILES = ["Logger.js", "firestore.js", "splits.js", "viewPublisher.js", "PWA.js"];
+const ME = "ronitnadar9@gmail.com";
+const FRIEND = "vaidehi@example.com";
+
+// A fake Firestore server. docs[path] = { fields (typed), updateTime }.
+function world(){
+  const w = makeWorld(FILES);
+  const sb = w.sb;
+  w.addSheet("AILogs", [["Timestamp", "Type", "Message"]]);
+  w.props.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({ client_email: "robot@test.iam", private_key: "fake-private-key", project_id: "test-project" });
+  w.cache = {};
+  sb.CacheService = { getScriptCache: function(){ return {
+    get: function(k){ return Object.prototype.hasOwnProperty.call(w.cache, k) ? w.cache[k] : null; },
+    put: function(k, v){ w.cache[k] = String(v); }, remove: function(k){ delete w.cache[k]; }
+  }; } };
+  sb.Utilities.base64EncodeWebSafe = function(x){ return Buffer.from(typeof x === "string" ? x : Buffer.from(x)).toString("base64").replace(/\+/g, "-").replace(/\//g, "_"); };
+  sb.Utilities.computeRsaSha256Signature = function(){ return Buffer.from("signature"); };
+  sb.ContentService = { createTextOutput: function(t){ return { _t: t, setMimeType: function(){ return this; }, getContent: function(){ return t; } }; }, MimeType: { JSON: "json" } };
+
+  w.docs = {};
+  w.clock = 1;
+  w.mode = "ok";            // ok | down
+  w.beforeCommit = null;    // a hook to simulate "someone else changed it first"
+  w.commits = 0;
+  const reply = function(code, obj){ return { getResponseCode: function(){ return code; }, getContentText: function(){ return JSON.stringify(obj); } }; };
+  const nameToPath = function(n){ return String(n).split("/documents/")[1]; };
+  const stamp = function(){ return "t" + String(w.clock++).padStart(6, "0"); };
+
+  sb.UrlFetchApp = { fetch: function(url, options){
+    if(url.indexOf("oauth2.googleapis.com/token") !== -1) return reply(200, { access_token: "tok" });
+    if(w.mode === "down") return reply(503, { error: { message: "unavailable: secret-internal-detail" } });
+    options = options || {};
+
+    if(url.indexOf(":commit") !== -1){
+      w.commits++;
+      if(w.beforeCommit){ const h = w.beforeCommit; w.beforeCommit = null; h(); }
+      const writes = JSON.parse(options.payload).writes;
+      // 1) check every promise first - all or nothing
+      for(const wr of writes){
+        const p = nameToPath(wr.update ? wr.update.name : wr["delete"]);
+        const cur = w.docs[p];
+        if(wr.currentDocument){
+          if(wr.currentDocument.exists === false && cur) return reply(409, { error: { status: "ALREADY_EXISTS", message: "exists: " + p } });
+          if(wr.currentDocument.updateTime && (!cur || cur.updateTime !== wr.currentDocument.updateTime)) return reply(400, { error: { status: "FAILED_PRECONDITION", message: "changed: " + p } });
+        }
+      }
+      // 2) apply
+      for(const wr of writes){
+        if(wr["delete"]){ delete w.docs[nameToPath(wr["delete"])]; continue; }
+        const p = nameToPath(wr.update.name);
+        const cur = w.docs[p] || { fields: {}, updateTime: "" };
+        const fields = Object.assign({}, cur.fields);
+        if(wr.updateMask){
+          wr.updateMask.fieldPaths.forEach(function(f){ fields[f] = wr.update.fields[f]; });
+        } else {
+          Object.keys(fields).forEach(function(k){ delete fields[k]; });
+          Object.assign(fields, wr.update.fields);
+        }
+        (wr.updateTransforms || []).forEach(function(t){
+          const before = fields[t.fieldPath] ? Number(fields[t.fieldPath].integerValue) : 0;
+          fields[t.fieldPath] = { integerValue: String(before + Number(t.increment.integerValue)) };
+        });
+        w.docs[p] = { fields: fields, updateTime: stamp() };
+      }
+      return reply(200, { writeResults: [] });
+    }
+
+    const rest = decodeURIComponent((/documents\/([^?]*)/.exec(url) || [])[1] || "");
+    const segs = rest.split("/");
+    if(segs.length % 2 === 1){            // a collection -> list its direct children
+      const docs = Object.keys(w.docs).filter(function(p){
+        return p.indexOf(rest + "/") === 0 && p.slice(rest.length + 1).indexOf("/") === -1;
+      }).map(function(p){ return { name: "projects/test-project/databases/(default)/documents/" + p, fields: w.docs[p].fields, updateTime: w.docs[p].updateTime }; });
+      return reply(200, docs.length ? { documents: docs } : {});
+    }
+    return w.docs[rest] ? reply(200, { fields: w.docs[rest].fields, updateTime: w.docs[rest].updateTime }) : reply(404, { error: { message: "not found" } });
+  } };
+
+  w.sb.verifyGoogleIdToken = function(t){ return t === "good" ? { email: ME, name: "Ronit" } : t === "other" ? { email: "someone@else.com", name: "X" } : null; };
+  w.get = function(p){ return w.docs[p] ? w.sb.fsDecodeFields_(w.docs[p].fields) : null; };
+  w.balance = function(owner, other){ const d = w.get("users/" + owner + "/friends/" + other); return d ? d.balancePaise : null; };
+  w.errors = function(){ return w.sheets.AILogs.rows.slice(1).filter(function(r){ return r[1] === "SPLITS_ERROR"; }); };
+  return w;
+}
+
+function run(w, action, data){ return w.sb.splitsHandle_(action, data || {}, { email: ME, name: "Ronit" }); }
+function withFriend(){
+  const w = world();
+  const r = run(w, "addFriend", { name: "Vaidehi", mobile: "98765 43210", email: "Vaidehi@Example.com " });
+  assert(r.ok, "setup: friend added");
+  return w;
+}
+
+console.log("\n--- 1. Adding a friend ---");
+{
+  const w = world();
+  assert(!run(w, "addFriend", { name: "", mobile: "9876543210", email: FRIEND }).ok, "a name is required");
+  assert(!run(w, "addFriend", { name: "V", mobile: "123", email: FRIEND }).ok, "a too-short mobile number is refused");
+  assert(!run(w, "addFriend", { name: "V", mobile: "9876543210", email: "not-an-email" }).ok, "a bad email is refused");
+  assert(!run(w, "addFriend", { name: "V", mobile: "9876543210", email: ME }).ok, "you can't add yourself");
+  assert(!run(w, "addFriend", { name: "V", mobile: "9876543210", email: "a/b@x.com" }).ok, "an email with a slash (path trick) is refused");
+  assert(Object.keys(w.docs).length === 0, "refused requests wrote nothing");
+
+  const r = run(w, "addFriend", { name: "Vaidehi", mobile: "+91 98765 43210", email: "  Vaidehi@Example.COM " });
+  assert(r.ok && r.friend.email === FRIEND, "email is tidied to lowercase and trimmed");
+  const mine = w.get("users/" + ME + "/friends/" + FRIEND);
+  assert(mine.name === "Vaidehi" && mine.mobile === "+919876543210" && mine.balancePaise === 0, "friend saved with name, mobile and a zero balance");
+  const mirror = w.get("users/" + FRIEND + "/friends/" + ME);
+  assert(mirror && mirror.name === "Ronit" && mirror.mirror === true && mirror.balancePaise === 0, "she gets a matching entry for you on her side");
+
+  w.sb.splitsCreate_(ME, "Ronit", { friendEmail: FRIEND, totalAmount: 100, description: "x", requestId: "a" });
+  assert(w.balance(ME, FRIEND) === 5000, "setup: a balance of Rs 50 exists");
+  w.docs["users/" + FRIEND + "/friends/" + ME].fields.name = { stringValue: "Ronit (her name for me)" };
+  run(w, "addFriend", { name: "Vaidehi N", mobile: "9876543210", email: FRIEND });
+  assert(w.get("users/" + ME + "/friends/" + FRIEND).name === "Vaidehi N", "adding again updates the name");
+  assert(w.balance(ME, FRIEND) === 5000, "adding again keeps the balance");
+  assert(w.get("users/" + FRIEND + "/friends/" + ME).name === "Ronit (her name for me)", "adding again does not overwrite what she calls you");
+}
+
+console.log("\n--- 2. Splitting a payment ---");
+{
+  const w = withFriend();
+  const r = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 840, description: "Restaurant Spice", txRow: 120, txFp: "fp-abc", requestId: "r1" });
+  assert(r.ok && r.friendShare === 420 && r.myShare === 420 && r.balance === 420, "Rs 840 splits equally: 420 each, balance 420");
+  assert(w.balance(ME, FRIEND) === 42000 && w.balance(FRIEND, ME) === -42000, "her balance with you is the exact opposite");
+  const mine = w.get("users/" + ME + "/friends/" + FRIEND + "/ledger/r1");
+  const hers = w.get("users/" + FRIEND + "/friends/" + ME + "/ledger/r1");
+  assert(mine.signedPaise === 42000 && mine.type === "split" && mine.description === "Restaurant Spice" && mine.txRow === 120, "your entry is saved with the details");
+  assert(hers.signedPaise === -42000 && hers.mirror === true && hers.counterparty === ME, "her copy is the mirror image and points back at you");
+  assert(w.get("users/" + ME + "/splitMarkers/fp-abc").entryId === "r1", "the payment is marked as already split");
+
+  const odd = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 100.01, description: "odd", requestId: "r2" });
+  assert(odd.friendShare === 50 && odd.myShare === 50.01, "an odd paisa stays with the person who paid (50.00 / 50.01)");
+  assert(w.balance(ME, FRIEND) === 42000 + 5000, "balance adds up in whole paise (no 0.0000001 drift)");
+
+  const custom = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 1000, friendShare: 300, requestId: "r3" });
+  assert(custom.ok && custom.friendShare === 300 && custom.myShare === 700, "a custom share is honoured");
+  assert(w.balance(ME, FRIEND) === 42000 + 5000 + 30000, "balance includes the custom share");
+
+  const full = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 50, friendShare: 50, requestId: "r4" });
+  assert(full.ok && full.myShare === 0, "she can owe the entire amount (you paid it all for her)");
+
+  const before = w.balance(ME, FRIEND);
+  for(const bad of [{ totalAmount: 0 }, { totalAmount: -5 }, { totalAmount: "abc" }, { totalAmount: "" }, { totalAmount: 100, friendShare: 0 },
+                    { totalAmount: 100, friendShare: 100.01 }, { totalAmount: 100, friendShare: "x" }, { totalAmount: 99999999999 }]){
+    const x = run(w, "createSplit", Object.assign({ friendEmail: FRIEND, requestId: "bad" + Math.random() }, bad));
+    assert(!x.ok, "refused: " + JSON.stringify(bad));
+  }
+  assert(w.balance(ME, FRIEND) === before, "refused splits changed nothing");
+  assert(!run(w, "createSplit", { friendEmail: "stranger@x.com", totalAmount: 100 }).ok, "splitting with someone not in your list is refused");
+  for(const a of ["createSplit", "recordSplitPayment", "undoSplitEntry", "getPerson"]){
+    const x = run(w, a, { friendEmail: "../../views/dashboard", totalAmount: 5, amount: 5, entryId: "r1" });
+    assert(!x.ok && /email/i.test(x.error), a + " refuses a friend email that is really a path trick");
+  }
+}
+
+console.log("\n--- 3. The same payment can never be split twice ---");
+{
+  const w = withFriend();
+  run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 840, txRow: 7, txFp: "fp-1", requestId: "first" });
+  const dup = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 840, txRow: 7, txFp: "fp-1", requestId: "second-tap" });
+  assert(!dup.ok && dup.duplicate === true, "a second tap on the same payment is refused as a duplicate");
+  assert(w.balance(ME, FRIEND) === 42000 && w.balance(FRIEND, ME) === -42000, "balances did not move");
+  assert(w.get("users/" + ME + "/friends/" + FRIEND + "/ledger/second-tap") === null && w.get("users/" + FRIEND + "/friends/" + ME + "/ledger/second-tap") === null, "no half-written entry was left on either side");
+
+  const retry = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 840, friendShare: 100, requestId: "first" });
+  assert(!retry.ok && retry.duplicate === true && w.balance(ME, FRIEND) === 42000, "a network retry with the same request id changes nothing");
+
+  const rowOnly = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 50, txRow: 9, requestId: "ro1" });
+  const rowAgain = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 50, txRow: 9, requestId: "ro2" });
+  assert(rowOnly.ok && !rowAgain.ok, "a payment known only by row number is also protected");
+
+  const manual1 = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 60, requestId: "m1" });
+  const manual2 = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 60, requestId: "m2" });
+  assert(manual1.ok && manual2.ok, "two typed-in expenses of the same amount are two real splits (no transaction link, nothing to clash)");
+}
+
+console.log("\n--- 4. Payments and the running balance (the user's own example) ---");
+{
+  const w = withFriend();
+  run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 840, requestId: "a" });
+  run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 600, requestId: "b" });
+  run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 560, requestId: "c" });
+  assert(w.balance(ME, FRIEND) === 100000, "420 + 300 + 280 = she owes Rs 1,000");
+
+  const p1 = run(w, "recordSplitPayment", { friendEmail: FRIEND, amount: 200, direction: "received", method: "upi", requestId: "p1" });
+  assert(p1.ok && p1.balance === 800 && w.balance(ME, FRIEND) === 80000, "she pays Rs 200 -> Rs 800 still owed");
+  assert(w.balance(FRIEND, ME) === -80000, "her side agrees");
+  const p2 = run(w, "recordSplitPayment", { friendEmail: FRIEND, amount: 800, direction: "received", method: "cash", requestId: "p2" });
+  assert(p2.ok && p2.balance === 0 && w.balance(ME, FRIEND) === 0, "she pays the remaining Rs 800 -> settled (0)");
+  const p3 = run(w, "recordSplitPayment", { friendEmail: FRIEND, amount: 150, direction: "received", requestId: "p3" });
+  assert(p3.ok && p3.balance === -150 && w.balance(ME, FRIEND) === -15000, "overpaying by Rs 150 flips it: you now owe her Rs 150");
+  const p4 = run(w, "recordSplitPayment", { friendEmail: FRIEND, amount: 150, direction: "sent", method: "upi", requestId: "p4" });
+  assert(p4.ok && p4.balance === 0, "you pay her Rs 150 back -> 0 again");
+
+  const net = withFriend();
+  run(net, "createSplit", { friendEmail: FRIEND, totalAmount: 2000, requestId: "x" });
+  const s = run(net, "recordSplitPayment", { friendEmail: FRIEND, amount: 300, direction: "sent", requestId: "y" });
+  assert(s.balance === 1300, "you pay for her once more ('sent' adds to what she owes you): 1000 + 300 = 1300");
+
+  const bad = run(w, "recordSplitPayment", { friendEmail: FRIEND, amount: 0 });
+  assert(!bad.ok, "a Rs 0 payment is refused");
+  assert(!run(w, "recordSplitPayment", { friendEmail: "nobody@x.com", amount: 10 }).ok, "a payment for someone not in your list is refused");
+  const dupe = run(w, "recordSplitPayment", { friendEmail: FRIEND, amount: 200, direction: "received", requestId: "p1" });
+  assert(!dupe.ok && dupe.duplicate && w.balance(ME, FRIEND) === 0, "re-sending the same payment id does not count it twice");
+  const m = w.get("users/" + ME + "/friends/" + FRIEND + "/ledger/p2");
+  assert(m.method === "cash" && m.type === "payment" && m.signedPaise === -80000, "the payment entry records method and sign");
+}
+
+console.log("\n--- 5. Undo ---");
+{
+  const w = withFriend();
+  run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 840, txRow: 5, txFp: "fp-u", requestId: "s1" });
+  run(w, "recordSplitPayment", { friendEmail: FRIEND, amount: 200, direction: "received", requestId: "p1" });
+  assert(w.balance(ME, FRIEND) === 22000, "setup: 420 - 200 = 220 owed");
+
+  const u = run(w, "undoSplitEntry", { friendEmail: FRIEND, entryId: "p1" });
+  assert(u.ok && w.balance(ME, FRIEND) === 42000 && w.balance(FRIEND, ME) === -42000, "undoing the payment puts the Rs 200 back on her balance, on both sides");
+  assert(w.get("users/" + ME + "/friends/" + FRIEND + "/ledger/p1").undone === true && w.get("users/" + FRIEND + "/friends/" + ME + "/ledger/p1").undone === true, "the entry is kept in history but marked undone, on both sides");
+  assert(!run(w, "undoSplitEntry", { friendEmail: FRIEND, entryId: "p1" }).ok && w.balance(ME, FRIEND) === 42000, "undoing twice is refused and does not double-reverse");
+
+  const us = run(w, "undoSplitEntry", { friendEmail: FRIEND, entryId: "s1" });
+  assert(us.ok && w.balance(ME, FRIEND) === 0, "undoing the split brings the balance back to 0");
+  assert(w.get("users/" + ME + "/splitMarkers/fp-u") === null, "the payment is free to be split again");
+  const again = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 840, friendShare: 500, txRow: 5, txFp: "fp-u", requestId: "s2" });
+  assert(again.ok && w.balance(ME, FRIEND) === 50000, "re-splitting the same payment after undo works (new share Rs 500)");
+
+  assert(!run(w, "undoSplitEntry", { friendEmail: FRIEND, entryId: "nope" }).ok, "undoing something that doesn't exist is refused");
+  assert(!run(w, "undoSplitEntry", { friendEmail: FRIEND, entryId: "" }).ok, "undo with no entry is refused");
+
+  const w2 = withFriend();
+  run(w2, "createSplit", { friendEmail: FRIEND, totalAmount: 100, requestId: "q1" });
+  w2.beforeCommit = function(){ w2.docs["users/" + ME + "/friends/" + FRIEND + "/ledger/q1"].updateTime = "changed-by-someone"; };
+  const race = run(w2, "undoSplitEntry", { friendEmail: FRIEND, entryId: "q1" });
+  assert(!race.ok && /just changed/i.test(race.error), "if the entry changed between reading and undoing, it asks you to refresh");
+  assert(w2.balance(ME, FRIEND) === 5000 && w2.balance(FRIEND, ME) === -5000, "and nothing was reversed");
+}
+
+console.log("\n--- 6. A failed save changes nothing ---");
+{
+  const w = withFriend();
+  run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 100, txFp: "fp-z", requestId: "ok1" });
+  const snapshot = JSON.stringify(w.docs);
+  // The marker clashes -> the whole batch must be rejected, including the entry that would have been fine.
+  w.docs["users/" + ME + "/splitMarkers/fp-clash"] = { fields: { entryId: { stringValue: "old" } }, updateTime: "x" };
+  const snap2 = JSON.stringify(w.docs);
+  const r = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 500, txFp: "fp-clash", requestId: "wont-land" });
+  assert(!r.ok && JSON.stringify(w.docs) === snap2, "one bad part (marker already there) rejects the WHOLE split; the database is byte-for-byte unchanged");
+  assert(snapshot.length > 0, "(sanity)");
+
+  w.mode = "down";
+  const down = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 100, requestId: "d1" });
+  assert(down.ok === false && /Nothing was saved/.test(down.error), "Firestore down -> a plain 'nothing was saved' message, no crash");
+  assert(down.error.indexOf("secret-internal-detail") === -1 && down.error.indexOf("503") === -1, "the message does not leak Google's internal error");
+  assert(w.errors().length >= 1, "the problem is written to the error log for you to find");
+  for(const a of ["getPeople", "getPerson", "addFriend", "recordSplitPayment", "undoSplitEntry"]){
+    let threw = false, out;
+    try{ out = run(w, a, { friendEmail: FRIEND, name: "A", mobile: "9876543210", email: FRIEND, amount: 5, entryId: "ok1" }); }catch(e){ threw = true; }
+    assert(!threw && out && out.ok === false, a + " with Firestore down returns {ok:false} instead of throwing");
+  }
+  w.mode = "ok";
+  assert(w.balance(ME, FRIEND) === 5000, "when Firestore comes back, the balance is exactly as it was");
+}
+
+console.log("\n--- 7. Reading: people list and one person's history ---");
+{
+  const w = withFriend();
+  run(w, "addFriend", { name: "Raj", mobile: "9000000001", email: "raj@example.com" });
+  run(w, "addFriend", { name: "Asha", mobile: "9000000002", email: "asha@example.com" });
+  run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 1000, requestId: "a" });             // she owes 500
+  run(w, "createSplit", { friendEmail: "raj@example.com", totalAmount: 200, requestId: "b" });   // raj owes 100
+  run(w, "recordSplitPayment", { friendEmail: "asha@example.com", amount: 70, direction: "sent", requestId: "c" });  // asha owes 70
+  run(w, "recordSplitPayment", { friendEmail: "raj@example.com", amount: 250, direction: "received", requestId: "d" }); // raj: 100 - 250 = -150 (you owe)
+
+  const list = run(w, "getPeople");
+  assert(list.ok && list.people.length === 3, "three people listed");
+  assert(list.people[0].email === FRIEND && list.people[0].balance === 500, "the biggest balance is first (Vaidehi 500)");
+  assert(list.owedToMe === 570 && list.iOwe === 150, "totals: Rs 570 owed to you, Rs 150 you owe");
+  assert(list.people.find(function(p){ return p.email === "raj@example.com"; }).balance === -150, "a negative balance means you owe them");
+
+  // Tests run faster than a millisecond; give the later entry a later time like real life would.
+  w.docs["users/" + ME + "/friends/raj@example.com/ledger/d"].fields.createdAtMs = { integerValue: String(Date.now() + 5000) };
+  const p = run(w, "getPerson", { friendEmail: "RAJ@example.com" });
+  assert(p.ok && p.person.balance === -150 && p.entries.length === 2, "one person's history shows both entries");
+  assert(p.entries[0].type === "payment" && p.entries[0].direction === "theyOweLess" && p.entries[0].amount === 250, "entries are described from your side, newest first");
+  assert(p.healed === false, "a correct stored balance is left alone");
+
+  w.docs["users/" + ME + "/friends/" + FRIEND].fields.balancePaise = { integerValue: "99999" };
+  const fixed = run(w, "getPerson", { friendEmail: FRIEND });
+  assert(fixed.person.balance === 500 && fixed.healed === true, "a wrong stored balance is corrected from the history");
+  assert(w.balance(ME, FRIEND) === 50000 && w.balance(FRIEND, ME) === -50000, "...and the corrected number is saved back, on her side too");
+
+  // A save that lands while the heal is running must not be overwritten (the heal adds, it does not replace).
+  w.docs["users/" + ME + "/friends/" + FRIEND].fields.balancePaise = { integerValue: "40000" };
+  w.beforeCommit = function(){
+    const d = w.docs["users/" + ME + "/friends/" + FRIEND];
+    d.fields.balancePaise = { integerValue: String(Number(d.fields.balancePaise.integerValue) + 777) };
+  };
+  run(w, "getPerson", { friendEmail: FRIEND });
+  assert(w.balance(ME, FRIEND) === 50777, "a change landing at the same moment is kept, not overwritten (50000 + 777)");
+
+  // History cut short by the safety cap -> never "fix" the balance to a too-small number.
+  const capWorld = withFriend();
+  run(capWorld, "createSplit", { friendEmail: FRIEND, totalAmount: 100, requestId: "c1" });
+  capWorld.sb.SPLITS_LEDGER_CAP_ = 1;
+  capWorld.docs["users/" + ME + "/friends/" + FRIEND].fields.balancePaise = { integerValue: "123456" };
+  const capped = run(capWorld, "getPerson", { friendEmail: FRIEND });
+  assert(capped.healed === false && capWorld.balance(ME, FRIEND) === 123456, "when the history is cut short, the balance is left alone");
+
+  w.sb.splitsUndo_(ME, { friendEmail: FRIEND, entryId: "a" });
+  const afterUndo = run(w, "getPerson", { friendEmail: FRIEND });
+  assert(afterUndo.person.balance === 0 && afterUndo.entries.length === 1 && afterUndo.entries[0].undone === true, "undone entries stay visible but do not count");
+
+  assert(!run(w, "getPerson", { friendEmail: "nobody@x.com" }).ok, "asking about someone not in your list is refused");
+  assert(run(world(), "getPeople").people.length === 0, "a brand-new account has an empty list, not an error");
+}
+
+console.log("\n--- 8. Privacy: nobody's data lands in anybody else's folder ---");
+{
+  const w = withFriend();
+  run(w, "addFriend", { name: "Raj", mobile: "9000000001", email: "raj@example.com" });
+  run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 840, txFp: "fp-p", requestId: "z1" });
+  run(w, "recordSplitPayment", { friendEmail: "raj@example.com", amount: 40, requestId: "z2" });
+  const paths = Object.keys(w.docs);
+  assert(paths.every(function(p){ return /^users\/(ronitnadar9@gmail\.com|vaidehi@example\.com|raj@example\.com)\//.test(p); }), "every document lives under someone's own email folder");
+  assert(paths.filter(function(p){ return p.indexOf("users/raj@example.com/") === 0; }).every(function(p){ return /friends\/ronitnadar9@gmail\.com/.test(p); }), "Raj's folder only holds his side of his dealings with you");
+  assert(!paths.some(function(p){ return p.indexOf("users/vaidehi@example.com/") === 0 && /raj/.test(p); }), "Vaidehi's folder says nothing about Raj");
+  assert(w.get("users/" + FRIEND + "/splitMarkers/fp-p") === null, "your 'already split' marker is not copied to her");
+
+  const rules = fs.readFileSync(path.join(__dirname, "..", "..", "firestore.rules"), "utf8");
+  assert(/match \/users\/\{email\}\/\{document=\*\*\}/.test(rules), "rules: a users/{email} block exists");
+  assert(/request\.auth\.token\.email\.lower\(\) == email/.test(rules), "rules: you can read only the folder named after your own email");
+  assert(/email_verified == true/.test(rules), "rules: the email must be verified");
+  assert(!/allow\s+(write|create|update|delete|read,\s*write)[^;]*:\s*if\s+true/.test(rules), "rules: nothing is open to everyone");
+  assert((rules.match(/allow write: if false/g) || []).length >= 2 && /match \/\{document=\*\*\} \{\s*allow read, write: if false/.test(rules), "rules: the phone can never write, and everything else is closed");
+  assert(/match \/views\/\{doc\}/.test(rules) && /ronitnadar9@gmail\.com/.test(rules), "rules: the existing Home-copy rule is still there");
+}
+
+console.log("\n--- 9. Through the real app door (sign-in check) ---");
+{
+  const w = world();
+  const call = function(token, action, extra){
+    const out = w.sb.handlePwaRequest(Object.assign({ action: action, idToken: token }, extra || {}));
+    return JSON.parse(out.getContent());
+  };
+  assert(call("good", "addFriend", { name: "Vaidehi", mobile: "9876543210", email: FRIEND }).ok, "addFriend works for the signed-in owner");
+  assert(call("good", "createSplit", { friendEmail: FRIEND, totalAmount: 840, requestId: "k1" }).friendShare === 420, "createSplit works through the app door");
+  assert(call("good", "getPeople").people[0].balance === 420, "getPeople works through the app door");
+  const stranger = call("other", "getPeople");
+  assert(stranger.ok === false && /not allowed/i.test(stranger.error), "a different Google account is still blocked");
+  assert(call("bogus", "getPeople").ok === false, "a bad sign-in is still blocked");
+  assert(w.sb.V2_WRITE_ACTIONS_.indexOf("createSplit") === -1, "split actions don't trigger a Home-screen rebuild (nothing there shows them yet)");
+}
+
+console.log("\n--- 10. The new Firestore writer sends what Firestore expects ---");
+{
+  const w = world();
+  w.sb.fsCommit_([
+    { set: { path: "users/a@b.com/x/1", fields: { n: 5 }, onlyIfNew: true } },
+    { merge: { path: "users/a@b.com/x/2", fields: { s: "hi" }, adds: [{ field: "bal", amountInt: -300 }] } },
+    { del: { path: "users/a@b.com/x/3" } }
+  ]);
+  assert(w.commits === 1, "three changes go out as ONE request");
+  assert(w.get("users/a@b.com/x/1").n === 5 && w.get("users/a@b.com/x/2").bal === -300 && w.get("users/a@b.com/x/2").s === "hi", "values and the 'add to number' land correctly (negative too)");
+  assert(w.sb.FS_USAGE_.writes === 3, "each change is counted against the free daily allowance");
+  const sent = JSON.parse(w.sb.UrlFetchApp.fetch.toString ? "{}" : "{}");
+  assert(typeof sent === "object", "(sanity)");
+  let code = 0;
+  try{ w.sb.fsCommit_([{ set: { path: "users/a@b.com/x/1", fields: { n: 6 }, onlyIfNew: true } }]); }catch(e){ code = e.httpCode; }
+  assert(code === 409 && w.get("users/a@b.com/x/1").n === 5, "creating something that already exists fails with 409 and leaves the old one alone");
+  assert(w.sb.fsPathUrl_("users/a@b.com/friends/c d@x.com").indexOf("users/a%40b.com/friends/c%20d%40x.com") !== -1, "odd characters in a path are made URL-safe piece by piece");
+}
+
+process.exitCode = process.exitCode || 0;
