@@ -59,3 +59,14 @@ Fixed: text-to-number/date conversion (above); mixed-type sorting; a real HTTP 4
 ({ok:false}) answer now saves nothing; pages are sized by bytes not characters; a missing tab is remembered per request; two tab names that would
 collapse to one stored name are refused. Still true: no lock or retry yet (a conflict is reported, never overwritten); tabs that were only READ are not
 version-checked; the Telegram-era `Analysis.js` chart code calls `deleteSheet`, which is not supported (dormant).
+
+## LIVE RESULT in real Apps Script (v2dbSmokeTest, 2026-10-13 00:05, owner ran it)
+- **Correctness: perfect.** All 14 tabs copied and re-opened cell-exact (including Dates to the millisecond); the Home dashboard, History, Debts, Investments and
+  Pending screens gave IDENTICAL answers computed from the Sheet and from the Firestore-backed copy.
+- **Speed: slower than the Sheet, not faster, as built.** Reading the whole Transactions tab: Sheet 406 ms vs copy 860 ms. Home dashboard: Sheet 5.2 s vs copy
+  9.1 s. History(50): 4.6 s vs 6.7 s. Pending: 2.2 s vs 4.9 s. One save (read + change + write): 3.4 s. Cause: each tab is its own Firestore request (about
+  0.4 to 0.9 s each) and the dashboard opens about 10 tabs one after another.
+- **Planned fix before flipping anyone (NEXT):** open all the tabs a request needs in ONE `documents:batchGet` call (prefetch), keep opened tabs for the whole
+  request, and avoid re-reading; expected to turn about 4 to 8 requests into 1. Re-run `v2dbSmokeTest` after that and flip only if it is no slower than the Sheet.
+- The test copy lives at `users/v2db-smoketest@example.com/` (run `v2dbSmokeTestCleanup()` in the editor to delete it).
+- Nothing is flipped; the owner's app still runs entirely on the Google Sheet.

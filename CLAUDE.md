@@ -2771,6 +2771,14 @@ the record and the app still reads the Sheet; nothing reads the Firestore copy y
 old-vs-new comparison and instant rollback), phase 4 (SMS writes straight to Firestore, per-user ingest keys), phase 5 (Sheet becomes an archive),
 phase 6 (move code to Cloud Functions; needs the owner to sign in the Firebase CLI). Order for people: owner first, then Vaidehi's transactions.
 
+**v2 step 3 status (2026-10-13, end of session):** approach changed (agreed with the owner, "do it properly"): instead of rewriting 8,700 lines, `backend/v2db.js`
+is a Firestore-backed virtual spreadsheet (docs/features/v2db.md); every backend file asks `dbSs_()` for the spreadsheet (real Sheet today). Live but INACTIVE
+(backend `@336`). Proven: 107 offline parity checks on the owner's real data AND a live run in real Apps Script (all cells exact, all 5 screens identical).
+Speed is currently slower than the Sheet (dashboard 9 s vs 5 s) because each tab is a separate Firestore request: NEXT = batchGet prefetch, then re-measure with
+`v2dbSmokeTest()` (owner runs it in the editor; results land in AILogs type V2DB_SMOKETEST). Then: routing per person (flag) + lock/retry, per-person settings
+(`_Props`), import the owner's tabs, flip with instant switch back, timer/SMS landing per person, Sheet backup export, "full app" frontend mode for Vaidehi.
+The Phase-2 mirror `v2Sync.js` is OFF (148 s runs); the 2026-10-12 per-document copy is a frozen snapshot, nothing reads it.
+
 ## Pre-multi-user cleanup (2026-09-05): done
 
 Before starting the multi-user plan above, the user asked for the
