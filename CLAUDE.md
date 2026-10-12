@@ -2761,6 +2761,16 @@ tile including friends, and a built-in daily Firestore safety limit (`docs/going
 tea-split test with Vaidehi. NOT built: SMS-suggest settle, Vaidehi's own expense tracking (needs her data space + SMS),
 owner approval of friend-created splits, deleting a friend, the automatic Rs 300 billing cut-off (needs the Firebase/gcloud CLI signed in). "My spend counts only my share" is NOT built yet (see the doc).
 
+## v2: Firestore as the real database (started 2026-10-12, plan in [docs/v2-firestore-native.md](docs/v2-firestore-native.md))
+Owner decision: before anyone records transactions, ALL data (the owner's too) must live in Firestore as the real record, one private folder
+per person. **Phase 1 DONE** (`tools/v2_migrate.py`: 14 tabs copied into `users/<owner>/...`, verified to the paisa; live privacy test
+`tools/rules_privacy_test.py`, 40/40 pass). **Phase 2 DONE and LIVE (backend `@333`, commit `f40e200`)**: `backend/v2Sync.js` mirrors Sheet changes
+into Firestore from the end of the background timer (max every 10 min, hidden tab `_V2Sync`, first run adopted the existing copy: 1,836 documents,
+0 duplicates, independently re-verified with `python tools/v2_migrate.py --verify`), daily self-check/repair via `checkAppHealth`. The Sheet is STILL
+the record and the app still reads the Sheet; nothing reads the Firestore copy yet. NEXT: phase 3 (screens read Firestore, one at a time with
+old-vs-new comparison and instant rollback), phase 4 (SMS writes straight to Firestore, per-user ingest keys), phase 5 (Sheet becomes an archive),
+phase 6 (move code to Cloud Functions; needs the owner to sign in the Firebase CLI). Order for people: owner first, then Vaidehi's transactions.
+
 ## Pre-multi-user cleanup (2026-09-05): done
 
 Before starting the multi-user plan above, the user asked for the
