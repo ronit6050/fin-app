@@ -30,7 +30,13 @@ function handlePwaRequestCore_(data){
   }
 
   if(verified.email.toLowerCase() !== PWA_ALLOWED_EMAIL.toLowerCase()){
-    return jsonResponse({ ok:false, error:"This account is not allowed." });
+    // Friends (added 2026-10-12): someone the owner has added as a friend may sign in
+    // too, but ONLY for the split actions, working inside their own folder. Every other
+    // action (anything touching the owner's Sheet, push tokens, ...) is refused here,
+    // before it can run. See splits.js and docs/features/splits.md.
+    if(!splitsFriendActionAllowed_(data.action) || !splitsIsOwnersFriend_(verified.email)){
+      return jsonResponse({ ok:false, error:"This account is not allowed." });
+    }
   }
 
   // Every action below this point is wrapped in one shared safety net.
@@ -2674,6 +2680,10 @@ function verifyGoogleIdToken(idToken){
 
     // Make sure the proof was issued for OUR app specifically
     if(info.aud !== PWA_CLIENT_ID) return null;
+
+    // The email must be one Google itself has verified (added 2026-10-12, when friends
+    // were allowed to sign in: never trust an email address nobody has proven they own).
+    if(String(info.email_verified) !== "true") return null;
 
     const verified = { email: info.email, name: info.name || info.email };
     cache.put(cacheKey, JSON.stringify(verified), 300); // remember for 5 minutes

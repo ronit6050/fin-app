@@ -81,11 +81,18 @@ function splitsAddFriend_(me, myName, input){
   var now = Date.now();
   // Don't overwrite what the friend already calls you on their side.
   var theirSide = fsGetPathMeta_(splitsFriendPath_(fk, me));
-  var mirrorFields = { email: me, mirror: true };
-  if(!theirSide || !theirSide.fields.name) mirrorFields.name = String(myName || me).slice(0, 60);
+  // Their entry for me is a mirror ONLY if they didn't add me themselves. If they did,
+  // it is a real entry and must never be flipped to a mirror (that would, for example,
+  // lock a friend out of signing in when she adds the owner back).
+  var mirrorFields = {};
+  if(!theirSide || theirSide.fields.mirror){
+    mirrorFields.email = me;
+    mirrorFields.mirror = true;
+    if(!theirSide || !theirSide.fields.name) mirrorFields.name = String(myName || me).slice(0, 60);
+  }
 
   fsCommit_([
-    { merge: { path: splitsFriendPath_(me, fk), fields: { name: name, mobile: mobile, email: fk, updatedAtMs: now },
+    { merge: { path: splitsFriendPath_(me, fk), fields: { name: name, mobile: mobile, email: fk, mirror: false, updatedAtMs: now },
                adds: [{ field: "balancePaise", amountInt: 0 }] } },
     { merge: { path: splitsFriendPath_(fk, me), fields: mirrorFields,
                adds: [{ field: "balancePaise", amountInt: 0 }] } }
@@ -103,6 +110,8 @@ function splitsWriteEntry_(me, myName, fk, entry, signedPaise, extraOps){
   };
   var mine = {}, theirs = {};
   Object.keys(common).forEach(function(k){ mine[k] = common[k]; theirs[k] = common[k]; });
+  // The friend's copy never carries which row/fingerprint of MY bank sheet this came from.
+  theirs.txRow = 0; theirs.txKey = ""; theirs.txFp = "";
   mine.signedPaise = signedPaise;    mine.counterparty = fk;  mine.mirror = false;
   theirs.signedPaise = -signedPaise; theirs.counterparty = me; theirs.mirror = true;
 
@@ -219,7 +228,16 @@ function splitsUndo_(me, input){
     { merge: { path: splitsFriendPath_(me, fk), fields: {}, adds: [{ field: "balancePaise", amountInt: -signed }] } },
     { merge: { path: splitsFriendPath_(fk, me), fields: {}, adds: [{ field: "balancePaise", amountInt: signed }] } }
   ];
-  if(mine.fields.txKey) ops.push({ del: { path: splitsMarkerPath_(me, mine.fields.txKey) } });
+  // The "already split" marker belongs to whoever CREATED the split. Undo by either side
+  // frees it (only ever the creator's own marker for this exact pair's entry).
+  var creator = String(mine.fields.createdBy || me);
+  if(creator !== me && creator !== fk) creator = me;
+  var txKey = mine.fields.txKey || "";
+  if(!txKey && creator !== me){
+    var theirCopy = fsGetPathMeta_(splitsLedgerPath_(creator, me, id));
+    txKey = theirCopy ? (theirCopy.fields.txKey || "") : "";
+  }
+  if(txKey) ops.push({ del: { path: splitsMarkerPath_(creator, txKey) } });
   try{
     fsCommit_(ops);
   }catch(e){
@@ -310,4 +328,37 @@ function splitsHandle_(action, data, verified){
     try{ fsFlushUsage_(); }catch(ignore){}
     return splitsFail_("Couldn't reach the splits database. Nothing was saved; try again in a moment.");
   }
+}
+
+// ---- Friends signing in themselves (added 2026-10-12) -------------------------
+// The actions a friend (anyone the owner has added) is allowed to use. Every
+// other action stays owner-only, because it reads or writes the owner's Sheet
+// (or, for push tokens, would take over the owner's notifications).
+var SPLITS_FRIEND_ACTIONS_ = ["ping", "getPeople", "getPerson", "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry"];
+
+function splitsFriendActionAllowed_(action){
+  return SPLITS_FRIEND_ACTIONS_.indexOf(action) !== -1;
+}
+
+// True only if this signed-in email is a friend the OWNER added by hand.
+// Adding someone IS the permission; there is no separate list to maintain.
+// A "mirror" entry (made when somebody else added the owner) does not count.
+// Remembered for 10 minutes (a "no" for 1 minute) so it is not a database read
+// on every tap. If Firestore can't be reached the answer is "no" (fail closed).
+function splitsIsOwnersFriend_(email){
+  var key = splitsKey_(email);
+  if(!splitsValidEmail_(key)) return false;
+  var cache = null, cacheKey = "SPF_" + key;
+  try{ cache = CacheService.getScriptCache(); var hit = cache.get(cacheKey); if(hit === "1") return true; if(hit === "0") return false; }catch(ignore){}
+  var ok = false;
+  try{
+    var doc = fsGetPathMeta_(splitsFriendPath_(splitsKey_(PWA_ALLOWED_EMAIL), key));
+    ok = !!(doc && !doc.fields.mirror);
+    try{ if(cache) cache.put(cacheKey, ok ? "1" : "0", ok ? 600 : 60); }catch(ignore){}
+  }catch(e){
+    try{ logAI("SPLITS_ERROR", "friend check: " + String(e && e.message).slice(0, 200)); }catch(ignore){}
+    ok = false;
+  }
+  try{ fsFlushUsage_(); }catch(ignore){}
+  return ok;
 }

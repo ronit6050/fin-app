@@ -76,9 +76,11 @@ function makeFakeEnv(){
 
   let fetchCallCount = 0;
   const tokenBehaviors = {
-    "good-token-1": function(){ return { code: 200, body: { aud: realClientId, email: "ronitnadar9@gmail.com", name: "Ronit" } }; },
-    "good-token-2": function(){ return { code: 200, body: { aud: realClientId, email: "ronitnadar9@gmail.com", name: "Ronit" } }; },
-    "wrong-app-token": function(){ return { code: 200, body: { aud: "someone-elses-app-id", email: "ronitnadar9@gmail.com", name: "Ronit" } }; },
+    "good-token-1": function(){ return { code: 200, body: { aud: realClientId, email: "ronitnadar9@gmail.com", email_verified: "true", name: "Ronit" } }; },
+    "good-token-2": function(){ return { code: 200, body: { aud: realClientId, email: "ronitnadar9@gmail.com", email_verified: "true", name: "Ronit" } }; },
+    "wrong-app-token": function(){ return { code: 200, body: { aud: "someone-elses-app-id", email: "ronitnadar9@gmail.com", email_verified: "true", name: "Ronit" } }; },
+    "unverified-email-token": function(){ return { code: 200, body: { aud: realClientId, email: "ronitnadar9@gmail.com", email_verified: "false", name: "Ronit" } }; },
+    "no-verified-field-token": function(){ return { code: 200, body: { aud: realClientId, email: "ronitnadar9@gmail.com", name: "Ronit" } }; },
     "bad-token": function(){ return { code: 400, body: {} }; }
   };
 
@@ -194,4 +196,18 @@ function loadSandbox(){
   const result = sandbox.verifyGoogleIdToken("wrong-app-token");
   assert(result === null, "a token issued for a different app is rejected");
   assert(env.getPutCalls().length === 0, "a rejected (wrong-app) token is never cached as verified");
+})();
+
+// ---------------------------------------------------------------------
+// Test 5 (added 2026-10-12, when friends were allowed to sign in) — an
+// email Google has NOT verified is rejected (false, or missing entirely),
+// and never cached as verified.
+// ---------------------------------------------------------------------
+(function testUnverifiedEmailIsRejected(){
+  const { sandbox, env } = loadSandbox();
+
+  assert(sandbox.verifyGoogleIdToken("unverified-email-token") === null, "a token whose email Google says is NOT verified is rejected");
+  assert(sandbox.verifyGoogleIdToken("no-verified-field-token") === null, "a token with no email_verified field at all is rejected");
+  assert(env.getPutCalls().length === 0, "rejected unverified tokens are never cached");
+  assert(sandbox.verifyGoogleIdToken("good-token-1") !== null, "a normal verified token still works");
 })();

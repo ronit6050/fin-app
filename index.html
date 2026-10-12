@@ -2251,6 +2251,9 @@
     .person-amount.owe  { color: var(--color-danger); }
     .split-panel { border-top: 0.5px solid var(--border-hairline); margin-top: 8px; padding-top: 10px; }
     .split-wrap { margin: 4px 0 8px; }
+    /* Friend mode (a friend signed in; splits only): hide everything that belongs to the owner's Sheet. */
+    body.friend-mode .owner-only { display: none !important; }
+    body.friend-mode #view-debts > .back-to-more { display: none !important; }
     .split-panel .field label { display: block; }
     .split-panel .field input, .split-panel .field select { width: 100%; box-sizing: border-box; }
     .ledger-row {
@@ -2702,7 +2705,7 @@
     <!-- ===== Shown if someone signs in with the WRONG account ===== -->
     <div class="signin-box" id="notAllowedBox" style="display:none">
       <div style="text-align:center">
-        <p style="margin:0 0 8px 0">This app is only for Ronit's account.</p>
+        <p style="margin:0 0 8px 0">This account hasn't been added yet. Ask Ronit to add your name, mobile and Google email as a friend, then sign in again.</p>
         <button class="signout-link" id="tryAgainButton">Try a different account</button>
       </div>
     </div>
@@ -3023,7 +3026,7 @@
         <div id="personDetail" style="display:none"></div>
 
         <div id="debtsContent" style="display:none">
-          <div class="today-total-box">
+          <div class="today-total-box owner-only">
             <div class="today-total-label" id="debtsNetLabel">Net Position</div>
             <div class="today-total-amount" id="debtsNetAmount">₹0</div>
             <div class="today-split" id="debtsTotalsLine"></div>
@@ -3040,15 +3043,15 @@
             <div class="pending-result" id="addFriendResult"></div>
           </div>
 
-          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">You owe</h3>
-          <div id="debtsYouOwe"></div>
+          <h3 class="owner-only" style="font-size:0.95rem; margin:14px 0 8px 0;">You owe</h3>
+          <div id="debtsYouOwe" class="owner-only"></div>
 
-          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">They owe you</h3>
-          <div id="debtsTheyOwe"></div>
+          <h3 class="owner-only" style="font-size:0.95rem; margin:14px 0 8px 0;">They owe you</h3>
+          <div id="debtsTheyOwe" class="owner-only"></div>
 
-          <button type="button" id="addDebtToggleButton" style="margin-top:16px;">+ Add Debt</button>
+          <button type="button" id="addDebtToggleButton" class="owner-only" style="margin-top:16px;">+ Add Debt</button>
 
-          <div id="addDebtForm" style="display:none; margin-top:12px;">
+          <div id="addDebtForm" class="owner-only" style="display:none; margin-top:12px;">
             <div class="field">
               <label>Person</label>
               <input type="text" id="debtPersonInput" placeholder="Name">
@@ -3511,7 +3514,7 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-12-02";
+    const APP_VERSION = "2026-10-12-03";
     const APP_CHANGELOG = "New: split a payment with a friend. Tap Split with a friend on a Pending card, and see each friend's running balance under Debts. You can record payments, remind them, and undo.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
@@ -3520,6 +3523,7 @@
     // from showSignedInUI() below, so it can only ever appear right after a
     // successful sign-in — never before or instead of the login screen.
     function checkWhatsNew() {
+      if (friendMode) return;   // friends only see Splits
       const lastSeen = localStorage.getItem("lastSeenAppVersion");
 
       // First-ever visit — nothing to compare against yet, just remember it.
@@ -3593,6 +3597,7 @@
     // We'll keep the signed-in person's info here once they sign in.
     // Later steps (talking to the Google Sheet) will use this.
     let currentUser = null;
+    let friendMode = false;   // true when a friend (not the owner) is signed in: splits only (added 2026-10-12)
 
     // Grab the sign-in related elements from the page
     const signInBox     = document.getElementById("signInBox");
@@ -3718,12 +3723,11 @@
       // just encoded so it can travel safely inside a web address/token.
       const payload = JSON.parse(atob(response.credential.split(".")[1]));
 
-      // ── Check this is actually the allowed account ──
-      if (payload.email.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
-        localStorage.removeItem(STORAGE_KEY);
-        showNotAllowedUI();
-        return;
-      }
+      // ── Who is this? ──
+      // The owner gets the whole app. Anyone else gets "friend mode" (splits only)
+      // IF the owner has added them as a friend; the backend decides that and
+      // refuses everyone else (see startFriendMode / loadPeople).
+      const isOwner = payload.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase();
 
       currentUser = {
         email: payload.email,
@@ -3735,6 +3739,8 @@
       // Remember this browser is signed in — including the actual proof —
       // so refreshing the page doesn't need to ask Google again at all.
       localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
+
+      if (!isOwner) { startFriendMode(); return; }
 
       // Also hand the sign-in proof to the service worker (added
       // 2026-09-19) — see that function's own comment for why.
@@ -3834,7 +3840,10 @@
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
           const savedUser = JSON.parse(saved);
-          if (savedUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase() && savedUser.idToken) {
+          if (savedUser.email && savedUser.idToken && savedUser.email.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
+            currentUser = savedUser;        // a friend's remembered sign-in: splits only
+            startFriendMode();
+          } else if (savedUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase() && savedUser.idToken) {
             currentUser = savedUser;
             syncAuthTokenForServiceWorker(currentUser);
             showSignedInUI(currentUser);
@@ -7777,6 +7786,7 @@
 
     function checkForNewTransactions() {
       if (!currentUser) return; // not signed in — nothing to check
+      if (friendMode) return;   // a friend has no Pending list (splits only) - never ask for it
 
       callAppsScript({ action: "getPending", idToken: currentUser.idToken })
         .then(function (data) {
@@ -9249,6 +9259,32 @@
       return "₹" + Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
     }
 
+    // ---- Friend mode (a friend signed in; added 2026-10-12) ----
+    // Shows ONLY the splits screen. Nothing here loads the owner's Home, Pending,
+    // Analysis etc., registers push notifications, or starts the background checks.
+    // The backend independently refuses every other action for a non-owner.
+    function startFriendMode() {
+      friendMode = true;
+      document.body.classList.add("friend-mode");
+      showSignedInUI(currentUser);
+      tabBar.style.display = "none";
+      tabLoaded.debts = true;                       // never ask for the owner's debts list
+      debtsStatusEl.textContent = "";
+      debtsContentEl.style.display = "block";
+      document.querySelector("#view-debts .section-title").textContent = "Splits";
+      switchTab("more");
+      showMoreSubView("debts");                     // also loads the people list
+    }
+
+    // The backend said this friend isn't on the owner's list: show the plain message.
+    function showFriendNotAllowed() {
+      friendMode = false;
+      document.body.classList.remove("friend-mode");
+      localStorage.removeItem(STORAGE_KEY);
+      currentUser = null;
+      showNotAllowedUI();
+    }
+
     function loadPeople(force) {
       if (peopleData && !force) return Promise.resolve(peopleData);
       if (peopleLoading) return peopleLoading;
@@ -9256,6 +9292,7 @@
         .then(function (d) {
           peopleLoading = null;
           if (!d.ok) {
+            if (friendMode && d.error === "This account is not allowed.") { showFriendNotAllowed(); throw new Error(d.error); }
             if (isAuthError(d.error)) handleSessionExpired();
             throw new Error(d.error);
           }

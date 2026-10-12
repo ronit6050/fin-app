@@ -116,3 +116,32 @@ draws the list on top); the saved friends copy is removed with the in-memory one
 default half-share computed in whole paise. Accepted: sign-out doesn't clear the friends cache (same as every other
 cache; only the owner can sign in); a payment retried after a dropped connection gets a new request id (the page
 reloads and shows the history first).
+
+## Friend mode: friends sign in themselves, splits only (built 2026-10-12)
+**What it is:** anyone the OWNER has added as a friend can sign in with their own Google account and gets a
+splits-only screen ("Splits": people list, person page, add friend, record payment, undo). No Home, Pending, Analysis
+or any Sheet-based screen. Their data lives in their own Firestore folder (`users/<their email>/...`).
+
+**Who is allowed (backend, `backend/PWA.js` + `splits.js`):** a non-owner passes only if (a) the action is one of
+`SPLITS_FRIEND_ACTIONS_` (ping, getPeople, getPerson, addFriend, createSplit, recordSplitPayment, undoSplitEntry)
+AND (b) `users/<owner>/friends/<their email>` exists and is NOT a mirror entry (the owner added them by hand).
+Adding someone IS the permission; there is no separate list. Remembered 10 min for yes / 1 min for no; fails closed
+if Firestore can't be read. Every other action (anything touching the owner's Sheet, push token, settings) is refused
+before the action runs, with the same message for "not a friend" and "action not allowed". `verifyGoogleIdToken` now
+also requires `email_verified == "true"`.
+
+**Frontend (`index.html`, search `friendMode` / `startFriendMode`):** `body.friend-mode` hides everything marked
+`owner-only`; no dashboard/pending/push/fast-views/15 s polling in friend mode; "not added yet" screen if the backend
+says no. The real enforcement is the backend, the hiding is only tidiness.
+
+**Security review fixes (2026-10-12):** (1) adding the owner back no longer flips his real entry to a mirror and locks
+her out; adding someone always writes `mirror:false` on MY entry so re-adding repairs it; (2) a friend's copy of a
+split no longer carries the owner's row number / fingerprint / transaction key; (3) undo by either side frees the
+creator's "already split" marker.
+
+**Known and accepted:** a friend can write a "you owe me" split into the OWNER's ledger for that friend with no consent
+step (visible on his Splits screen, undoable, never touches Debts or the Sheet); a friend shares the owner's free
+quotas; if a friend's Google email differs from what the owner typed (case is fine; dots/aliases are not) they see
+"not added yet". Not built: the owner approving a friend-created split, deleting a friend, per-friend push.
+
+**Needs:** Google OAuth consent screen must either be "In production" or list the friend as a Test user.

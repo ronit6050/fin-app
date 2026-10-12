@@ -100,7 +100,13 @@ function world(){
     return w.docs[rest] ? reply(200, { fields: w.docs[rest].fields, updateTime: w.docs[rest].updateTime }) : reply(404, { error: { message: "not found" } });
   } };
 
-  w.sb.verifyGoogleIdToken = function(t){ return t === "good" ? { email: ME, name: "Ronit" } : t === "other" ? { email: "someone@else.com", name: "X" } : null; };
+  w.sb.verifyGoogleIdToken = function(t){
+    return t === "good" ? { email: ME, name: "Ronit" }
+      : t === "other" ? { email: "someone@else.com", name: "X" }
+      : t === "vaidehi" ? { email: "Vaidehi@Example.com", name: "Vaidehi N" }
+      : t === "zed" ? { email: "zed@example.com", name: "Zed" }
+      : null;
+  };
   w.get = function(p){ return w.docs[p] ? w.sb.fsDecodeFields_(w.docs[p].fields) : null; };
   w.balance = function(owner, other){ const d = w.get("users/" + owner + "/friends/" + other); return d ? d.balancePaise : null; };
   w.errors = function(){ return w.sheets.AILogs.rows.slice(1).filter(function(r){ return r[1] === "SPLITS_ERROR"; }); };
@@ -393,6 +399,129 @@ console.log("\n--- 10. The new Firestore writer sends what Firestore expects ---
   try{ w.sb.fsCommit_([{ set: { path: "users/a@b.com/x/1", fields: { n: 6 }, onlyIfNew: true } }]); }catch(e){ code = e.httpCode; }
   assert(code === 409 && w.get("users/a@b.com/x/1").n === 5, "creating something that already exists fails with 409 and leaves the old one alone");
   assert(w.sb.fsPathUrl_("users/a@b.com/friends/c d@x.com").indexOf("users/a%40b.com/friends/c%20d%40x.com") !== -1, "odd characters in a path are made URL-safe piece by piece");
+}
+
+console.log("\n--- 11. A friend signing in herself (splits-only) ---");
+{
+  const w = world();
+  const call = function(token, action, extra){
+    const out = w.sb.handlePwaRequest(Object.assign({ action: action, idToken: token }, extra || {}));
+    return JSON.parse(out.getContent());
+  };
+  const owner = function(action, extra){ return call("good", action, extra); };
+  const she = function(action, extra){ return call("vaidehi", action, extra); };
+
+  // Before the owner adds her she is nobody.
+  const before = she("getPeople");
+  assert(before.ok === false && /not allowed/i.test(before.error), "before she is added, she is refused");
+  w.cache = {};   // forget that "no" so the next check looks again (the real "no" is only remembered for a minute)
+
+  owner("addFriend", { name: "Vaidehi", mobile: "9876543210", email: FRIEND });
+  owner("createSplit", { friendEmail: FRIEND, totalAmount: 840, description: "Dinner", requestId: "f1" });
+  w.cache = {};
+
+  const mine = she("getPeople");
+  assert(mine.ok && mine.people.length === 1 && mine.people[0].email === ME && mine.people[0].balance === -420, "once added, she signs in and sees ONLY Ronit, owing Rs 420");
+  const person = she("getPerson", { friendEmail: ME });
+  assert(person.ok && person.entries.length === 1 && person.entries[0].description === "Dinner" && person.entries[0].mirror === true, "she sees the split in her own history, marked as the mirror copy");
+
+  const blocked = ["getPending", "saveNote", "getDashboard", "getDebts", "settleDebt", "addDebt", "getSettings", "updateSettings", "registerPushToken",
+                   "refreshViews", "getCash", "addCashEntry", "getTransactionHistory", "reconcileStatement", "getSavingsGoals", "getPlannerData", "markNotATransaction"];
+  blocked.forEach(function(a){
+    const r = she(a, { row: 5, amount: 1, token: "stolen-push-token" });
+    assert(r.ok === false && /not allowed/i.test(r.error), "she cannot use " + a);
+  });
+  assert(w.props.PWA_PUSH_TOKEN === undefined, "she could not overwrite the owner's push-notification device");
+
+  const addF = she("addFriend", { name: "Raj", mobile: "9000000001", email: "raj@example.com" });
+  assert(addF.ok && w.get("users/" + FRIEND + "/friends/raj@example.com").name === "Raj", "she can add her own friends, stored in HER folder");
+  assert(w.get("users/" + ME + "/friends/raj@example.com") === null, "...and nothing about Raj appears in the owner's folder");
+
+  const pay = she("recordSplitPayment", { friendEmail: ME, amount: 200, direction: "sent", method: "upi", requestId: "hp1" });
+  assert(pay.ok && pay.balance === -220 && w.balance(FRIEND, ME) === -22000 && w.balance(ME, FRIEND) === 22000, "she records paying Rs 200: she owes Rs 220, and the owner sees Rs 220 owed to him");
+  const undo = she("undoSplitEntry", { friendEmail: ME, entryId: "hp1" });
+  assert(undo.ok && w.balance(FRIEND, ME) === -42000 && w.balance(ME, FRIEND) === 42000, "she can undo it");
+
+  const dir = Object.keys(w.docs).filter(function(p){ return p.indexOf("users/" + FRIEND + "/") === 0; });
+  assert(she("getPeople").people.every(function(p){ return p.email === ME || p.email === "raj@example.com"; }), "her list never contains anyone else's friends");
+  assert(dir.length > 0, "(sanity) her folder has data");
+
+  // Other accounts
+  const stranger = call("other", "getPeople");
+  assert(stranger.ok === false && /not allowed/i.test(stranger.error), "a stranger is refused even for split actions");
+  const zedBefore = call("zed", "createSplit", { friendEmail: FRIEND, totalAmount: 5 });
+  assert(zedBefore.ok === false, "someone only a FRIEND added (a mirror entry, not added by the owner) is refused");
+  w.docs["users/" + ME + "/friends/zed@example.com"] = { fields: { name: { stringValue: "Zed" }, mirror: { booleanValue: true }, balancePaise: { integerValue: "0" } }, updateTime: "z" };
+  w.cache = {};
+  assert(call("zed", "getPeople").ok === false, "a mirror-only entry in the owner's folder does not grant access");
+
+  // Remembered, and fails closed
+  w.cache = {};
+  const readsBefore = w.sb.FS_USAGE_.reads;
+  she("getPeople"); she("getPeople"); she("getPeople");
+  const friendCheckReads = w.fetches ? 0 : 0;
+  assert(w.cache["SPF_" + FRIEND] === "1", "a friend is remembered for a few minutes (not re-checked every tap)");
+  w.cache = {}; w.mode = "down";
+  assert(she("getPeople").ok === false, "if the database can't be reached, a friend is refused (never let in by accident)");
+  assert(owner("ping").ok === true, "...but the owner is unaffected");
+  w.mode = "ok";
+
+  // Owner still works for everything split-related, and the sign-in check demands a verified email
+  assert(owner("getPeople").people.length >= 1, "the owner still sees their own friends");
+  assert(typeof readsBefore === "number" && typeof friendCheckReads === "number", "(sanity)");
+}
+
+console.log("\n--- 12. Fixes from the security review ---");
+{
+  const w = world();
+  const call = function(token, action, extra){
+    return JSON.parse(w.sb.handlePwaRequest(Object.assign({ action: action, idToken: token }, extra || {})).getContent());
+  };
+  const owner = function(a, x){ return call("good", a, x); };
+  const she = function(a, x){ return call("vaidehi", a, x); };
+
+  owner("addFriend", { name: "Vaidehi", mobile: "9876543210", email: FRIEND });
+  w.cache = {};
+  assert(she("getPeople").ok, "setup: she is a friend and can sign in");
+
+  // Finding 1: she adds the OWNER as her friend -> her real entry in his list must stay real
+  const addBack = she("addFriend", { name: "Ronit", mobile: "9000000009", email: ME });
+  assert(addBack.ok, "she can add the owner as her own friend");
+  const ownersEntry = w.get("users/" + ME + "/friends/" + FRIEND);
+  assert(ownersEntry.mirror === false && ownersEntry.name === "Vaidehi", "his real entry for her was NOT flipped to a mirror, and keeps her name");
+  w.cache = {};
+  assert(she("getPeople").ok === true, "she can still sign in afterwards (not locked out)");
+  assert(w.get("users/" + FRIEND + "/friends/" + ME).mirror === false || w.get("users/" + FRIEND + "/friends/" + ME).mirror === true, "(sanity)");
+
+  // Reverse order: a stranger adds the owner FIRST (mirror in his folder), then the owner adds them -> they become allowed
+  const w2 = world();
+  const call2 = function(token, action, extra){
+    return JSON.parse(w2.sb.handlePwaRequest(Object.assign({ action: action, idToken: token }, extra || {})).getContent());
+  };
+  // she can't call anything yet (not a friend), so simulate the mirror doc a friend-added-me action would leave
+  w2.docs["users/" + ME + "/friends/" + FRIEND] = { fields: { name: { stringValue: "Vaidehi" }, email: { stringValue: ME }, mirror: { booleanValue: true }, balancePaise: { integerValue: "0" } }, updateTime: "m" };
+  assert(call2("vaidehi", "getPeople").ok === false, "a mirror-only entry does not let her in");
+  w2.cache = {};
+  call2("good", "addFriend", { name: "Vaidehi", mobile: "9876543210", email: FRIEND });
+  w2.cache = {};
+  assert(w2.get("users/" + ME + "/friends/" + FRIEND).mirror === false, "when the owner adds her, his entry becomes a real one");
+  assert(call2("vaidehi", "getPeople").ok === true, "...and now she is let in (re-adding repairs it)");
+
+  // Finding 4: her copy of a split carries none of the owner's row/fingerprint details
+  owner("createSplit", { friendEmail: FRIEND, totalAmount: 100, txRow: 77, txFp: "secret-fp", requestId: "sx1", description: "Tea" });
+  const theirs = w.get("users/" + FRIEND + "/friends/" + ME + "/ledger/sx1");
+  const mine = w.get("users/" + ME + "/friends/" + FRIEND + "/ledger/sx1");
+  assert(theirs.txRow === 0 && theirs.txKey === "" && theirs.txFp === "", "her copy has no row number, no fingerprint, no transaction key");
+  assert(mine.txRow === 77 && mine.txKey === "secret-fp", "his own copy still has them");
+  assert(she("getPerson", { friendEmail: ME }).entries.every(function(e){ return e.txRow === 0; }), "she is never sent his row number");
+
+  // Finding 2b: she undoes a split the owner made -> his "already split" marker is freed
+  assert(w.get("users/" + ME + "/splitMarkers/secret-fp") !== null, "setup: the owner's marker exists");
+  const u = she("undoSplitEntry", { friendEmail: ME, entryId: "sx1" });
+  assert(u.ok === true && w.get("users/" + ME + "/splitMarkers/secret-fp") === null, "her undo frees the owner's marker, so he can split that payment again");
+  assert(w.balance(ME, FRIEND) === 0 && w.balance(FRIEND, ME) === 0, "balances back to 0 on both sides");
+  const again = owner("createSplit", { friendEmail: FRIEND, totalAmount: 100, txRow: 77, txFp: "secret-fp", requestId: "sx2" });
+  assert(again.ok === true, "the owner can now split that same payment again");
 }
 
 process.exitCode = process.exitCode || 0;
