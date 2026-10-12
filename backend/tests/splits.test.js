@@ -22,7 +22,11 @@ const fs = require("fs");
 const path = require("path");
 const { makeWorld, assert } = require("./_fakeSheetsKit");
 
-const FILES = ["Logger.js", "firestore.js", "splits.js", "viewPublisher.js", "PWA.js"];
+const FILES = [
+  "category.js", "noteWordModel.js", "noteMemory.js", "needWantSaving.js", "financialEvents.js",
+  "investmentInstruments.js", "savingsGoals.js", "PWA.js", "Recon.js", "Logger.js", "transactions.js",
+  "autoSettle.js", "obligationReminders.js", "appHealth.js", "firestore.js", "viewPublisher.js", "splits.js", "planner.js", "CCAdvisor.js"
+];
 const ME = "ronitnadar9@gmail.com";
 const FRIEND = "vaidehi@example.com";
 
@@ -522,6 +526,141 @@ console.log("\n--- 12. Fixes from the security review ---");
   assert(w.balance(ME, FRIEND) === 0 && w.balance(FRIEND, ME) === 0, "balances back to 0 on both sides");
   const again = owner("createSplit", { friendEmail: FRIEND, totalAmount: 100, txRow: 77, txFp: "secret-fp", requestId: "sx2" });
   assert(again.ok === true, "the owner can now split that same payment again");
+}
+
+console.log("\n--- 13. My spend counts only my share ---");
+{
+  const w = world();
+  const sb = w.sb;
+  const now = new Date(); now.setHours(10, 0, 0, 0);
+  const HEADER = ["Date","Time","Bank","Type","Mode","Amount","Reference","Counterparty","Channel","Source","RawSMS","Sender","Note","Category","TelegramMsgID","Processed","NeedWantSaving","FinancialEvent","FinancialEventName","AutoSettled"];
+  const mk = function(amount, ref, cp, extra){
+    const r = [now, "10:00:00", "TESTBANK", "debit", "upi", amount, ref, cp, "SMS", "Tasker", "raw", "TESTBK", "", "Food", "", "YES", "Want", "", "", ""];
+    return r;
+  };
+  const tx = w.addSheet("Transactions", [HEADER, mk(840, "r1", "Restaurant Spice"), mk(100, "r2", "Chai Stall")]);
+  w.addSheet("Cash", [["ID","Date","Time","Type","Amount","Note","Category"]]);
+  const fp1 = sb.rowFingerprint_(tx.rows[1]);
+  const callO = function(action, extra){ return JSON.parse(sb.handlePwaRequest(Object.assign({ action: action, idToken: "good" }, extra || {})).getContent()); };
+  callO("addFriend", { name: "Vaidehi", mobile: "9876543210", email: FRIEND });
+
+  const spendBefore = sb.getTodaySummary().total;
+  assert(spendBefore === 940, "before any split, today's spend is the full Rs 940");
+
+  const r = callO("createSplit", { friendEmail: FRIEND, totalAmount: 840, txRow: 2, txFp: fp1, requestId: "sp1", description: "Dinner" });
+  assert(r.ok && r.sheetUpdated === true, "splitting the owner's payment reports the sheet was updated");
+  assert(tx.rows[0][20] === "FriendShare", "the new column gets its header");
+  assert(tx.rows[1][20] === 420 && tx.rows[2][20] === undefined, "only that payment's row got the friend's share (Rs 420)");
+
+  assert(sb.getTodaySummary().total === 520, "today's spend is now Rs 520 (420 of dinner + 100 chai), not Rs 940");
+  const cat = sb.getTodaySummary().categories.find(function(c){ return c.category === "Food"; });
+  assert(cat && cat.amount === 520, "category totals use your share too");
+  const month = sb.getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1);
+  assert(month.totalDebit === 520 && month.topAmount === 420, "the monthly analysis uses your share (total 520, biggest payment 420)");
+  assert(month.byMode.bank.totalDebit === 520, "...and so does the Bank/Card/Wallet breakdown");
+  assert(sb.txnMyAmount_(tx.rows[1]) === 420 && sb.txnFriendShare_(tx.rows[1]) === 420, "helpers: my amount 420, friend share 420");
+  assert(sb.rowStillMatches_(tx, 2, fp1) === true, "the fingerprint ignores the share column, so the Pending safeguard still matches");
+
+  // A share bigger than the payment is never trusted
+  assert(sb.txnMyAmount_(["", "", "", "debit", "", 100, "", "", "", "", "", "", "", "", "", "", "", "", "", "", 500]) === 100, "a bogus share larger than the payment is ignored");
+
+  // Wrong fingerprint -> nothing is written to a row that is no longer that payment
+  const wrong = sb.splitsApplyShareToSheet_(3, "not-the-fingerprint", 50);
+  assert(wrong === false && tx.rows[2][20] === undefined, "a row that no longer matches its fingerprint is left alone");
+
+  // Undo gives the share back
+  const u = callO("undoSplitEntry", { friendEmail: FRIEND, entryId: "sp1" });
+  assert(u.ok && u.sheetUpdated === true && tx.rows[1][20] === "", "undoing the split clears the share on the sheet");
+  assert(sb.getTodaySummary().total === 940, "...and today's spend is back to Rs 940");
+
+  // Re-split, then the FRIEND undoes it -> still cleared
+  callO("createSplit", { friendEmail: FRIEND, totalAmount: 840, friendShare: 300, txRow: 2, txFp: fp1, requestId: "sp2" });
+  assert(tx.rows[1][20] === 300 && sb.getTodaySummary().total === 640, "custom share Rs 300: spend = 840 - 300 + 100 = 640");
+  w.cache = {};
+  const fu = JSON.parse(sb.handlePwaRequest({ action: "undoSplitEntry", idToken: "vaidehi", friendEmail: ME, entryId: "sp2" }).getContent());
+  assert(fu.ok && fu.sheetUpdated === true && tx.rows[1][20] === "", "when the friend undoes the owner's split, the owner's spend is restored too");
+
+  // A friend's OWN split never touches the owner's sheet
+  const fs = JSON.parse(sb.handlePwaRequest({ action: "createSplit", idToken: "vaidehi", friendEmail: ME, totalAmount: 60, txRow: 2, txFp: fp1, requestId: "hs1" }).getContent());
+  assert(fs.ok && fs.sheetUpdated === false && tx.rows[1][20] === "", "a friend splitting THEIR payment cannot write to the owner's sheet");
+
+  // The check-and-repair function finds and fixes drift between the Sheet and the splits database
+  callO("createSplit", { friendEmail: FRIEND, totalAmount: 840, friendShare: 400, txRow: 2, txFp: fp1, requestId: "sp3" });
+  tx.rows[1][20] = "";                                  // simulate a failed sheet write
+  tx.rows[2][20] = 55;                                  // and a stray share with no split behind it
+  const audit = sb.splitsShareAudit_(false);
+  assert(audit.missing.length === 1 && audit.missing[0] === 2 && audit.orphan.length === 1 && audit.orphan[0] === 3 && tx.rows[1][20] === "", "the check finds a missing share (row 2) and a stray one (row 3) and changes nothing");
+  const fix = sb.splitsShareAudit_(true);
+  assert(fix.fixed === 2 && tx.rows[1][20] === 400 && tx.rows[2][20] === "", "the repair restores row 2 (Rs 400) and clears the stray one");
+  assert(sb.splitsShareAudit_(false).missing.length + sb.splitsShareAudit_(false).orphan.length + sb.splitsShareAudit_(false).wrong.length === 0, "after the repair, a second check finds nothing");
+  callO("undoSplitEntry", { friendEmail: FRIEND, entryId: "sp3" });
+
+  // Card bill matching still uses the FULL amount
+  const ccRows = [HEADER, mk(5000, "c1", "Shop")];
+  ccRows[1][4] = "card 1234";
+  assert(sb.txnMyAmount_(ccRows[1]) === 5000, "(sanity) unsplit card row = full amount");
+  ccRows[1][20] = 2000;
+  assert(sb.txnMyAmount_(ccRows[1]) === 3000 && Number(ccRows[1][5]) === 5000, "a split card swipe: my spend 3000, but the amount on the row (used for the card limit and bill) stays 5000");
+}
+
+console.log("\n--- 14. The share finds its row even after the sheet is re-sorted (review fixes) ---");
+{
+  const w = world();
+  const sb = w.sb;
+  const now = new Date(); now.setHours(10, 0, 0, 0);
+  const HEADER = ["Date","Time","Bank","Type","Mode","Amount","Reference","Counterparty","Channel","Source","RawSMS","Sender","Note","Category","TelegramMsgID","Processed","NeedWantSaving","FinancialEvent","FinancialEventName","AutoSettled"];
+  const mk = function(amount, ref, cp, time){ return [now, time || "10:00:00", "TESTBANK", "debit", "upi", amount, ref, cp, "SMS", "Tasker", "raw", "TESTBK", "", "Food", "", "YES", "Want", "", "", ""]; };
+  const tx = w.addSheet("Transactions", [HEADER, mk(840, "r1", "Restaurant Spice", "10:00:00"), mk(100, "r2", "Chai Stall", "11:00:00")]);
+  w.addSheet("Cash", [["ID","Date","Time","Type","Amount","Note","Category"]]);
+  const fpA = sb.rowFingerprint_(tx.rows[1]);
+  const callO = function(action, extra){ return JSON.parse(sb.handlePwaRequest(Object.assign({ action: action, idToken: "good" }, extra || {})).getContent()); };
+  callO("addFriend", { name: "Vaidehi", mobile: "9876543210", email: FRIEND });
+
+  // The card said row 2, but a Reconcile has since moved that payment to row 3
+  tx.rows.reverse(); tx.rows.unshift(tx.rows.pop());     // header back on top; the two payments swapped
+  assert(tx.rows[2][7] === "Restaurant Spice", "setup: the dinner payment is now on row 3");
+  const r = callO("createSplit", { friendEmail: FRIEND, totalAmount: 840, txRow: 2, txFp: fpA, requestId: "m1" });
+  assert(r.ok && r.sheetUpdated === true && tx.rows[2][20] === 420 && tx.rows[1][20] === undefined, "the share lands on the right payment (found by fingerprint), not on whatever is now on row 2");
+
+  // Undo after another re-sort still clears the right row
+  tx.rows.splice(1, 0, tx.rows.splice(2, 1)[0]);         // swap back
+  const u = callO("undoSplitEntry", { friendEmail: FRIEND, entryId: "m1" });
+  assert(u.ok && u.sheetUpdated === true && tx.rows[1][20] === "", "undo clears the share on the right row even though rows moved");
+
+  // No fingerprint -> never written by row number alone
+  assert(sb.splitsApplyShareToSheet_(2, "", 50) === false && tx.rows[1][20] === "", "without a fingerprint nothing is written");
+
+  // A failed sheet write is healed by tapping Save again (the duplicate path re-applies it)
+  callO("createSplit", { friendEmail: FRIEND, totalAmount: 840, txRow: 2, txFp: fpA, requestId: "m2" });
+  tx.rows[1][20] = "";                                    // pretend the write never landed
+  const retry = callO("createSplit", { friendEmail: FRIEND, totalAmount: 840, txRow: 2, txFp: fpA, requestId: "m3" });
+  assert(retry.ok === false && retry.duplicate === true && retry.sheetUpdated === true && tx.rows[1][20] === 420, "a retry that is refused as 'already split' still puts the share back");
+
+  // Two identical-looking rows: never guess
+  const dup = w.addSheet("Transactions", [HEADER, mk(50, "", "Same Shop", "09:00:00"), mk(50, "", "Same Shop", "09:00:00")]);
+  const fpD = sb.rowFingerprint_(dup.rows[1]);
+  assert(sb.splitsApplyShareToSheet_(2, fpD, 25) === true || sb.splitsApplyShareToSheet_(2, fpD, 25) === false, "(sanity)");
+  const dupRows = w.sheets.Transactions.rows;
+  dupRows[1][20] = ""; dupRows[2][20] = "";
+  const none = sb.splitsApplyShareToSheet_(5, fpD, 25);
+  assert(none === false && dupRows[1][20] === "" && dupRows[2][20] === "", "if two rows share a fingerprint and the hinted row is gone, nothing is written (no guessing)");
+  dupRows[1][20] = 10;
+  const audit = sb.splitsShareAudit_(true);
+  assert(audit.ambiguous.length === 1 && audit.ambiguous[0] === 2 && audit.fixed === 0 && dupRows[1][20] === 10, "the repair leaves an ambiguous row (two identical-looking payments) alone and reports it");
+
+  // The daily health check repairs drift by itself
+  const w3 = world(), sb3 = w3.sb;
+  const t3 = w3.addSheet("Transactions", [HEADER, mk(840, "r1", "Restaurant Spice", "10:00:00")]);
+  w3.addSheet("Cash", [["ID","Date","Time","Type","Amount","Note","Category"]]);
+  const fp3 = sb3.rowFingerprint_(t3.rows[1]);
+  JSON.parse(sb3.handlePwaRequest({ action: "addFriend", idToken: "good", name: "V", mobile: "9876543210", email: FRIEND }).getContent());
+  JSON.parse(sb3.handlePwaRequest({ action: "createSplit", idToken: "good", friendEmail: FRIEND, totalAmount: 840, txRow: 2, txFp: fp3, requestId: "q" }).getContent());
+  t3.rows[1][20] = "";
+  const rep = sb3.splitsAutoRepairShares_();
+  assert(rep.fixed === 1 && t3.rows[1][20] === 420, "the daily self-repair puts a missing share back");
+  assert(w3.sheets.AILogs.rows.some(function(r){ return r[1] === "SPLITS_SHARE_REPAIRED"; }), "and says so in the log");
+  assert(sb3.splitsAutoRepairShares_().fixed === 0, "when nothing is wrong it changes nothing");
+  assert(sb3.txnMyAmount_([0, 0, 0, 0, 0, 12.345]) === 12.345, "with no split, an amount is returned exactly as it is (no rounding at all)");
 }
 
 process.exitCode = process.exitCode || 0;

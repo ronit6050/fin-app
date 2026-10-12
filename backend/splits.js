@@ -59,6 +59,50 @@ function splitsMarkerPath_(me, key){ return "users/" + me + "/splitMarkers/" + k
 // A plain, friendly failure that never leaks Firestore internals.
 function splitsFail_(msg){ return { ok: false, error: msg }; }
 
+// ---- "My spend counts only my share" (added 2026-10-12) -----------------------
+// Transactions column U ("FriendShare", index 20) holds how many rupees of that
+// payment a friend owes you because of a split. Every SPEND total (Today, Analysis,
+// Planner, Home) subtracts it, so splitting Rs 840 with a friend shows Rs 420 as your
+// spending. Things that are about what actually left the BANK or CARD (card limit, card
+// bill matching, the transaction itself in Pending/History) keep the full amount.
+var SPLITS_SHARE_COL_ = 21;          // column U (1-based)
+var SPLITS_SHARE_HEADER_ = "FriendShare";
+
+// Writes (or clears, with 0) the friend's share on one Transactions row, but ONLY if the
+// row still is the transaction the split was made for (same stale-card fingerprint the
+// Pending screen uses). Best-effort: a problem is logged, and the split itself stands.
+// Returns true if the sheet now shows the intended value.
+function splitsApplyShareToSheet_(txRow, txFp, shareRupees){
+  try{
+    if(!txFp) return false;       // never write by row number alone: a re-sorted sheet would put it on the wrong payment
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    if(!sheet) return false;
+    var row = Math.floor(Number(txRow));
+    // The stored row number is only a hint: a Reconcile can re-sort the sheet. If that row is
+    // no longer this payment, look for the row that is (by fingerprint). Exactly one match
+    // is used; none or several means "don't guess".
+    if(!(row >= 2 && row <= sheet.getLastRow() && rowStillMatches_(sheet, row, txFp))){
+      var rows = sheet.getDataRange().getValues();
+      var found = [];
+      for(var i = 1; i < rows.length; i++){
+        if((rows[i][5] || rows[i][7]) && rowFingerprint_(rows[i]) === String(txFp)) found.push(i + 1);
+      }
+      if(found.length !== 1){
+        try{ logAI("SPLITS_SHEET_SKIP", "fingerprint matched " + found.length + " rows; share not written"); }catch(ignore){}
+        return false;
+      }
+      row = found[0];
+    }
+    var header = sheet.getRange(1, SPLITS_SHARE_COL_);
+    if(String(header.getValue() || "").trim() === "") header.setValue(SPLITS_SHARE_HEADER_);
+    sheet.getRange(row, SPLITS_SHARE_COL_).setValue(shareRupees > 0 ? shareRupees : "");
+    return true;
+  }catch(e){
+    try{ logAI("SPLITS_SHEET_ERROR", String(e && e.message).slice(0, 200)); }catch(ignore){}
+    return false;
+  }
+}
+
 // Firestore says 409 when a "create only if new" document already exists.
 function splitsIsAlreadyThere_(e){ return !!e && e.httpCode === 409; }
 // ...and 400/412 when "only if unchanged" fails because someone else changed it first.
@@ -168,12 +212,32 @@ function splitsCreate_(me, myName, input){
   try{
     splitsWriteEntry_(me, myName, fk, entry, share, extra);
   }catch(e){
-    if(splitsIsAlreadyThere_(e)) return { ok: false, duplicate: true, error: "This payment is already split. Undo the earlier split first if you want to change it." };
+    if(splitsIsAlreadyThere_(e)){
+      // Maybe an earlier try recorded the split but the Sheet write didn't land: re-apply it (harmless if it did).
+      var healed = false;
+      try{
+        if(me === splitsKey_(PWA_ALLOWED_EMAIL) && txKey){
+          var marker = fsGetPathMeta_(splitsMarkerPath_(me, txKey));
+          if(marker && marker.fields.entryId){
+            var old = fsGetPathMeta_(splitsLedgerPath_(me, marker.fields.friend || fk, marker.fields.entryId));
+            if(old && !old.fields.undone && old.fields.type === "split" && Number(old.fields.txRow) > 0){
+              healed = splitsApplyShareToSheet_(old.fields.txRow, old.fields.txFp, splitsRupees_(old.fields.signedPaise));
+            }
+          }
+        }
+      }catch(ignore){}
+      return { ok: false, duplicate: true, sheetUpdated: healed, error: "This payment is already split. Undo the earlier split first if you want to change it." };
+    }
     throw e;
+  }
+  // Only the owner's own bank payments live in the Sheet; a friend's splits have no Sheet row.
+  var sheetUpdated = false;
+  if(me === splitsKey_(PWA_ALLOWED_EMAIL) && entry.txRow > 0){
+    sheetUpdated = splitsApplyShareToSheet_(entry.txRow, entry.txFp, splitsRupees_(share));
   }
   return {
     ok: true, entryId: id, friendShare: splitsRupees_(share), myShare: splitsRupees_(total - share),
-    balance: splitsRupees_((friend.fields.balancePaise || 0) + share)
+    balance: splitsRupees_((friend.fields.balancePaise || 0) + share), sheetUpdated: sheetUpdated
   };
 }
 
@@ -232,11 +296,12 @@ function splitsUndo_(me, input){
   // frees it (only ever the creator's own marker for this exact pair's entry).
   var creator = String(mine.fields.createdBy || me);
   if(creator !== me && creator !== fk) creator = me;
-  var txKey = mine.fields.txKey || "";
-  if(!txKey && creator !== me){
+  var creatorCopy = mine;
+  if(creator !== me){
     var theirCopy = fsGetPathMeta_(splitsLedgerPath_(creator, me, id));
-    txKey = theirCopy ? (theirCopy.fields.txKey || "") : "";
+    creatorCopy = theirCopy || mine;
   }
+  var txKey = creatorCopy.fields.txKey || "";
   if(txKey) ops.push({ del: { path: splitsMarkerPath_(creator, txKey) } });
   try{
     fsCommit_(ops);
@@ -244,7 +309,12 @@ function splitsUndo_(me, input){
     if(splitsIsChangedMeanwhile_(e)) return splitsFail_("That entry just changed. Refresh and try again.");
     throw e;
   }
-  return { ok: true };
+  // If it was a split of the OWNER's bank payment, give the friend's share back to the owner's spend.
+  var sheetUpdated = false;
+  if(creator === splitsKey_(PWA_ALLOWED_EMAIL) && creatorCopy.fields.type === "split" && Number(creatorCopy.fields.txRow) > 0){
+    sheetUpdated = splitsApplyShareToSheet_(creatorCopy.fields.txRow, creatorCopy.fields.txFp, 0);
+  }
+  return { ok: true, sheetUpdated: sheetUpdated };
 }
 
 // ---- Reading ------------------------------------------------------------------
@@ -361,4 +431,65 @@ function splitsIsOwnersFriend_(email){
   }
   try{ fsFlushUsage_(); }catch(ignore){}
   return ok;
+}
+
+// ---- Keeping the Sheet and the splits database in step (added 2026-10-12) -----
+// Compares Transactions column U ("FriendShare") with the owner's ACTIVE splits in
+// Firestore and reports (apply=false) or repairs (apply=true) any difference:
+//   missing = an active split with no share on its row, orphan = a share on a row with
+//   no active split, wrong = the two numbers disagree. Rows are matched by fingerprint,
+//   never by row number, so a re-sorted sheet can't confuse it.
+// Run by hand from the Apps Script editor: splitsCheckShares() to look, splitsFixShares()
+// to repair. Both are safe to run any time; the check changes nothing.
+function splitsShareAudit_(apply){
+  var owner = splitsKey_(PWA_ALLOWED_EMAIL);
+  var want = {};
+  fsListPath_("users/" + owner + "/friends", 500).forEach(function(f){
+    if(f.fields.mirror) return;
+    fsListPath_(splitsFriendPath_(owner, f.id) + "/ledger", SPLITS_LEDGER_CAP_).forEach(function(e){
+      var x = e.fields;
+      if(x.type === "split" && !x.undone && !x.mirror && x.createdBy === owner && x.txFp){
+        want[x.txFp] = Math.round(((want[x.txFp] || 0) + (Number(x.signedPaise) || 0) / 100) * 100) / 100;
+      }
+    });
+  });
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  var rows = sheet.getDataRange().getValues();
+  var report = { missing: [], orphan: [], wrong: [], ambiguous: [], fixed: 0 };
+  var fpCount = {}, fps = [];
+  for(var k = 1; k < rows.length; k++){
+    fps[k] = (rows[k][5] || rows[k][7]) ? rowFingerprint_(rows[k]) : "";
+    if(fps[k]) fpCount[fps[k]] = (fpCount[fps[k]] || 0) + 1;
+  }
+  for(var i = 1; i < rows.length; i++){
+    if(!fps[i]) continue;
+    var have = Number(rows[i][20]) || 0;
+    var w = want[fps[i]] || 0;
+    if(fpCount[fps[i]] > 1){ if(have > 0 || w > 0) report.ambiguous.push(i + 1); continue; }   // two rows look identical: never guess
+    if(Math.abs(have - w) < 0.005) continue;
+    (w > 0 && have === 0 ? report.missing : (have > 0 && w === 0 ? report.orphan : report.wrong)).push(i + 1);
+    if(apply){
+      if(String(sheet.getRange(1, SPLITS_SHARE_COL_).getValue() || "").trim() === "") sheet.getRange(1, SPLITS_SHARE_COL_).setValue(SPLITS_SHARE_HEADER_);
+      sheet.getRange(i + 1, SPLITS_SHARE_COL_).setValue(w > 0 ? w : "");
+      report.fixed++;
+    }
+  }
+  try{ fsFlushUsage_(); }catch(ignore){}
+  return report;
+}
+
+function splitsCheckShares(){ var r = splitsShareAudit_(false); Logger.log(JSON.stringify(r)); return r; }
+function splitsFixShares(){ var r = splitsShareAudit_(true); Logger.log(JSON.stringify(r)); return r; }
+
+// Quiet daily self-repair, called from checkAppHealth: puts the Sheet back in step with the
+// splits database if a write ever failed. Logs only when it actually fixed something.
+function splitsAutoRepairShares_(){
+  try{
+    var r = splitsShareAudit_(true);
+    if(r.fixed > 0) logAI("SPLITS_SHARE_REPAIRED", JSON.stringify(r));
+    return r;
+  }catch(e){
+    try{ logAI("SPLITS_SHARE_REPAIR_ERROR", String(e && e.message).slice(0, 200)); }catch(ignore){}
+    return null;
+  }
 }

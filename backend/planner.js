@@ -202,7 +202,7 @@ function computeCategoryTypeBreakdown_(txnData, cashData, matchesDate){
     if(type !== "debit") continue; // Planner only ever tracks spend, never income
 
     const mode         = txnData[i][4]  || "";
-    const amount        = Number(txnData[i][5]) || 0;
+    const amount        = txnMyAmount_(txnData[i]);   // your share only (splits.js)
     const reference      = txnData[i][6]  || "";
     const counterparty    = txnData[i][7]  || "";
     const note         = txnData[i][12] || "";
@@ -304,7 +304,7 @@ function computeFinancialEventTotals_(txnData, matchesDate){
     if(!matchesDate(d)) continue;
     const type = (txnData[i][3] || "").toString().toLowerCase();
     if(type !== "debit") continue;
-    const amount = Number(txnData[i][5]) || 0;
+    const amount = txnMyAmount_(txnData[i]);   // your share only (splits.js)
     const financialEvent = (txnData[i][17] || "").toString().trim();
     if(financialEvent === "Rent" || financialEvent === "EMI") fixedObligations += amount;
     else if(financialEvent === "Investment") invested += amount;

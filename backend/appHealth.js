@@ -224,6 +224,8 @@ function healthMessage_(problems){
 // The scheduled function. Silent when healthy. Never throws.
 // ---------------------------------------------------------------------
 function checkAppHealth(){
+  // Once a day, quietly keep the Sheet's "FriendShare" column in step with the splits database (splits.js).
+  try{ if(typeof splitsAutoRepairShares_ === "function") splitsAutoRepairShares_(); }catch(ignoreRepair){}
   try{
     var problems = computeHealthProblems_(loadHealthInputs_());
     if(problems.length === 0) return { problems: [], sent: false };

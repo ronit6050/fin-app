@@ -48,6 +48,7 @@ note/category/tags to existing rows via Pending/History/Reconcile.
 | R | FinancialEvent | `Rent` / `EMI` / `Investment`, or blank |
 | S | FinancialEventName | Only meaningful when column R is `EMI` or `Investment` — the specific named loan/investment (e.g. "Home Loan EMI") |
 | T | AutoSettled | Added 2026-10-10. Blank for anything a human handled. A short reason code when the app settled the row by itself (see [auto-settle-and-health.md](features/auto-settle-and-health.md)): `ccbill`, `wallet-topup`, `fe:Rent`, or `fe:<event name>` (e.g. `fe:Laptop EMI`). Rows written by the SMS reader / Recon only have 16-17 values, so this cell is simply empty for them — nothing depends on the row being 20 wide |
+| U | FriendShare | Added 2026-10-12. Blank normally. When you split a payment with a friend (see [splits.md](features/splits.md)), the rupees the FRIEND owes. Every spend total (Today, Analysis, Planner, Home) uses `Amount - FriendShare`; card limit/bill matching and the Pending/History amount keep the full `Amount`. Written/cleared by the app (on split / undo) and re-checked daily. Header is added automatically the first time. Never edit by hand; `splitsCheckShares()` / `splitsFixShares()` (run from the editor) report/repair drift |
 
 ---
 

@@ -7557,6 +7557,7 @@
         // then fails, tapping Save again re-sends the same split request id,
         // which the backend recognises as "already done" instead of splitting twice.
         let splitWasDuplicate = false;
+        let splitSheetOk = true;   // false = the split saved but your spend total may not have updated yet
         const savePromise = splitArm
           ? callAppsScript({
               action:      "createSplit",
@@ -7571,6 +7572,7 @@
             }).then(function (sp) {
               if (!sp.ok && !sp.duplicate) throw new Error(sp.error);
               splitWasDuplicate = !!sp.duplicate;   // already recorded earlier (a retry): keep that one
+              splitSheetOk = sp.sheetUpdated !== false;
               invalidatePeople();   // balances changed - reload next time they're shown
               return runSave();
             })
@@ -7623,6 +7625,9 @@
               showPendingNotice(splitWasDuplicate
                 ? "Saved. This payment was already split earlier, so that earlier split was kept (check the friend's page if you changed it)."
                 : "Split saved: " + splitArm.friendName + " owes you ₹" + splitArm.share.toLocaleString("en-IN") + ".");
+              if (!splitSheetOk) {
+                showPendingNotice("The split is saved, but your spending total may still show the full amount for now. It is checked and corrected automatically each day.");
+              }
             }
             // otherwise: fully saved, nothing more to do, it's already off the screen
           })
@@ -12771,6 +12776,7 @@
           <span>${escapeHtml(txn.mode)}</span>
         </div>
         <div class="pending-meta">${txn.date} ${txn.time} · ${escapeHtml(txn.bank)}${counterpartyText}</div>
+        ${txn.friendShare > 0 ? `<div class="pending-meta" style="margin-top:2px;">₹${txn.friendShare.toLocaleString("en-IN")} of this was a friend's share · your spend ₹${(Math.round((txn.amount - txn.friendShare) * 100) / 100).toLocaleString("en-IN")}</div>` : ""}
         <div class="field">
           <label>Note</label>
           <input type="text" class="history-note" value="${noteValue}">

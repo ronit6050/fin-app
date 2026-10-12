@@ -145,3 +145,20 @@ quotas; if a friend's Google email differs from what the owner typed (case is fi
 "not added yet". Not built: the owner approving a friend-created split, deleting a friend, per-friend push.
 
 **Needs:** Google OAuth consent screen must either be "In production" or list the friend as a Test user.
+
+## My spend counts only my share (built 2026-10-12)
+Transactions column U `FriendShare` holds the rupees a friend owes on a split payment (see SHEET_SCHEMA.md).
+`txnFriendShare_` / `txnMyAmount_` (PWA.js) turn a row into "your amount"; with column U empty they return the
+amount UNCHANGED (no rounding). Used by: `getMonthlyAnalysis` (this includes the Bank/Card/Wallet buckets), `getTodaySummary`
+(feeds Home), and two planner.js loops. Deliberately NOT changed (still the full amount, because the bank/card
+charged the full amount): card-bill matching, CC Advisor card totals, average card bill, ATM rows, Pending/History
+amounts, Recon. `getTransactionHistory` returns `friendShare` and History shows "Rs X of this was a friend's share".
+- Written by `createSplit` (owner's payments only) and cleared by undo (by either side) via `splitsApplyShareToSheet_`:
+  needs the fingerprint (`txFp`; never writes by row number alone), finds the row BY FINGERPRINT if a Reconcile has
+  re-sorted the sheet, and refuses when several rows look identical.
+- A retry that hits "already split" re-applies the share, so a failed Sheet write heals when you tap Save again.
+- Daily self-repair: `checkAppHealth` calls `splitsAutoRepairShares_` (logs `SPLITS_SHARE_REPAIRED` only when it fixes
+  something). By hand: `splitsCheckShares()` (looks) / `splitsFixShares()` (repairs). Ambiguous rows are reported, never touched.
+- Known edge cases: editing a split payment's amount to less than the share makes the share be ignored; "Not a
+  transaction" on an already-split payment leaves the split in Firestore with no Sheet row.
+- Review (2026-10-12): safe; nothing in existing numbers changes when column U is empty.

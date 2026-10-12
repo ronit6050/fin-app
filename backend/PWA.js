@@ -1343,7 +1343,8 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
     const d = new Date(rawDate);
     if(d.getFullYear() === year && (d.getMonth() + 1) === month){
       const type     = (txnData[i][3] || "").toString().toLowerCase();
-      const amount   = Number(txnData[i][5]) || 0;
+      const fullAmount = Number(txnData[i][5]) || 0;   // what actually left the bank/card
+      const amount   = txnMyAmount_(txnData[i]);       // YOUR share of it (a split's friend part is not your spend)
       const category = txnData[i][13] || "Other";
       const note     = txnData[i][12] || "";
       const day      = d.getDate();
@@ -1356,7 +1357,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
       // computed once per row, used below for both debit and credit.
       const modeBucket = modeBuckets[bucketKeyForMode(mode)];
 
-      if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note, amount, txnData)) continue; // settling spend already counted, not new spend
+      if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note, fullAmount, txnData)) continue; // settling spend already counted, not new spend
       if(type === "debit" && isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet — the real spend gets counted separately, below, as each wallet purchase happens
       // A loan/repayment isn't spending either — you expect the money back.
       // Skipped Need/Want/Saving already, but was never actually excluded
@@ -1725,8 +1726,9 @@ function getTodaySummary(txnData, cashData){
       const counterparty = txnData[i][7] || "";
       const note = txnData[i][12] || "";
       const financialEvent = (txnData[i][17] || "").toString().trim(); // column R
-      const amount   = Number(txnData[i][5]) || 0;
-      if(isCreditCardBillPayment(mode, counterparty, note, amount, txnData)) continue; // settling spend already counted, not new spend
+      const fullAmount = Number(txnData[i][5]) || 0;   // what actually left the bank/card
+      const amount   = txnMyAmount_(txnData[i]);       // YOUR share of it (see splits.js)
+      if(isCreditCardBillPayment(mode, counterparty, note, fullAmount, txnData)) continue; // settling spend already counted, not new spend
       if(isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet
       if(isLendingTransfer(counterparty, note)) continue; // a loan/repayment isn't spending — see the matching comment in getMonthlyAnalysis
       if(financialEvent) continue; // Rent/EMI/Investment — not day-to-day spend, see financialEvents.js
@@ -1997,6 +1999,7 @@ function getTransactionHistory(offset, limit){
       type:         data[i][3] || "",
       mode:         data[i][4] || "",
       amount:       Number(data[i][5]) || 0,
+      friendShare:  txnFriendShare_(data[i]),   // how much of this a friend owes you (splits.js); 0 if none
       reference:    data[i][6] || "",
       counterparty: data[i][7] || "",
       note:         note,
@@ -2197,6 +2200,21 @@ function rowFingerprint_(r){
     h = Math.imul(h, 0x01000193) >>> 0;
   }
   return h.toString(36);
+}
+
+// ---- Friend share of a split payment (added 2026-10-12; see splits.js, "My spend counts
+// only my share") ----
+function txnFriendShare_(row){
+  var amt = Number(row[5]) || 0;
+  var v = Number(row[20]);
+  return (isFinite(v) && v > 0 && v <= amt) ? v : 0;   // a share bigger than the payment is ignored, never trusted
+}
+
+function txnMyAmount_(row){
+  var amt = Number(row[5]) || 0;
+  var share = txnFriendShare_(row);
+  if(!share) return amt;                              // no split: exactly the amount, untouched
+  return Math.round((amt - share) * 100) / 100;
 }
 
 // The refusal sent back when a card no longer matches its row.
