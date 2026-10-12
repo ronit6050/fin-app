@@ -76,7 +76,7 @@ function handlePwaRequestCore_(data){
   if(data.action === "getPending"){
     // Read the sheet once and share it: the pending list AND the note-word
     // table (Need/Want auto-fill, see noteWordModel.js) come from the same data.
-    const pendingTxnData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
+    const pendingTxnData = dbSs_().getSheetByName("Transactions").getDataRange().getValues();
     return jsonResponse({ ok:true, transactions: getPendingTransactions(pendingTxnData), knownDebtPeople: getKnownDebtPeople(), noteWordModel: buildNoteTypeModel_(pendingTxnData) });
   }
 
@@ -87,7 +87,7 @@ function handlePwaRequestCore_(data){
     let noteType = data.type;
     if(data.autoType && !noteType){
       try{
-        const allTxn = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
+        const allTxn = dbSs_().getSheetByName("Transactions").getDataRange().getValues();
         const guess = explainNoteWordPrediction_(buildNoteTypeModel_(allTxn), data.note);
         if(guess && guess.kind === "confident") noteType = guess.answer;
       }catch(autoTypeErr){ noteType = data.type; }
@@ -293,7 +293,7 @@ function handlePwaRequestCore_(data){
 // functions directly rather than re-scanning the sheets from scratch.
 function getDashboardData(){
   const now = new Date();
-  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const ss  = dbSs_();
 
   // Read Transactions and Cash ONCE here and pass them into everything
   // below, instead of each function reading its own copy fresh — this
@@ -377,7 +377,7 @@ function registerPushToken(token){
 // it here and in getTodaySummary/getMonthlyAnalysis instead of each of
 // them reading it fresh).
 function getCashData(cashData){
-  const data = cashData || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Cash").getDataRange().getValues();
+  const data = cashData || dbSs_().getSheetByName("Cash").getDataRange().getValues();
 
   const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
@@ -432,7 +432,7 @@ function getCashData(cashData){
 // docs/features/need-want-saving.md for why that was a real bug there).
 function addCashEntryFromApp(type, amount, note, category, needWantSaving){
   try{
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Cash");
+    const sheet = dbSs_().getSheetByName("Cash");
     const now = new Date();
     const cleanNote = note || "";
 
@@ -471,7 +471,7 @@ function addCashEntryFromApp(type, amount, note, category, needWantSaving){
 // SmartMemory pollution incident for why that boundary matters).
 function updateCashEntry(row, type, amount, note, category, needWantSaving){
   try{
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Cash");
+    const sheet = dbSs_().getSheetByName("Cash");
 
     if(!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()){
       return { ok:false, error:"Invalid row." };
@@ -509,7 +509,7 @@ function updateCashEntry(row, type, amount, note, category, needWantSaving){
 // (see investmentInstruments.js), so the same fund can never end up
 // split across two slightly-different spellings again.
 function getInvestmentsData(){
-  const investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
+  const investSheet = dbSs_().getSheetByName("Investments");
   const data = investSheet.getDataRange().getValues();
 
   // Name -> Category (SIP / One-time Fund / Stock / Gold), so the
@@ -568,7 +568,7 @@ function logInvestmentFromApp(amount, instrumentName){
     if(!validation.ok) return validation;
     if(!amount || Number(amount) <= 0) return { ok:false, error:"Enter a valid amount." };
 
-    const investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
+    const investSheet = dbSs_().getSheetByName("Investments");
     const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
     investSheet.appendRow([today, validation.name, Number(amount), ""]);
@@ -585,7 +585,7 @@ function logInvestmentFromApp(amount, instrumentName){
 // edit can never reintroduce a stray free-typed spelling.
 function updateInvestmentEntry(row, instrumentName, amount){
   try{
-    const investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
+    const investSheet = dbSs_().getSheetByName("Investments");
 
     if(!Number.isInteger(row) || row < 2 || row > investSheet.getLastRow()){
       return { ok:false, error:"Invalid row." };
@@ -613,7 +613,7 @@ function updateInvestmentEntry(row, instrumentName, amount){
 // hand from the Apps Script editor (select this function, Run, then
 // View > Logs).
 function auditInvestmentsSheet(){
-  const investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
+  const investSheet = dbSs_().getSheetByName("Investments");
   const data = investSheet.getDataRange().getValues();
 
   Logger.log("Investments sheet — " + (data.length - 1) + " row(s):");
@@ -640,8 +640,8 @@ function auditInvestmentsSheet(){
 // guess. Run by hand from the Apps Script editor (select this
 // function, Run, then View > Logs / Executions).
 function auditAtmWithdrawals(){
-  const txnData  = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
-  const cashData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Cash").getDataRange().getValues();
+  const txnData  = dbSs_().getSheetByName("Transactions").getDataRange().getValues();
+  const cashData = dbSs_().getSheetByName("Cash").getDataRange().getValues();
 
   const atmRows = [];
   for(let i = 1; i < txnData.length; i++){
@@ -712,7 +712,7 @@ function auditAtmWithdrawals(){
 // Same logic as sendDebtDashboard() in DebtAdvisor.js, but returns plain
 // data instead of a Telegram message.
 function getDebtsData(){
-  const debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+  const debtSheet = dbSs_().getSheetByName("Debts");
   const data  = debtSheet.getDataRange().getValues();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -770,7 +770,7 @@ function getDebtsData(){
 // Adds a new debt entry from the PWA's form (no AI parsing — plain fields)
 function addDebtEntryFromApp(person, type, amount, note, dueDate){
   try{
-    const debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+    const debtSheet = dbSs_().getSheetByName("Debts");
     const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
     debtSheet.appendRow([
@@ -801,7 +801,7 @@ function addDebtEntryFromApp(person, type, amount, note, dueDate){
 // docs/features/debt-trajectory.md.
 function settleDebtRow(row){
   try{
-    const debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+    const debtSheet = dbSs_().getSheetByName("Debts");
 
     if(!Number.isInteger(row) || row < 2 || row > debtSheet.getLastRow()){
       return { ok:false, error:"Invalid row." };
@@ -861,7 +861,7 @@ function settleDebtRow(row){
 // docs/features/debt-trajectory.md.
 function applyDebtPayment(row, amount){
   try{
-    const debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+    const debtSheet = dbSs_().getSheetByName("Debts");
 
     if(!Number.isInteger(row) || row < 2 || row > debtSheet.getLastRow()){
       return { ok:false, error:"Invalid row." };
@@ -960,7 +960,7 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
   const currentCycleStart = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth(), 19);
   const currentCycleEnd   = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() + 1, 18);
 
-  const data = txnData || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
+  const data = txnData || dbSs_().getSheetByName("Transactions").getDataRange().getValues();
 
   const settings   = getSettings();
   const ccLimit    = settings.ccLimit;
@@ -1308,7 +1308,7 @@ function finalizeModeBucket(bucket){
 // note (the "all" numbers) is completely unchanged.
 // txnData/cashData are optional — see getCashData's comment, same reasoning.
 function getMonthlyAnalysis(year, month, txnData, cashData){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
 
   txnData  = txnData  || ss.getSheetByName("Transactions").getDataRange().getValues();
   cashData = cashData || ss.getSheetByName("Cash").getDataRange().getValues();
@@ -1649,7 +1649,7 @@ function getOutstandingCCCycleWindow_(){
 // outstanding total into two smaller ones that then never amount-match
 // a real bill payment. Trimming first makes that impossible.
 function getOutstandingCCBillTotalsByCard(txnData){
-  const data = txnData || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions").getDataRange().getValues();
+  const data = txnData || dbSs_().getSheetByName("Transactions").getDataRange().getValues();
   const window = getOutstandingCCCycleWindow_();
   const totals = {};
   for(let i = 1; i < data.length; i++){
@@ -1709,7 +1709,7 @@ function isWalletTopUp(counterparty, reference){
 // Adds up everything spent today, from both bank/UPI and cash, by category.
 // txnData/cashData are optional — see getCashData's comment, same reasoning.
 function getTodaySummary(txnData, cashData){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
 
   txnData  = txnData  || ss.getSheetByName("Transactions").getDataRange().getValues();
   cashData = cashData || ss.getSheetByName("Cash").getDataRange().getValues();
@@ -1775,7 +1775,7 @@ function getTodaySummary(txnData, cashData){
 // same definition Telegram's /pending command already uses.
 // txnData is optional — see getCashData's comment, same reasoning.
 function getPendingTransactions(txnData){
-  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const ss    = dbSs_();
   const data  = txnData || ss.getSheetByName("Transactions").getDataRange().getValues();
   const pending = [];
 
@@ -1975,7 +1975,7 @@ function getTransactionHistory(offset, limit){
   offset = Number(offset) || 0;
   limit  = Number(limit) || 20;
 
-  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const ss    = dbSs_();
   const sheet = ss.getSheetByName("Transactions");
   const data  = sheet.getDataRange().getValues();
 
@@ -2084,7 +2084,7 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
 
     let memData = smartMemoryData;
     if(!memData){
-      const smartMemory = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("SmartMemory");
+      const smartMemory = dbSs_().getSheetByName("SmartMemory");
       if(!smartMemory) return "Other";
       memData = smartMemory.getDataRange().getValues();
     }
@@ -2245,7 +2245,7 @@ function rowStillMatches_(sheet, row, expectFp){
 function saveTransactionNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName, debtPerson, investmentInstrument, expectFp, opts){
   opts = opts || {};
   try{
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    const sheet = dbSs_().getSheetByName("Transactions");
 
     // The app sends which row to write to — make sure it's a real data
     // row (not the header, not something out of range) before touching
@@ -2528,7 +2528,7 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
 // that guarantee matters.
 function markNotATransaction(row, expectFp){
   try{
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    const sheet = dbSs_().getSheetByName("Transactions");
 
     if(!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()){
       return { ok:false, error:"Invalid row." };
@@ -2622,7 +2622,7 @@ function markNotATransaction(row, expectFp){
 // "auto-create on first use" pattern already used elsewhere in this
 // codebase (e.g. investmentInstruments.js's getInvestmentInstrumentsSheet_()).
 function getTransactionsIgnoredSheet_(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   let sheet = ss.getSheetByName("Transactions_Ignored");
   if(!sheet){
     sheet = ss.insertSheet("Transactions_Ignored");
@@ -2635,7 +2635,7 @@ function getTransactionsIgnoredSheet_(){
 
 // Auto-creates LearnedSpamPatterns the first time it's needed.
 function getLearnedSpamPatternsSheet_(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   let sheet = ss.getSheetByName("LearnedSpamPatterns");
   if(!sheet){
     sheet = ss.insertSheet("LearnedSpamPatterns");

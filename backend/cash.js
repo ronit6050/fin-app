@@ -7,7 +7,7 @@
 =============================== */
 function processCashEntry(text, msgId, mode){
 
-  const ss     = SpreadsheetApp.getActiveSpreadsheet();
+  const ss     = dbSs_();
   const sheet  = ss.getSheetByName("Cash");
 
   const lines = text.split("\n");
@@ -53,7 +53,7 @@ function processCashEntry(text, msgId, mode){
 =============================== */
 function sendCashBalance(){
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet()
+  const sheet = dbSs_()
     .getSheetByName("Cash");
   const data = sheet.getDataRange().getValues();
 
@@ -77,7 +77,7 @@ function sendCashBalance(){
 =============================== */
 function sendTodayCash(){
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet()
+  const sheet = dbSs_()
     .getSheetByName("Cash");
   const data  = sheet.getDataRange().getValues();
 
@@ -121,7 +121,7 @@ function sendDailyCashCheckin(){
 
   try{
 
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const cashSheet = ss.getSheetByName("Cash");
     const txnSheet  = ss.getSheetByName("Transactions");
 

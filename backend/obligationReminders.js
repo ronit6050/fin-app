@@ -205,7 +205,7 @@ function computeObligationStatuses_(financialEventsData, txnData, today){
 // ---------------------------------------------------------------------
 function checkUpcomingObligations(){
   try{
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = dbSs_();
     var financialEventsSheet = ss.getSheetByName("FinancialEvents");
     var txnSheet = ss.getSheetByName("Transactions");
     if(!financialEventsSheet || !txnSheet) return;
@@ -254,7 +254,7 @@ function checkUpcomingObligations(){
 // reminder from firing later). Prints via Logger.log — View > Logs (or
 // View > Executions) after running.
 function testUpcomingObligations(){
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = dbSs_();
   var financialEventsSheet = ss.getSheetByName("FinancialEvents");
   var txnSheet = ss.getSheetByName("Transactions");
   if(!financialEventsSheet || !txnSheet){

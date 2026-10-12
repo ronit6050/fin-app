@@ -24,11 +24,11 @@ const SAVINGS_FREE_SHARE = 0.10;        // Free Savings' constant slice, every s
 ============================================ */
 
 function getSavingsSheet_(){
-  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Savings");
+  return dbSs_().getSheetByName("Savings");
 }
 
 function getGoalsSheet_(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   let sheet = ss.getSheetByName("Goals");
   if(!sheet){
     sheet = ss.insertSheet("Goals");
@@ -151,7 +151,7 @@ function validateManualSplit_(amount, rows){
 // from the Transactions sheet, then hands them to the pure averager.
 function computeCCBufferTarget_(cyclesToAverage){
   cyclesToAverage = cyclesToAverage || 3;
-  const txnSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  const txnSheet = dbSs_().getSheetByName("Transactions");
   if(!txnSheet) return CC_BUFFER_FALLBACK_TARGET;
 
   const data  = txnSheet.getDataRange().getValues();
@@ -382,7 +382,7 @@ function purchaseGoal(row, name, amount){
 ============================================ */
 
 function migrateSavingsToV2(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   const wishSheet = ss.getSheetByName("WishList");
   const savSheet  = getSavingsSheet_();
 

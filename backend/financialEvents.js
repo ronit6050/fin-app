@@ -33,7 +33,7 @@
 // same kind of transaction sent twice).
 
 function getFinancialEventsSheet(){
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = dbSs_();
   var sheet = ss.getSheetByName("FinancialEvents");
   if(!sheet){
     sheet = ss.insertSheet("FinancialEvents");
@@ -264,7 +264,7 @@ function isNearbyDate(a, b, windowDays){
 // Investments sheet: [Date, Type, Amount, Note] — see PWA.js's
 // logInvestmentFromApp for the manual-entry version this mirrors.
 function hasLikelyDuplicateInvestment(dateStr, amount){
-  var investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
+  var investSheet = dbSs_().getSheetByName("Investments");
   if(!investSheet) return false;
   var data = investSheet.getDataRange().getValues();
   var txnDate = new Date(dateStr);
@@ -301,7 +301,7 @@ function hasLikelyDuplicateInvestment(dateStr, amount){
 // checks for a duplicate.
 function autoLogInvestment(dateStr, name, amount, note, skipDuplicateCheck){
   if(!skipDuplicateCheck && hasLikelyDuplicateInvestment(dateStr, amount)) return { logged: false, reason: "duplicate" };
-  var investSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Investments");
+  var investSheet = dbSs_().getSheetByName("Investments");
   if(!investSheet) return { logged: false, reason: "no sheet" };
   investSheet.appendRow([dateStr, name || "Investment", Number(amount) || 0, note || ""]);
   return { logged: true };
@@ -312,7 +312,7 @@ function autoLogInvestment(dateStr, name, amount, note, skipDuplicateCheck){
 // same-day rows first, not compare row-by-row — a manual saving is
 // almost never a single row.
 function hasLikelyDuplicateSaving(dateStr, amount){
-  var savSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Savings");
+  var savSheet = dbSs_().getSheetByName("Savings");
   if(!savSheet) return false;
   var data = savSheet.getDataRange().getValues();
   var txnDate = new Date(dateStr);
@@ -417,7 +417,7 @@ function classifyDebtDirection(txnType, note){
 // frontend so it can recognize "lent to Raj" again live, as you type,
 // without a round trip, once Raj has been confirmed once before.
 function getKnownDebtPeople(){
-  var debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+  var debtSheet = dbSs_().getSheetByName("Debts");
   if(!debtSheet) return [];
   var data = debtSheet.getDataRange().getValues();
   var seen = {};
@@ -449,7 +449,7 @@ function findSettleableDebtRow(person, expectedType, debtsData){
 }
 
 function autoCreateDebt(person, debtType, amount, note){
-  var debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+  var debtSheet = dbSs_().getSheetByName("Debts");
   if(!debtSheet) return { logged: false, reason: "no sheet" };
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
   debtSheet.appendRow([today, person, debtType, Number(amount) || 0, note || "", "", "Pending", ""]);
@@ -477,7 +477,7 @@ function handleDebtAutoLink(txnType, note, person, amount){
   if(direction === "newLent")     return autoCreateDebt(person, "LENT", amount, note);
   if(direction === "newBorrowed") return autoCreateDebt(person, "BORROWED", amount, note);
 
-  var debtSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+  var debtSheet = dbSs_().getSheetByName("Debts");
   var debtsData = debtSheet ? debtSheet.getDataRange().getValues() : [];
   if(direction === "repayLent"){
     var row1 = findSettleableDebtRow(person, "LENT", debtsData);

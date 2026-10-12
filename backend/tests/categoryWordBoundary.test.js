@@ -38,7 +38,9 @@ function assert(condition, message){
 }
 
 const sandbox = { console };
-vm.createContext(sandbox);
+// Every backend file asks dbSs_() for the spreadsheet (v2db.js); outside a virtual-spreadsheet request that is the real one.
+  sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
+  vm.createContext(sandbox);
 const src = fs.readFileSync(path.join(__dirname, "..", "category.js"), "utf8");
 vm.runInContext(src + "\nthis.findMerchantMatch = findMerchantMatch; this.matchByPattern = matchByPattern; this.normalizeText = normalizeText;", sandbox);
 

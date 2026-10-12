@@ -61,7 +61,7 @@ Examples:
     const type = parts[1] || "bank";
     const note = parts.slice(2).join(" ") || "saving";
 
-    const ss       = SpreadsheetApp.getActiveSpreadsheet();
+    const ss       = dbSs_();
     const savSheet = ss.getSheetByName("Savings");
 
     if(!savSheet){ sendMessage("❌ Savings sheet not found"); return; }
@@ -128,7 +128,7 @@ function sendSavingsDashboard(){
 
   try{
 
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const savSheet  = ss.getSheetByName("Savings");
     const wishSheet = ss.getSheetByName("WishList");
 
@@ -231,7 +231,7 @@ function sendInvestmentDashboard(){
 
   try{
 
-    const ss          = SpreadsheetApp.getActiveSpreadsheet();
+    const ss          = dbSs_();
     const investSheet = ss.getSheetByName("Investments");
 
     if(!investSheet){ sendMessage("❌ Investments sheet not found"); return; }
@@ -306,7 +306,7 @@ function logInvestment(text){
 
     const type = parts.slice(1).join(" ") || "General";
 
-    const ss          = SpreadsheetApp.getActiveSpreadsheet();
+    const ss          = dbSs_();
     const investSheet = ss.getSheetByName("Investments");
 
     if(!investSheet){ sendMessage("❌ Investments sheet not found"); return; }
@@ -397,7 +397,7 @@ Rules:
       return;
     }
 
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const wishSheet = ss.getSheetByName("WishList");
     if(!wishSheet){ sendMessage("❌ WishList sheet not found"); return; }
 
@@ -441,7 +441,7 @@ function markWishListPurchased(text){
 
   try{
 
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const wishSheet = ss.getSheetByName("WishList");
     const savSheet  = ss.getSheetByName("Savings");
 
@@ -503,7 +503,7 @@ function processWishListPurchase(text){
     const entry = pending[index];
     PropertiesService.getScriptProperties().deleteProperty("wishlistPurchaseList");
 
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const wishSheet = ss.getSheetByName("WishList");
     const savSheet  = ss.getSheetByName("Savings");
     const fmt       = (n) => Math.round(n).toLocaleString('en-IN');
@@ -550,7 +550,7 @@ function checkWishListAffordability(wishlistTotal){
 
   try{
 
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const wishSheet = ss.getSheetByName("WishList");
     if(!wishSheet) return;
 
@@ -666,7 +666,7 @@ function sendSundaySavingsReminder(){
 
   try{
 
-    const ss       = SpreadsheetApp.getActiveSpreadsheet();
+    const ss       = dbSs_();
     const savSheet = ss.getSheetByName("Savings");
     if(!savSheet) return;
 

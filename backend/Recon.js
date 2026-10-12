@@ -80,7 +80,7 @@ function extractNoteFromNarration(narration){
 
 /* ===== GET SHEET DATA ===== */
 function getSheetData(){
-  return SpreadsheetApp.getActiveSpreadsheet()
+  return dbSs_()
     .getSheetByName("Transactions")
     .getDataRange()
     .getValues();
@@ -178,7 +178,7 @@ function runReconciliation(sheet){
   const bankTxns  = parseBankSheet(sheet);
   const sheetData = getSheetData();
 
-  const tempSheet = SpreadsheetApp.getActiveSpreadsheet()
+  const tempSheet = dbSs_()
     .getSheetByName("Recon_Temp");
 
   tempSheet.clear();
@@ -220,7 +220,7 @@ function runReconciliation(sheet){
 /* ===== INSERT CONFIRMED ===== */
 function insertConfirmed(){
 
-  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const ss   = dbSs_();
   const temp = ss.getSheetByName("Recon_Temp");
   const main = ss.getSheetByName("Transactions");
   const data = temp.getDataRange().getValues();
@@ -306,7 +306,7 @@ function previewReconciliation(bankTxns, options){
   options = options || {};
   const sheetData = getSheetData();
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   const smartMemorySheet = ss.getSheetByName("SmartMemory");
   const smartMemoryData  = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
   const typeVotesSheet   = ss.getSheetByName("TypeVotes");
@@ -405,7 +405,7 @@ function extractCardLast4(text){
 // edit already possible via History.
 function fixTransactionMode(row, mode, expectFp){
   try{
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    const sheet = dbSs_().getSheetByName("Transactions");
     // This used to write to ANY row number it was given. Same row check as
     // saveTransactionNote, plus the stale-card safeguard (see rowFingerprint_
     // in PWA.js) added 2026-10-11.
@@ -489,7 +489,7 @@ function resetBookmarkAfterSort_(sheet){
 function insertReconciledTransactions(txns, source){
 
   try{
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    const sheet = dbSs_().getSheetByName("Transactions");
     const formattedTime = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "HH:mm:ss");
 
     // BEFORE any row moves (added 2026-10-11): alert/mark any real transaction

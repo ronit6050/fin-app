@@ -264,7 +264,8 @@ function fsCommit_(ops){
   var r = fsFetch_("post", fsDocumentsUrl_() + ":commit", { writes: writes });
   FS_USAGE_.writes += writes.length;
   if(r.code !== 200) throw fsError_("write", r);
-  return true;
+  // One entry per write, in the same order (each has the new updateTime); an empty list is still "true-ish" for old callers.
+  try{ return JSON.parse(r.text).writeResults || []; }catch(parseErr){ return []; }
 }
 
 // ---- Usage meter ----------------------------------------------------------

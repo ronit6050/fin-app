@@ -111,6 +111,8 @@ function makeApp(o){
       return Promise.resolve({ json: function(){ return Promise.resolve(o.refreshResponse ? o.refreshResponse(body) : { ok: true, published: true, builtAt: clock.now }); } });
     }
   };
+  // Every backend file asks dbSs_() for the spreadsheet (v2db.js); outside a virtual-spreadsheet request that is the real one.
+  sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
   vm.createContext(sandbox);
   vm.runInContext(code + "\nthis.__api = { loadDashboard, onFastSnapshot, fastWriteStarted, fastWriteFinished, stopFastViews, fastIsDirty, handleSessionExpiredProbe: function(){ return 1; }, getState: function(){ return { applied: fastApplied, min: fastMinBuiltAt, inFlight: fastWritesInFlight, broken: fastBroken, held: !!fastHeldSnap, listening: !!fastListenerUnsub, running: fastRefreshesRunning, dirty: fastIsDirty() }; } };", sandbox);
   return { api: sandbox.__api, sb: sandbox, clock, fb, log };

@@ -78,7 +78,7 @@ const INVESTMENT_INSTRUMENTS_SEED = [
 // one time the sheet doesn't exist yet — every call after that just
 // returns the existing sheet, untouched.
 function getInvestmentInstrumentsSheet_(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   let sheet = ss.getSheetByName("InvestmentInstruments");
   if(!sheet){
     sheet = ss.insertSheet("InvestmentInstruments");
@@ -298,7 +298,7 @@ function matchInvestmentInstrumentByNote(note, instrumentsData){
    this ever genuinely needs re-running, clear the relevant rows first.
 ============================================ */
 function migrateInvestmentsToNamedInstruments(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   const investSheet = ss.getSheetByName("Investments");
   if(!investSheet){
     Logger.log("No Investments sheet found — nothing to migrate.");

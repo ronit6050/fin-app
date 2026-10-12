@@ -66,7 +66,7 @@ const PLANNER_FIXED_OBLIGATIONS_KEY = "_FixedObligations";
 ============================================ */
 
 function getBudgetsSheet_(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   let sheet = ss.getSheetByName("Budgets");
   if(!sheet){
     sheet = ss.insertSheet("Budgets");
@@ -387,7 +387,7 @@ function computeSuggestedTargets_(txnData, cashData, today){
 // are optional (pass an already-read sheet's values to skip re-reading
 // it), same reasoning as getCashData's own comment.
 function getPlannerData(monthStr, txnData, cashData){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   txnData  = txnData  || ss.getSheetByName("Transactions").getDataRange().getValues();
   cashData = cashData || ss.getSheetByName("Cash").getDataRange().getValues();
 

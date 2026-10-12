@@ -18,7 +18,7 @@
 const NOTE_CONFIDENCE_MIN_USES = 2;
 
 function getNoteMemorySheet(){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   let sheet = ss.getSheetByName("NoteMemory");
   if(!sheet){
     sheet = ss.insertSheet("NoteMemory");
@@ -35,7 +35,7 @@ function getSuggestedNote(counterparty, amount, noteMemoryData){
 
   const band = getAmountBand(amount);
   const data = noteMemoryData || (function(){
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("NoteMemory");
+    const sheet = dbSs_().getSheetByName("NoteMemory");
     return sheet ? sheet.getDataRange().getValues() : [];
   })();
 
@@ -66,7 +66,7 @@ function getSuggestedNotes(counterparty, amount, noteMemoryData, limit){
 
   const band = getAmountBand(amount);
   const data = noteMemoryData || (function(){
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("NoteMemory");
+    const sheet = dbSs_().getSheetByName("NoteMemory");
     return sheet ? sheet.getDataRange().getValues() : [];
   })();
 

@@ -34,7 +34,7 @@ function getSmartCategory(note, counterparty, amount, mode, rowIndex){
 
     if(!note && !counterparty) return { category:"Other", confidence:0 };
 
-    const ss          = SpreadsheetApp.getActiveSpreadsheet();
+    const ss          = dbSs_();
     const smartMemory = ss.getSheetByName("SmartMemory");
 
     if(!smartMemory){
@@ -438,7 +438,7 @@ function handleCategoryCorrection(merchant, correctCategory, correctSubcategory)
 
   try{
 
-    const ss          = SpreadsheetApp.getActiveSpreadsheet();
+    const ss          = dbSs_();
     const smartMemory = ss.getSheetByName("SmartMemory");
 
     if(!smartMemory) return;

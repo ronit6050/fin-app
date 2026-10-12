@@ -97,7 +97,7 @@ function isLendingTransfer(counterparty, note) {
 }
 
 function getTypeVotesSheet() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = dbSs_();
   var sheet = ss.getSheetByName("TypeVotes");
   if (!sheet) {
     sheet = ss.insertSheet("TypeVotes");
@@ -136,7 +136,7 @@ function getSuggestedType(txnType, category, counterparty, amount, typeVotesData
   var band = getAmountBand(amount);
   var data = typeVotesData;
   if (!data) {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TypeVotes");
+    var sheet = dbSs_().getSheetByName("TypeVotes");
     data = sheet ? sheet.getDataRange().getValues() : [];
   }
 

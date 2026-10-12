@@ -65,7 +65,7 @@ function processNewTransactionsCore_() {
 
   const {BOT_TOKEN, CHAT_ID} = getConfig();
 
-  const sheet   = SpreadsheetApp.getActiveSpreadsheet()
+  const sheet   = dbSs_()
     .getSheetByName("Transactions");
   const lastRow = sheet.getLastRow();
 
@@ -93,7 +93,7 @@ function processNewTransactionsCore_() {
   // 2026-09-19) — read once here, same reason getPendingTransactions()
   // reads them once outside its own loop. See
   // docs/features/quick-confirm-notification.md.
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
   const smartMemorySheet = ss.getSheetByName("SmartMemory");
   const smartMemoryData  = smartMemorySheet ? smartMemorySheet.getDataRange().getValues() : [];
   const typeVotesSheet = ss.getSheetByName("TypeVotes");
@@ -326,7 +326,7 @@ function diagnosePendingTransactions(){
       triggers.map(t => t.getHandlerFunction()).join(", ") + ")");
 
   // 2) How far behind is the "last checked row" bookmark?
-  const sheet   = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  const sheet   = dbSs_().getSheetByName("Transactions");
   const lastRow = sheet.getLastRow();
   const props   = PropertiesService.getScriptProperties();
   const lastChecked = Number(props.getProperty("lastCheckedRow") || 1);
@@ -378,7 +378,7 @@ function diagnosePendingTransactions(){
   }
 
   // 5) Any recent errors already logged from past attempts?
-  const logsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("AILogs");
+  const logsSheet = dbSs_().getSheetByName("AILogs");
   if(logsSheet){
     const logsData = logsSheet.getDataRange().getValues();
     const recentErrors = logsData
@@ -407,7 +407,7 @@ function sendNextPendingTransaction(){
 
     const {BOT_TOKEN, CHAT_ID} = getConfig();
 
-    const sheet = SpreadsheetApp.getActiveSpreadsheet()
+    const sheet = dbSs_()
       .getSheetByName("Transactions");
     const data  = sheet.getDataRange().getValues();
 

@@ -161,7 +161,7 @@ function mapColumns(header){
 /* ========= SAVE ========= */
 function saveCreditCardTransactions(data){
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet()
+  const sheet = dbSs_()
     .getSheetByName("Credit_Card");
 
   if(!sheet) throw new Error("Credit_Card sheet missing");

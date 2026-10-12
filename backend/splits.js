@@ -75,7 +75,7 @@ var SPLITS_SHARE_HEADER_ = "FriendShare";
 function splitsApplyShareToSheet_(txRow, txFp, shareRupees){
   try{
     if(!txFp) return false;       // never write by row number alone: a re-sorted sheet would put it on the wrong payment
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    var sheet = dbSs_().getSheetByName("Transactions");
     if(!sheet) return false;
     var row = Math.floor(Number(txRow));
     // The stored row number is only a hint: a Reconcile can re-sort the sheet. If that row is
@@ -454,7 +454,7 @@ function splitsShareAudit_(apply){
       }
     });
   });
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  var sheet = dbSs_().getSheetByName("Transactions");
   var rows = sheet.getDataRange().getValues();
   var report = { missing: [], orphan: [], wrong: [], ambiguous: [], fixed: 0 };
   var fpCount = {}, fps = [];
@@ -517,7 +517,7 @@ function splitsMoveDebt_(me, myName, input){
   var friend = splitsLoadFriend_(me, fk);
   if(!friend || friend.fields.mirror) return splitsFail_("That friend isn't in your list.");
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+  var sheet = dbSs_().getSheetByName("Debts");
   if(!sheet || !(row >= 2 && row <= sheet.getLastRow())) return splitsFail_("Invalid row.");
   var v = sheet.getRange(row, 1, 1, 8).getValues()[0];
   var person = String(v[1] || "").trim(), type = String(v[2] || "").trim().toUpperCase();

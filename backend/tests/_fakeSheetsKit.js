@@ -147,6 +147,10 @@ function makeWorld(files){
     vm.runInContext(src, sandbox, { filename: f });
   });
 
+  // Every backend file asks dbSs_() for "the spreadsheet" (v2db.js); outside a v2dbRun_ that is the real
+  // Sheet. Tests that do not load v2db.js get the same behaviour here.
+  vm.runInContext("if (typeof dbSs_ === 'undefined') { var dbSs_ = function(){ return SpreadsheetApp.getActiveSpreadsheet(); }; }", sandbox);
+
   // Stubs for the things that would talk to the outside world. Defined
   // AFTER loading the real files so they win.
   sandbox.__pushes = pushes;

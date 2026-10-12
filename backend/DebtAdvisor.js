@@ -10,7 +10,7 @@
 function sendDebtDashboard() {
 
   try {
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const debtSheet = ss.getSheetByName("Debts");
 
     if(!debtSheet){
@@ -123,7 +123,7 @@ function sendRepaymentPlan(youOwe, totalYouOwe){
 
   try{
 
-    const ss  = SpreadsheetApp.getActiveSpreadsheet();
+    const ss  = dbSs_();
     const fmt = (n) => Math.round(Math.abs(n)).toLocaleString('en-IN');
 
     // ── Read Savings sheet — fast, only a few rows ──
@@ -234,7 +234,7 @@ If amount not found return amount:0. No explanation.`;
       return;
     }
 
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const debtSheet = ss.getSheetByName("Debts");
 
     if(!debtSheet){ sendMessage("❌ Debts sheet not found."); return; }
@@ -280,7 +280,7 @@ ${typeLabel}
 ======================================= */
 function sendSettleList(){
   try{
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const debtSheet = ss.getSheetByName("Debts");
     const data      = debtSheet.getDataRange().getValues();
     const fmt       = (n) => Math.round(n).toLocaleString('en-IN');
@@ -351,7 +351,7 @@ function processSettlement(text){
     const entry = pending[index];
     if(!entry){ sendMessage("❌ Invalid number. Try again."); return; }
 
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const debtSheet = ss.getSheetByName("Debts");
     const today     = Utilities.formatDate(
       new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"
@@ -412,7 +412,7 @@ function checkDebtDueDates(){
 
   try{
 
-    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const ss        = dbSs_();
     const debtSheet = ss.getSheetByName("Debts");
     if(!debtSheet) return;
 
@@ -478,7 +478,7 @@ Tap Debts → Dashboard to plan payments.`
    TEST FUNCTION
 ======================================= */
 function testRepaymentPlan(){
-  const ss        = SpreadsheetApp.getActiveSpreadsheet();
+  const ss        = dbSs_();
   const debtSheet = ss.getSheetByName("Debts");
   const data      = debtSheet.getDataRange().getValues();
   const today     = new Date();
@@ -543,7 +543,7 @@ function testRepaymentPlan(){
 // app self-creates on first use (see e.g. getFinancialEventsSheet in
 // financialEvents.js).
 function getDebtPaymentsSheet_(){
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = dbSs_();
   var sheet = ss.getSheetByName("DebtPayments");
   if(!sheet){
     sheet = ss.insertSheet("DebtPayments");
@@ -583,7 +583,7 @@ function logDebtPayment_(row, person, type, amountPaid){
 // activity in the last 90 days, this deliberately does NOT invent a
 // fake date — see hasProjection/message below.
 function getDebtTrajectory(direction){
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = dbSs_();
   var debtSheet = ss.getSheetByName("Debts");
   var debtsData = debtSheet ? debtSheet.getDataRange().getValues() : [];
 
@@ -691,7 +691,7 @@ function pushDebtPaymentUpdate(direction, personLabel, amountPaid){
 
 function debugRepaymentPlan(){
   try{
-    const ss       = SpreadsheetApp.getActiveSpreadsheet();
+    const ss       = dbSs_();
     const savSheet = ss.getSheetByName("Savings");
 
     if(!savSheet){

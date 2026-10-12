@@ -190,7 +190,7 @@ function computeHealthProblems_(input){
 
 // Reads the real sheets/timers into the shape computeHealthProblems_ wants.
 function loadHealthInputs_(){
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = dbSs_();
 
   var triggerHandlers = null;
   try{

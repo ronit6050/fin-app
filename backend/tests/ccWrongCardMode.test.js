@@ -91,6 +91,8 @@ function loadSandbox(transactionsHolder){
     Logger: { log: function(){} },
     console: console
   };
+  // Every backend file asks dbSs_() for the spreadsheet (v2db.js); outside a virtual-spreadsheet request that is the real one.
+  sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
   vm.createContext(sandbox);
 
   ["category.js", "needWantSaving.js", "Credit Card.js", "PWA.js", "Recon.js"].forEach(function(filename){

@@ -17,7 +17,7 @@ const CC_ALERT_AMT = CC_LIMIT * CC_ALERT_PCT;  // ₹15,000
 function sendCCAdvisorReport() {
 
   try {
-    const ss     = SpreadsheetApp.getActiveSpreadsheet();
+    const ss     = dbSs_();
     const sheet  = ss.getSheetByName("Transactions");
 
     if(!sheet){ sendMessage("❌ Transactions sheet not found"); return; }

@@ -14,7 +14,7 @@ function generateSmartReaction(note, category, amount, bank, mode) {
     const genericNotes = ["test","na","n/a","-","misc","other","unknown"];
     if(genericNotes.includes(note.toLowerCase().trim())) return;
 
-    const ss    = SpreadsheetApp.getActiveSpreadsheet();
+    const ss    = dbSs_();
     const sheet = ss.getSheetByName("Transactions");
     const data  = sheet.getDataRange().getValues();
 

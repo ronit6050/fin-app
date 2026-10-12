@@ -4,7 +4,7 @@
 
 function generateMonthlyAnalysis(year, month){
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
 
   const txnSheet  = ss.getSheetByName("Transactions");
   const cashSheet = ss.getSheetByName("Cash");
@@ -278,7 +278,7 @@ Write 2-3 sentences of specific, honest financial insight for this month.
 ============================================ */
 function generateCategoryChart(categoryTotals){
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
 
   let tempSheet = ss.getSheetByName("TEMP_CHART");
   if(tempSheet) ss.deleteSheet(tempSheet);

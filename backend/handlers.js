@@ -304,7 +304,7 @@ Examples:
       PropertiesService.getScriptProperties().deleteProperty("pendingCorrection");
 
       if(validCat){
-        const sheet = SpreadsheetApp.getActiveSpreadsheet()
+        const sheet = dbSs_()
           .getSheetByName("Transactions");
         sheet.getRange(pending.rowIndex, 14).setValue(newCat);
         handleCategoryCorrection(pending.merchant, newCat, "Other");
@@ -432,7 +432,7 @@ Examples:
     const replyId  = message.reply_to_message.message_id;
     const userText = message.text;
 
-    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    const ss   = dbSs_();
     const sheet = ss.getSheetByName("Transactions");
     const rows  = sheet.getDataRange().getValues();
 

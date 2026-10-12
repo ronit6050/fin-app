@@ -128,6 +128,8 @@ function loadSandbox(){
     getSettings: () => ({ ccLimit: 50000, ccWarnPct: 0.25, ccAlertPct: 0.30, monthlyExpenses: 30000, monthlySaveGoal: 1000, monthlyInvestmentGoal: 0 }),
     console: console
   };
+  // Every backend file asks dbSs_() for the spreadsheet (v2db.js); outside a virtual-spreadsheet request that is the real one.
+  sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
   vm.createContext(sandbox);
 
   ["DebtAdvisor.js", "PWA.js"].forEach((filename) => {

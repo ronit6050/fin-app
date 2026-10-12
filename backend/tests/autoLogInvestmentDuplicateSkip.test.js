@@ -126,6 +126,8 @@ function loadFinancialEventsSandbox(){
     Logger: env.Logger,
     console: console
   };
+  // Every backend file asks dbSs_() for the spreadsheet (v2db.js); outside a virtual-spreadsheet request that is the real one.
+  sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
   vm.createContext(sandbox);
 
   ["investmentInstruments.js", "financialEvents.js"].forEach(function(filename){
@@ -148,6 +150,7 @@ function loadFullBackendSandbox(){
     Logger: env.Logger,
     console: console
   };
+  sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
   vm.createContext(sandbox);
 
   const files = ["investmentInstruments.js", "financialEvents.js", "needWantSaving.js", "PWA.js"];

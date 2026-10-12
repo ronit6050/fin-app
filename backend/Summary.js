@@ -4,7 +4,7 @@
 
 function sendTodaySummary(){
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = dbSs_();
 
   const txnSheet  = ss.getSheetByName("Transactions");
   const cashSheet = ss.getSheetByName("Cash");

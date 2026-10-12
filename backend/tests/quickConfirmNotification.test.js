@@ -79,6 +79,8 @@ function loadBackendSandbox(){
   const env = makeFakeSheetsEnv();
 
   const sandbox = { SpreadsheetApp: env.SpreadsheetApp, console: console };
+  // Every backend file asks dbSs_() for the spreadsheet (v2db.js); outside a virtual-spreadsheet request that is the real one.
+  sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
   vm.createContext(sandbox);
 
   const files = ["category.js", "noteMemory.js", "needWantSaving.js", "financialEvents.js", "PWA.js"];
@@ -273,6 +275,7 @@ function emptyFinancialEventsData(){
     logAI: function(){}, // real logAI lives in Logger.js, not needed for this test
     console: console
   };
+  sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "push.js"), "utf8"), sandbox, { filename: "push.js" });
 
@@ -329,6 +332,7 @@ function emptyFinancialEventsData(){
     logAI: function(){},
     console: console
   };
+  sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "push.js"), "utf8"), sandbox, { filename: "push.js" });
   sandbox.getFirebaseAccessToken = function(){ return "fake-access-token"; };

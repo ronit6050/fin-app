@@ -216,7 +216,7 @@ function loadAutoSettleContext_(sheet){
     logAI("AUTO_SETTLE_ERROR", "Transactions column T already has a different header - auto-settle is switched off until that is sorted out.");
     return null;
   }
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = dbSs_();
   var feSheet = ss.getSheetByName("FinancialEvents");
   return {
     txnData: sheet.getDataRange().getValues(),
@@ -330,10 +330,10 @@ function previewAutoSettle(){
   var out = [];
   var log = function(s){ out.push(s); Logger.log(s); };
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  var sheet = dbSs_().getSheetByName("Transactions");
   if(!sheet) return "Transactions tab not found.";
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = dbSs_();
   var feSheet = ss.getSheetByName("FinancialEvents");
   var ctx = {
     txnData: sheet.getDataRange().getValues(),
@@ -355,7 +355,7 @@ function autoSettlePendingNow(){
   var out = [];
   var log = function(s){ out.push(s); Logger.log(s); };
 
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  var sheet = dbSs_().getSheetByName("Transactions");
   if(!sheet) return "Transactions tab not found.";
 
   var ctx = loadAutoSettleContext_(sheet); // also adds the column T header
