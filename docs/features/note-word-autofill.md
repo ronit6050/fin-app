@@ -45,3 +45,14 @@ nothing. Old rows before 2026-08-11 teach nothing.
 - Demo Mode has no table, so the feature is simply inactive there.
 - Planned next: answer from the notification with the top two guesses; a native-app
   widget / inline-reply notification (see CLAUDE.md "automation pipeline").
+
+## Update 2026-10-12 - "Card bill" option in Mark as...
+A fifth choice, **Card bill**, for a payment that is the user paying their credit card bill (e.g. a CRED payment).
+Tapping it sets the note to "Credit card bill payment" (the words the backend recognises - `isCreditCardBillWording_` -
+so the payment stays out of spend totals and skips Need/Want), sets the category to Financial and hides the Need/Want and
+Category questions, like Rent/EMI. Undo restores the note; editing the note so it no longer says "credit card" leaves the
+mode; choosing another Mark-as option leaves it too. Why a button and not automatic matching: tried matching old payments
+against closed-cycle card bills, but real history showed zero hits (a real 9 May payment did not equal any cycle's card
+total - interest/older balance, and some card spends are logged as UPI), so the rule was not shipped.
+Test: `backend/tests/creditCardBillMark.test.js` (pins the wording contract the button depends on).
+

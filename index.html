@@ -1314,7 +1314,7 @@
     }
     .pending-item .mark-opts {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 6px;
     }
     .pending-item .mark-opts .mark-opt {
@@ -3453,8 +3453,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-11-04";
-    const APP_CHANGELOG = "Notifications can now show your two most likely notes as buttons (for example Tea and Coffee), so you can save a payment without opening the app. In the Android app there is also a reply box to type any note.";
+    const APP_VERSION = "2026-10-12-01";
+    const APP_CHANGELOG = "New one-tap Card bill button under Mark as...: when a payment is you paying your credit card bill, tap it and the app leaves it out of your spending and skips the questions. Also fixed: a payment could be missed by the notification check.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -6965,6 +6965,7 @@
               <button type="button" class="fe-btn mark-opt" data-mark="Rent">Rent</button>
               <button type="button" class="fe-btn mark-opt" data-mark="SIP">SIP</button>
               <button type="button" class="fe-btn mark-opt" data-mark="Saving">Saving</button>
+              <button type="button" class="fe-btn mark-opt" data-mark="CCBILL">Card bill</button>
             </div>
             <div class="mark-name" style="display:none; margin-top:8px;"></div>
             <div class="pending-status mark-state" style="display:none; margin-top:8px;"></div>
@@ -7038,6 +7039,11 @@
       // by the time any callback touches it. The app never overrides a
       // choice of yours.
       let typeSource = null;
+      // "Mark as > Card bill" (added 2026-10-12): this payment is the user paying their
+      // credit card bill. Not new spending (the swipes were already counted), so the
+      // Need/Want and Category questions are hidden, exactly like Rent/EMI.
+      let markedCcBill = false;
+      let ccBillPrevNote = "";
       const typeHintEl = card.querySelector(".type-hint");
       function showTypeHint(html) { if (typeHintEl) typeHintEl.innerHTML = html; }
       if (showTypeToggle) {
@@ -7102,7 +7108,7 @@
         typeSource = null;
         showTypeHint("");
         card.querySelectorAll(".type-field .type-btn").forEach(function (b) { b.classList.remove("active"); });
-      }, function () { return !!financialEvent.type; }, function () { return !!investmentInstrument.name; });
+      }, function () { return !!financialEvent.type || markedCcBill; }, function () { return !!investmentInstrument.name; });
 
       // ---- Note-word auto-fill, "Not sure" and "Mark as..." (added 2026-10-11) ----
       const typeFieldEl = card.querySelector(".type-field");
@@ -7168,7 +7174,14 @@
         function afterMarkChange() {
           updateTypeVisibility();
           updateCategoryVisibility();
-          if (!financialEvent.type) applyNoteWordType();
+          if (!financialEvent.type && !markedCcBill) applyNoteWordType();
+        }
+        // Leaves "Card bill" mode: puts the note back as it was.
+        function clearCcBill() {
+          if (!markedCcBill) return;
+          markedCcBill = false;
+          noteInput.value = ccBillPrevNote;
+          noteInput.dispatchEvent(new Event("input", { bubbles: true }));
         }
         function clearChipHighlights() {
           card.querySelectorAll(".fe-field:not(.debt-field) .fe-btn.active").forEach(function (b) { b.classList.remove("active"); });
@@ -7198,12 +7211,48 @@
           markPanel.style.display = markPanel.style.display === "none" ? "block" : "none";
         });
 
+        // If the note is edited so it no longer says "credit card", this is no longer
+        // marked as a card bill (the backend recognises it by those words), so leave the
+        // mode and bring the Need/Want and Category questions back.
+        noteInput.addEventListener("input", function () {
+          if (markedCcBill && !/credit card/i.test(noteInput.value)) {
+            markedCcBill = false;
+            markStateEl.style.display = "none";
+            markOpts.forEach(function (b) { b.classList.remove("active"); });
+            afterMarkChange();
+          }
+        });
+
         markOpts.forEach(function (btn) {
           btn.addEventListener("click", function () {
             markOpts.forEach(function (b) { b.classList.remove("active"); });
             btn.classList.add("active");
             markStateEl.style.display = "none";
             const kind = btn.dataset.mark;
+            if (kind !== "CCBILL") clearCcBill();
+            if (kind === "CCBILL") {
+              // The words "credit card bill" in the note are what the backend recognises
+              // (they keep this payment out of spend totals and skip Need/Want), so the
+              // note is set for you. Nothing to name, nothing else to answer.
+              markNameEl.style.display = "none";
+              clearChipHighlights();
+              financialEvent.type = null;
+              financialEvent.name = null;
+              ccBillPrevNote = noteInput.value;
+              markedCcBill = true;     // set BEFORE the note changes so the hide logic sees it
+              noteInput.value = "Credit card bill payment";
+              noteInput.dispatchEvent(new Event("input", { bubbles: true }));
+              afterMarkChange();
+              markStateEl.style.display = "";
+              markStateEl.innerHTML = 'Marked as a <b>credit card bill payment</b>. It is not new spending, so it is left out of your totals. <button type="button" class="link-btn mark-undo">Undo</button>';
+              markStateEl.querySelector(".mark-undo").addEventListener("click", function () {
+                clearCcBill();
+                markStateEl.style.display = "none";
+                markOpts.forEach(function (b) { b.classList.remove("active"); });
+                afterMarkChange();
+              });
+              return;
+            }
             if (kind === "Rent" || kind === "Saving") {
               markNameEl.style.display = "none";
               chooseMark(kind, null);
@@ -7252,7 +7301,7 @@
       // you type, same as the Need/Want/Saving toggle just above.
       function updateCategoryVisibility() {
         if (!categoryField) return;
-        if (financialEvent.type || isLendingNote(noteInput.value)) {
+        if (financialEvent.type || markedCcBill || isLendingNote(noteInput.value)) {
           categoryField.style.display = "none";
           categorySelect.value = "Financial";
         } else {
