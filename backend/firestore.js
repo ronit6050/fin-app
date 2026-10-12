@@ -206,7 +206,7 @@ function fsListPath_(collectionPath, maxDocs){
     var docs = body.documents || [];
     FS_USAGE_.reads += Math.max(1, docs.length);
     docs.forEach(function(d){
-      out.push({ id: String(d.name).split("/").pop(), fields: fsDecodeFields_(d.fields || {}), updateTime: d.updateTime || "" });
+      out.push({ id: String(d.name).split("/").pop(), fields: fsDecodeFields_(d.fields || {}), raw: d.fields || {}, updateTime: d.updateTime || "" });
     });
     pageToken = body.nextPageToken || "";
     if(!pageToken) break;

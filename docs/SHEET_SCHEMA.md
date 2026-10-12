@@ -301,3 +301,10 @@ both cosmetic only.
   this app, nothing in the code touches them): `Categories`, `Config`,
   `CategoryBudgets`, `Budget`, `Track exp`, `60k account`, `Aug CC bill`,
   `Sep CC bil`.
+
+## Hidden bookkeeping tab: `_V2Sync` (added 2026-10-12)
+Created and maintained by `backend/v2Sync.js` (the Sheet-to-Firestore mirror, see [v2-firestore-native.md](v2-firestore-native.md)).
+Two columns: `collection/documentId` and a short fingerprint of that document, so each sync run writes only what changed.
+Never edit it by hand. Deleting it is safe: the next run re-adopts what is already in Firestore (no duplicates) and rebuilds it.
+Code that loops over every tab should skip names starting with `_`.
+

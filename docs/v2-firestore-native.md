@@ -59,6 +59,13 @@ docs, about 3 to 5. The daily safety limit is raised only after the real numbers
 Order for people: build the engine once, move the OWNER's data onto it first (real data is the best test), then onboard Vaidehi's
 transactions on the same engine. Until then she keeps the splits screens.
 
+## Phase 6 (added 2026-10-12 at the owner's request): move the code from Apps Script to Firebase Cloud Functions
+Why: Cloud Functions need the Blaze plan (active). Not started. It comes AFTER phases 2 to 4, because most of today's slowness is
+re-reading whole Sheet tabs; moving code that still reads the Sheet would gain little. Needs the owner to install/sign in the
+Firebase CLI once (`npm i -g firebase-tools`, `firebase login`; Node is already installed); I cannot sign in for them. Expect a 1 to 3
+second wake-up on the first call after idle, then fast. Keep Apps Script only for what must stay there (the Tasker/SMS endpoint until
+the native app replaces it). Re-check the Rs 300 ceiling and budget alerts before turning anything on, since functions bill by use.
+
 ## What stays as it is
 Splits, friend mode, the Home fast-copy, push notifications and the SMS parser keep working throughout. No phase changes what the
 owner sees until its screen is flipped on purpose.
@@ -78,3 +85,17 @@ owner sees until its screen is flipped on purpose.
   their own folders; a friend, a stranger, nobody-signed-in and an unverified email are all refused (HTTP 403) on every collection;
   nobody can write from a phone; the friend reads only their own (empty) folder; a friend cannot list all users.
   Unsigned requests are also refused (HTTP 403) by direct REST.
+
+## Phase 2 (keep Firestore in step) built 2026-10-12: `backend/v2Sync.js`
+- Runs at the END of the existing background timer (`transactions.js`), at most every 10 minutes (backs off to 30 minutes by itself if a run
+  ever takes over a minute, to protect the daily trigger-runtime allowance). One run at a time (script lock). Switch: `V2SYNC_ENABLED_`.
+- Builds the same documents as `tools/v2_migrate.py` (proved identical on 1,836 real documents by `backend/tests/v2Sync.test.js`), remembers a
+  fingerprint per document in the hidden `_V2Sync` tab, writes only changed documents, deletes documents whose row vanished (never more than 25
+  at once; a sudden 50% drop in rows abandons the run).
+- FIRST RUN adopts what Firestore already has (the verified Python copy) instead of rewriting; if the ids disagree wholesale it writes and deletes
+  NOTHING and logs why (so a time-zone/time-cell misreading can never create duplicates).
+- Daily: `checkAppHealth` calls `v2VerifyShadowIfDue_` (compares every document, logs `V2SYNC_MISMATCH`, repairs). `V2SYNC_ERROR` and `V2SYNC_MISMATCH`
+  are watched by the health check. Manual: `v2SyncNow()` in the editor; independent check: `python tools/v2_migrate.py --verify`.
+- Independent review (2026-10-12) found it safe once the first run was made non-destructive; its other findings (lock leak, once-an-hour logging, runtime
+  quota, 20% delete allowance) are fixed.
+- Still true: the Sheet is the record; nothing reads the Firestore copy yet. Next: phase 3 (screens read Firestore).

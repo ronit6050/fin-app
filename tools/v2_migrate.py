@@ -107,10 +107,18 @@ def to_ts(date_str, time_str):
 
 
 def to_ts_serial(v):
-    """A date-time number (sheet 'Timestamp'/'CreatedAt'/'Confirmed') -> UTC moment, or None."""
+    """A date-time number (sheet 'Timestamp'/'CreatedAt'/'Confirmed') -> UTC moment rounded to the
+    nearest second (the Apps Script sync does the same, so both agree), or None."""
     if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
-        return serial_to_dt(v).replace(tzinfo=IST).astimezone(dt.timezone.utc)
+        d = serial_to_dt(v) + dt.timedelta(microseconds=500000)
+        return d.replace(microsecond=0, tzinfo=IST).astimezone(dt.timezone.utc)
     return None
+
+
+def ts_key(v):
+    """A language-neutral key for a date-time cell, used inside document ids: the rounded UTC second."""
+    d = to_ts_serial(v)
+    return d.strftime("%Y-%m-%dT%H:%M:%SZ") if d else ""
 
 
 def text(v):
@@ -169,7 +177,7 @@ def map_cash(row):
     doc = {"date": date_s if date_s is not None else "", "time": to_time_str(r[2]), "type": text(r[3]).lower(),
            "amountPaise": amount_p, "note": text(r[5]), "category": text(r[6]), "source": text(r[7]),
            "telegramMsgId": text(r[8]), "createdAt": created, "needWantSaving": text(r[10])}
-    return sha([doc["date"], doc["time"], doc["type"], doc["amountPaise"], doc["note"], text(r[8]), text(r[9])]), doc
+    return sha([doc["date"], doc["time"], doc["type"], doc["amountPaise"], doc["note"], text(r[8]), ts_key(r[9])]), doc
 
 
 def map_debt(row):
@@ -223,7 +231,7 @@ def map_fin_event(row):
         return None
     doc = {"type": text(r[0]), "amountPaise": paise(r[1]), "counterparty": text(r[2]),
            "confirmedAt": to_ts_serial(r[3]), "name": text(r[4])}
-    return sha([doc["type"], doc["amountPaise"], doc["counterparty"], text(r[3])]), doc
+    return sha([doc["type"], doc["amountPaise"], doc["counterparty"], ts_key(r[3])]), doc
 
 
 def map_budget(row):
@@ -463,6 +471,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="really write to Firestore (default: dry run)")
     ap.add_argument("--verify", action="store_true", help="only compare Firestore with the Sheet, write nothing")
+    ap.add_argument("--prune", action="store_true", help="with --apply: also delete documents in these collections that the Sheet no longer implies")
     a = ap.parse_args()
     fs = Firestore()
     report = {"at": dt.datetime.now(dt.timezone.utc).isoformat(), "mode": "apply" if a.apply else ("verify" if a.verify else "dry-run"),
@@ -511,6 +520,15 @@ def main():
                                       "fields": {k: enc(v) for k, v in doc.items()}}} for doc_id, doc in items[i:i + 300]]
                 fs.commit(writes)
             print("  wrote %-22s %5d documents" % (coll, len(items)))
+
+    if a.apply and a.prune and not a.verify:
+        removed = 0
+        for coll, docs in expected.items():
+            stale = [k for k in fs.list("users/%s/%s" % (OWNER, coll)) if k not in docs]
+            for i in range(0, len(stale), 300):
+                fs.commit([{"delete": fs.name("users/%s/%s/%s" % (OWNER, coll, k))} for k in stale[i:i + 300]])
+            removed += len(stale)
+        print("  pruned %d documents the Sheet no longer implies" % removed)
 
     if a.apply or a.verify:
         print("\nChecking Firestore against the Sheet ...")

@@ -19,6 +19,7 @@ function FakeSheet(name, rows){
 FakeSheet.prototype._width = function(){
   return this.rows.reduce(function(m, r){ return Math.max(m, r.length); }, 0);
 };
+FakeSheet.prototype.hideSheet = function(){ this.hidden = true; };
 FakeSheet.prototype.getLastRow = function(){ return this.rows.length; };
 FakeSheet.prototype.getLastColumn = function(){ return this._width(); };
 FakeSheet.prototype.appendRow = function(values){ this.rows.push(values.slice()); };
@@ -69,6 +70,13 @@ FakeSheet.prototype.getRange = function(r, c, nr, nc){
           while(row.length < c + j) row.push("");
           row[c - 1 + j] = vals[i][j];
         }
+      }
+    },
+    clearContent: function(){
+      for(let i = 0; i < nr; i++){
+        const row = self.rows[r - 1 + i];
+        if(!row) continue;
+        for(let j = 0; j < nc; j++){ if(c - 1 + j < row.length) row[c - 1 + j] = ""; }
       }
     },
     sort: function(specs){

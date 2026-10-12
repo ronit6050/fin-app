@@ -14,6 +14,10 @@ function processNewTransactions() {
     processNewTransactionsCore_();
   }finally{
     try{ publishViewsIfNeeded_(); }catch(ignore){}
+    // After the real work and the Home copy: mirror whatever changed in the Sheet into the owner's
+    // private Firestore folder (v2Sync.js, "step 2" of docs/v2-firestore-native.md). Every 3 minutes at
+    // most, and it can never stop a transaction, a notification or a save.
+    try{ v2SyncIfDue_(); }catch(ignore){}
   }
 }
 

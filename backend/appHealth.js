@@ -43,7 +43,8 @@ var HEALTH_NO_NEW_TXN_DAYS         = 3;   // silence longer than this = problem
 var HEALTH_ERROR_WINDOW_HOURS      = 24;
 var HEALTH_ERROR_LOG_TYPES = [
   "PUSH_ERROR", "PUSH_TOKEN_ERROR", "PROCESS_TXN_ERROR", "AUTO_SETTLE_ERROR",
-  "UPCOMING_OBLIGATION_ERROR", "DEBT_TRAJECTORY_LOG_ERROR", "V2_PUBLISH_ERROR"
+  "UPCOMING_OBLIGATION_ERROR", "DEBT_TRAJECTORY_LOG_ERROR", "V2_PUBLISH_ERROR",
+  "V2SYNC_ERROR", "V2SYNC_MISMATCH"
 ];
 var HEALTH_PROP_PREFIX = "HEALTH_REPORTED_"; // + problemKey + "_" + yyyy-MM-dd
 
@@ -226,6 +227,9 @@ function healthMessage_(problems){
 function checkAppHealth(){
   // Once a day, quietly keep the Sheet's "FriendShare" column in step with the splits database (splits.js).
   try{ if(typeof splitsAutoRepairShares_ === "function") splitsAutoRepairShares_(); }catch(ignoreRepair){}
+  // Once a day, check the Firestore copy of the Sheet still matches it (v2Sync.js). A mismatch is logged
+  // as V2SYNC_MISMATCH, which the error check below then reports.
+  try{ if(typeof v2VerifyShadowIfDue_ === "function") v2VerifyShadowIfDue_(); }catch(ignoreVerify){}
   try{
     var problems = computeHealthProblems_(loadHealthInputs_());
     if(problems.length === 0) return { problems: [], sent: false };
