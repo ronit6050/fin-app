@@ -24,6 +24,7 @@ function world(){
   const w = makeWorld(["Logger.js", "firestore.js", "PWA.js", "appHealth.js", "v2Sync.js"]);
   const sb = w.sb;
   w.addSheet("AILogs", [["Timestamp", "Type", "Message"]]);
+  sb.V2SYNC_ENABLED_ = true;                  // the live switch is OFF (see v2Sync.js); the tests exercise the code with it on
   const pad = function(n, l){ return String(n).padStart(l || 2, "0"); };
   // India time formatting for the few patterns the sync uses
   sb.Utilities.formatDate = function(d, tz, fmt){

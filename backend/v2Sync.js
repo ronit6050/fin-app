@@ -20,7 +20,10 @@
 // - Everything written goes under users/<owner>/<collection>/ for the 14 collections below only.
 //   It never touches friends, splitMarkers, debtMoves or views.
 
-var V2SYNC_ENABLED_ = true;              // flip to false to stop syncing at once
+// SWITCHED OFF 2026-10-13: in real Apps Script one run took 148 seconds (about 2 minutes), far more than the few seconds measured in tests
+// (every date/time cell costs a Utilities.formatDate call). At that speed it would eat the daily trigger-runtime allowance that also runs the
+// transaction alerts. The Firestore-backed virtual spreadsheet (v2db.js) replaces this mirror, so it stays off.
+var V2SYNC_ENABLED_ = false;             // flip to true to run the mirror again (not recommended)
 var V2SYNC_MIN_GAP_SEC_ = 600;           // at most every 10 minutes (keeps the daily trigger-runtime quota safe)
 var V2SYNC_TAB_ = "_V2Sync";
 var V2SYNC_TZ_ = "Asia/Kolkata";
