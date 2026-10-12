@@ -117,3 +117,11 @@ text so Firestore's array/index limits never bite). All backend code gets its sp
   instant switch back. The Sheet then becomes a live backup (Firestore to Sheet export).
 - Per-person things still to make per-user: settings (Script Properties), push token, the background timer loop, SMS ingestion key. The per-document
   collections and `v2Sync.js` from phases 1 and 2 become a verification aid and are retired when the owner flips.
+
+## Phase 2 mirror (`v2Sync.js`) SWITCHED OFF 2026-10-13, and why
+First live runs took about 148 seconds each (tests had suggested a few seconds). Every date/time cell costs a `Utilities.formatDate` call in real Apps Script,
+about 1,800 documents per run. At that speed even every 30 minutes (where its own back-off put it) would use about 2 hours of the 90-minute daily
+background-timer allowance, which also runs the transaction alerts. `V2SYNC_ENABLED_ = false` since backend `@335`. The Firestore per-document copy
+(`users/<owner>/transactions/...` etc.) stays as a verified snapshot from 2026-10-12 but is NOT kept up to date and nothing reads it; it is superseded by
+the virtual spreadsheet (`v2db.js`). LESSON: measure real Apps Script run time on live data before putting anything inside the timer; keep
+per-cell service calls (formatDate/parseDate) out of loops. v2db's cost is dominated by one Firestore read per tab, not per cell.

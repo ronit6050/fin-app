@@ -2766,7 +2766,7 @@ Owner decision: before anyone records transactions, ALL data (the owner's too) m
 per person. **Phase 1 DONE** (`tools/v2_migrate.py`: 14 tabs copied into `users/<owner>/...`, verified to the paisa; live privacy test
 `tools/rules_privacy_test.py`, 40/40 pass). **Phase 2 DONE and LIVE (backend `@333`, commit `f40e200`)**: `backend/v2Sync.js` mirrors Sheet changes
 into Firestore from the end of the background timer (max every 10 min, hidden tab `_V2Sync`, first run adopted the existing copy: 1,836 documents,
-0 duplicates, independently re-verified with `python tools/v2_migrate.py --verify`), daily self-check/repair via `checkAppHealth`. The Sheet is STILL
+0 duplicates, independently re-verified with `python tools/v2_migrate.py --verify`), daily self-check/repair via `checkAppHealth`. **SWITCHED OFF 2026-10-13 (`V2SYNC_ENABLED_ = false`, backend `@335`): a real run took 148 s, too much of the daily trigger-runtime allowance; superseded by `backend/v2db.js` (Firestore-backed virtual spreadsheet, docs/features/v2db.md, pushed inactive `@334`).** The Sheet is STILL
 the record and the app still reads the Sheet; nothing reads the Firestore copy yet. NEXT: phase 3 (screens read Firestore, one at a time with
 old-vs-new comparison and instant rollback), phase 4 (SMS writes straight to Firestore, per-user ingest keys), phase 5 (Sheet becomes an archive),
 phase 6 (move code to Cloud Functions; needs the owner to sign in the Firebase CLI). Order for people: owner first, then Vaidehi's transactions.
