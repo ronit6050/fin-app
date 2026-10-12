@@ -2221,6 +2221,50 @@
       margin-top: 4px;
     }
 
+    /* ---------- Splits with friends (added 2026-10-12) ----------
+       Reuses the Debts card look; only the person row, avatar and a few
+       small pieces are new. Every colour is an existing token, so light
+       and dark mode both work with no new colours. */
+    .person-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      padding: 12px 14px;
+      border-radius: var(--radius-md);
+      margin-bottom: 10px;
+      box-shadow: var(--shadow-card);
+      cursor: pointer;
+    }
+    .person-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--cat-transport-bg); color: var(--cat-transport-text);
+      font-weight: 700; flex: none;
+    }
+    .person-main { flex: 1; min-width: 0; }
+    .person-name { font-weight: 600; color: var(--text-primary); }
+    .person-sub { font-size: 0.8rem; color: var(--text-muted); }
+    .person-amount { font-weight: 700; color: var(--text-primary); }
+    .person-amount.owed { color: var(--color-success); }
+    .person-amount.owe  { color: var(--color-danger); }
+    .split-panel { border-top: 0.5px solid var(--border-hairline); margin-top: 8px; padding-top: 10px; }
+    .split-wrap { margin: 4px 0 8px; }
+    .split-panel .field label { display: block; }
+    .split-panel .field input, .split-panel .field select { width: 100%; box-sizing: border-box; }
+    .ledger-row {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+      padding: 10px 0; border-top: 0.5px solid var(--border-hairline);
+    }
+    .ledger-row.undone .ledger-title, .ledger-row.undone .ledger-amount { text-decoration: line-through; color: var(--text-muted); }
+    .ledger-title { color: var(--text-primary); }
+    .ledger-meta { font-size: 0.78rem; color: var(--text-muted); }
+    .ledger-amount { font-weight: 600; white-space: nowrap; }
+    .ledger-amount.more { color: var(--text-primary); }
+    .ledger-amount.less { color: var(--color-success); }
+    .ledger-undo { font-size: 0.78rem; padding: 4px 10px; margin-top: 4px; }
+
     /* ---------- Monthly Analysis month picker ----------
        Redesigned 2026-08-11 — was a plain arrow-in-a-filled-circle button
        on each side of the month label (looked like an afterthought). Now
@@ -2975,6 +3019,9 @@
           <div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>
           <div class="skeleton-block" style="height:58px;"></div>
         </div>
+        <!-- Person detail (Splits, added 2026-10-12): replaces the Debts list while open -->
+        <div id="personDetail" style="display:none"></div>
+
         <div id="debtsContent" style="display:none">
           <div class="today-total-box">
             <div class="today-total-label" id="debtsNetLabel">Net Position</div>
@@ -2982,7 +3029,18 @@
             <div class="today-split" id="debtsTotalsLine"></div>
           </div>
 
-          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">You owe</h3>
+          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">People you split with</h3>
+          <div id="peopleList"></div>
+          <button type="button" id="addFriendToggle" class="secondary" style="margin-bottom:6px;">+ Add friend</button>
+          <div id="addFriendForm" style="display:none; margin:8px 0 14px;">
+            <div class="field"><label>Name</label><input type="text" id="friendNameInput" placeholder="Name"></div>
+            <div class="field"><label>Mobile</label><input type="tel" id="friendMobileInput" placeholder="98765 43210"></div>
+            <div class="field"><label>Email (their Google email)</label><input type="email" id="friendEmailInput" placeholder="name@gmail.com"></div>
+            <button type="button" id="saveFriendButton">Save friend</button>
+            <div class="pending-result" id="addFriendResult"></div>
+          </div>
+
+          <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">You owe</h3>
           <div id="debtsYouOwe"></div>
 
           <h3 style="font-size:0.95rem; margin:14px 0 8px 0;">They owe you</h3>
@@ -3453,8 +3511,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-12-01";
-    const APP_CHANGELOG = "New one-tap Card bill button under Mark as...: when a payment is you paying your credit card bill, tap it and the app leaves it out of your spending and skips the questions. Also fixed: a payment could be missed by the notification check.";
+    const APP_VERSION = "2026-10-12-02";
+    const APP_CHANGELOG = "New: split a payment with a friend. Tap Split with a friend on a Pending card, and see each friend's running balance under Debts. You can record payments, remind them, and undo.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -5967,11 +6025,97 @@
           case "getTransactionHistory": return Object.assign({ ok: true }, demoComputeHistory(data.offset, data.limit), { knownDebtPeople: demoKnownDebtPeople() });
           case "getPlannerData": return { ok: true, planner: demoComputePlannerData(data.month) };
           case "saveBudgets": return demoSaveBudgets(data.month, data.budgets, data.income, data.fixedObligations);
+          case "getPeople": case "getPerson": case "addFriend": case "createSplit":
+          case "recordSplitPayment": case "undoSplitEntry": return demoSplitsRoute(data);
           default: return { ok: false, error: "Unknown action." };
         }
       } catch (err) {
         return { ok: false, error: "Demo Mode hit a snag: " + err.message };
       }
+    }
+
+    // ---------------------------------------------------------
+    // DEMO MODE: splits with friends (added 2026-10-12). The same six actions
+    // the real backend has, working on a small pretend list held in memory.
+    // Nothing here is ever sent anywhere.
+    // ---------------------------------------------------------
+    function demoSplitsState() {
+      if (!demoState.splits) {
+        const now = Date.now(), day = 86400000;
+        demoState.splits = {
+          friends: [
+            { name: "Vaidehi", email: "vaidehi@example.com", mobile: "9876543210", entries: [
+              { id: "d1", type: "split", signed: 420, description: "Restaurant Spice", total: 840, createdAtMs: now - 4 * day, undone: false },
+              { id: "d2", type: "split", signed: 300, description: "Cab to airport", total: 600, createdAtMs: now - 3 * day, undone: false },
+              { id: "d3", type: "split", signed: 280, description: "Movie snacks", total: 560, createdAtMs: now - 2 * day, undone: false },
+              { id: "d4", type: "payment", signed: -200, method: "upi", createdAtMs: now - day, undone: false }
+            ] },
+            { name: "Raj", email: "raj@example.com", mobile: "9000000001", entries: [
+              { id: "d5", type: "split", signed: 100, description: "Chai and snacks", total: 200, createdAtMs: now - 5 * day, undone: false },
+              { id: "d6", type: "payment", signed: -250, method: "cash", createdAtMs: now - 2 * day, undone: false }
+            ] }
+          ]
+        };
+      }
+      return demoState.splits;
+    }
+
+    function demoFriendBalance(f) {
+      return Math.round(f.entries.reduce(function (sum, e) { return e.undone ? sum : sum + e.signed; }, 0) * 100) / 100;
+    }
+
+    function demoSplitsRoute(data) {
+      const st = demoSplitsState();
+      const find = function (email) { return st.friends.find(function (f) { return f.email === String(email || "").toLowerCase().trim(); }); };
+      const bad = { ok: false, error: "That friend isn't in your list." };
+      if (data.action === "getPeople") {
+        const people = st.friends.map(function (f) { return { name: f.name, email: f.email, mobile: f.mobile, balance: demoFriendBalance(f) }; });
+        people.sort(function (a, b) { return Math.abs(b.balance) - Math.abs(a.balance); });
+        let owedToMe = 0, iOwe = 0;
+        people.forEach(function (p) { if (p.balance > 0) owedToMe += p.balance; else iOwe -= p.balance; });
+        return { ok: true, people: people, owedToMe: owedToMe, iOwe: iOwe };
+      }
+      if (data.action === "addFriend") {
+        const email = String(data.email || "").trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "Enter your friend's email, like name@gmail.com." };
+        if (!String(data.name || "").trim()) return { ok: false, error: "Enter your friend's name." };
+        if (String(data.mobile || "").replace(/\D/g, "").length < 10) return { ok: false, error: "Enter a valid mobile number (10 digits)." };
+        if (!find(email)) st.friends.push({ name: String(data.name).trim(), email: email, mobile: String(data.mobile), entries: [] });
+        return { ok: true, friend: { name: String(data.name).trim(), email: email, mobile: String(data.mobile) } };
+      }
+      const f = find(data.friendEmail);
+      if (!f) return bad;
+      if (data.action === "getPerson") {
+        const entries = f.entries.map(function (e) {
+          return { id: e.id, type: e.type, amount: Math.abs(e.signed), direction: e.signed >= 0 ? "theyOweMore" : "theyOweLess",
+                   description: e.description || "", note: "", method: e.method || "", total: e.total || 0, txRow: 0,
+                   createdAtMs: e.createdAtMs, undone: e.undone, mirror: false };
+        }).sort(function (a, b) { return b.createdAtMs - a.createdAtMs; });
+        return { ok: true, healed: false, person: { name: f.name, email: f.email, mobile: f.mobile, balance: demoFriendBalance(f) }, entries: entries };
+      }
+      if (data.action === "createSplit") {
+        const total = Number(data.totalAmount), share = data.friendShare === undefined || data.friendShare === "" ? Math.floor(total * 100 / 2) / 100 : Number(data.friendShare);
+        if (!(total > 0)) return { ok: false, error: "Enter the amount to split." };
+        if (!(share > 0) || share > total) return { ok: false, error: "Your friend's share must be between Rs 0.01 and the full amount." };
+        if (f.entries.some(function (e) { return e.id === data.requestId; })) return { ok: false, duplicate: true, error: "This payment is already split." };
+        f.entries.push({ id: data.requestId, type: "split", signed: share, description: String(data.description || ""), total: total, createdAtMs: Date.now(), undone: false });
+        return { ok: true, entryId: data.requestId, friendShare: share, myShare: Math.round((total - share) * 100) / 100, balance: demoFriendBalance(f) };
+      }
+      if (data.action === "recordSplitPayment") {
+        const amt = Number(data.amount);
+        if (!(amt > 0)) return { ok: false, error: "Enter the amount paid." };
+        if (f.entries.some(function (e) { return e.id === data.requestId; })) return { ok: false, duplicate: true, error: "That payment was already recorded." };
+        f.entries.push({ id: data.requestId, type: "payment", signed: data.direction === "sent" ? amt : -amt, method: data.method || "other", createdAtMs: Date.now(), undone: false });
+        return { ok: true, entryId: data.requestId, balance: demoFriendBalance(f) };
+      }
+      if (data.action === "undoSplitEntry") {
+        const e = f.entries.find(function (x) { return x.id === data.entryId; });
+        if (!e) return { ok: false, error: "Couldn't find that entry." };
+        if (e.undone) return { ok: false, error: "That entry is already undone." };
+        e.undone = true;
+        return { ok: true };
+      }
+      return { ok: false, error: "Unknown split action." };
     }
 
     function demoHandleRequest(payload) {
@@ -5986,6 +6130,8 @@
     function enterDemoMode() {
       demoMode = true;
       demoState = demoFreshState();
+      invalidatePeople();       // never show your real friends while demoing (Splits, 2026-10-12)
+      peopleLoading = null;
 
       // Analysis remembers whichever month you were last looking at —
       // reset to the current month so Demo Mode always starts on the
@@ -6988,6 +7134,25 @@
       // History.
       const invChipHtml = buildInvestmentChipHtml(txn);
 
+      // "Split with a friend" (added 2026-10-12): only for money going OUT that
+      // is real spending (same test as the Mark-as link above).
+      const splitHtml = showMarkLink ? `
+        <div class="split-wrap">
+          <button type="button" class="link-btn split-link">Split with a friend…</button>
+          <div class="split-panel" style="display:none">
+            <div class="field"><label>With</label><select class="split-friend"></select></div>
+            <div class="split-new" style="display:none">
+              <div class="field"><label>Name</label><input type="text" class="split-new-name" placeholder="Name"></div>
+              <div class="field"><label>Mobile</label><input type="tel" class="split-new-mobile" placeholder="98765 43210"></div>
+              <div class="field"><label>Email (their Google email)</label><input type="email" class="split-new-email" placeholder="name@gmail.com"></div>
+              <button type="button" class="split-new-save secondary">Add friend</button>
+            </div>
+            <div class="field split-share-field"><label>Their share (₹)</label><input type="number" class="split-share" min="0" step="0.01"></div>
+            <div class="pending-status split-summary" style="margin:0;"></div>
+          </div>
+        </div>
+      ` : "";
+
       card.innerHTML = `
         <div class="pending-top">
           <span class="pending-amount">₹${txn.amount.toLocaleString("en-IN")}</span>
@@ -7007,6 +7172,7 @@
         <div class="field fe-field debt-field" style="display:none"></div>
         ${typeToggleHtml}
         ${markHtml}
+        ${splitHtml}
         <button type="button" class="save-btn">Save</button>
         <button type="button" class="not-txn-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="8.5"/><path d="M6.5 17.5l11-11"/></svg><span class="btn-label">Not a transaction</span></button>
         <div class="pending-result"></div>
@@ -7019,6 +7185,7 @@
       const saveButton     = card.querySelector(".save-btn");
       const notTxnButton   = card.querySelector(".not-txn-btn");
       const resultEl       = card.querySelector(".pending-result");
+      const getSplit       = attachSplitPanel(card, txn, saveButton);   // Splits, 2026-10-12
 
       // Whatever category was showing before any Financial Event
       // selection — restored if the user later taps "No, regular spend".
@@ -7338,6 +7505,15 @@
         const savedCategory = categorySelect.value;
         const savedType     = selectedType;
 
+        // Splits (2026-10-12): if a split is set up, check it BEFORE the card
+        // disappears, so a mistake (no friend picked, bad share) is fixed in place.
+        const splitArm = getSplit();
+        if (splitArm && splitArm.error) {
+          resultEl.style.color = "var(--color-danger)";
+          resultEl.textContent = splitArm.error;
+          return;
+        }
+
         const idx = allPending.findIndex(function (t) { return t.row === txn.row; });
         if (idx !== -1) allPending.splice(idx, 1);
         shownCount = Math.max(shownCount - 1, 0);
@@ -7350,20 +7526,48 @@
         const savedDebtPerson           = selectedDebtPerson;
         const savedInvestmentInstrument = investmentInstrument.name;
 
-        callAppsScript({
-          action:       "saveNote",
-          idToken:      currentUser.idToken,
-          row:          txn.row,
-          note:         savedNote,
-          category:     savedCategory,
-          counterparty: txn.counterparty,
-          fp:           txn.fp,
-          type:         savedType,
-          financialEvent:       savedFinancialEvent,
-          financialEventName:   savedFinancialEventName,
-          debtPerson:           savedDebtPerson,
-          investmentInstrument: savedInvestmentInstrument
-        })
+        function runSave() {
+          return callAppsScript({
+            action:       "saveNote",
+            idToken:      currentUser.idToken,
+            row:          txn.row,
+            note:         savedNote,
+            category:     savedCategory,
+            counterparty: txn.counterparty,
+            fp:           txn.fp,
+            type:         savedType,
+            financialEvent:       savedFinancialEvent,
+            financialEventName:   savedFinancialEventName,
+            debtPerson:           savedDebtPerson,
+            investmentInstrument: savedInvestmentInstrument
+          });
+        }
+
+        // With a split, the split is recorded FIRST and the note second. If the
+        // split fails nothing else is saved and the card comes back; if the note
+        // then fails, tapping Save again re-sends the same split request id,
+        // which the backend recognises as "already done" instead of splitting twice.
+        let splitWasDuplicate = false;
+        const savePromise = splitArm
+          ? callAppsScript({
+              action:      "createSplit",
+              idToken:     currentUser.idToken,
+              friendEmail: splitArm.friendEmail,
+              totalAmount: txn.amount,
+              friendShare: splitArm.share,
+              description: savedNote || txn.counterparty || "",
+              txRow:       txn.row,
+              txFp:        txn.fp,
+              requestId:   splitArm.requestId
+            }).then(function (sp) {
+              if (!sp.ok && !sp.duplicate) throw new Error(sp.error);
+              splitWasDuplicate = !!sp.duplicate;   // already recorded earlier (a retry): keep that one
+              invalidatePeople();   // balances changed - reload next time they're shown
+              return runSave();
+            })
+          : runSave();
+
+        savePromise
           .then(function (data) {
             if (!data.ok) {
               if (data.stale) {
@@ -7405,6 +7609,11 @@
                 "₹" + txn.amount.toLocaleString("en-IN") + " confirmed as " + savedInvestmentInstrument +
                 ", but wasn't logged to Investments (looks like a duplicate of something already there) — check the Investments tab."
               );
+            }
+            if (splitArm) {
+              showPendingNotice(splitWasDuplicate
+                ? "Saved. This payment was already split earlier, so that earlier split was kept (check the friend's page if you changed it)."
+                : "Split saved: " + splitArm.friendName + " owes you ₹" + splitArm.share.toLocaleString("en-IN") + ".");
             }
             // otherwise: fully saved, nothing more to do, it's already off the screen
           })
@@ -7765,6 +7974,12 @@
       if (name === "cc" && !tabLoaded.cc) {
         tabLoaded.cc = true;
         loadCCAdvisor();
+      }
+      // Splits (2026-10-12): the people list refreshes EVERY time Debts opens (balances
+      // change from Pending), even when the rest of the screen was pre-loaded from Home.
+      if (name === "debts") {
+        if (currentPersonEmail) closePerson();   // coming back always starts at the list
+        refreshPeopleList();
       }
       if (name === "debts" && !tabLoaded.debts) {
         tabLoaded.debts = true;
@@ -8625,6 +8840,7 @@
     // the two lists and the "You're Ahead/Behind" totals immediately, and
     // put everything back exactly as it was if a background save fails.
     let debtsData = null;
+    let currentPersonEmail = null;   // Splits: the friend whose page is open (null = the list)
 
     function cloneDebtsData() { return JSON.parse(JSON.stringify(debtsData)); }
 
@@ -8872,18 +9088,25 @@
     // Payment/Add handlers below so a single-item change doesn't have to
     // rebuild every other card on screen to keep the header honest.
     function updateDebtsHeader(d) {
-      const net = d.netPosition;
+      // Friends you split with (Splits, 2026-10-12) count here too, so this one
+      // number answers "am I ahead or behind overall?" - not just the old list.
+      const friendsOwe = peopleData ? peopleData.iOwe : 0;
+      const friendsOwed = peopleData ? peopleData.owedToMe : 0;
+      const youOweTotal = d.totalYouOwe + friendsOwe;
+      const theyOweTotal = d.totalTheyOwe + friendsOwed;
+      const net = theyOweTotal - youOweTotal;
       debtsNetLabelEl.textContent = net >= 0 ? "You're Ahead" : "You're Behind";
       debtsNetAmountEl.textContent = "₹" + Math.abs(net).toLocaleString("en-IN");
       debtsTotalsLineEl.textContent =
-        "You owe: ₹" + d.totalYouOwe.toLocaleString("en-IN") +
-        "  ·  Owed to you: ₹" + d.totalTheyOwe.toLocaleString("en-IN");
+        "You owe: ₹" + youOweTotal.toLocaleString("en-IN") +
+        "  ·  Owed to you: ₹" + theyOweTotal.toLocaleString("en-IN");
     }
 
     function renderDebts(d) {
       debtsData = d;
       debtsStatusEl.textContent = "";
-      debtsContentEl.style.display = "block";
+      // A friend's page may be open; a background refresh must not draw the list on top of it.
+      debtsContentEl.style.display = currentPersonEmail ? "none" : "block";
 
       updateDebtsHeader(d);
 
@@ -8996,6 +9219,374 @@
           addDebtResultEl.textContent = "Couldn't save (" + err.message + ") — check your connection and try again.";
         });
     });
+
+    // ---------------------------------------------------------
+    // SPLITS WITH FRIENDS (added 2026-10-12 - see docs/features/splits.md)
+    // Each friend has ONE running balance with you. A split adds to it, a
+    // payment subtracts, any entry can be undone. The data lives in
+    // Firestore (not the Sheet); this file only talks to Apps Script, which
+    // does all the writing. Three places use it:
+    //   - the "People you split with" list on the Debts screen
+    //   - a person's detail page (balance, record payment, remind, history)
+    //   - the "Split with a friend" option on each Pending card
+    // ---------------------------------------------------------
+    let peopleData = null;       // { people: [{name,email,mobile,balance}], owedToMe, iOwe }
+    let peopleLoading = null;    // shared promise so two screens asking at once make one request
+
+    const peopleListEl      = document.getElementById("peopleList");
+    const addFriendToggleEl = document.getElementById("addFriendToggle");
+    const addFriendFormEl   = document.getElementById("addFriendForm");
+    const personDetailEl    = document.getElementById("personDetail");
+
+    // Forget the friends list everywhere (memory + the copy saved on the phone), so
+    // the next time it's shown it can't flash old balances.
+    function invalidatePeople() {
+      peopleData = null;
+      try { localStorage.removeItem("cache_people"); } catch (e) { /* nothing to clear */ }
+    }
+
+    function splitMoney(n) {
+      return "₹" + Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+    }
+
+    function loadPeople(force) {
+      if (peopleData && !force) return Promise.resolve(peopleData);
+      if (peopleLoading) return peopleLoading;
+      peopleLoading = callAppsScript({ action: "getPeople", idToken: currentUser.idToken })
+        .then(function (d) {
+          peopleLoading = null;
+          if (!d.ok) {
+            if (isAuthError(d.error)) handleSessionExpired();
+            throw new Error(d.error);
+          }
+          peopleData = d;
+          saveCache("people", d);
+          return d;
+        })
+        .catch(function (err) { peopleLoading = null; throw err; });
+      return peopleLoading;
+    }
+
+    // Draws the list from whatever we have (a saved copy first, so it's instant),
+    // then quietly refreshes it.
+    function refreshPeopleList() {
+      const cached = loadCache("people");
+      if (cached && !peopleData) { peopleData = cached; renderPeopleList(); }
+      else if (peopleData) { renderPeopleList(); }
+      loadPeople(true).then(renderPeopleList).catch(function () {
+        if (!peopleData) peopleListEl.innerHTML = '<div class="pending-status">Couldn\'t load your friends. They\'ll appear when you\'re back online.</div>';
+      });
+    }
+
+    function renderPeopleList() {
+      if (debtsData) updateDebtsHeader(debtsData);   // header totals include friends
+      peopleListEl.innerHTML = "";
+      const people = (peopleData && peopleData.people) || [];
+      if (people.length === 0) {
+        peopleListEl.innerHTML = '<div class="empty-state"><span class="empty-icon">🤝</span><p>No friends yet. Add one to start splitting.</p></div>';
+        return;
+      }
+      people.forEach(function (p) {
+        const row = document.createElement("div");
+        row.className = "person-row";
+        const state = p.balance > 0 ? "owed" : (p.balance < 0 ? "owe" : "");
+        const sub = p.balance > 0 ? "owes you" : (p.balance < 0 ? "you owe" : "all settled");
+        row.innerHTML =
+          '<div class="person-avatar">' + escapeHtml((p.name || "?").charAt(0).toUpperCase()) + '</div>' +
+          '<div class="person-main"><div class="person-name">' + escapeHtml(p.name) + '</div>' +
+          '<div class="person-sub">' + sub + '</div></div>' +
+          '<div class="person-amount ' + state + '">' + (p.balance === 0 ? "" : splitMoney(p.balance)) + '</div>';
+        row.addEventListener("click", function () { openPerson(p.email); });
+        peopleListEl.appendChild(row);
+      });
+    }
+
+    // ---- Add a friend (Debts screen) ----
+    addFriendToggleEl.addEventListener("click", function () {
+      addFriendFormEl.style.display = addFriendFormEl.style.display === "none" ? "block" : "none";
+    });
+    document.getElementById("saveFriendButton").addEventListener("click", function () {
+      const resultEl = document.getElementById("addFriendResult");
+      const btn = this;
+      resultEl.style.color = "";
+      resultEl.textContent = "Saving...";
+      btn.disabled = true;
+      callAppsScript({
+        action: "addFriend", idToken: currentUser.idToken,
+        name:   document.getElementById("friendNameInput").value,
+        mobile: document.getElementById("friendMobileInput").value,
+        email:  document.getElementById("friendEmailInput").value
+      }).then(function (d) {
+        btn.disabled = false;
+        if (!d.ok) { resultEl.style.color = "var(--color-danger)"; resultEl.textContent = d.error; return; }
+        resultEl.textContent = "";
+        ["friendNameInput", "friendMobileInput", "friendEmailInput"].forEach(function (id) { document.getElementById(id).value = ""; });
+        addFriendFormEl.style.display = "none";
+        loadPeople(true).then(renderPeopleList).catch(function () {});
+      }).catch(function (err) {
+        btn.disabled = false;
+        resultEl.style.color = "var(--color-danger)";
+        resultEl.textContent = "Couldn't save (" + err.message + ") - check your connection and try again.";
+      });
+    });
+
+    // ---- One person's page ----
+    // While a person's page is open, the screen's own Back button and title step aside.
+    function setDebtsChromeHidden(hidden) {
+      const view = document.getElementById("view-debts");
+      view.querySelector(".back-to-more:not(.person-back)").style.display = hidden ? "none" : "";
+      view.querySelector(".section-title").style.display = hidden ? "none" : "";
+    }
+
+    function closePerson() {
+      setDebtsChromeHidden(false);
+      currentPersonEmail = null;
+      personDetailEl.style.display = "none";
+      personDetailEl.innerHTML = "";
+      debtsContentEl.style.display = "block";
+      refreshPeopleList();
+    }
+
+    function openPerson(email) {
+      setDebtsChromeHidden(true);
+      currentPersonEmail = email;
+      debtsContentEl.style.display = "none";
+      personDetailEl.style.display = "block";
+      personDetailEl.innerHTML = '<div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div><div class="skeleton-block" style="height:58px;"></div>';
+      loadPerson(email, "");
+    }
+
+    function loadPerson(email, noticeText) {
+      callAppsScript({ action: "getPerson", idToken: currentUser.idToken, friendEmail: email })
+        .then(function (d) {
+          if (currentPersonEmail !== email) return;   // you've already left this page
+          if (!d.ok) {
+            if (isAuthError(d.error)) { handleSessionExpired(); return; }
+            personDetailEl.innerHTML = "";
+            showLoadError(personDetailEl, d.error, function () { openPerson(email); });
+            return;
+          }
+          renderPerson(d, noticeText);
+        })
+        .catch(function (err) {
+          if (currentPersonEmail !== email) return;
+          showLoadError(personDetailEl, "Couldn't load: " + err.message, function () { openPerson(email); });
+        });
+    }
+
+    function renderPerson(d, noticeText) {
+      const p = d.person;
+      const bal = p.balance;
+      const label = bal > 0 ? p.name + " owes you" : (bal < 0 ? "You owe " + p.name : "All settled");
+      personDetailEl.innerHTML =
+        '<button type="button" class="back-to-more person-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>People</button>' +
+        '<div class="today-total-box"><div class="today-total-label">' + escapeHtml(label) + '</div>' +
+        '<div class="today-total-amount">' + (bal === 0 ? "₹0" : splitMoney(bal)) + '</div></div>' +
+        '<div class="pending-status person-notice" style="min-height:1em;">' + escapeHtml(noticeText || "") + '</div>' +
+        '<div style="display:flex; gap:8px; margin:6px 0 10px;">' +
+          '<button type="button" class="person-pay-toggle" style="flex:1;">Record payment</button>' +
+          (bal > 0 && p.mobile ? '<button type="button" class="person-remind secondary" style="flex:1;">Remind</button>' : '') +
+        '</div>' +
+        '<div class="person-pay-form" style="display:none; margin-bottom:12px;">' +
+          '<div class="field"><label>Who paid?</label><div class="type-toggle">' +
+            '<button type="button" class="type-btn pay-dir ' + (bal >= 0 ? "active" : "") + '" data-dir="received">' + escapeHtml(p.name) + ' paid me</button>' +
+            '<button type="button" class="type-btn pay-dir ' + (bal < 0 ? "active" : "") + '" data-dir="sent">I paid ' + escapeHtml(p.name) + '</button>' +
+          '</div></div>' +
+          '<div class="field"><label>Amount (₹) - change it if it was only part</label><input type="number" class="pay-amount" min="0" step="0.01" value="' + (bal === 0 ? "" : Math.abs(bal)) + '"></div>' +
+          '<div class="field"><label>How</label><div class="type-toggle">' +
+            '<button type="button" class="type-btn pay-method active" data-method="upi">UPI</button>' +
+            '<button type="button" class="type-btn pay-method" data-method="cash">Cash</button>' +
+          '</div></div>' +
+          '<button type="button" class="pay-save">Save payment</button>' +
+          '<div class="pending-result pay-result"></div>' +
+        '</div>' +
+        '<h3 style="font-size:0.95rem; margin:14px 0 4px 0;">History</h3>' +
+        '<div class="person-ledger"></div>';
+
+      personDetailEl.querySelector(".person-back").addEventListener("click", closePerson);
+
+      // Record payment
+      const form = personDetailEl.querySelector(".person-pay-form");
+      personDetailEl.querySelector(".person-pay-toggle").addEventListener("click", function () {
+        form.style.display = form.style.display === "none" ? "block" : "none";
+      });
+      let payDir = bal >= 0 ? "received" : "sent", payMethod = "upi";
+      form.querySelectorAll(".pay-dir").forEach(function (b) {
+        b.addEventListener("click", function () {
+          form.querySelectorAll(".pay-dir").forEach(function (x) { x.classList.remove("active"); });
+          b.classList.add("active"); payDir = b.dataset.dir;
+        });
+      });
+      form.querySelectorAll(".pay-method").forEach(function (b) {
+        b.addEventListener("click", function () {
+          form.querySelectorAll(".pay-method").forEach(function (x) { x.classList.remove("active"); });
+          b.classList.add("active"); payMethod = b.dataset.method;
+        });
+      });
+      const payRequestId = "pay" + Date.now() + Math.random().toString(36).slice(2, 7);
+      form.querySelector(".pay-save").addEventListener("click", function () {
+        const resultEl = form.querySelector(".pay-result");
+        const amount = parseFloat(form.querySelector(".pay-amount").value);
+        if (!amount || amount <= 0) { resultEl.style.color = "var(--color-danger)"; resultEl.textContent = "Enter the amount paid."; return; }
+        // Feels instant: the number on top moves now; the save happens in the background.
+        const newBal = Math.round((bal + (payDir === "received" ? -amount : amount)) * 100) / 100;
+        personDetailEl.querySelector(".today-total-amount").textContent = newBal === 0 ? "₹0" : splitMoney(newBal);
+        personDetailEl.querySelector(".today-total-label").textContent =
+          newBal > 0 ? p.name + " owes you" : (newBal < 0 ? "You owe " + p.name : "All settled");
+        resultEl.style.color = "";
+        resultEl.textContent = "Saving...";
+        callAppsScript({
+          action: "recordSplitPayment", idToken: currentUser.idToken, friendEmail: p.email,
+          amount: amount, direction: payDir, method: payMethod, requestId: payRequestId
+        }).then(function (r) {
+          if (!r.ok && !r.duplicate) { loadPerson(p.email, "Couldn't save the payment (" + r.error + ")."); return; }
+          invalidatePeople();
+          loadPerson(p.email, "Payment saved.");
+        }).catch(function (err) {
+          loadPerson(p.email, "Couldn't save the payment (" + err.message + ") - check your connection and try again.");
+        });
+      });
+
+      // Remind (opens WhatsApp with the message ready; you still tap send)
+      const remindBtn = personDetailEl.querySelector(".person-remind");
+      if (remindBtn) remindBtn.addEventListener("click", function () {
+        let num = String(p.mobile || "").replace(/\D/g, "");
+        if (num.length === 10) num = "91" + num;
+        const text = "Hi " + p.name + ", a quick reminder: you owe me " + splitMoney(bal) + " from our shared expenses. Thanks!";
+        window.open("https://wa.me/" + num + "?text=" + encodeURIComponent(text), "_blank");
+      });
+
+      // History
+      const ledgerEl = personDetailEl.querySelector(".person-ledger");
+      if (d.entries.length === 0) {
+        ledgerEl.innerHTML = '<div class="empty-state"><p>Nothing yet. Split a payment from Pending to start.</p></div>';
+      }
+      d.entries.forEach(function (e) {
+        const row = document.createElement("div");
+        row.className = "ledger-row" + (e.undone ? " undone" : "");
+        const when = e.createdAtMs ? new Date(e.createdAtMs).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "";
+        const more = e.direction === "theyOweMore";
+        const title = e.type === "split"
+          ? (e.description || "Split") + (e.total ? " (of " + splitMoney(e.total) + ")" : "")
+          : (more ? "You paid " + p.name : p.name + " paid you") + (e.method ? " by " + e.method.toUpperCase() : "");
+        row.innerHTML =
+          '<div><div class="ledger-title">' + escapeHtml(title) + '</div>' +
+          '<div class="ledger-meta">' + when + (e.undone ? " · undone" : "") + '</div>' +
+          (e.undone ? "" : '<button type="button" class="secondary ledger-undo"><span class="btn-label">Undo</span></button>') + '</div>' +
+          '<div class="ledger-amount ' + (more ? "more" : "less") + '">' + (more ? "+" : "-") + splitMoney(e.amount) + '</div>';
+        const undoBtn = row.querySelector(".ledger-undo");
+        if (undoBtn) bindConfirmAction(undoBtn, function () {
+          undoBtn.disabled = true;
+          callAppsScript({ action: "undoSplitEntry", idToken: currentUser.idToken, friendEmail: p.email, entryId: e.id })
+            .then(function (r) {
+              invalidatePeople();
+              loadPerson(p.email, r.ok ? "Undone." : "Couldn't undo (" + r.error + ").");
+            })
+            .catch(function (err) { loadPerson(p.email, "Couldn't undo (" + err.message + ")."); });
+        });
+        ledgerEl.appendChild(row);
+      });
+    }
+
+    // ---- "Split with a friend" on a Pending card ----
+    // Returns getSplit(): null (no split), { error } (set up wrongly), or
+    // { friendEmail, friendName, share, requestId } (ready). The card's Save
+    // button then reads "Save and split".
+    function attachSplitPanel(card, txn, saveButton) {
+      const wrap = card.querySelector(".split-wrap");
+      if (!wrap) return function () { return null; };
+      const link      = wrap.querySelector(".split-link");
+      const panel     = wrap.querySelector(".split-panel");
+      const selectEl  = wrap.querySelector(".split-friend");
+      const newBox    = wrap.querySelector(".split-new");
+      const shareEl   = wrap.querySelector(".split-share");
+      const summaryEl = wrap.querySelector(".split-summary");
+      const requestId = "sp" + Date.now() + Math.random().toString(36).slice(2, 8);   // one per card, reused on retry
+      let open = false;
+
+      function defaultShare() { return Math.floor(Math.round(txn.amount * 100) / 2) / 100; }
+
+      function friends() { return (peopleData && peopleData.people) || []; }
+
+      function fillFriends(selectEmail) {
+        let html = friends().map(function (f) {
+          return '<option value="' + escapeHtml(f.email) + '">' + escapeHtml(f.name) + '</option>';
+        }).join("");
+        html += '<option value="__new__">+ Add a new friend…</option>';
+        selectEl.innerHTML = html;
+        selectEl.value = selectEmail || (friends().length ? friends()[0].email : "__new__");
+        onFriendChange();
+      }
+
+      function onFriendChange() {
+        const isNew = selectEl.value === "__new__";
+        newBox.style.display = isNew ? "block" : "none";
+        wrap.querySelector(".split-share-field").style.display = isNew ? "none" : "block";
+        summaryEl.style.display = isNew ? "none" : "block";
+        refresh();
+      }
+
+      function chosen() { return friends().find(function (f) { return f.email === selectEl.value; }); }
+
+      function currentShare() { const v = parseFloat(shareEl.value); return isFinite(v) ? Math.round(v * 100) / 100 : NaN; }
+
+      function refresh() {
+        const f = chosen();
+        const share = currentShare();
+        if (!open || !f) { saveButton.textContent = "Save"; return; }
+        if (!(share > 0) || share > txn.amount) {
+          summaryEl.textContent = "Enter a share between ₹0.01 and ₹" + txn.amount.toLocaleString("en-IN") + ".";
+          saveButton.textContent = "Save and split";
+          return;
+        }
+        const mine = Math.round((txn.amount - share) * 100) / 100;
+        summaryEl.textContent = "You keep " + splitMoney(mine) + " · " + f.name + " owes you " + splitMoney(share) + ".";
+        saveButton.textContent = "Save and split";
+      }
+
+      link.addEventListener("click", function () {
+        open = !open;
+        panel.style.display = open ? "block" : "none";
+        link.textContent = open ? "Cancel split" : "Split with a friend…";
+        if (!open) { saveButton.textContent = "Save"; return; }
+        shareEl.value = defaultShare();
+        summaryEl.textContent = "Loading your friends…";
+        loadPeople(false).then(function () { fillFriends(); })
+          .catch(function () { summaryEl.textContent = "Couldn't load your friends. Check your connection and try again."; });
+      });
+      selectEl.addEventListener("change", onFriendChange);
+      shareEl.addEventListener("input", refresh);
+
+      // Add a friend without leaving the card
+      wrap.querySelector(".split-new-save").addEventListener("click", function () {
+        const btn = this;
+        const email = wrap.querySelector(".split-new-email").value;
+        btn.disabled = true;
+        callAppsScript({
+          action: "addFriend", idToken: currentUser.idToken,
+          name: wrap.querySelector(".split-new-name").value,
+          mobile: wrap.querySelector(".split-new-mobile").value,
+          email: email
+        }).then(function (d) {
+          btn.disabled = false;
+          if (!d.ok) { summaryEl.style.display = "block"; summaryEl.textContent = d.error; return; }
+          return loadPeople(true).then(function () { fillFriends(d.friend.email); });
+        }).catch(function (err) {
+          btn.disabled = false;
+          summaryEl.style.display = "block";
+          summaryEl.textContent = "Couldn't add (" + err.message + ").";
+        });
+      });
+
+      return function getSplit() {
+        if (!open) return null;
+        const f = chosen();
+        if (!f) return { error: "Pick a friend to split with, or tap Cancel split." };
+        const share = currentShare();
+        if (!(share > 0) || share > txn.amount) return { error: "Enter their share, between ₹0.01 and ₹" + txn.amount.toLocaleString("en-IN") + "." };
+        return { friendEmail: f.email, friendName: f.name, share: share, requestId: requestId };
+      };
+    }
 
     // ---------------------------------------------------------
     // SAVINGS & GOALS (rebuilt 2026-08-11 — see docs/features/savings-v2.md)

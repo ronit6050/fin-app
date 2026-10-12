@@ -65,20 +65,35 @@ the app's own `views` rule is unchanged.)
 - `getPeople` -> `{people:[{name,email,mobile,balance}], owedToMe, iOwe}`
 - `getPerson {friendEmail}` -> `{person, entries:[...], healed}`
 
+## Screens (index.html, built 2026-10-12, NOT yet pushed to GitHub Pages)
+Search `SPLITS WITH FRIENDS` in `index.html`.
+- **Pending card:** "Split with a friend..." link (only for real spending: not credits, wallet/card-bill transfers).
+  Opens a panel: friend dropdown (+ "Add a new friend" inline), their share (half by default, editable),
+  and a live "You keep X, Vaidehi owes you Y". Save becomes "Save and split". The split is recorded FIRST,
+  then the note; if the split fails nothing else is saved and the card returns; a retry reuses the same
+  request id so it can never split twice. A bad share is caught before the card disappears.
+- **Debts screen:** a "People you split with" list on top (balance per person, tap to open) and
+  "+ Add friend" (name, mobile, email). The blue header total now includes friends. The list refreshes
+  EVERY time Debts opens (not only the first time).
+- **Person page:** balance, Record payment (who paid, amount prefilled with the full balance and editable,
+  UPI/Cash; balance updates instantly), Remind (opens WhatsApp with the message ready), and the full
+  history with a tap-twice Undo.
+- **Demo Mode:** works with pretend friends (Vaidehi, Raj) so it can be tried safely.
+- Checked in a real browser in Demo Mode: list, person page, payment, undo, split from Pending, bad share,
+  server failure (card returns, note not saved), inline add friend. No console errors.
+- Colours: only existing tokens, so light and dark both work (dark checked visually; light not).
+
 ## Not built yet (in order)
-1. Pending card "Split" button + split sheet, and the Debts "people" list + person detail
-   (`index.html`; mockup approved 2026-10-12).
-2. **My spend should count only my share.** Today Analysis/Today/Home read the full
-   amount from the Sheet. Plan: store the friend's share against the transaction (new
-   Transactions column) and subtract it in the spend totals - touches several
-   functions, needs its own careful pass and tests.
-3. Suggest "count this incoming payment toward Vaidehi's balance?" from a matching bank SMS.
-4. Vaidehi's own sign-in. Today every action still requires the owner's email
-   (`PWA_ALLOWED_EMAIL`), so only you can create/record. Her phone can already READ her
-   side directly once rules are published and the screens exist; letting her WRITE
-   (her own payments, her own friends) needs the multi-user sign-in and per-person
+1. **My spend should count only my share.** Today Analysis/Today/Home still count the full amount from the
+   Sheet. Plan: store the friend's share against the transaction (new Transactions column) and subtract it in
+   the spend totals - touches several functions, needs its own careful pass and tests. Until then the Home
+   "Debts net" tile (computed by the backend) also ignores friends; only the Debts screen header includes them.
+2. Suggest "count this incoming payment toward Vaidehi's balance?" from a matching bank SMS.
+3. Vaidehi's own sign-in. Today every action still requires the owner's email (`PWA_ALLOWED_EMAIL`),
+   so only you can create/record. Her phone can already READ her side directly from Firestore (rules published
+   2026-10-12) once a screen reads it; letting her WRITE needs the multi-user sign-in and per-person
    push token / settings work.
-5. "Remind" button (WhatsApp / UPI link with the amount filled in).
+4. Notification "Split" button, groups, notes/photos on splits, UPI link on Remind.
 
 ## Tests
 `backend/tests/splits.test.js` (122 checks, mutation-tested): balances, the user's own
@@ -92,3 +107,12 @@ action validates the friend email. Accepted for now: a genuine retry after a tim
 (balance is right); Firestore contention (also HTTP 409) could be mislabelled "already split" (very rare);
 `addFriend` can create a folder for any email you type (harmless while only the owner can call it).
 Deploy order: publish `firestore.rules` in the console, then `clasp push` + `clasp deploy`.
+
+## Screens: independent review (2026-10-12), fixed before pushing
+Reviewer found no regression to Pending Save without a split and no unescaped text. Fixed: Demo Mode could show
+real friends (now cleared on entry); a retried split's notice could name the wrong amount (now says "already split
+earlier"); the person page could get stuck/layered (Debts always reopens at the list, a background refresh never
+draws the list on top); the saved friends copy is removed with the in-memory one so balances can't flash stale;
+default half-share computed in whole paise. Accepted: sign-out doesn't clear the friends cache (same as every other
+cache; only the owner can sign in); a payment retried after a dropped connection gets a new request id (the page
+reloads and shows the history first).

@@ -2751,9 +2751,9 @@ Short version: Vaidehi first (SMS allowed), then a few friends, then maybe publi
 Rs 300/month ceiling (not yet needed). **Splits slice 1 built 2026-10-12, NOT deployed:** `backend/splits.js`
 (friends, splits, payments, undo; Firestore-only, one running balance per friend), new batch/list helpers in
 `backend/firestore.js`, six routes in `PWA.js`, `firestore.rules` (must be pasted into the Firebase console by hand
-before any friend can read their side), `backend/tests/splits.test.js` (122 checks). Screens (Pending "Split"
-button, Debts "people" list) and "my spend counts only my share" are NOT built yet. Needs: change-reviewer, then
-the user's go-ahead for `clasp push`/`deploy`.
+before any friend can read their side), `backend/tests/splits.test.js` (122 checks). **Backend deployed live `@329` and security rules published (2026-10-12).** Screens built in `index.html` the same day
+(Pending "Split with a friend", Debts "People you split with" + person page, Demo Mode) - NOT yet pushed to GitHub
+Pages; `APP_VERSION` `2026-10-12-02`. "My spend counts only my share" is NOT built yet (see the doc).
 
 ## Pre-multi-user cleanup (2026-09-05): done
 
