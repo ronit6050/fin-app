@@ -25,7 +25,7 @@
 // Not supported on purpose (maintenance-only helpers that need a real Sheet): copyTo, formatting calls.
 
 var V2DB_PAGE_ROWS_ = 1000;            // most rows in one page
-var V2DB_PAGE_CHARS_ = 600000;         // most JSON characters in one page (Firestore documents max out near 1 MiB)
+var V2DB_PAGE_BYTES_ = 500000;         // most JSON BYTES in one page (Firestore documents max out near 1 MiB)
 var V2DB_REQ_ = null;                  // the virtual spreadsheet for the request in progress, or null
 
 function dbSs_(){
@@ -41,6 +41,37 @@ function v2dbCell_(v){                      // a value as the tab keeps it
   if(typeof v === "number" && !isFinite(v)) return "";
   return v;
 }
+
+// Real Google Sheets treats text written by a script (setValue / appendRow) as if it were typed: "123" becomes the
+// number 123, "2026-10-12" becomes a date, "TRUE" becomes true. The backend relies on that in places (amounts, dates,
+// references), so a virtual spreadsheet must do the same or the same code would store different values.
+function v2dbMidnightDate_(y, mo, d, h, mi, s){
+  var iso = y + "-" + ("0" + mo).slice(-2) + "-" + ("0" + d).slice(-2) + " " + ("0" + h).slice(-2) + ":" + ("0" + mi).slice(-2) + ":" + ("0" + s).slice(-2);
+  try{
+    if(typeof Utilities !== "undefined" && Utilities.parseDate) return Utilities.parseDate(iso, "Asia/Kolkata", "yyyy-MM-dd HH:mm:ss");   // uses the same time-zone rules the real Sheet does
+  }catch(ignore){}
+  return new Date(Date.UTC(y, mo - 1, d, h, mi, s) - 330 * 60000);
+}
+
+function v2dbCoerce_(v){
+  if(typeof v !== "string") return v2dbCell_(v);
+  var s = v.trim(), m;
+  if(s === "") return v;
+  if(/^[+-]?(\d+\.?\d*|\.\d+)$/.test(s) && s.replace(/[^0-9]/g, "").length <= 15) return Number(s);
+  if(/^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) return Number(s.replace(/,/g, ""));
+  if(/^(true|false)$/i.test(s)) return s.toLowerCase() === "true";
+  if((m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(s))){
+    var y = +m[1], mo = +m[2], d = +m[3];
+    if(mo >= 1 && mo <= 12 && d >= 1 && d <= 31){
+      var chk = new Date(Date.UTC(y, mo - 1, d));
+      if(chk.getUTCMonth() === mo - 1 && chk.getUTCDate() === d) return v2dbMidnightDate_(y, mo, d, +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+    }
+  }
+  if((m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(s)) && +m[1] < 24 && +m[2] < 60) return v2dbMidnightDate_(1899, 12, 30, +m[1], +m[2], +(m[3] || 0));
+  return v;
+}
+
+function v2dbBytes_(str){ return unescape(encodeURIComponent(str)).length; }       // the real size in bytes (a character like the rupee sign is 3)
 
 function v2dbEncodeRows_(rows){
   return JSON.stringify(rows.map(function(row){
@@ -102,7 +133,7 @@ V2Sheet_.prototype.getRange = function(r, c, nr, nc){
 
 V2Sheet_.prototype.appendRow = function(values){
   var last = this.getLastRow();
-  var row = values.map(v2dbCell_);
+  var row = values.map(v2dbCoerce_);
   this.rows.length = Math.max(this.rows.length, last);
   this.rows.splice(last, this.rows.length - last, row);       // replaces any trailing blank rows, like the real Sheet
   this.touch_();
@@ -161,7 +192,7 @@ V2Range_.prototype.setValues = function(vals){
     var row = sh.rows[this.r - 1 + i];
     for(var j = 0; j < vals[i].length; j++){
       while(row.length < this.c + j) row.push("");
-      row[this.c - 1 + j] = v2dbCell_(vals[i][j]);
+      row[this.c - 1 + j] = v2dbCoerce_(vals[i][j]);
     }
   }
   sh.touch_();
@@ -193,7 +224,10 @@ V2Range_.prototype.sort = function(specs){
     var x = a[col], y = b[col], bx = v2dbIsBlankCell_(x), by = v2dbIsBlankCell_(y);
     if(bx || by){ if(bx && by) return 0; return (bx ? 1 : -1) * (asc ? 1 : -1); }
     var kx = key(x), ky = key(y), cmp;
-    if(typeof kx === "number" && typeof ky === "number") cmp = kx - ky;
+    var rank = function(k){ return typeof k === "number" ? 0 : (typeof k === "boolean" ? 2 : 1); };
+    if(rank(kx) !== rank(ky)) cmp = rank(kx) - rank(ky);
+    else if(typeof kx === "number") cmp = kx - ky;
+    else if(typeof kx === "boolean") cmp = (kx ? 1 : 0) - (ky ? 1 : 0);
     else cmp = String(kx) < String(ky) ? -1 : String(kx) > String(ky) ? 1 : 0;
     return cmp * (asc ? 1 : -1);
   });
@@ -219,8 +253,9 @@ V2Db_.prototype.getId = function(){ return "v2db:" + this.user; };
 // Opens a tab (one read; two or more only for a very large tab). null if the person has no such tab.
 V2Db_.prototype.getSheetByName = function(name){
   if(this.sheets[name]) return this.sheets[name];
+  if(this.missing && this.missing[name]) return null;
   var first = fsGetPathMeta_(this.pagePath_(name, 0));
-  if(!first) return null;
+  if(!first){ (this.missing = this.missing || {})[name] = true; return null; }
   var pageCount = Number(first.fields.pages) || 1;
   var pageJsons = [String(first.fields.json || "[]")];
   for(var p = 1; p < pageCount; p++){
@@ -236,6 +271,11 @@ V2Db_.prototype.getSheetByName = function(name){
 
 V2Db_.prototype.insertSheet = function(name){
   if(this.getSheetByName(name)) throw new Error("v2db: a tab named " + name + " already exists");
+  var safe = v2dbSafeName_(name), self = this;
+  Object.keys(this.sheets).forEach(function(other){
+    if(other !== name && v2dbSafeName_(other) === safe) throw new Error("v2db: tab name " + name + " would collide with " + other);
+  });
+  if(this.missing) delete this.missing[name];
   var sheet = new V2Sheet_(this, name, [], null);
   this.sheets[name] = sheet;
   return sheet;
@@ -256,13 +296,13 @@ V2Db_.prototype.renameSheet_ = function(sheet, newName){
   throw new Error("v2db: renaming a tab is not supported");
 };
 
-// Splits rows into pages: at most V2DB_PAGE_ROWS_ rows and V2DB_PAGE_CHARS_ characters each.
+// Splits rows into pages: at most V2DB_PAGE_ROWS_ rows and V2DB_PAGE_BYTES_ bytes each.
 V2Db_.prototype.paginate_ = function(rows){
   var pages = [], current = [], size = 2;
   rows.forEach(function(row){
     var js = v2dbEncodeRows_([row]);
-    var len = js.length;
-    if(current.length && (current.length >= V2DB_PAGE_ROWS_ || size + len > V2DB_PAGE_CHARS_)){
+    var len = v2dbBytes_(js);
+    if(current.length && (current.length >= V2DB_PAGE_ROWS_ || size + len > V2DB_PAGE_BYTES_)){
       pages.push(current); current = []; size = 2;
     }
     current.push(row); size += len;
@@ -304,7 +344,9 @@ V2Db_.prototype.flush = function(){
   try{
     results = fsCommit_(ops);
   }catch(e){
-    if(e && (e.httpCode === 400 || e.httpCode === 409 || e.httpCode === 412)){
+    var msg = String(e && e.message || "");
+    var looksLikeConflict = e && (e.httpCode === 409 || e.httpCode === 412 || (e.httpCode === 400 && /does not match|base version|precondition|already exists|was changed|modified/i.test(msg)));
+    if(looksLikeConflict){
       var conflict = new Error("v2db: this data was changed by someone else at the same moment; nothing was saved, please try again");
       conflict.v2dbConflict = true;
       throw conflict;
@@ -323,13 +365,22 @@ V2Db_.prototype.flush = function(){
 // ---------------------------------------------------------------- running a request on a person's virtual spreadsheet
 // Runs fn() with dbSs_() returning the person's virtual spreadsheet; flushes on success; ALWAYS restores the
 // real spreadsheet afterwards. If fn throws, nothing is written.
+function v2dbAnswerFailed_(result){
+  try{
+    var text = result && typeof result.getContent === "function" ? result.getContent() : (typeof result === "string" ? result : "");
+    return /"ok"\s*:\s*false/.test(String(text).slice(0, 400));
+  }catch(e){ return false; }
+}
+
 function v2dbRun_(user, fn){
   var db = new V2Db_(user);
   var previous = V2DB_REQ_;
   V2DB_REQ_ = db;
   try{
     var result = fn(db);
-    db.flush();
+    // If the action reported failure ({ok:false}, which is how the app turns errors into answers), keep NONE of its
+    // changes: a half-finished save must never be written.
+    if(!v2dbAnswerFailed_(result)) db.flush();
     return result;
   }finally{
     V2DB_REQ_ = previous;

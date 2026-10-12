@@ -82,7 +82,7 @@ function makeEnv(tabs, virtual){
       ops.forEach(function(op){
         if(op.set){ const cur = w.store[op.set.path];
           if(op.set.onlyIfNew && cur){ const e = new Error("exists"); e.httpCode = 409; throw e; }
-          if(op.set.onlyIfUpdateTime && (!cur || cur.updateTime !== op.set.onlyIfUpdateTime)){ const e = new Error("changed"); e.httpCode = 400; throw e; } }
+          if(op.set.onlyIfUpdateTime && (!cur || cur.updateTime !== op.set.onlyIfUpdateTime)){ const e = new Error("the stored version (x) does not match the required base version (y)"); e.httpCode = 400; throw e; } }
       });
       return ops.map(function(op){
         if(op.set){ w.store[op.set.path] = { fields: clone(op.set.fields), updateTime: "t" + String(++w.clock).padStart(8, "0") }; return { updateTime: w.store[op.set.path].updateTime }; }
@@ -93,6 +93,31 @@ function makeEnv(tabs, virtual){
     Object.keys(tabs).forEach(function(t){ sb.v2dbImportTab_(OWNER, t, inRealm(tabs[t])); });
   } else {
     Object.keys(tabs).forEach(function(t){ w.addSheet(t, inRealm(tabs[t])); });
+    // The real Google Sheet turns text a script writes into numbers / dates / true-false. The plain fake Sheet does not, so
+    // give the answer key an INDEPENDENT copy of that behaviour (separate code from v2db.js) or the comparison would be unfair.
+    const coerce = function(v){
+      if(typeof v !== "string") return v;
+      const t = v.trim();
+      if(/^-?\d+(\.\d+)?$/.test(t) && t.replace(/\D/g, "").length <= 15) return Number(t);
+      if(/^(true|false)$/i.test(t)) return t.toLowerCase() === "true";
+      let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+      if(m) return new SD(Date.UTC(+m[1], +m[2] - 1, +m[3]) - IST_MIN * 60000);
+      m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(t);
+      if(m) return new SD(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) - IST_MIN * 60000);
+      m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(t);
+      if(m) return new SD(Date.UTC(1899, 11, 30, +m[1], +m[2], +(m[3] || 0)) - IST_MIN * 60000);
+      return v;
+    };
+    Object.keys(w.sheets).forEach(function(n){
+      const sh = w.sheets[n], origAppend = sh.appendRow.bind(sh), origRange = sh.getRange.bind(sh);
+      sh.appendRow = function(vals){ return origAppend(vals.map(coerce)); };
+      sh.getRange = function(){
+        const rg = origRange.apply(null, arguments), sv = rg.setValue, svs = rg.setValues;
+        rg.setValue = function(v){ return sv.call(rg, coerce(v)); };
+        rg.setValues = function(vals){ return svs.call(rg, vals.map(function(r){ return r.map(coerce); })); };
+        return rg;
+      };
+    });
   }
   // run one app action exactly as the live app does
   w.act = function(payload){

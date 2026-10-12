@@ -31,7 +31,7 @@ function fresh(){
       if(op.set){
         const cur = w.store[op.set.path];
         if(op.set.onlyIfNew && cur){ const e = new Error("exists"); e.httpCode = 409; throw e; }
-        if(op.set.onlyIfUpdateTime && (!cur || cur.updateTime !== op.set.onlyIfUpdateTime)){ const e = new Error("changed"); e.httpCode = 400; throw e; }
+        if(op.set.onlyIfUpdateTime && (!cur || cur.updateTime !== op.set.onlyIfUpdateTime)){ const e = new Error("the stored version (x) does not match the required base version (y)"); e.httpCode = 400; throw e; }
       }
     });
     return ops.map(function(op){
@@ -122,15 +122,41 @@ console.log("\n--- 2. Everything survives being saved and re-opened ---");
     [753022182554, -0.01, "a,b;c", 0, D(1899, 12, 30, 0, 0, 0)],
     [1e15, 1e-7, "x".repeat(5000), 12345678901234, "0123"]
   ];
-  sb.v2dbRun_("owner@example.com", function(db){
-    const sh = db.insertSheet("Transactions");
-    rows.forEach(function(r){ sh.appendRow(r); });
-  });
+  sb.v2dbImportTab_("owner@example.com", "Transactions", rows);        // an exact copy of a real tab: nothing is converted
   const back = new sb.V2Db_("owner@example.com").getSheetByName("Transactions").getDataRange().getValues();
   assert(same(back, rows), "numbers, text, true/false, empty cells, unicode, emoji, quotes, newlines, huge text and exact Dates (to the millisecond) all come back identical");
   assert(Object.prototype.toString.call(back[1][0]) === "[object Date]" && back[1][0].getTime() === rows[1][0].getTime(), "a Date comes back as a real Date");
   assert(back[4][4] === "0123" && back[3][0] === 753022182554, "text that looks like a number stays text; a long number stays a number");
   assert(new sb.V2Db_("owner@example.com").getSheetByName("Nope") === null, "a tab the person doesn't have is null (like getSheetByName)");
+}
+
+console.log("\n--- 2b. Text a script writes is turned into numbers / dates / true-false, like the real Sheet ---");
+{
+  const w = fresh(), sb = w.sb;
+  const db = new sb.V2Db_("owner@example.com");
+  const sh = db.insertSheet("C");
+  sh.appendRow(["123", "12.50", "-7", "1,234.5", "0123", "TRUE", "false", "2026-10-12", "2026-10-12 18:36:21", "18:36", "753022182554", "hello", "", "2026-13-45", "12345678901234567890", "1e5", " 42 "]);
+  const r = sh.getRange(1, 1, 1, 17).getValues()[0];
+  const isDate = function(x){ return Object.prototype.toString.call(x) === "[object Date]"; };
+  assert(r[0] === 123 && r[1] === 12.5 && r[2] === -7 && r[3] === 1234.5 && r[4] === 123, "number-looking text becomes a number (including 12.50, negatives, 1,234.5 and 0123)");
+  assert(r[5] === true && r[6] === false, "TRUE / false become true / false");
+  assert(isDate(r[7]) && r[7].getTime() === Date.UTC(2026, 9, 11, 18, 30), "yyyy-MM-dd becomes a date at midnight India time");
+  assert(isDate(r[8]) && r[8].getTime() === Date.UTC(2026, 9, 12, 18 - 5, 36 - 30 + 60, 21) || r[8].getTime() === Date.UTC(2026, 9, 12, 13, 6, 21), "yyyy-MM-dd HH:mm:ss becomes a date-time");
+  assert(isDate(r[9]), "HH:mm becomes a time of day");
+  assert(r[10] === 753022182554, "a 12-digit reference becomes a number (as in the live Sheet)");
+  assert(r[11] === "hello" && r[12] === "", "ordinary text and empty text stay as they are");
+  assert(r[13] === "2026-13-45", "an impossible date stays text");
+  assert(r[14] === "12345678901234567890" && r[15] === "1e5", "a number too long to hold exactly, and scientific notation, stay text (never silently rounded)");
+  assert(r[16] === 42, "spaces around a number are ignored");
+  sh.getRange(2, 1).setValue("45"); sh.getRange(2, 2, 1, 2).setValues([["2026-01-02", "x"]]);
+  assert(sh.getRange(2, 1).getValue() === 45 && isDate(sh.getRange(2, 2).getValue()) && sh.getRange(2, 3).getValue() === "x", "setValue and setValues convert the same way");
+  const imp = sb.v2dbImportTab_("owner@example.com", "Copy", [["0123", "2026-10-12"]]);
+  assert(new sb.V2Db_("owner@example.com").getSheetByName("Copy").getRange(1, 1, 1, 2).getValues()[0].join("|") === "0123|2026-10-12", "importing an exact copy of a real tab converts nothing");
+  const mix = new sb.V2Db_("owner@example.com").insertSheet("Mix");
+  [["b"], ["2026-10-02"], [5], ["2026-10-01"], [true], ["a"], [""]].forEach(function(row){ mix.appendRow(row); });
+  mix.getRange(1, 1, 7, 1).sort([{ column: 1, ascending: true }]);
+  const order = mix.getRange(1, 1, 7, 1).getValues().map(function(x){ const v = x[0]; return isDate(v) ? "D" + new Date(v.getTime() + 330 * 60000).getUTCDate() : String(v); }).join(",");
+  assert(order === "5,D1,D2,a,b,true,", "sorting mixed content like Sheets: numbers and dates first (earlier date first), then text, then true/false, blanks last (got " + order + ")");
 }
 
 console.log("\n--- 3. All-or-nothing, and nothing written when nothing changed ---");
@@ -247,6 +273,43 @@ console.log("\n--- 7. Importing a real Sheet tab, and the Sheet-like details ---
   const copy = new sb.V2Db_("owner@example.com").getSheetByName("Debts").getRange(2, 1, 1, 1).getValues();
   copy[0][0] = "mutated";
   assert(new sb.V2Db_("owner@example.com").getSheetByName("Debts").getRange(2, 1).getValue() === "z", "values handed out are copies (changing them changes nothing)");
+}
+
+console.log("\n--- 8. Review fixes: failed answers save nothing, real errors are not disguised, byte-sized pages ---");
+{
+  const w = fresh(), sb = w.sb;
+  const answer = function(ok){ return { getContent: function(){ return JSON.stringify({ ok: ok, x: 1 }); } }; };
+  sb.v2dbRun_("owner@example.com", function(db){ db.insertSheet("A").appendRow([1]); return answer(true); });
+  const before = JSON.stringify(w.store);
+  const ret = sb.v2dbRun_("owner@example.com", function(db){ db.getSheetByName("A").appendRow([2]); return answer(false); });
+  assert(JSON.stringify(w.store) === before && JSON.parse(ret.getContent()).ok === false, "an action that answers {ok:false} saves NONE of its changes, and its answer is passed through");
+  sb.v2dbRun_("owner@example.com", function(db){ db.getSheetByName("A").appendRow([3]); return answer(true); });
+  assert(new sb.V2Db_("owner@example.com").getSheetByName("A").getLastRow() === 2, "an action that answers {ok:true} is saved");
+  sb.v2dbRun_("owner@example.com", function(db){ db.getSheetByName("A").appendRow([4]); return "not a response object"; });
+  assert(new sb.V2Db_("owner@example.com").getSheetByName("A").getLastRow() === 3, "a plain return value (no answer object) is saved");
+
+  const w2 = fresh(), sb2 = w2.sb;
+  const bad = new Error("Invalid argument: document too large"); bad.httpCode = 400;
+  w2.failNext = bad;
+  let got = null;
+  try{ sb2.v2dbRun_("owner@example.com", function(db){ db.insertSheet("A").appendRow([1]); }); }catch(e){ got = e; }
+  assert(got && !got.v2dbConflict && /too large/.test(got.message), "a genuine HTTP 400 (like an oversize document) keeps its real message instead of being called a harmless conflict");
+
+  const w3 = fresh(), sb3 = w3.sb;
+  sb3.v2dbRun_("owner@example.com", function(db){ const t = db.insertSheet("Wide"); for(let i = 0; i < 12; i++) t.appendRow([i, "₹".repeat(60000)]); });
+  const pages = Object.keys(w3.store).filter(function(p){ return /\/Wide\/pages\//.test(p); });
+  const bytes = function(str){ return Buffer.byteLength(str, "utf8"); };
+  assert(pages.length >= 2 && pages.every(function(p){ return bytes(w3.store[p].fields.json) <= 560000; }), "pages are sized by real bytes: rows full of the rupee sign (3 bytes each) are split before a page nears 1 MiB");
+  assert(new sb3.V2Db_("owner@example.com").getSheetByName("Wide").getLastRow() === 12, "...and they read back whole");
+
+  const w4 = fresh(), sb4 = w4.sb;
+  sb4.v2dbRun_("owner@example.com", function(db){ db.insertSheet("My Tab").appendRow([1]); });
+  let collide = false;
+  try{ const d = new sb4.V2Db_("owner@example.com"); d.insertSheet("My Tab2"); d.insertSheet("My_Tab2"); }catch(e){ collide = true; }
+  assert(collide, "two tab names that would be stored under the same name are refused");
+  const d5 = new sb4.V2Db_("owner@example.com");
+  w4.reads = 0; d5.getSheetByName("Nope"); d5.getSheetByName("Nope"); d5.getSheetByName("Nope");
+  assert(w4.reads === 1, "asking again for a tab that doesn't exist costs one read, not one per ask");
 }
 
 process.exitCode = process.exitCode || 0;

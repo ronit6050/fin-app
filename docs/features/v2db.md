@@ -17,7 +17,7 @@ Security rules already cover it (`users/<email>/{document=**}`: a person reads o
 
 ## How a request uses it
 `v2dbRun_(user, fn)` runs `fn` with `dbSs_()` returning that person's virtual spreadsheet. Changes happen in memory; at the end ALL changed tabs are
-written in ONE all-or-nothing batch. If `fn` throws, nothing is written. If someone else changed a tab in the meantime, the save is refused with a
+written in ONE all-or-nothing batch. If `fn` throws, OR the action's answer says `{ok:false}` (the app's own safety net turns errors into such answers), nothing is written. If someone else changed a tab in the meantime, the save is refused with a
 plain "try again" message (an update-time check on page 0), never overwriting. Outside `v2dbRun_`, `dbSs_()` is the real Google Sheet, so
 **nothing changes until something calls `v2dbRun_`** (nothing does yet).
 
@@ -27,18 +27,25 @@ purpose: `Logger.js` (maintenance tools and `logAI`) and `v2Sync.js` (the Sheet-
 `appHealth.js` and the timer entry points also follow `dbSs_()`, so when a person is flipped, their timers must run inside `v2dbRun_` (not done yet).
 The shared test kit and every test sandbox define `dbSs_` as the real spreadsheet.
 
+## Sheet-like conversion (important)
+Real Google Sheets treats text a script writes as if it were typed: "123" becomes the number 123, "2026-10-12" a date, "18:36" a time of day,
+"TRUE" true. The backend relies on this (amounts, dates, SMS reference numbers), so `setValue` / `setValues` / `appendRow` convert the same way
+(`v2dbCoerce_`; numbers longer than 15 digits and scientific notation stay text, never silently rounded). Date conversion uses
+`Utilities.parseDate` in real Apps Script so old (1899) time-of-day values use the same time-zone rules the Sheet does. `v2dbImportTab_` (an exact
+copy of a real tab) converts nothing. Sorting follows the Sheet: numbers/dates, then text, then true/false, blanks last.
+
 ## Not supported (on purpose)
 `copyTo`, formatting calls, A1-notation ranges (`getRange("A1:B2")` throws loudly; the backend only uses row/column numbers), renaming a tab.
-Writing "123" into a cell stores the text "123" (the real Sheet would turn it into a number); the app does not rely on that.
+
 
 ## Proof
-- `backend/tests/v2db.test.js` (45 checks): 600 random operations compared cell-for-cell with a plain fake Sheet; sorting with blanks/dates/text both
+- `backend/tests/v2db.test.js` (65 checks): 600 random operations compared cell-for-cell with a plain fake Sheet; sorting with blanks/dates/text both
   ways; everything (numbers, text, true/false, unicode, emoji, huge text, Dates to the millisecond) survives save and reopen; all-or-nothing; conflicts
   refused; pages; two people never see each other's data; malformed people refused. Mutation-checked.
 - `backend/tests/v2dbParity.test.js` (73 checks, needs a Sheet backup in `local-data/backups`): the REAL backend actions run on a copy of the owner's
   real data twice (plain Sheet = answer key, and the virtual spreadsheet); every screen answer and the final contents of every tab are identical,
   including real saves (notes, Need/Want votes, not-a-transaction, cash, debts, part-payments, settle, investments, savings goals/splits).
-  The clock is frozen so timestamps match.
+  The clock is frozen so timestamps match. The "answer key" Sheet gets its own independent copy of the text-to-number/date conversion so the comparison is fair.
 
 ## What is NOT done yet (next steps)
 1. Routing: `handlePwaRequest` choosing the engine per person (flag), a lock around writes, a retry on conflict.
@@ -46,3 +53,9 @@ Writing "123" into a cell stores the text "123" (the real Sheet would turn it in
 3. Importing the owner's tabs inside Apps Script (cell-exact, real Dates) via `v2dbImportTab_`, then flipping, with an instant switch back.
 4. The background timer, SMS landing and health check per person; Sheet backup export; new-person onboarding (empty template tabs).
 5. The frontend: a "full app" mode for a non-owner whose engine is on.
+
+## Independent review (2026-10-12): safe to push; fixed before activation
+Fixed: text-to-number/date conversion (above); mixed-type sorting; a real HTTP 400 is no longer disguised as a "try again" conflict; a failed
+({ok:false}) answer now saves nothing; pages are sized by bytes not characters; a missing tab is remembered per request; two tab names that would
+collapse to one stored name are refused. Still true: no lock or retry yet (a conflict is reported, never overwritten); tabs that were only READ are not
+version-checked; the Telegram-era `Analysis.js` chart code calls `deleteSheet`, which is not supported (dormant).
