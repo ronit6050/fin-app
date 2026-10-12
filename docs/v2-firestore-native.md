@@ -99,3 +99,21 @@ owner sees until its screen is flipped on purpose.
 - Independent review (2026-10-12) found it safe once the first run was made non-destructive; its other findings (lock leak, once-an-hour logging, runtime
   quota, 20% delete allowance) are fixed.
 - Still true: the Sheet is the record; nothing reads the Firestore copy yet. Next: phase 3 (screens read Firestore).
+
+## REVISED PLAN for phases 3 to 5 (2026-10-12, agreed with the owner: "do it properly", Firestore becomes the real database)
+Finding: the backend (about 8,700 lines) identifies rows by Sheet position, and flipping only the READS would show stale data after a save
+(Firestore lags the Sheet) and read about 1,000 documents per screen. Rewriting every feature around per-document ids would be weeks of risk.
+**Chosen approach: a Firestore-backed "virtual spreadsheet".** The backend only uses a small set of Sheet operations (getSheetByName, getDataRange,
+getRange get/set, appendRow, sort, getLastRow, deleteRow(s), insertSheet ...). `backend/v2db.js` provides an object with that same behaviour whose
+tabs live in the person's own Firestore folder as a few "page" documents per tab (`users/<email>/sheets/<tab>` + `.../pages/<n>`, rows stored as JSON
+text so Firestore's array/index limits never bite). All backend code gets its spreadsheet from one function, `dbSs_()`, which returns the real Sheet
+(today) or the person's virtual spreadsheet (flag per person). Consequences:
+- Firebase is the single real record, one private folder per person; Vaidehi gets the full app (Pending, History, learning...) on HER OWN tabs.
+- No rewrite of tested logic; the same action run on the Sheet and on the virtual spreadsheet must give identical answers and identical final tab
+  contents (proved by `backend/tests/v2db.test.js`, on a copy of the owner's real data).
+- Reads: 1 document per tab page (about 5 to 15 reads per request), writes: 1 to 3 per changed tab. A request is all-or-nothing (buffered, flushed
+  at the end; an error discards the lot).
+- The owner's data is imported tab-by-tab INSIDE Apps Script (cell-exact, real Date values), verified, then flipped with a per-person flag and an
+  instant switch back. The Sheet then becomes a live backup (Firestore to Sheet export).
+- Per-person things still to make per-user: settings (Script Properties), push token, the background timer loop, SMS ingestion key. The per-document
+  collections and `v2Sync.js` from phases 1 and 2 become a verification aid and are retired when the owner flips.
