@@ -33,6 +33,30 @@ function isEmptyTransactionRow_(row){
   return !hasDate && !hasAmount;
 }
 
+// The first REAL transaction row (2..lastRow) that was never alerted - Processed
+// is blank, not YES, not IGNORED - or 0 when there is none. Added 2026-10-12.
+//
+// WHY: the timer remembers "how far have I looked" as a row NUMBER (the
+// bookmark). That number can be WRONG: on 2026-10-11 it said 999 while the sheet
+// only had 987 rows (blank rows below the data had been removed), so the next
+// real payment landed at row 987 - "already looked at" - and was never alerted
+// and never showed up in Pending. A row number can never be trusted on its own
+// in a sheet whose rows get cleared, re-sorted and trimmed, so every run also
+// asks the data itself: "is any real transaction still un-alerted?"
+function findFirstUnprocessedRow_(sheet, lastRow){
+  if(lastRow < 2) return 0;
+  const rows = sheet.getRange(2, 1, lastRow - 1, 16).getValues();
+  for(let i = 0; i < rows.length; i++){
+    if(isUnprocessedTransactionRow_(rows[i])) return i + 2;
+  }
+  return 0;
+}
+
+// How many times a row may fail before the timer stops retrying it and just lets
+// it appear in Pending without a notification (so a permanently broken row can
+// never cause a notification every 5 minutes, or hold the scan back forever).
+const TXN_MAX_ALERT_ATTEMPTS_ = 3;
+
 function processNewTransactionsCore_() {
 
   const {BOT_TOKEN, CHAT_ID} = getConfig();
@@ -47,8 +71,13 @@ function processNewTransactionsCore_() {
   const props       = PropertiesService.getScriptProperties();
   const lastChecked = Number(props.getProperty("lastCheckedRow") || 1);
 
-  // If sheet has shrunk somehow, reset
-  const startRow = Math.min(lastChecked, lastRow);
+  // The bookmark is only a speed-up, never the truth (see findFirstUnprocessedRow_).
+  // If it points PAST the end of the sheet (the sheet shrank), heal it; and always
+  // start no later than the first real row that was never alerted.
+  if(lastChecked > lastRow) props.setProperty("lastCheckedRow", String(lastRow));
+  let startRow = Math.min(lastChecked, lastRow);
+  const firstMissed = findFirstUnprocessedRow_(sheet, lastRow);
+  if(firstMissed) startRow = Math.min(startRow, firstMissed - 1);
 
   const numRows = lastRow - startRow;
   if(numRows < 1) return; // Nothing new to check
@@ -228,6 +257,20 @@ Reply to add a note for this transaction.`;
 
       }catch(err){
         logAI("PROCESS_TXN_ERROR", "Row " + rowIndex + ": " + err.toString());
+        // The timer now retries a row that failed (it is still "never alerted"),
+        // so count the failures and stop after a few: the row then simply shows
+        // up in Pending without a notification, and the scan moves on.
+        try{
+          const attemptKey = "txnAlertAttempts_" + rowIndex;
+          const attempts = Number(props.getProperty(attemptKey) || 0) + 1;
+          if(attempts >= TXN_MAX_ALERT_ATTEMPTS_){
+            sheet.getRange(rowIndex, 16).setValue("YES");
+            props.deleteProperty(attemptKey);
+            logAI("PROCESS_TXN_GAVE_UP", "Row " + rowIndex + " failed " + attempts + " times; marked processed so it appears in Pending without a notification.");
+          }else{
+            props.setProperty(attemptKey, String(attempts));
+          }
+        }catch(ignore){}
       }
     }
   }

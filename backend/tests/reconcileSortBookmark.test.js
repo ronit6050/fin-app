@@ -54,14 +54,14 @@ const OLDER = [
 ];
 const unprocessedRowNumber = (w) => w.sheets.Transactions.rows.findIndex((r) => r[5] === 77) + 1;
 
-console.log("\n--- 1. PROOF THE TEST HAS TEETH: with both protections off, the row IS missed ---");
+console.log("\n--- 1. With BOTH reconcile protections off, the general scan (added 2026-10-12) still catches the row ---");
 {
   const w = world({ noFlush: true, noRepair: true });
   const res = w.sb.insertReconciledTransactions(OLDER, "Bank Statement");
   assert(res.ok && res.added === 2, "the reconcile itself works");
   assert(unprocessedRowNumber(w) === 7, "the sort moved the unalerted row from 8 to 7 (got " + unprocessedRowNumber(w) + ")");
   w.sb.processNewTransactionsCore_();
-  assert(w.pushes.length === 0 && w.sheets.Transactions.rows[6][15] === "", "WITHOUT the fix the timer never alerts it (0 notifications, still unprocessed)");
+  assert(w.pushes.length === 1 && w.sheets.Transactions.rows[6][15] === "YES", "the timer now alerts it anyway: it no longer trusts the bookmark alone (before 2026-10-12 this row was missed forever)");
 }
 
 console.log("\n--- 2. The bookmark repair alone catches it ---");

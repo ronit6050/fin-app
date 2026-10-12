@@ -2992,3 +2992,17 @@ repo) shows two guess buttons + an inline reply box that save via a background w
 Backend tests 32 files pass; Kotlin compiles. Full doc: [docs/features/quick-confirm-notification.md](docs/features/quick-confirm-notification.md).
 The user must rebuild/install the Android app to get the buttons (Android Studio > Run). APP_VERSION `2026-10-11-04`.
 
+## Timer bookmark bug (2026-10-12): FIXED and DEPLOYED (backend @328)
+A payment saved at row 987 (2026-10-11 18:21) was never alerted and never reached Pending: the timer's
+`lastCheckedRow` Script Property said 999 while the sheet only had 987 rows (blank rows below the data had been
+removed), so the row counted as "already looked at". The old "if the sheet shrank, reset" actually skipped the last
+row. Fix (`transactions.js`): the bookmark is only a speed-up now - every run also calls `findFirstUnprocessedRow_`
+(first real row with Processed blank, not YES/IGNORED) and starts no later than it; a bookmark past the end heals
+itself; a row that fails 3 times (`TXN_MAX_ALERT_ATTEMPTS_`) is marked processed with a `PROCESS_TXN_GAVE_UP` log so it
+cannot cause a notification every 5 minutes. Tests: `backend/tests/bookmarkSafety.test.js`; replayed on the real
+sheet with the real bookmark 999 (exactly one alert). LESSON: never trust a row number alone in this sheet.
+Also: the Google Sheet is still the MAIN record; Firestore only holds copies of finished screens (see the revision
+under the v2 decision record). Making Firestore primary is a separate long project (transactions last).
+Open: add a one-tap 'Credit card bill' option to the Mark-as panel (the May 9 CRED payment cannot be matched
+automatically - amount does not equal any card bill in the data); user's splits plan is on hold.
+
