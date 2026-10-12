@@ -334,4 +334,38 @@ console.log("\n--- 12. refreshViews: rebuilds the copy now and reports when it s
   assert(no.ok === false && wrong.writes().length === 0, "another account cannot trigger it");
 }
 
+console.log("\n--- 13. The daily safety limit keeps the app inside the free allowance ---");
+{
+  const w = world();
+  w.sb.fsSetDocument_("views", "a", { x: 1 });
+  w.sb.fsFlushUsage_();
+  assert(w.sb.fsGetDocument_("views", "a") !== null, "normal use is untouched");
+
+  const nearReads = world();
+  nearReads.props[nearReads.sb.fsTodayKey_()] = JSON.stringify({ reads: 44999, writes: 0, calls: 0 });
+  nearReads.sb.fsGetDocument_("views", "x");           // read number 45,000: allowed
+  const fetchesBefore = nearReads.fetches.length;
+  let err = null;
+  try{ nearReads.sb.fsGetDocument_("views", "x"); }catch(e){ err = e; }
+  assert(err && err.safetyLimit === true && /safety limit/i.test(err.message), "at 45,000 reads a day the next read is refused with a plain message");
+  assert(nearReads.fetches.length === fetchesBefore, "...and no request is even sent to Google");
+
+  const nearWrites = world();
+  nearWrites.props[nearWrites.sb.fsTodayKey_()] = JSON.stringify({ reads: 0, writes: 18000, calls: 0 });
+  let werr = null;
+  try{ nearWrites.sb.fsSetDocument_("views", "x", { a: 1 }); }catch(e){ werr = e; }
+  assert(werr && werr.safetyLimit === true, "at 18,000 writes a day, writes are refused");
+  assert(nearWrites.sb.fsGetDocument_("views", "nope") === null, "...but reads still work while only the write limit is hit");
+
+  const old = world();
+  old.props["FS_USAGE_20200101"] = JSON.stringify({ reads: 99999, writes: 99999, calls: 1 });
+  assert(old.sb.fsGetDocument_("views", "a") === null, "yesterday's (or older) heavy use does not block today");
+
+  const full = world();
+  full.props[full.sb.fsTodayKey_()] = JSON.stringify({ reads: 50000, writes: 0, calls: 0 });
+  assert(full.sb.publishViewsBestEffort_("test", true) === false && full.errors().length >= 0, "the Home-copy publisher fails quietly (no crash) when the limit is reached");
+  const sign = full.sb.fsAccessToken_();
+  assert(sign === "token-1", "signing in is never blocked by the limit");
+}
+
 console.log("\nDone.");

@@ -77,6 +77,7 @@ function publishDashboardView_(reason){
 // One error line per hour at most, so a broken connection can't flood the log.
 function v2LogErrorOncePerHour_(err){
   try{
+    if(err && err.safetyLimit) return;   // the daily Firestore safety limit working as designed, not a fault (firestore.js)
     var cache = CacheService.getScriptCache();
     if(cache.get("V2_ERR_LOGGED")) return;
     cache.put("V2_ERR_LOGGED", "1", 3600);

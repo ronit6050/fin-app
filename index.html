@@ -3514,8 +3514,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-12-04";
-    const APP_CHANGELOG = "When you split a payment with a friend, your spending totals now count only your share. History shows how much was the friend's part.";
+    const APP_VERSION = "2026-10-12-05";
+    const APP_CHANGELOG = "You can now move an old debt into a friend's running balance (Debts > Move to a friend's balance), so there is one number per person.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -6034,6 +6034,7 @@
           case "getTransactionHistory": return Object.assign({ ok: true }, demoComputeHistory(data.offset, data.limit), { knownDebtPeople: demoKnownDebtPeople() });
           case "getPlannerData": return { ok: true, planner: demoComputePlannerData(data.month) };
           case "saveBudgets": return demoSaveBudgets(data.month, data.budgets, data.income, data.fixedObligations);
+          case "moveDebtToFriend": return demoMoveDebt(data);
           case "getPeople": case "getPerson": case "addFriend": case "createSplit":
           case "recordSplitPayment": case "undoSplitEntry": return demoSplitsRoute(data);
           default: return { ok: false, error: "Unknown action." };
@@ -6048,6 +6049,17 @@
     // the real backend has, working on a small pretend list held in memory.
     // Nothing here is ever sent anywhere.
     // ---------------------------------------------------------
+    function demoMoveDebt(data) {
+      const d = demoComputeDebts().debts.find(function (x) { return x.row === data.row; });
+      if (!d) return { ok: false, error: "That debt is already settled." };
+      const f = demoSplitsState().friends.find(function (x) { return x.email === String(data.friendEmail || "").toLowerCase(); });
+      if (!f) return { ok: false, error: "That friend isn't in your list." };
+      f.entries.push({ id: "debt" + data.row, type: "carryover", signed: d.type === "BORROWED" ? -d.amount : d.amount,
+                       description: "Earlier balance: " + d.person, createdAtMs: Date.now(), undone: false });
+      demoSettleDebt(data.row);
+      return { ok: true, balance: demoFriendBalance(f) };
+    }
+
     function demoSplitsState() {
       if (!demoState.splits) {
         const now = Date.now(), day = 86400000;
@@ -6680,6 +6692,15 @@
       if (!tabLoaded.cash) { renderCash(full.cash); tabLoaded.cash = true; }
     }
 
+    // The Home "Debts" tile = the old Debts list net + what friends owe you - what you owe friends.
+    let homeDebtsBaseNet = 0;
+    let peopleFetchedAt = 0;
+    function updateHomeDebtsNet() {
+      const friendsNet = peopleData ? (peopleData.owedToMe - peopleData.iOwe) : 0;
+      const net = Math.round((homeDebtsBaseNet + friendsNet) * 100) / 100;
+      homeDebtsNetEl.textContent = (net >= 0 ? "+₹" : "-₹") + Math.abs(net).toLocaleString("en-IN");
+    }
+
     function renderDashboard(d) {
       homeStatusEl.textContent = "";
       homeContentEl.style.display = "block";
@@ -6689,7 +6710,15 @@
       homePendingCountEl.textContent = d.pendingCount;
       homeCashBalanceEl.textContent = "₹" + d.cashBalance.toLocaleString("en-IN");
       homeCCUsageEl.textContent = d.ccUsagePct + "%";
-      homeDebtsNetEl.textContent = (d.debtsNet >= 0 ? "+₹" : "-₹") + Math.abs(d.debtsNet).toLocaleString("en-IN");
+      homeDebtsBaseNet = d.debtsNet;
+      if (!friendMode && !peopleData) { const c = loadCache("people"); if (c) peopleData = c; }
+      updateHomeDebtsNet();
+      // Friends balances count in this tile too (they used to live only in the Debts list). Refreshed
+      // quietly at most once a minute.
+      if (!friendMode && Date.now() - peopleFetchedAt > 60000 && !peopleLoading) {
+        peopleFetchedAt = Date.now();
+        loadPeople(true).then(updateHomeDebtsNet).catch(function () { /* the tile just shows debts only */ });
+      }
 
       if (d.full && d.full.cc) {
         homeCCUsageAmountEl.textContent =
@@ -8932,6 +8961,11 @@
         </div>
         <button type="button" class="record-payment-btn">Record Payment</button>
         <button type="button" class="settle-btn secondary">Mark as Settled (fully paid)</button>
+        <button type="button" class="secondary move-debt-link" style="display:none; margin-top:6px;">Move to a friend's balance…</button>
+        <div class="move-debt-panel" style="display:none; margin-top:8px;">
+          <div class="field"><label>Friend</label><select class="move-debt-friend"></select></div>
+          <button type="button" class="move-debt-go">Move it (can not be undone)</button>
+        </div>
         <div class="pending-result"></div>
       `;
 
@@ -8940,6 +8974,57 @@
       const settleButton       = card.querySelector(".settle-btn");
       const resultEl           = card.querySelector(".pending-result");
       const amountEl           = card.querySelector(".debt-amount");
+
+      // Move this old debt into a friend's running balance (Splits, 2026-10-12): one number per
+      // person instead of two places. Shown only when you have friends and this is a saved debt.
+      const moveLink  = card.querySelector(".move-debt-link");
+      const movePanel = card.querySelector(".move-debt-panel");
+      const moveSel   = card.querySelector(".move-debt-friend");
+      if (entry.row && !friendMode) {
+        loadPeople(false).then(function () {
+          const mine = ((peopleData && peopleData.people) || []).filter(function (f) { return !f.mirror; });
+          if (mine.length === 0) return;
+          moveSel.innerHTML = mine.map(function (f) { return '<option value="' + escapeHtml(f.email) + '">' + escapeHtml(f.name) + '</option>'; }).join("");
+          // Pre-pick the friend whose name matches this debt's person, if there is one
+          const guess = mine.find(function (f) { return String(f.name).toLowerCase() === String(entry.person).toLowerCase(); });
+          if (guess) moveSel.value = guess.email;
+          moveLink.style.display = "";
+        }).catch(function () { /* no friends list: just no Move option */ });
+      }
+      moveLink.addEventListener("click", function () {
+        movePanel.style.display = movePanel.style.display === "none" ? "block" : "none";
+      });
+      // Moving can not be undone, so (like Settle) it needs a second tap.
+      const moveGo = card.querySelector(".move-debt-go");
+      bindConfirmAction(moveGo, function () {
+        const go = moveGo;
+        go.disabled = true;
+        resultEl.style.color = "";
+        resultEl.textContent = "Moving...";
+        callAppsScript({
+          action: "moveDebtToFriend", idToken: currentUser.idToken, row: entry.row, friendEmail: moveSel.value,
+          expectedPerson: entry.person, expectedType: entry.type   // the row must still be THIS debt
+        })
+          .then(function (r) {
+            go.disabled = false;
+            if (!r.ok) { resultEl.style.color = "var(--color-danger)"; resultEl.textContent = r.error; return; }
+            invalidatePeople();
+            loadPeople(true).then(renderPeopleList).catch(function () {});
+            if (r.alreadyMovedTo) {
+              // An earlier try had already moved it to someone else; it is closed now, not counted twice.
+              resultEl.textContent = "This debt had already been moved to " + r.alreadyMovedTo + " earlier, so it is closed and was not counted twice.";
+              refreshDebtsQuiet();
+              return;
+            }
+            removeCardShowingEmptyIfLast();
+            refreshDebtsQuiet();
+          })
+          .catch(function (err) {
+            go.disabled = false;
+            resultEl.style.color = "var(--color-danger)";
+            resultEl.textContent = "Couldn't move it (" + err.message + ") - check your connection and try again.";
+          });
+      });
 
       // A just-added optimistic debt (see saveDebtButtonEl's handler)
       // doesn't have a real row number yet, so Settle/Record Payment stay
@@ -9508,13 +9593,15 @@
         row.className = "ledger-row" + (e.undone ? " undone" : "");
         const when = e.createdAtMs ? new Date(e.createdAtMs).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "";
         const more = e.direction === "theyOweMore";
-        const title = e.type === "split"
+        const title = e.type === "carryover"
+          ? (e.description || "Earlier balance")
+          : e.type === "split"
           ? (e.description || "Split") + (e.total ? " (of " + splitMoney(e.total) + ")" : "")
           : (more ? "You paid " + p.name : p.name + " paid you") + (e.method ? " by " + e.method.toUpperCase() : "");
         row.innerHTML =
           '<div><div class="ledger-title">' + escapeHtml(title) + '</div>' +
           '<div class="ledger-meta">' + when + (e.undone ? " · undone" : "") + '</div>' +
-          (e.undone ? "" : '<button type="button" class="secondary ledger-undo"><span class="btn-label">Undo</span></button>') + '</div>' +
+          ((e.undone || e.type === "carryover") ? "" : '<button type="button" class="secondary ledger-undo"><span class="btn-label">Undo</span></button>') + '</div>' +
           '<div class="ledger-amount ' + (more ? "more" : "less") + '">' + (more ? "+" : "-") + splitMoney(e.amount) + '</div>';
         const undoBtn = row.querySelector(".ledger-undo");
         if (undoBtn) bindConfirmAction(undoBtn, function () {

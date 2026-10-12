@@ -283,6 +283,7 @@ function splitsUndo_(me, input){
   var mine = fsGetPathMeta_(splitsLedgerPath_(me, fk, id));
   if(!mine) return splitsFail_("Couldn't find that entry.");
   if(mine.fields.undone) return splitsFail_("That entry is already undone.");
+  if(mine.fields.type === "carryover") return splitsFail_("That came from an old debt, so it can't be undone here. Record a payment if the balance needs adjusting.");
   var signed = Number(mine.fields.signedPaise || 0);
   var now = Date.now();
 
@@ -491,5 +492,84 @@ function splitsAutoRepairShares_(){
   }catch(e){
     try{ logAI("SPLITS_SHARE_REPAIR_ERROR", String(e && e.message).slice(0, 200)); }catch(ignore){}
     return null;
+  }
+}
+
+// ---- Moving an OLD debt into a friend's running balance (added 2026-10-12) ---------
+// The Debts list (Sheet) predates friends. This turns one open debt into an "earlier balance"
+// entry on a friend's page and closes the old debt, so there is one number per person.
+// OWNER ONLY (it reads/writes the owner's Sheet). Order matters: the Firestore entry is
+// written first with an id built from the debt row, so a retry after a half-finished try
+// can't count it twice; then the old debt is marked Settled. LENT/SPLIT = they owe you (+),
+// BORROWED = you owe them (-). Carry-overs can't be undone (the old debt would have to be
+// re-opened); record a payment to adjust instead.
+function splitsDebtKey_(person, type, amountPaise){
+  var text = String(person) + "|" + type + "|" + amountPaise, h = 0x811c9dc5;
+  for(var i = 0; i < text.length; i++){ h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(36);
+}
+
+function splitsMoveDebt_(me, myName, input){
+  if(me !== splitsKey_(PWA_ALLOWED_EMAIL)) return splitsFail_("Only the owner can move old debts.");
+  var fk = splitsKey_(input && input.friendEmail);
+  if(splitsBadFriend_(fk)) return splitsBadFriend_(fk);
+  var row = Math.floor(Number(input && input.row));
+  var friend = splitsLoadFriend_(me, fk);
+  if(!friend || friend.fields.mirror) return splitsFail_("That friend isn't in your list.");
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Debts");
+  if(!sheet || !(row >= 2 && row <= sheet.getLastRow())) return splitsFail_("Invalid row.");
+  var v = sheet.getRange(row, 1, 1, 8).getValues()[0];
+  var person = String(v[1] || "").trim(), type = String(v[2] || "").trim().toUpperCase();
+  var amount = Number(v[3]) || 0, note = String(v[4] || "").trim();
+  // The card must say who/what it showed, and the row must still be that debt (a row number alone
+  // could point at someone else's debt if the list changed). The amount is not compared: a
+  // partial payment legitimately lowers it.
+  var expectedPerson = String((input && input.expectedPerson) || "").trim().toLowerCase();
+  var expectedType = String((input && input.expectedType) || "").trim().toUpperCase();
+  if(!expectedPerson || !expectedType) return splitsFail_("Refresh the app and try again.");
+  if(expectedPerson !== person.toLowerCase() || expectedType !== type) return splitsFail_("That debt changed since this list loaded. Refresh Debts and try again.");
+  if(String(v[6] || "").trim() === "Settled" || !(amount > 0)) return splitsFail_("That debt is already settled.");
+  if(type !== "LENT" && type !== "BORROWED" && type !== "SPLIT") return splitsFail_("That kind of debt can't be moved.");
+
+  var paise = Math.round(amount * 100);
+  var signed = type === "BORROWED" ? -paise : paise;
+  var entry = {
+    id: "debt" + row + "_" + splitsDebtKey_(person, type, paise), type: "carryover",
+    description: ("Earlier balance: " + person + (note ? " (" + note + ")" : "")).slice(0, 80),
+    createdAtMs: Date.now()
+  };
+  // One "this debt has been moved" marker per debt, so a retry that picks a DIFFERENT friend can
+  // never credit the same debt to two people.
+  var markerId = "debt" + row + "_" + splitsDebtKey_(person, type, paise);
+  var movedElsewhere = "";
+  try{
+    splitsWriteEntry_(me, myName, fk, entry, signed, [
+      { set: { path: "users/" + me + "/debtMoves/" + markerId, fields: { friend: fk, entryId: entry.id, createdAtMs: Date.now() }, onlyIfNew: true } }
+    ]);
+  }catch(e){
+    if(!splitsIsAlreadyThere_(e)) throw e;
+    var mk = fsGetPathMeta_("users/" + me + "/debtMoves/" + markerId);
+    if(mk && mk.fields.friend && mk.fields.friend !== fk) movedElsewhere = mk.fields.friend;   // an earlier try went to someone else
+    // otherwise an earlier try for THIS friend already wrote it: carry on and close the old debt
+  }
+  sheet.getRange(row, 7).setValue("Settled");
+  sheet.getRange(row, 8).setValue(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"));
+  var f2 = fsGetPathMeta_(splitsFriendPath_(me, fk));
+  var out = { ok: true, balance: splitsRupees_(f2 ? f2.fields.balancePaise : 0) };
+  if(movedElsewhere) out.alreadyMovedTo = movedElsewhere;
+  return out;
+}
+
+function splitsMoveDebtHandle_(data, verified){
+  try{
+    var me = splitsKey_(verified && verified.email);
+    var out = splitsMoveDebt_(me, (verified && verified.name) || me, data);
+    try{ fsFlushUsage_(); }catch(ignore){}
+    return out;
+  }catch(e){
+    try{ logAI("SPLITS_ERROR", "moveDebtToFriend: " + String(e && e.message).slice(0, 300)); }catch(ignore){}
+    try{ fsFlushUsage_(); }catch(ignore){}
+    return splitsFail_("Couldn't move that debt. Nothing was lost; check Debts and try again.");
   }
 }

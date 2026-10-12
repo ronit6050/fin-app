@@ -162,3 +162,17 @@ amounts, Recon. `getTransactionHistory` returns `friendShare` and History shows 
 - Known edge cases: editing a split payment's amount to less than the share makes the share be ignored; "Not a
   transaction" on an already-split payment leaves the split in Firestore with no Sheet row.
 - Review (2026-10-12): safe; nothing in existing numbers changes when column U is empty.
+
+## Move an old debt into a friend's balance (built 2026-10-12)
+Owner-only action `moveDebtToFriend {row, friendEmail, expectedPerson, expectedType}` (`splitsMoveDebt_`). Turns one open row
+of the Debts sheet into a `carryover` ledger entry ("Earlier balance: <person>") on a friend's page (LENT/SPLIT = they owe you, BORROWED
+= you owe them) and marks the Debts row Settled. Guards (from the independent review): the card must send the person and type it
+showed and the row must still match (else "That debt changed..."); a per-debt marker `users/<owner>/debtMoves/<id>` means a retry that
+picks a DIFFERENT friend can never credit one debt twice (it closes the debt and says where it went); the Firestore entry is written first
+with a deterministic id so a half-finished try is safe to repeat. Carry-overs can NOT be undone (record a payment to adjust). It skips the
+DebtPayments log and the "repaid" push on purpose (this is not a repayment). The UI needs a second tap ("Move it (can not be undone)").
+The Home "Debts" tile and the Debts header now include friends' balances, so moving a debt never changes the headline number.
+
+## Daily Firestore safety limit (2026-10-12)
+`fsGuard_` in `firestore.js` refuses Firestore calls at 45,000 reads / 18,000 writes a day (90% of the free allowance); see
+`docs/going-public-ops.md`. The meter counts only Apps Script's own calls (a phone's direct read of the Home copy is not counted).

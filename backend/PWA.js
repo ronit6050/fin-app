@@ -68,6 +68,11 @@ function handlePwaRequestCore_(data){
     return jsonResponse(splitsHandle_(data.action, data, verified));
   }
 
+  // Move an old Debts-list entry into a friend's running balance (owner only; see splits.js).
+  if(data.action === "moveDebtToFriend"){
+    return jsonResponse(splitsMoveDebtHandle_(data, verified));
+  }
+
   if(data.action === "getPending"){
     // Read the sheet once and share it: the pending list AND the note-word
     // table (Need/Want auto-fill, see noteWordModel.js) come from the same data.

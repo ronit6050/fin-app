@@ -663,4 +663,68 @@ console.log("\n--- 14. The share finds its row even after the sheet is re-sorted
   assert(sb3.txnMyAmount_([0, 0, 0, 0, 0, 12.345]) === 12.345, "with no split, an amount is returned exactly as it is (no rounding at all)");
 }
 
+console.log("\n--- 15. Moving an old debt into a friend's balance ---");
+{
+  const w = world();
+  const sb = w.sb;
+  const debts = w.addSheet("Debts", [
+    ["Date", "Person", "Type", "Amount", "Note", "DueDate", "Status", "SettledDate"],
+    ["", "Vaidehi", "LENT", 500, "lunch", "", "Pending", ""],
+    ["", "Vaidehi", "BORROWED", 120, "cab", "", "Pending", ""],
+    ["", "Raj", "LENT", 40, "", "", "Settled", "2026-01-01"],
+    ["", "Vaidehi", "OTHER", 10, "", "", "Pending", ""]
+  ]);
+  const callO = function(action, extra){ return JSON.parse(sb.handlePwaRequest(Object.assign({ action: action, idToken: "good" }, extra || {})).getContent()); };
+  callO("addFriend", { name: "Vaidehi", mobile: "9876543210", email: FRIEND });
+  const mv = function(row, email, person, type){ return callO("moveDebtToFriend", { row: row, friendEmail: email, expectedPerson: person, expectedType: type }); };
+
+  const m1 = mv(2, FRIEND, "Vaidehi", "LENT");
+  assert(m1.ok && m1.balance === 500 && debts.rows[1][6] === "Settled", "an old 'I lent Rs 500' becomes +500 on her page and the old debt is closed");
+  assert(w.balance(ME, FRIEND) === 50000 && w.balance(FRIEND, ME) === -50000, "her side shows the opposite (she owes Rs 500)");
+  const m2 = mv(3, FRIEND, "Vaidehi", "BORROWED");
+  assert(m2.ok && m2.balance === 380 && debts.rows[2][6] === "Settled", "'I borrowed Rs 120' nets against it: 500 - 120 = 380");
+
+  const person = callO("getPerson", { friendEmail: FRIEND });
+  assert(person.entries.filter(function(e){ return e.type === "carryover"; }).length === 2 && /Earlier balance: Vaidehi/.test(person.entries[0].description + person.entries[1].description), "both show in her history as 'Earlier balance'");
+
+  assert(!mv(2, FRIEND, "Vaidehi", "LENT").ok, "an already-settled debt can't be moved twice");
+  assert(!mv(4, FRIEND, "Raj", "LENT").ok, "a debt that was already settled before is refused");
+  assert(!mv(5, FRIEND, "Vaidehi", "OTHER").ok, "an unknown kind of debt is refused");
+  assert(!mv(99, FRIEND, "Vaidehi", "LENT").ok && !mv(1, FRIEND, "Vaidehi", "LENT").ok, "a bad row (or the header row) is refused");
+  assert(!mv(2, "stranger@x.com", "Vaidehi", "LENT").ok, "moving to someone who isn't a friend is refused");
+  assert(w.balance(ME, FRIEND) === 38000, "refusals changed nothing");
+
+  // A half-finished try (entry written, old debt not closed) is safe to repeat
+  debts.rows[1][6] = "Pending";
+  const again = mv(2, FRIEND, "Vaidehi", "LENT");
+  assert(again.ok && w.balance(ME, FRIEND) === 38000 && debts.rows[1][6] === "Settled", "retrying after a half-finished try closes the debt without counting it twice");
+
+  // The row must still be the debt the card showed
+  debts.rows.push(["", "Priya", "LENT", 70, "", "", "Pending", ""]);                   // row 6
+  assert(!mv(6, FRIEND, "Vaidehi", "LENT").ok && debts.rows[5][6] === "Pending", "if the row now holds a different person's debt, the move is refused and nothing changes");
+  assert(!mv(6, FRIEND, "Priya", "BORROWED").ok, "...or a different kind of debt");
+  assert(!callO("moveDebtToFriend", { row: 6, friendEmail: FRIEND }).ok, "a request that does not say which debt it expects is refused");
+  assert(w.balance(ME, FRIEND) === 38000, "(balance untouched by those refusals)");
+
+  // A retry that picks a DIFFERENT friend can never credit the same debt twice
+  callO("addFriend", { name: "Raj", mobile: "9000000001", email: "raj@example.com" });
+  const first = mv(6, FRIEND, "Priya", "LENT");
+  assert(first.ok && w.balance(ME, FRIEND) === 38000 + 7000, "setup: Priya's Rs 70 moved to Vaidehi");
+  debts.rows[5][6] = "Pending";                                                       // pretend closing the old debt failed
+  const other = mv(6, "raj@example.com", "Priya", "LENT");
+  assert(other.ok && other.alreadyMovedTo === FRIEND && w.balance(ME, "raj@example.com") === 0 && debts.rows[5][6] === "Settled", "choosing another friend on the retry credits nobody twice: it says where it went and closes the debt");
+
+  // Carry-overs can't be undone
+  const entryId = person.entries[0].id;
+  const u = callO("undoSplitEntry", { friendEmail: FRIEND, entryId: entryId });
+  assert(!u.ok && /old debt/i.test(u.error) && w.balance(ME, FRIEND) === 45000, "a carried-over balance can't be undone (record a payment instead)");
+
+  // Not available to friends
+  w.cache = {};
+  const hers = JSON.parse(sb.handlePwaRequest({ action: "moveDebtToFriend", idToken: "vaidehi", row: 2, friendEmail: ME }).getContent());
+  assert(hers.ok === false && /not allowed/i.test(hers.error), "a friend cannot move debts (it touches the owner's Sheet)");
+  const seen = JSON.parse(sb.handlePwaRequest({ action: "getPeople", idToken: "vaidehi" }).getContent());
+  assert(seen.people[0].balance === -450, "she sees she owes Rs 450 in total (380 + Priya's 70)");
+}
+
 process.exitCode = process.exitCode || 0;

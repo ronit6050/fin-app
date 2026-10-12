@@ -22,6 +22,14 @@ var FS_TOKEN_CACHE_KEY_ = "FS_ACCESS_TOKEN";
 var FS_FREE_READS_PER_DAY_ = 50000;
 var FS_FREE_WRITES_PER_DAY_ = 20000;
 
+// Hard safety limit (added 2026-10-12): the app stops using Firestore at 90% of the free
+// daily allowance, so it can never go over it and never costs money, even on a paid plan.
+// When the limit is reached, calls fail with a clear message (screens fall back to the
+// slower direct way and splits show "couldn't reach the database") until the day rolls over.
+var FS_SAFE_READS_PER_DAY_ = 45000;
+var FS_SAFE_WRITES_PER_DAY_ = 18000;
+var FS_PERSISTED_ = null;           // today's saved totals, read once per run
+
 // Counts for THIS run only; fsFlushUsage_() adds them to today's total.
 var FS_USAGE_ = { reads: 0, writes: 0, calls: 0 };
 var FS_SA_CACHE_ = null;
@@ -115,7 +123,22 @@ function fsErrorText_(text){
   catch(err){ return String(text).slice(0, 200); }
 }
 
+// Refuses (throws) when today's totals are at the safe limit. Reads the saved total once per
+// run and adds this run's own counts, so it costs no extra Firestore calls.
+function fsGuard_(isWrite){
+  if(!FS_PERSISTED_) FS_PERSISTED_ = fsUsageToday_();
+  var reads = FS_PERSISTED_.reads + FS_USAGE_.reads;
+  var writes = FS_PERSISTED_.writes + FS_USAGE_.writes;
+  if(reads >= FS_SAFE_READS_PER_DAY_ || (isWrite && writes >= FS_SAFE_WRITES_PER_DAY_)){
+    var e = new Error("Firestore daily safety limit reached (keeps the app inside the free allowance; resets tomorrow).");
+    e.httpCode = 429;
+    e.safetyLimit = true;
+    throw e;
+  }
+}
+
 function fsFetch_(method, url, payload){
+  fsGuard_(method !== "get");
   var options = {
     method: method,
     headers: { Authorization: "Bearer " + fsAccessToken_() },
@@ -261,6 +284,7 @@ function fsFlushUsage_(){
   total.calls  = (total.calls  || 0) + FS_USAGE_.calls;
   props.setProperty(key, JSON.stringify(total));
   FS_USAGE_ = { reads: 0, writes: 0, calls: 0 };
+  FS_PERSISTED_ = null;
 
   var all = props.getProperties();
   Object.keys(all).forEach(function(k){
