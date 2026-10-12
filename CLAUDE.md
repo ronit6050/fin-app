@@ -2753,8 +2753,13 @@ Rs 300/month ceiling (not yet needed). **Splits slice 1 built 2026-10-12, NOT de
 `backend/firestore.js`, six routes in `PWA.js`, `firestore.rules` (must be pasted into the Firebase console by hand
 before any friend can read their side), `backend/tests/splits.test.js` (122 checks). **Backend deployed live `@329` and security rules published (2026-10-12).** Screens built in `index.html` the same day
 (Pending "Split with a friend", Debts "People you split with" + person page, Demo Mode) - NOT yet pushed to GitHub
-Pages (live, `590f559`); `APP_VERSION` `2026-10-12-02`. **Friend mode** (friends sign in themselves, splits only; see
-the doc) built 2026-10-12 - reviewed, tests pass (172 split checks), awaiting the user's go-ahead to `clasp push`/`deploy` + `git push`. "My spend counts only my share" is NOT built yet (see the doc).
+Pages. **Everything below is LIVE as of 2026-10-12 (backend `@332`, `APP_VERSION` `2026-10-12-05`, commit `69891e8`):**
+friend mode (friends the owner adds sign in themselves, splits only; Vaidehi confirmed working on her phone), "my spend counts
+only my share" (Transactions column U `FriendShare`, daily self-repair), moving old Debts into a friend's balance, the Home Debts
+tile including friends, and a built-in daily Firestore safety limit (`docs/going-public-ops.md`). All independently reviewed;
+172+ split checks (226 at the end of the day). Still owed by the user: Google Cloud budget alerts (Rs 50/100/200/300) and the real-world
+tea-split test with Vaidehi. NOT built: SMS-suggest settle, Vaidehi's own expense tracking (needs her data space + SMS),
+owner approval of friend-created splits, deleting a friend, the automatic Rs 300 billing cut-off (needs the Firebase/gcloud CLI signed in). "My spend counts only my share" is NOT built yet (see the doc).
 
 ## Pre-multi-user cleanup (2026-09-05): done
 
