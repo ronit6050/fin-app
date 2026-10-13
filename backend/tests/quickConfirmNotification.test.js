@@ -81,6 +81,7 @@ function loadBackendSandbox(){
   const sandbox = { SpreadsheetApp: env.SpreadsheetApp, console: console };
   // Every backend file asks dbSs_() for the spreadsheet (v2db.js); outside a virtual-spreadsheet request that is the real one.
   sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
+  sandbox.dbProps_ = function(){ return sandbox.PropertiesService.getScriptProperties(); };
   vm.createContext(sandbox);
 
   const files = ["category.js", "noteMemory.js", "needWantSaving.js", "financialEvents.js", "PWA.js"];
@@ -276,6 +277,7 @@ function emptyFinancialEventsData(){
     console: console
   };
   sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
+  sandbox.dbProps_ = function(){ return sandbox.PropertiesService.getScriptProperties(); };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "push.js"), "utf8"), sandbox, { filename: "push.js" });
 
@@ -333,6 +335,7 @@ function emptyFinancialEventsData(){
     console: console
   };
   sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
+  sandbox.dbProps_ = function(){ return sandbox.PropertiesService.getScriptProperties(); };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "push.js"), "utf8"), sandbox, { filename: "push.js" });
   sandbox.getFirebaseAccessToken = function(){ return "fake-access-token"; };

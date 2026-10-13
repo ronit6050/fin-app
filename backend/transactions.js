@@ -72,7 +72,7 @@ function processNewTransactionsCore_() {
   if(lastRow < 2) return; // No data rows at all
 
   // ── Only scan from last checked row onwards ──
-  const props       = PropertiesService.getScriptProperties();
+  const props       = dbProps_();
   const lastChecked = Number(props.getProperty("lastCheckedRow") || 1);
 
   // The bookmark is only a speed-up, never the truth (see findFirstUnprocessedRow_).
@@ -328,7 +328,7 @@ function diagnosePendingTransactions(){
   // 2) How far behind is the "last checked row" bookmark?
   const sheet   = dbSs_().getSheetByName("Transactions");
   const lastRow = sheet.getLastRow();
-  const props   = PropertiesService.getScriptProperties();
+  const props   = dbProps_();
   const lastChecked = Number(props.getProperty("lastCheckedRow") || 1);
   log("");
   log("2) Transactions sheet has data through row " + lastRow +

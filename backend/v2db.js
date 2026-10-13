@@ -390,6 +390,40 @@ V2Db_.prototype.flush = function(){
   return { written: ops.length };
 };
 
+// ---------------------------------------------------------------- per-person settings and small state
+// What used to live in global Script Properties (settings, the timer's bookmark, push token, reminder markers) is now
+// per person: inside a v2dbRun_ it lives in that person's own "_Props" tab; outside one it is still Script Properties,
+// so nothing changes until a person is on the virtual spreadsheet. Secrets (the Firebase service account) stay global.
+// Values are stored with an "s:" prefix so number-looking text (like "0123") is never turned into a number.
+function dbProps_(){
+  return V2DB_REQ_ ? V2DB_REQ_.props() : PropertiesService.getScriptProperties();
+}
+
+V2Db_.prototype.props = function(){
+  var db = this;
+  var tab = function(create){ var s = db.getSheetByName("_Props"); return s || (create ? db.insertSheet("_Props") : null); };
+  var find = function(s, key){
+    var vals = s.getDataRange().getValues();
+    for(var i = 0; i < vals.length; i++) if(String(vals[i][0]) === String(key)) return i + 1;
+    return 0;
+  };
+  var unwrap = function(v){ v = String(v); return v.indexOf("s:") === 0 ? v.slice(2) : v; };
+  return {
+    getProperty: function(key){ var s = tab(false); if(!s) return null; var r = find(s, key); return r ? unwrap(s.getRange(r, 2).getValue()) : null; },
+    setProperty: function(key, value){
+      var s = tab(true), r = find(s, key), v = "s:" + String(value);
+      if(r) s.getRange(r, 2).setValue(v); else s.appendRow([String(key), v]);
+      return this;
+    },
+    deleteProperty: function(key){ var s = tab(false); if(!s) return this; var r = find(s, key); if(r) s.deleteRow(r); return this; },
+    getProperties: function(){
+      var out = {}, s = tab(false);
+      if(s) s.getDataRange().getValues().forEach(function(row){ if(row[0] !== "") out[String(row[0])] = unwrap(row[1]); });
+      return out;
+    }
+  };
+};
+
 // ---------------------------------------------------------------- running a request on a person's virtual spreadsheet
 // Runs fn() with dbSs_() returning the person's virtual spreadsheet; flushes on success; ALWAYS restores the
 // real spreadsheet afterwards. If fn throws, nothing is written.

@@ -16,8 +16,8 @@
 // send otherwise.
 function sendPushNotification(title, body, extraData){
   try{
-    const props = PropertiesService.getScriptProperties();
-    const deviceToken = props.getProperty("PWA_PUSH_TOKEN");
+    const props = PropertiesService.getScriptProperties();            // global secrets
+    const deviceToken = dbProps_().getProperty("PWA_PUSH_TOKEN");     // per person (v2db.js)
     if(!deviceToken) return;
 
     const accessToken = getFirebaseAccessToken();

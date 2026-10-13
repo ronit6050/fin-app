@@ -213,6 +213,11 @@ if(!folder){
   compare("log an investment", { action: "logInvestment", amount: 1500, instrumentName: "HDFC Nifty 50 Index Fund" });
   compare("add a savings goal", { action: "addSavingsGoal", name: "Parity Goal", type: "OneTime", target: 5000 });
   compare("save a Savings split", { action: "saveSavingsAuto", amount: 1000, note: "parity" });
+  compare("read the settings", { action: "getSettings" });
+  compare("change the settings", { action: "updateSettings", settings: { ccLimit: 65000, monthlySaveGoal: 2500, monthlyInvestmentGoal: 3000 } });
+  compare("read the settings again", { action: "getSettings" });
+  compare("CC Advisor uses the new settings", { action: "getCCAdvisor" });
+  compare("register a push device", { action: "registerPushToken", token: "parity-test-device-token" });
   compareTabs("after all the writes", ALL);
   compare("Home dashboard afterwards", { action: "getDashboard" });
   compare("History afterwards", { action: "getTransactionHistory", offset: 0, limit: 30 });

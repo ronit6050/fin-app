@@ -363,4 +363,54 @@ console.log("\n--- 9. Opening many tabs in ONE request (the speed fix) ---");
   assert(err && err.v2dbConflict === true, "saving a prefetched tab still refuses to overwrite someone else's change");
 }
 
+console.log("\n--- 10. Per-person settings and small state (dbProps_) ---");
+{
+  const w = fresh(), sb = w.sb;
+  // outside a request it is still the global Script Properties (nothing changes until a person is flipped)
+  w.props.SOME_KEY = "global";
+  assert(sb.dbProps_().getProperty("SOME_KEY") === "global", "outside a virtual-spreadsheet request, dbProps_ is the global Script Properties");
+
+  sb.v2dbRun_("owner@example.com", function(){
+    const p = sb.dbProps_();
+    assert(p.getProperty("SOME_KEY") === null, "inside a request, a person starts with their own empty settings (the global value is not visible)");
+    p.setProperty("SETTING_CC_LIMIT", 75000);
+    p.setProperty("tricky", "0123");
+    p.setProperty("number", "42");
+    p.setProperty("tokenLike", "abc:DEF-123_xyz");
+    p.setProperty("SETTING_CC_LIMIT", "80000");
+  });
+  sb.v2dbRun_("owner@example.com", function(){
+    const p = sb.dbProps_();
+    assert(p.getProperty("SETTING_CC_LIMIT") === "80000", "a setting is saved, and setting it again replaces (never duplicates)");
+    assert(p.getProperty("tricky") === "0123" && p.getProperty("number") === "42" && typeof p.getProperty("number") === "string", "number-looking text comes back as the SAME text (never turned into a number)");
+    assert(p.getProperty("tokenLike") === "abc:DEF-123_xyz", "a push-token-like value survives");
+    assert(Object.keys(p.getProperties()).length === 4, "getProperties lists exactly this person's settings");
+    p.deleteProperty("number");
+    assert(p.getProperty("number") === null && Object.keys(p.getProperties()).length === 3, "a setting can be removed");
+    p.deleteProperty("never-existed");
+  });
+  sb.v2dbRun_("friend@example.com", function(){
+    assert(sb.dbProps_().getProperty("SETTING_CC_LIMIT") === null, "another person never sees these settings");
+    sb.dbProps_().setProperty("SETTING_CC_LIMIT", "1");
+  });
+  sb.v2dbRun_("owner@example.com", function(){ assert(sb.dbProps_().getProperty("SETTING_CC_LIMIT") === "80000", "and cannot change them either"); });
+  assert(w.props.SETTING_CC_LIMIT === undefined && w.props.tricky === undefined, "nothing from a person's settings leaked into the global Script Properties");
+  assert(Object.keys(w.store).every(function(p){ return /^users\/(owner|friend)@example\.com\//.test(p); }), "each person's settings live only in their own folder");
+
+  // the real Settings screen code, on the real property store
+  const w2 = makeWorld(["settings.js", "v2db.js", "Logger.js", "firestore.js"]);
+  const sb2 = w2.sb;
+  w2.store = {}; w2.clock = 0;
+  const clone = function(o){ return JSON.parse(JSON.stringify(o)); };
+  sb2.fsGetPathMeta_ = function(p){ const d = w2.store[p]; return d ? { fields: clone(d.fields), updateTime: d.updateTime } : null; };
+  sb2.fsCommit_ = function(ops){ return ops.map(function(op){ if(op.set){ w2.store[op.set.path] = { fields: clone(op.set.fields), updateTime: "t" + (++w2.clock) }; return { updateTime: "t" + w2.clock }; } return {}; }); };
+  const global = sb2.getSettings();
+  const mine = sb2.v2dbRun_("owner@example.com", function(){
+    sb2.updateSettings({ ccLimit: 90000, monthlySaveGoal: 5000 });
+    return sb2.getSettings();
+  });
+  assert(global.ccLimit === 50000 && mine.ccLimit === 90000 && mine.monthlySaveGoal === 5000 && mine.monthlyExpenses === 30000, "the real Settings code works per person: defaults for a new person, their own saved values after");
+  assert(sb2.getSettings().ccLimit === 50000, "...and the global settings are untouched");
+}
+
 process.exitCode = process.exitCode || 0;

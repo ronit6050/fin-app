@@ -363,7 +363,7 @@ function getDashboardData(){
 // value is enough — same place BOT_TOKEN/CHAT_ID already live.
 function registerPushToken(token){
   try{
-    PropertiesService.getScriptProperties().setProperty("PWA_PUSH_TOKEN", token);
+    dbProps_().setProperty("PWA_PUSH_TOKEN", token);   // per person (v2db.js); global Script Properties until a person is flipped
     return { ok: true };
   }catch(err){
     return { ok: false, error: err.toString() };

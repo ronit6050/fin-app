@@ -19,7 +19,7 @@
 ============================================ */
 
 function getSettings(){
-  const props = PropertiesService.getScriptProperties();
+  const props = dbProps_();
 
   return {
     ccLimit:         Number(props.getProperty("SETTING_CC_LIMIT"))          || 50000,
@@ -40,7 +40,7 @@ function getSettings(){
 // filled form never wipes out the other settings.
 function updateSettings(newSettings){
   try{
-    const props = PropertiesService.getScriptProperties();
+    const props = dbProps_();
 
     if(newSettings.ccLimit)         props.setProperty("SETTING_CC_LIMIT", String(newSettings.ccLimit));
     if(newSettings.ccWarnPct)       props.setProperty("SETTING_CC_WARN_PCT", String(newSettings.ccWarnPct));

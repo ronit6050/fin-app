@@ -52,6 +52,7 @@ function loadSandbox(){
   };
   // Every backend file asks dbSs_() for the spreadsheet (v2db.js); outside a virtual-spreadsheet request that is the real one.
   sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
+  sandbox.dbProps_ = function(){ return sandbox.PropertiesService.getScriptProperties(); };
   vm.createContext(sandbox);
   const src = fs.readFileSync(path.join(__dirname, "..", "Recon.js"), "utf8");
   vm.runInContext(src, sandbox, { filename: "Recon.js" });

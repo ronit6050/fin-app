@@ -217,7 +217,7 @@ function checkUpcomingObligations(){
     today.setHours(0, 0, 0, 0);
     var thisMonthKey = today.getFullYear() + "-" + (today.getMonth() + 1);
 
-    var props = PropertiesService.getScriptProperties();
+    var props = dbProps_();
     var fmt = function(n){ return Math.round(n).toLocaleString('en-IN'); };
 
     var statuses = computeObligationStatuses_(financialEventsData, txnData, today);
