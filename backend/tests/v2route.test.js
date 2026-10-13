@@ -230,4 +230,20 @@ console.log("\n--- 6. Speed: only the tabs an action needs are fetched, together
   assert(batches >= 1 && batches <= 2, "the whole Home dashboard is fetched in " + batches + " batch request(s)");
 }
 
+console.log("\n--- 7. A Splits action is never repeated after a clash (it could apply a payment twice) ---");
+{
+  const w = build(); ownerSheets(w); const sb = w.sb;
+  sb.v2dbEnableUser(FRIEND);
+  w.act("friend", { action: "getCash" });
+  let runs = 0;
+  const realRun = sb.v2dbRun_;
+  sb.v2dbRun_ = function(){ runs++; const e = new Error("clash"); e.v2dbConflict = true; throw e; };
+  const r = w.act("friend", { action: "recordSplitPayment", friendId: OWNER, amount: 10, requestId: "r1" });
+  assert(r.ok === false && runs === 1, "a Splits action that clashes is tried ONCE, not repeated (tried " + runs + " time(s))");
+  runs = 0;
+  w.act("friend", { action: "addCashEntry", type: "debit", amount: 5, note: "x", category: "Food", needWantSaving: "Want" });
+  assert(runs === 2, "an ordinary save still gets its one retry (tried " + runs + " times)");
+  sb.v2dbRun_ = realRun;
+}
+
 process.exitCode = process.exitCode || 0;

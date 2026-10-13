@@ -63,6 +63,8 @@ var V2_PREFETCH_BY_ACTION_ = {
   "getInvestmentInstruments": ["InvestmentInstruments", "Investments"]
 };
 
+var V2_NO_RETRY_ACTIONS_ = ["addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry"];
+
 function v2dbPrefetchFor_(action){
   return Object.prototype.hasOwnProperty.call(V2_PREFETCH_BY_ACTION_, action) ? V2_PREFETCH_BY_ACTION_[action] : V2_PREFETCH_ALL_;
 }
@@ -133,7 +135,9 @@ function v2RouteAndDispatch_(data, verified){
     try{
       return attempt();
     }catch(e){
-      if(e && e.v2dbConflict) return attempt();   // someone changed the same data at the same instant: look again once
+      // Someone changed the same data at the same instant: look again once. NEVER for the Splits actions: they also write to
+      // Firestore directly (outside the all-or-nothing spreadsheet part), so repeating one could apply a payment twice.
+      if(e && e.v2dbConflict && V2_NO_RETRY_ACTIONS_.indexOf(data.action) === -1) return attempt();
       throw e;
     }
   }catch(err){

@@ -72,6 +72,21 @@ var SPLITS_SHARE_HEADER_ = "FriendShare";
 // row still is the transaction the split was made for (same stale-card fingerprint the
 // Pending screen uses). Best-effort: a problem is logged, and the split itself stands.
 // Returns true if the sheet now shows the intended value.
+// Runs fn against the OWNER's own spreadsheet (the real Sheet, or his virtual one once he is switched on), even when the request
+// in progress belongs to someone else (a friend undoing a split the owner made must still give the share back to the owner's spend).
+function splitsOnOwnerSheet_(fn){
+  var owner = splitsKey_(PWA_ALLOWED_EMAIL);
+  if(!V2DB_REQ_ || V2DB_REQ_.user === owner) return fn();
+  var saved = V2DB_REQ_;
+  try{
+    V2DB_REQ_ = null;                                         // back to the real Sheet ...
+    if(v2EngineFor_(owner) === "v2db") return v2dbRun_(owner, fn, { prefetch: ["Transactions"] });   // ... or the owner's virtual one
+    return fn();
+  }finally{
+    V2DB_REQ_ = saved;
+  }
+}
+
 function splitsApplyShareToSheet_(txRow, txFp, shareRupees){
   try{
     if(!txFp) return false;       // never write by row number alone: a re-sorted sheet would put it on the wrong payment
@@ -313,7 +328,7 @@ function splitsUndo_(me, input){
   // If it was a split of the OWNER's bank payment, give the friend's share back to the owner's spend.
   var sheetUpdated = false;
   if(creator === splitsKey_(PWA_ALLOWED_EMAIL) && creatorCopy.fields.type === "split" && Number(creatorCopy.fields.txRow) > 0){
-    sheetUpdated = splitsApplyShareToSheet_(creatorCopy.fields.txRow, creatorCopy.fields.txFp, 0);
+    sheetUpdated = splitsOnOwnerSheet_(function(){ return splitsApplyShareToSheet_(creatorCopy.fields.txRow, creatorCopy.fields.txFp, 0); });
   }
   return { ok: true, sheetUpdated: sheetUpdated };
 }
