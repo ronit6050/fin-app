@@ -7,3 +7,8 @@ local-data/
 *service-account*.json
 .fin-app/
 __pycache__/
+
+# Cloud Functions: generated at deploy time / installed locally
+functions/backend/
+functions/node_modules/
+functions/*.log

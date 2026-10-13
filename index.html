@@ -3436,6 +3436,17 @@
               <option value="off">Off - always ask the server directly</option>
             </select>
           </div>
+          <div class="field" style="margin:14px 0 0 0;">
+            <label>New server (beta)</label>
+            <select id="settingsNewServer">
+              <option value="off">Off - Apps Script only</option>
+              <option value="on">On - try the new fast server first</option>
+            </select>
+          </div>
+          <p class="pending-status" id="settingsNewServerStatus" style="margin-top:6px;">
+            Reading screens from our own Firebase server, next to the database. If anything is wrong the app quietly uses the old
+            server instead, so it cannot break your screens.
+          </p>
           <p class="pending-status" style="margin-top:8px;">
             On: the app reads a ready-made copy of your screens, so fresh numbers
             appear in about a second. Off: the old way (slower, but identical
@@ -3600,8 +3611,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-13-05";
-    const APP_CHANGELOG = "You can now split a payment you already noted (History > Split with a friend), and More > Access shows the shared bank-SMS library.";
+    const APP_VERSION = "2026-10-14-01";
+    const APP_CHANGELOG = "New in Settings > Speed: a beta switch to read screens from our new Firebase server (it falls back to the old one by itself).";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -4800,6 +4811,51 @@
       // answers; see the FAST VIEWS block near loadDashboard().
       const isWrite = FAST_WRITE_ACTIONS.indexOf(payload.action) !== -1;
       const counted = isWrite ? fastWriteStarted() : false;
+      // New server (Firebase Cloud Functions), beta: ONLY when switched on in Settings, ONLY for the read-only screens, and ANY
+      // problem (network, timeout, not ready for this person, an error answer) quietly falls back to the Apps Script server below.
+      if (newServerEnabled() && NEW_SERVER_ACTIONS.indexOf(payload.action) !== -1) {
+        return callNewServer(payload).catch(function () { return callAppsScriptDirect(payload, isWrite, counted); });
+      }
+      return callAppsScriptDirect(payload, isWrite, counted);
+    }
+
+    // ---- New server (Firebase Cloud Functions), beta (2026-10-14) ----
+    // Same backend code as Apps Script, running next to the database. Read-only actions only for now; see docs/features/cloud-functions.md.
+    const NEW_SERVER_URL = "https://asia-south1-fin-app-76c40.cloudfunctions.net/api";
+    const NEW_SERVER_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
+      "getDebts", "getCash", "getInvestments", "getInvestmentInstruments", "getSavingsGoals", "getTransactionHistory", "getPlannerData", "getSettings",
+      "getPeople", "getPerson"];
+    let newServerStatus = "";     // shown in Settings: what the last request used and how long it took
+    function newServerEnabled() {
+      try { return localStorage.getItem("newServer") === "on" && !demoMode; } catch (e) { return false; }
+    }
+    function callNewServer(payload) {
+      const started = Date.now();
+      const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+      const timer = controller ? setTimeout(function () { controller.abort(); }, 15000) : null;
+      return fetch(NEW_SERVER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(payload),
+        signal: controller ? controller.signal : undefined
+      }).then(function (response) { return response.json(); })
+        .then(function (data) {
+          if (timer) clearTimeout(timer);
+          // "fallback" = this person/action is not ready on the new server; an unreadable answer is treated the same way
+          if (!data || data.fallback === true || (data.ok === false && data.error === "Couldn't complete that. Nothing was saved; try again in a moment.")) {
+            newServerStatus = "fell back to Apps Script (" + payload.action + ")";
+            throw new Error("fallback");
+          }
+          newServerStatus = "new server " + (Date.now() - started) + " ms (" + payload.action + ")";
+          return data;
+        }, function (err) {
+          if (timer) clearTimeout(timer);
+          newServerStatus = "fell back to Apps Script (" + payload.action + ")";
+          throw err;
+        });
+    }
+
+    function callAppsScriptDirect(payload, isWrite, counted) {
       return fetch(APPS_SCRIPT_URL, {
         method: "POST",
         // text/plain avoids the browser's extra "permission check" request
@@ -12273,6 +12329,20 @@
         document.documentElement.setAttribute("data-theme", choice);
       }
     });
+
+    // New server (beta) switch (local to this phone, takes effect immediately) + what the last request used.
+    const settingsNewServerEl = document.getElementById("settingsNewServer");
+    try { settingsNewServerEl.value = localStorage.getItem("newServer") === "on" ? "on" : "off"; } catch (e) { /* default Off */ }
+    settingsNewServerEl.addEventListener("change", function () {
+      try {
+        if (settingsNewServerEl.value === "on") localStorage.setItem("newServer", "on");
+        else localStorage.removeItem("newServer");
+      } catch (e) { /* ignore */ }
+    });
+    setInterval(function () {
+      const el = document.getElementById("settingsNewServerStatus");
+      if (el && newServerStatus && newServerEnabled()) el.textContent = "Last request: " + newServerStatus + ".";
+    }, 2000);
 
     // Fast loading switch (local to this phone, applies on next open).
     const settingsFastViewsEl = document.getElementById("settingsFastViews");

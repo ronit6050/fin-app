@@ -247,3 +247,22 @@ console.log("\n--- 7. A Splits action is never repeated after a clash (it could 
 }
 
 process.exitCode = process.exitCode || 0;
+
+console.log("\n--- 8. The new server's copy of the on/off switches follows every change ---");
+{
+  const w = build(); const sb = w.sb;
+  const flags = function(){ const d = w.store["_system/props"]; return d ? d.fields : null; };
+  sb.v2dbEnableUser(FRIEND);
+  assert(flags() && JSON.parse(flags().V2DB_USERS).indexOf(FRIEND) !== -1 && !flags().V2DB_OWNER, "switching a friend on is copied (owner not on)");
+  sb.v2dbEnableOwner();
+  assert(flags().V2DB_OWNER === "on", "switching the owner on is copied");
+  sb.v2dbDisableUser(FRIEND);
+  assert(JSON.parse(flags().V2DB_USERS).length === 0, "switching a friend off is copied");
+  sb.v2dbDisableOwner();
+  assert(!flags().V2DB_OWNER, "switching the owner off is copied");
+  const real = sb.fsCommit_;
+  sb.fsCommit_ = function(){ throw new Error("firestore down"); };
+  let threw = false; try{ sb.v2dbEnableUser(FRIEND); }catch(e){ threw = true; }
+  sb.fsCommit_ = real;
+  assert(threw === false && sb.v2EngineFor_(FRIEND) === "v2db", "if the copy fails, the switch itself still works");
+}

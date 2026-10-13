@@ -1,0 +1,14 @@
+{
+  "name": "fin-app-functions",
+  "private": true,
+  "description": "Runs the finance backend (the same code as backend/*.js) on Firebase Cloud Functions, with small stand-ins for the Apps Script features it uses. See docs/features/cloud-functions.md.",
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "scripts": {
+    "test": "node tests/shim.test.js",
+    "local": "node local.js"
+  },
+  "dependencies": {
+    "firebase-functions": "^6.0.0"
+  }
+}

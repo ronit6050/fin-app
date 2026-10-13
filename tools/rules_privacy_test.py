@@ -121,5 +121,11 @@ expect("friend cannot read the SMS pattern library", read(friend, "smsFormats"),
 expect("nobody signed in cannot read it", read(None, "smsFormats"), 403)
 expect("friend cannot write a pattern", write(friend, "smsFormats/should-never-land"), 403)
 
+print("\n--- The new server's shared switches (added 2026-10-14): closed to every phone ---")
+expect("owner's phone cannot read the shared switches", read(own, "_system"), 403)
+expect("friend cannot read the shared switches", read(friend, "_system"), 403)
+expect("nobody signed in cannot read them", read(None, "_system"), 403)
+expect("owner's phone cannot change them", write(own, "_system/props"), 403)
+
 print("\n%s" % ("ALL PRIVACY CHECKS PASSED" if failures == 0 else "%d FAILED" % failures))
 sys.exit(1 if failures else 0)

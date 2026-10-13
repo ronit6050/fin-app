@@ -83,22 +83,40 @@ function v2EngineFor_(email){
   return v2dbUsersOn_().indexOf(e) !== -1 ? "v2db" : "sheet";
 }
 
+// Keeps the NEW server (Firebase Cloud Functions, functions/) in step with the on/off switches kept here in Script Properties: it
+// reads them from the Firestore document _system/props. Called whenever a switch changes; best-effort (a failure never blocks the
+// switch itself). Run exportFlagsToFunctions() by hand once to seed it.
+function exportFlagsToFunctions(){
+  try{
+    var p = PropertiesService.getScriptProperties();
+    var fields = { V2DB_USERS: JSON.stringify(v2dbUsersOn_()), updatedAtMs: Date.now() };
+    if(p.getProperty("V2DB_OWNER") === "on") fields.V2DB_OWNER = "on";
+    fsCommit_([{ set: { path: "_system/props", fields: fields } }]);
+    return true;
+  }catch(err){
+    try{ logAI("FLAGS_EXPORT_ERROR", String(err && err.message).slice(0, 200)); }catch(ignore){}
+    return false;
+  }
+}
+
 function v2dbEnableUser(email){
   var e = String(email || "").trim().toLowerCase();
   if(!/^[^\s@\/]+@[^\s@\/]+\.[^\s@\/]+$/.test(e)) throw new Error("Give a real email address.");
   var list = v2dbUsersOn_();
   if(list.indexOf(e) === -1) list.push(e);
   PropertiesService.getScriptProperties().setProperty("V2DB_USERS", JSON.stringify(list));
+  exportFlagsToFunctions();
   return list;
 }
 function v2dbDisableUser(email){
   var e = String(email || "").trim().toLowerCase();
   var list = v2dbUsersOn_().filter(function(x){ return x !== e; });
   PropertiesService.getScriptProperties().setProperty("V2DB_USERS", JSON.stringify(list));
+  exportFlagsToFunctions();
   return list;
 }
-function v2dbEnableOwner(){ PropertiesService.getScriptProperties().setProperty("V2DB_OWNER", "on"); return "owner is now on the Firestore-backed spreadsheet"; }
-function v2dbDisableOwner(){ PropertiesService.getScriptProperties().deleteProperty("V2DB_OWNER"); return "owner is back on the Google Sheet"; }
+function v2dbEnableOwner(){ PropertiesService.getScriptProperties().setProperty("V2DB_OWNER", "on"); exportFlagsToFunctions(); return "owner is now on the Firestore-backed spreadsheet"; }
+function v2dbDisableOwner(){ PropertiesService.getScriptProperties().deleteProperty("V2DB_OWNER"); exportFlagsToFunctions(); return "owner is back on the Google Sheet"; }
 
 // ---------------------------------------------------------------- new people
 // Creates any template tab the person doesn't have yet (empty, headers only). Cheap when the tabs already exist: one check.
