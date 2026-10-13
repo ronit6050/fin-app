@@ -44,6 +44,10 @@ function handlePwaRequestCore_(data){
     }
   }
 
+  // The Access panel (admin.js): "what may I use?" for everyone, the overview and the full-app switch for the owner only.
+  const adminAnswer = (typeof adminHandle_ === "function") ? adminHandle_(data, verified) : null;
+  if(adminAnswer) return jsonResponse(adminAnswer);
+
   // Run the action on the Google Sheet (default) or on this person's own Firestore-backed spreadsheet (v2route.js).
   return v2RouteAndDispatch_(data, verified);
 }

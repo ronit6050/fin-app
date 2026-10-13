@@ -2254,6 +2254,14 @@
     /* Friend mode (a friend signed in; splits only): hide everything that belongs to the owner's Sheet. */
     body.friend-mode .owner-only { display: none !important; }
     body.friend-mode #view-debts > .back-to-more { display: none !important; }
+    /* Anyone who is not the owner (a friend, even with the full app): hide what only works on the owner's own Google account. */
+    body.not-owner .real-owner-only { display: none !important; }
+    .access-sub { font-size: 0.8rem; color: var(--text-muted); }
+    .access-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-top: 0.5px solid var(--border-hairline); }
+    .access-main { flex: 1; min-width: 0; }
+    .access-name { font-weight: 600; color: var(--text-primary); }
+    .access-pill { font-size: 0.72rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--chart-track-bg); color: var(--text-muted); }
+    .access-pill.on { background: var(--button-fill); color: #fff; }
     .split-panel .field label { display: block; }
     .split-panel .field input, .split-panel .field select { width: 100%; box-sizing: border-box; }
     .ledger-row {
@@ -2901,9 +2909,13 @@
               <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.4M12 18.6V21M4.9 6.5l1.7 1.7M17.4 15.8l1.7 1.7M3 12h2.4M18.6 12H21M4.9 17.5l1.7-1.7M17.4 8.2l1.7-1.7"/></svg></span>
               <span>Settings</span>
             </button>
-            <button type="button" class="more-menu-item tactile" data-target="reconcile">
+            <button type="button" class="more-menu-item tactile real-owner-only" data-target="reconcile">
               <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-5-5"/></svg></span>
               <span>Reconcile</span>
+            </button>
+            <button type="button" class="more-menu-item tactile real-owner-only" data-target="access">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><path d="M16.5 6.5a3 3 0 0 1 0 5.6"/><path d="M18 14.3c1.6.6 2.7 2.2 3 4.7"/></svg></span>
+              <span>Access</span>
             </button>
             <button type="button" class="more-menu-item tactile" data-target="planner">
               <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-7"/><path d="M12 20V8"/><path d="M19 20v-5"/><path d="M3 10.5h18" stroke-dasharray="2.6 2.6"/></svg></span>
@@ -3324,6 +3336,33 @@
         <div id="reconResults" style="margin-top:12px;"></div>
       </div>
 
+      <!-- ===== SUB-SCREEN: Access (owner only, 2026-10-13): who can use the app, who has the full app ===== -->
+      <div id="view-access" style="display:none">
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
+        <h2 class="section-title">Access</h2>
+        <div id="accessStatus"><div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div><div class="skeleton-block" style="height:58px;"></div></div>
+        <div id="accessContent" style="display:none">
+          <div class="today-total-box">
+            <div class="today-total-label">People with access</div>
+            <div class="today-total-amount" id="accessTotal">0</div>
+            <div class="today-split" id="accessSplit"></div>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-title">People</div>
+            <div id="accessList"></div>
+            <p class="pending-status" style="margin-top:8px;">
+              Add a friend from Debts first; they appear here. "Full app" gives them the whole tracker on their own private data
+              (they never see yours). "Splits only" is the default.
+            </p>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-title">Your own data</div>
+            <p class="pending-status" id="accessOwnerLine"></p>
+            <p class="pending-status" id="accessUsageLine"></p>
+          </div>
+        </div>
+      </div>
+
       <!-- ===== SUB-SCREEN: Settings ===== -->
       <div id="view-settings" style="display:none">
         <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
@@ -3343,7 +3382,7 @@
 
         <div class="settings-group">
           <div class="settings-group-title">Speed</div>
-          <div class="field" style="margin-bottom:0;">
+          <div class="field real-owner-only" style="margin-bottom:0;">
             <label>Fast loading</label>
             <select id="settingsFastViews">
               <option value="on">On (recommended)</option>
@@ -3514,8 +3553,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-12-05";
-    const APP_CHANGELOG = "You can now move an old debt into a friend's running balance (Debts > Move to a friend's balance), so there is one number per person.";
+    const APP_VERSION = "2026-10-13-01";
+    const APP_CHANGELOG = "New Access screen (More > Access) shows who can use the app and lets you give a friend the full app on their own private data.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -6035,6 +6074,8 @@
           case "getPlannerData": return { ok: true, planner: demoComputePlannerData(data.month) };
           case "saveBudgets": return demoSaveBudgets(data.month, data.budgets, data.income, data.fixedObligations);
           case "moveDebtToFriend": return demoMoveDebt(data);
+          case "getMyAccess": return { ok: true, isOwner: true, fullApp: true };
+          case "getAdminOverview": case "setFriendFullApp": return demoAccessOverview(data);
           case "getPeople": case "getPerson": case "addFriend": case "createSplit":
           case "recordSplitPayment": case "undoSplitEntry": return demoSplitsRoute(data);
           default: return { ok: false, error: "Unknown action." };
@@ -6085,6 +6126,17 @@
       return Math.round(f.entries.reduce(function (sum, e) { return e.undone ? sum : sum + e.signed; }, 0) * 100) / 100;
     }
 
+    // Demo Mode's pretend Access panel: the demo friends, with a full-app switch that only changes this pretend copy.
+    function demoAccessOverview(data) {
+      const st = demoSplitsState();
+      st.fullApp = st.fullApp || {};
+      if (data.action === "setFriendFullApp") st.fullApp[String(data.email || "").toLowerCase()] = data.on === true;
+      const people = st.friends.map(function (f) { return { name: f.name, email: f.email, fullApp: !!st.fullApp[f.email], balance: demoFriendBalance(f) }; });
+      const full = people.filter(function (p) { return p.fullApp; }).length;
+      return { ok: true, owner: { email: "demo", onPrivateCopy: true, lastBackup: "" },
+        totals: { everyone: people.length + 1, friends: people.length, fullApp: full, splitsOnly: people.length - full },
+        people: people, usage: { readsPct: 3, writesPct: 1, reads: 1500, writes: 200 } };
+    }
     function demoSplitsRoute(data) {
       const st = demoSplitsState();
       const find = function (email) { return st.friends.find(function (f) { return f.email === String(email || "").toLowerCase().trim(); }); };
@@ -6415,6 +6467,8 @@
       try {
         if (localStorage.getItem("fastViews") === "off") return false;
       } catch (e) { /* default On */ }
+      // The ready-made Home copy is the owner's only; anyone else always asks the server for their own data.
+      if (currentUser && currentUser.email && currentUser.email.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) return false;
       return !demoMode && !fastBroken && !!(window.firebase && firebase.auth && firebase.firestore);
     }
 
@@ -7893,7 +7947,8 @@
       reconcile:   document.getElementById("view-reconcile"),
       settings:    document.getElementById("view-settings"),
       history:     document.getElementById("view-history"),
-      planner:     document.getElementById("view-planner")
+      planner:     document.getElementById("view-planner"),
+      access:      document.getElementById("view-access")
     };
 
     // Only load a screen's data the first time it's opened, not every time.
@@ -8053,6 +8108,7 @@
         tabLoaded.planner = true;
         loadPlanner();
       }
+      if (name === "access") loadAccess();      // always fresh: it is a small admin list
     }
 
     document.querySelectorAll(".more-menu-item").forEach(function (btn) {
@@ -8980,7 +9036,7 @@
       const moveLink  = card.querySelector(".move-debt-link");
       const movePanel = card.querySelector(".move-debt-panel");
       const moveSel   = card.querySelector(".move-debt-friend");
-      if (entry.row && !friendMode) {
+      if (entry.row && !friendMode && currentUser && currentUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
         loadPeople(false).then(function () {
           const mine = ((peopleData && peopleData.people) || []).filter(function (f) { return !f.mirror; });
           if (mine.length === 0) return;
@@ -9356,6 +9412,7 @@
     function startFriendMode() {
       friendMode = true;
       document.body.classList.add("friend-mode");
+      document.body.classList.add("not-owner");
       showSignedInUI(currentUser);
       tabBar.style.display = "none";
       tabLoaded.debts = true;                       // never ask for the owner's debts list
@@ -9364,12 +9421,85 @@
       document.querySelector("#view-debts .section-title").textContent = "Splits";
       switchTab("more");
       showMoreSubView("debts");                     // also loads the people list
+      // Has the owner switched this friend on for the FULL app? If so, upgrade right away (2026-10-13).
+      callAppsScript({ action: "getMyAccess", idToken: currentUser.idToken }).then(function (d) {
+        if (d && d.ok && d.fullApp && !d.isOwner) upgradeFriendToFullApp();
+      }).catch(function () { /* stay on Splits only; the next open asks again */ });
     }
+
+    // A friend the owner switched on: show the whole tracker, working on THEIR OWN private data (the backend enforces that).
+    function upgradeFriendToFullApp() {
+      friendMode = false;
+      document.body.classList.remove("friend-mode");
+      document.querySelector("#view-debts .section-title").textContent = "Debts";
+      invalidatePeople();
+      Object.keys(tabLoaded).forEach(function (k) { if (k !== "home" && k !== "pending") tabLoaded[k] = false; });
+      tabBar.style.display = "flex";
+      switchTab("home");
+      loadDashboard();
+      loadPendingTransactions();
+      loadInvestmentInstruments();
+      setupPushNotifications();
+    }
+
+    // ---- Access panel (owner only) ----
+    const accessStatusEl  = document.getElementById("accessStatus");
+    const accessContentEl = document.getElementById("accessContent");
+    function loadAccess() {
+      callAppsScript({ action: "getAdminOverview", idToken: currentUser.idToken }).then(function (d) {
+        if (!d.ok) { accessStatusEl.style.display = "block"; accessStatusEl.innerHTML = '<div class="pending-status">' + escapeHtml(d.error || "Couldn't load.") + '</div>'; return; }
+        renderAccess(d);
+      }).catch(function () {
+        accessStatusEl.style.display = "block";
+        accessStatusEl.innerHTML = '<div class="pending-status">Couldn\'t load. <button type="button" id="accessRetry">Retry</button></div>';
+        const r = document.getElementById("accessRetry"); if (r) r.addEventListener("click", loadAccess);
+      });
+    }
+    function renderAccess(d) {
+      accessStatusEl.style.display = "none";
+      accessContentEl.style.display = "block";
+      document.getElementById("accessTotal").textContent = String(d.totals.everyone);
+      document.getElementById("accessSplit").textContent = "You + " + d.totals.friends + " friend" + (d.totals.friends === 1 ? "" : "s") +
+        " · " + d.totals.fullApp + " with the full app · " + d.totals.splitsOnly + " Splits only";
+      const list = document.getElementById("accessList");
+      list.innerHTML = "";
+      if (d.people.length === 0) list.innerHTML = '<div class="pending-status">No friends yet.</div>';
+      d.people.forEach(function (p) {
+        const row = document.createElement("div");
+        row.className = "access-row";
+        row.innerHTML = '<div class="access-main"><div class="access-name"></div><div class="access-sub"></div></div>' +
+          '<span class="access-pill' + (p.fullApp ? " on" : "") + '">' + (p.fullApp ? "Full app" : "Splits only") + '</span>' +
+          '<button type="button" class="access-toggle"></button>';
+        row.querySelector(".access-name").textContent = p.name;
+        row.querySelector(".access-sub").textContent = p.email;
+        const btn = row.querySelector(".access-toggle");
+        btn.textContent = p.fullApp ? "Turn off" : "Give full app";
+        btn.addEventListener("click", function () {
+          // Turning something OFF asks once more (tap again to confirm), same habit as the other destructive buttons.
+          if (p.fullApp && btn.dataset.sure !== "1") {
+            btn.dataset.sure = "1"; btn.textContent = "Tap again to confirm";
+            setTimeout(function () { btn.dataset.sure = ""; btn.textContent = "Turn off"; }, 3000);
+            return;
+          }
+          btn.disabled = true; btn.textContent = "Saving...";
+          callAppsScript({ action: "setFriendFullApp", idToken: currentUser.idToken, email: p.email, on: !p.fullApp }).then(function (r) {
+            if (r.ok) renderAccess(r); else { btn.disabled = false; btn.textContent = r.error || "Try again"; }
+          }).catch(function () { btn.disabled = false; btn.textContent = "Try again"; });
+        });
+        list.appendChild(row);
+      });
+      document.getElementById("accessOwnerLine").textContent = d.owner.onPrivateCopy
+        ? "Your data is on your private copy in Firebase." + (d.owner.lastBackup ? " Last backup: " + new Date(d.owner.lastBackup).toLocaleString() + "." : " No backup has run yet.")
+        : "Your data is still on the Google Sheet.";
+      document.getElementById("accessUsageLine").textContent = "Today's free allowance used: reads " + d.usage.readsPct + "%, writes " + d.usage.writesPct + "%.";
+    }
+
 
     // The backend said this friend isn't on the owner's list: show the plain message.
     function showFriendNotAllowed() {
       friendMode = false;
       document.body.classList.remove("friend-mode");
+      document.body.classList.remove("not-owner");
       localStorage.removeItem(STORAGE_KEY);
       currentUser = null;
       showNotAllowedUI();
