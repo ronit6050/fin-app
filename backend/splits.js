@@ -407,6 +407,15 @@ function splitsHandle_(action, data, verified){
     else if(action === "recordSplitPayment")out = splitsPayment_(me, myName, data);
     else if(action === "undoSplitEntry")    out = splitsUndo_(me, data);
     else out = splitsFail_("Unknown split action.");
+    // Tell the OTHER person on their own phone (splitNotify.js). Only after the action really saved; never changes the answer.
+    try{
+      if(out && out.ok === true && typeof splitNotify_ === "function"){
+        var other = splitsKey_(data && data.friendEmail);
+        if(action === "createSplit" && !out.duplicate) splitNotify_(myName, other, "split", { description: data.description, friendShare: out.friendShare });
+        else if(action === "recordSplitPayment") splitNotify_(myName, other, "payment", { amount: data.amount, direction: data.direction === "sent" ? "sent" : "received" });
+        else if(action === "undoSplitEntry") splitNotify_(myName, other, "undo", {});
+      }
+    }catch(ignoreNotify){}
     try{ fsFlushUsage_(); }catch(ignore){}
     return out;
   }catch(e){

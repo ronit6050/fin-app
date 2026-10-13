@@ -15,9 +15,14 @@
 // message format only accepts strings — it silently rejects the whole
 // send otherwise.
 function sendPushNotification(title, body, extraData){
+  sendPushToToken_(dbProps_().getProperty("PWA_PUSH_TOKEN"), title, body, extraData);   // per person (v2db.js)
+}
+
+// Sends one push to a SPECIFIC device token (used by sendPushNotification above and by splitNotify.js, which tells the OTHER person
+// about a split). Does nothing if there is no token. Never throws.
+function sendPushToToken_(deviceToken, title, body, extraData){
   try{
     const props = PropertiesService.getScriptProperties();            // global secrets
-    const deviceToken = dbProps_().getProperty("PWA_PUSH_TOKEN");     // per person (v2db.js)
     if(!deviceToken) return;
 
     const accessToken = getFirebaseAccessToken();
