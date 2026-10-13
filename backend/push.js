@@ -15,7 +15,13 @@
 // message format only accepts strings — it silently rejects the whole
 // send otherwise.
 function sendPushNotification(title, body, extraData){
-  sendPushToToken_(dbProps_().getProperty("PWA_PUSH_TOKEN"), title, body, extraData);   // per person (v2db.js)
+  try{
+    sendPushToToken_(dbProps_().getProperty("PWA_PUSH_TOKEN"), title, body, extraData);   // per person (v2db.js)
+  }catch(err){
+    // Reading the saved token used to sit inside the same safety net as the sending (it can fail when a person is on the
+    // Firestore copy and Firestore hiccups): keep it that way, so a caller never sees an error from a notification.
+    logAI("PUSH_ERROR", err.toString());
+  }
 }
 
 // Sends one push to a SPECIFIC device token (used by sendPushNotification above and by splitNotify.js, which tells the OTHER person

@@ -96,3 +96,29 @@ console.log("\n--- 5. The ordinary notification path (push.js) still sends exact
   w2.sb.sendPushNotification("T", "B");
   assert(calls.length === 0, "with no device registered it still does nothing");
 }
+
+console.log("\n--- 6. Review fixes: errors reading the token are swallowed; long names are cut; a sender cannot spam one person ---");
+{
+  const w3 = build(); const sb3 = w3.sb;
+  const got = [];
+  sb3.sendPushToToken_ = function(token, title, body){ got.push({ token: token, body: body }); };
+  const store = {};
+  sb3.CacheService = { getScriptCache: function(){ return { get: function(k){ return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; }, put: function(k, v){ store[k] = String(v); }, remove: function(){} }; } };
+  w3.props.PWA_PUSH_TOKEN = "tok-owner";
+  // a long display name is cut
+  sb3.v2dbEnableUser(FRIEND);
+  w3.act("friend", { action: "registerPushToken", token: "tok-f" });
+  sb3.splitNotify_("N".repeat(200), FRIEND, "undo", {}, OWNER);
+  assert(got.length === 1 && got[0].body.length < 90, "a very long display name is cut (" + got[0].body.length + " characters)");
+  // spam limit: the 11th push from the same sender to the same person within 10 minutes is dropped
+  got.length = 0;
+  for(let i = 0; i < 14; i++) sb3.splitNotify_("Ronit", FRIEND, "undo", {}, OWNER);
+  assert(got.length === 9, "only 10 pushes per sender per person per 10 minutes get through (one was used above): " + got.length);
+  assert(sb3.splitNotify_("Someone", FRIEND, "undo", {}, "third@example.com") === true, "a different sender is not affected by that limit");
+  // the ordinary wrapper never throws when reading the token fails
+  const w4 = build(); const sb4 = w4.sb;
+  require("vm").runInContext(require("fs").readFileSync(require("path").join(__dirname, "..", "push.js"), "utf8"), sb4);
+  sb4.dbProps_ = function(){ throw new Error("firestore hiccup"); };
+  let threw = false; try{ sb4.sendPushNotification("T", "B"); }catch(e){ threw = true; }
+  assert(threw === false && w4.errors("PUSH_ERROR").length === 1, "if reading the saved token fails, the caller sees no error (it is logged as PUSH_ERROR, like before)");
+}

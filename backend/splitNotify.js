@@ -26,9 +26,9 @@ function splitNotifyToken_(email){
 
 // Tells the OTHER person (friendEmail) what just happened. kind: "split" | "payment" | "undo".
 // d: { description, friendShare, amount, direction ("received" = I received money from them, "sent" = I paid them) }.
-function splitNotify_(myName, friendEmail, kind, d){
+function splitNotify_(myName, friendEmail, kind, d, myEmail){
   try{
-    var who = String(myName || "Your friend").trim() || "Your friend";
+    var who = String(myName || "Your friend").trim().slice(0, 40) || "Your friend";
     var title, body;
     if(kind === "split"){
       title = "New split";
@@ -44,8 +44,15 @@ function splitNotify_(myName, friendEmail, kind, d){
     }else{
       return false;
     }
+    // Cheap spam limit: at most 10 of these per sender to the same person in 10 minutes (kept in the script's memory).
+    var cache = null, limitKey = "sn:" + splitsKey_(myEmail) + ":" + splitsKey_(friendEmail);
+    try{ cache = CacheService.getScriptCache(); }catch(ignoreCache){}
+    var recent = 0;
+    try{ recent = cache ? Number(cache.get(limitKey) || 0) : 0; }catch(ignoreGet){}
+    if(recent >= 10) return false;
     var token = splitNotifyToken_(friendEmail);
     if(!token) return false;
+    try{ if(cache) cache.put(limitKey, String(recent + 1), 600); }catch(ignorePut){}
     sendPushToToken_(token, title, body, { kind: "split" });
     return true;
   }catch(err){

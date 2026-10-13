@@ -411,9 +411,9 @@ function splitsHandle_(action, data, verified){
     try{
       if(out && out.ok === true && typeof splitNotify_ === "function"){
         var other = splitsKey_(data && data.friendEmail);
-        if(action === "createSplit" && !out.duplicate) splitNotify_(myName, other, "split", { description: data.description, friendShare: out.friendShare });
-        else if(action === "recordSplitPayment") splitNotify_(myName, other, "payment", { amount: data.amount, direction: data.direction === "sent" ? "sent" : "received" });
-        else if(action === "undoSplitEntry") splitNotify_(myName, other, "undo", {});
+        if(action === "createSplit" && !out.duplicate) splitNotify_(myName, other, "split", { description: data.description, friendShare: out.friendShare }, me);
+        else if(action === "recordSplitPayment") splitNotify_(myName, other, "payment", { amount: data.amount, direction: data.direction === "sent" ? "sent" : "received" }, me);
+        else if(action === "undoSplitEntry") splitNotify_(myName, other, "undo", {}, me);
       }
     }catch(ignoreNotify){}
     try{ fsFlushUsage_(); }catch(ignore){}
