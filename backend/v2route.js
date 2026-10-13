@@ -127,10 +127,13 @@ function v2RouteAndDispatch_(data, verified){
       lock.waitLock(25000);                       // one saving request at a time
     }
     var attempt = function(){
-      return v2dbRun_(verified.email, function(db){
+      V2_AFTER_SAVE_ = [];
+      var result = v2dbRun_(verified.email, function(db){
         v2dbEnsureTemplate_(db);
         return pwaDispatch_(data, verified);
       }, { prefetch: v2dbPrefetchFor_(data.action) });
+      if(typeof v2FinishSave_ === "function") v2FinishSave_(result);   // e.g. Reconcile's copies for the SMS reader, only after the save worked
+      return result;
     };
     try{
       return attempt();
@@ -144,6 +147,7 @@ function v2RouteAndDispatch_(data, verified){
     try{ logAI("V2DB_REQUEST_ERROR", String(data && data.action) + ": " + String(err && err.message).slice(0, 250)); }catch(ignore){}
     return jsonResponse({ ok: false, error: err && err.v2dbConflict ? "That was changed at the same moment elsewhere, so nothing was saved. Please try again." : "Couldn't complete that. Nothing was saved; try again in a moment." });
   }finally{
+    V2_AFTER_SAVE_ = [];
     try{ if(lock) lock.releaseLock(); }catch(ignore){}
   }
 }

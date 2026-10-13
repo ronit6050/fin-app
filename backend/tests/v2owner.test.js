@@ -128,3 +128,44 @@ console.log("\n--- 7. Backup: his private copy written out as a normal Sheet ---
   assert(made.sheets.Transactions.rows.length === 4 && made.sheets.Transactions.rows[3][5] === 55, "the backup holds the private copy, including the row that arrived after the import");
   assert(Object.keys(made.sheets).indexOf("_Props") !== -1, "his settings tab is in the backup too");
 }
+
+console.log("\n--- 8. Reconcile while on the private copy: the SMS reader can still see the row, and no double comes back ---");
+{
+  const w = build(); seedReal(w); const sb = w.sb;
+  sb.v2dbImportOwner(); sb.v2dbEnableOwner();
+  const txn = { date: new w.D(), amount: 474.49, type: "debit", ref: "NOREF_47", name: "Google Play", mode: "card 8132", note: "app", category: "Other", needWantSaving: "Want" };
+  const r = w.act("owner", { action: "insertReconciledTransactions", transactions: [txn], source: "Credit Card Statement" });
+  assert(r.ok === true && r.added === 1, "Reconcile saved the row");
+  const mine = w.virtualTab(OWNER, "Transactions");
+  assert(mine.some(function(x){ return x[6] === "NOREF_47"; }), "the row is in his private Transactions");
+  const real = w.sheets.Transactions.rows;
+  const shadow = real.filter(function(x){ return x[6] === "NOREF_47"; });
+  assert(shadow.length === 1 && shadow[0][8] === "Import" && shadow[0][15] === "YES", "a plain copy was left in the real Sheet (Channel Import, handled) for the SMS reader's duplicate check");
+  // a real SMS arrives behind the copy; then the jobs run
+  w.sheets.Transactions.appendRow(w.row(31, 999111, "Shop Z", ""));
+  const privateBefore = w.virtualTab(OWNER, "Transactions").length;
+  sb.processNewTransactions();
+  const after = w.virtualTab(OWNER, "Transactions");
+  assert(after.length === privateBefore + 1 && after.filter(function(x){ return x[6] === "NOREF_47"; }).length === 1, "the SMS row was copied, the shadow copy did NOT come back as a double");
+  const last = w.sheets.Transactions.rows[w.sheets.Transactions.rows.length - 1];
+  assert(last[6] === 999111 && last[15] === "YES", "only the real SMS row was stamped (the rows are not next to each other)");
+  sb.processNewTransactions();
+  assert(w.virtualTab(OWNER, "Transactions").length === after.length, "nothing is copied again on the next run");
+}
+
+console.log("\n--- 9. A failed or refused Reconcile leaves NO copy in the real Sheet ---");
+{
+  const w = build(); seedReal(w); const sb = w.sb;
+  sb.v2dbImportOwner(); sb.v2dbEnableOwner();
+  const realBefore = w.sheets.Transactions.rows.length;
+  const txn = { date: new w.D(), amount: 10, type: "debit", ref: "NOREF_1", name: "X", mode: "upi", note: "", category: "", needWantSaving: "" };
+  const bad = new Error("firestore down"); bad.httpCode = 503;
+  w.failCommits = [bad, bad];
+  const r = w.act("owner", { action: "insertReconciledTransactions", transactions: [txn], source: "Bank Statement" });
+  w.failCommits = [];
+  assert(r.ok === false, "the save reported a failure");
+  assert(w.sheets.Transactions.rows.length === realBefore, "no copy was left in the real Sheet");
+  assert(sb.V2_AFTER_SAVE_.length === 0, "the waiting list is empty afterwards");
+  const f = w.act("owner", { action: "insertReconciledTransactions", transactions: [], source: "Bank Statement" });
+  assert(w.sheets.Transactions.rows.length === realBefore, "an empty Reconcile writes nothing anywhere");
+}

@@ -527,6 +527,11 @@ function insertReconciledTransactions(txns, source){
         typeToSave           // NeedWantSaving (column Q) — the actually-chosen type, same as saveTransactionNote now stores
       ]);
       added++;
+      // Owner on his private copy: leave a plain copy in the real Sheet too (after the save), for the SMS reader's duplicate check.
+      if(typeof v2QueueShadowRow_ === "function"){
+        v2QueueShadowRow_([t.date, formattedTime, "HDFC", t.type, t.mode, t.amount, t.ref, t.name, "Import", source || "Bank Statement",
+                           "-", "-", t.note || "", t.category || "", "", "YES", typeToSave]);
+      }
 
       if(t.name && t.category){
         handleCategoryCorrection(t.name, t.category, "Other");

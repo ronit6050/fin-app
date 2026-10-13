@@ -34,6 +34,7 @@ function v2OwnerTakeOver_(jobFn){
     var marks = { rows: [] };
     var attempt = function(){
       marks.rows = [];
+      V2_AFTER_SAVE_ = [];
       return v2dbRun_(v2OwnerEmail_(), function(db){
         v2dbEnsureTemplate_(db);
         marks.rows = v2InboxSync_(db);
@@ -44,9 +45,36 @@ function v2OwnerTakeOver_(jobFn){
     try{ value = attempt(); }
     catch(e){ if(e && e.v2dbConflict) value = attempt(); else throw e; }
     v2InboxStampSheet_(marks.rows);                              // only AFTER the private copy was saved
+    v2FinishSave_(value);
     return { ran: true, value: value };
   }finally{
+    V2_AFTER_SAVE_ = [];
     try{ lock.releaseLock(); }catch(ignore){}
+  }
+}
+
+// ---------------------------------------------------------------- shadow rows for the SMS reader
+// The SMS reader (a separate project) decides "is this a duplicate?" by looking at the REAL Sheet only. A row that Reconcile adds
+// while the owner is on his private copy would be invisible to it, so the same SMS arriving later would be added a second time.
+// So Reconcile also queues a plain copy of each row here; the copy is written to the real Sheet only AFTER the private copy saved
+// (never for a failed or refused save). The inbox sync skips rows whose Channel is "Import" so they never come back as doubles.
+var V2_AFTER_SAVE_ = [];
+
+function v2QueueShadowRow_(row){
+  if(!V2DB_REQ_ || String(V2DB_REQ_.user).toLowerCase() !== v2OwnerEmail_()) return;
+  V2_AFTER_SAVE_.push(row.slice());
+}
+
+// Call after a private run finished. Writes the queued shadow rows (if the run really saved) and always empties the queue.
+function v2FinishSave_(result){
+  var rows = V2_AFTER_SAVE_;
+  V2_AFTER_SAVE_ = [];
+  if(!rows.length || v2dbAnswerFailed_(result)) return;
+  try{
+    var real = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    rows.forEach(function(r){ real.appendRow(r); });
+  }catch(err){
+    try{ logAI("V2_SHADOW_ERROR", String(err && err.message).slice(0, 200)); }catch(ignore){}
   }
 }
 
@@ -68,6 +96,7 @@ function v2InboxSync_(db){
   var rows = real.getRange(seen + 1, 1, last - seen, cols).getValues();
   var copied = [];
   rows.forEach(function(r, i){
+    if(String(r[8]) === "Import") return;                        // a Reconcile shadow copy: already in his private copy
     mine.appendRow(r);
     copied.push(seen + 1 + i);
   });
@@ -80,9 +109,12 @@ function v2InboxStampSheet_(sheetRows){
   if(!sheetRows || !sheetRows.length) return;
   try{
     var real = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
-    var first = sheetRows[0], n = sheetRows.length;
+    var first = sheetRows[0], n = sheetRows[sheetRows.length - 1] - first + 1;   // rows may not be next to each other
     var cells = real.getRange(first, 16, n, 1).getValues();
-    for(var i = 0; i < n; i++){ if(cells[i][0] === "" || cells[i][0] === null) cells[i][0] = "YES"; }   // never overwrite IGNORED etc.
+    sheetRows.forEach(function(r){
+      var c = cells[r - first];
+      if(c[0] === "" || c[0] === null) c[0] = "YES";             // never overwrite IGNORED etc.
+    });
     real.getRange(first, 16, n, 1).setValues(cells);
   }catch(err){
     try{ logAI("V2_INBOX_STAMP_ERROR", String(err && err.message).slice(0, 200)); }catch(ignore){}
