@@ -2602,7 +2602,10 @@ function markNotATransaction(row, expectFp){
     // out of Pending" result never depends on whether a learning rule
     // could safely be created from it.
     let patternLearned = false;
-    if(rawSms && sender){
+    // A friend's own message is never copied into the OWNER's learned-spam list (that list lives in the owner's Sheet and would
+    // hold the friend's message text). The row is still archived and cleared in the friend's own space.
+    const isFriendData = (typeof V2DB_REQ_ !== "undefined") && !!V2DB_REQ_ && String(V2DB_REQ_.user).toLowerCase() !== String(PWA_ALLOWED_EMAIL).toLowerCase();
+    if(!isFriendData && rawSms && sender){
       const template = normalizeForFingerprint(rawSms);
       if(template.length >= 20){
         const patternsSheet = getLearnedSpamPatternsSheet_();

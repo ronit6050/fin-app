@@ -169,3 +169,22 @@ console.log("\n--- 9. A failed or refused Reconcile leaves NO copy in the real S
   const f = w.act("owner", { action: "insertReconciledTransactions", transactions: [], source: "Bank Statement" });
   assert(w.sheets.Transactions.rows.length === realBefore, "an empty Reconcile writes nothing anywhere");
 }
+
+console.log("\n--- 10. A copied row that missed its 'handled' stamp is healed; nothing else is touched ---");
+{
+  const w = build(); seedReal(w); const sb = w.sb;
+  sb.v2dbImportOwner(); sb.v2dbEnableOwner();
+  w.sheets.Transactions.appendRow(w.row(61, 400001, "Shop M", ""));
+  w.sheets.Transactions.appendRow(w.row(62, 400002, "Shop N", ""));
+  sb.processNewTransactions();
+  w.sheets.Transactions.rows[3][15] = "";                       // simulate the missed stamp on the first new row
+  w.sheets.Transactions.appendRow(w.row(63, 400003, "Shop O", ""));   // a row NOT copied yet (beyond the mark): must stay blank until copied
+  const row6 = w.sheets.Transactions.rows.length - 1;
+  w.sheets.Transactions.rows.push(w.row(5, 400004, "Shop P", "IGNORED"));
+  const igRow = w.sheets.Transactions.rows.length - 1;
+  // before the next run: the row beyond the mark is still blank, the IGNORED stays
+  sb.v2OwnerTakeOver_(function(){ return null; });
+  assert(w.sheets.Transactions.rows[3][15] === "YES", "the earlier copied row got its missing YES back");
+  assert(w.sheets.Transactions.rows[igRow][15] === "IGNORED", "an IGNORED mark is never overwritten");
+  assert(w.virtualTab(OWNER, "Transactions").filter(function(r){ return r[6] === 400001; }).length === 1, "and nothing was copied twice");
+}

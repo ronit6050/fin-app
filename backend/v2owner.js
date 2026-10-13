@@ -45,6 +45,7 @@ function v2OwnerTakeOver_(jobFn){
     try{ value = attempt(); }
     catch(e){ if(e && e.v2dbConflict) value = attempt(); else throw e; }
     v2InboxStampSheet_(marks.rows);                              // only AFTER the private copy was saved
+    v2InboxHeal_(V2_INBOX_MARK_);
     v2FinishSave_(value);
     return { ran: true, value: value };
   }finally{
@@ -82,9 +83,12 @@ function v2FinishSave_(result){
 // Copies the Sheet's Transactions rows beyond the remembered count into the private Transactions tab. The count is kept in the
 // private _Props, so it is saved in the SAME all-or-nothing step as the rows (no row can be lost or copied twice).
 // Returns the Sheet row numbers copied (to stamp afterwards).
+var V2_INBOX_MARK_ = 0;      // the inbox mark as it stands after the latest sync (used to heal missing "handled" stamps)
+
 function v2InboxSync_(db){
   var props = db.props();
   var seen = Number(props.getProperty("inboxSheetRows") || 0);
+  V2_INBOX_MARK_ = seen;
   if(!seen) return [];                                           // not imported yet: never guess
   var real = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
   var mine = db.getSheetByName("Transactions");
@@ -101,6 +105,7 @@ function v2InboxSync_(db){
     copied.push(seen + 1 + i);
   });
   props.setProperty("inboxSheetRows", String(last));
+  V2_INBOX_MARK_ = last;
   return copied;
 }
 
@@ -118,6 +123,27 @@ function v2InboxStampSheet_(sheetRows){
     real.getRange(first, 16, n, 1).setValues(cells);
   }catch(err){
     try{ logAI("V2_INBOX_STAMP_ERROR", String(err && err.message).slice(0, 200)); }catch(ignore){}
+  }
+}
+
+// Safety net (added 2026-10-13 after one real row, copied correctly, was left without its "handled" stamp in the Sheet with no
+// error logged): on every run, any of the last 60 Sheet rows at or below the inbox mark that still has a blank Processed cell gets
+// its "YES". Only blank cells are touched, only rows already copied, one cell at a time.
+function v2InboxHeal_(mark){
+  if(!mark) return;
+  try{
+    var real = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+    var last = Math.min(Number(mark), real.getLastRow());
+    var first = Math.max(2, last - 59);
+    if(last < first) return;
+    var vals = real.getRange(first, 1, last - first + 1, 16).getValues();
+    vals.forEach(function(r, i){
+      var blank = r[15] === "" || r[15] === null || r[15] === undefined;
+      var hasData = (r[0] !== "" && r[0] !== null) || (r[5] !== "" && r[5] !== null);
+      if(blank && hasData) real.getRange(first + i, 16).setValue("YES");
+    });
+  }catch(err){
+    try{ logAI("V2_INBOX_HEAL_ERROR", String(err && err.message).slice(0, 200)); }catch(ignore){}
   }
 }
 

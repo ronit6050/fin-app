@@ -121,3 +121,18 @@ console.log("\n--- 6. Cheap abuse limits and safe text ---");
   const over = send(k2, { tx: tx({ reference: "990001" }), sms: "one more message" });
   assert(over.ok === false && /too many/i.test(over.error), "one person cannot add endless rows (cap per 6 hours)");
 }
+
+console.log("\n--- 7. A friend marking a message 'not a transaction' never writes it into the owner's spam list ---");
+{
+  sb.CacheService = { getScriptCache: function(){ return { get: function(){ return null; }, put: function(){}, remove: function(){} }; } };   // fresh limits
+  const k = w.act("friend", { action: "getMyIngestKey" }).key;
+  send(k, { tx: tx({ reference: "661001", amount: 3 }), sms: "Your favourite plan will stay available on Vi. Recharge today for more benefits!" , sender: "VG-611112-P" });
+  const p = w.act("friend", { action: "getPending" }).transactions.filter(function(t){ return t.amount === 3; })[0];
+  const r = w.act("friend", { action: "markNotATransaction", row: p.row, fp: p.fp });
+  assert(r.ok === true && r.patternLearned === false, "it is removed from her Pending, and no pattern is learned from her message");
+  const spam = w.sheets.LearnedSpamPatterns;
+  assert(!spam || spam.rows.length <= 1, "the owner's learned-spam list holds nothing from her");
+  assert(JSON.stringify(w.sheets).indexOf("favourite plan") === -1, "her message text is nowhere in the owner's Sheet");
+  const ign = w.virtualTab(FRIEND, "Transactions_Ignored");
+  assert(ign && JSON.stringify(ign).indexOf("favourite plan") !== -1, "it is archived in HER own space");
+}

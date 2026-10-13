@@ -117,3 +117,9 @@ How a friend with the full app gets their bank SMS read into THEIR OWN private s
 
 ## Add a transaction by hand (added 2026-10-13: `backend/manualTxn.js`, Pending screen)
 For a payment no SMS was sent for (e.g. a bank that sends no SMS). Pending > "+ Add a transaction": Type (Spent/Received), Amount, Paid to / Received from, How (UPI, Card, Net banking, Other), Date (today by default, not future, not older than ~2 years). The backend (`addManualTransaction`) adds one row like an SMS row: Channel `Manual`, Source `App`, reference `MANUAL_<random>`, Processed `YES`, no note/category. So it appears in Pending and the note, category and Need/Want type are chosen the usual way (same suggestions and learning). Works for the owner and for friends with the full app, each on their own data. Text starting with `= + - @` is stored with a `'` in front. Tests: `backend/tests/manualTxn.test.js` (21 checks).
+
+## Found on the first day of real use (2026-10-13) and fixed
+- Owner on the private copy worked for real: 4 SMS rows copied, processed, notified, notes saved in the private copy; "not a transaction" worked there too.
+- One copied row (1008) was left without its "handled" stamp in the Sheet with no error logged (cause not found). `v2InboxHeal_` now re-stamps any blank Processed cell among the last 60 rows at or below the inbox mark, every run (blank cells only, never IGNORED).
+- A friend marking a message "not a transaction" had written the message text into the OWNER's `LearnedSpamPatterns`. Now a friend's message is never learned into the owner's list (archived and cleared in the friend's own space only). Friends do not get a learned-spam list of their own yet.
+- Idea not built: Indian promotional SMS use sender IDs ending `-P` (e.g. `JX-620020-P`, `VG-611112-P`), transactional ones `-S`/`-T`. Treating an UNCERTAIN message from a `-P` sender as junk would be a durable rule instead of learning each promo one by one.
