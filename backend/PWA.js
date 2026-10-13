@@ -34,10 +34,22 @@ function handlePwaRequestCore_(data){
     // too, but ONLY for the split actions, working inside their own folder. Every other
     // action (anything touching the owner's Sheet, push tokens, ...) is refused here,
     // before it can run. See splits.js and docs/features/splits.md.
-    if(!splitsFriendActionAllowed_(data.action) || !splitsIsOwnersFriend_(verified.email)){
+    // A friend switched on for the full app (v2route.js) may use the personal-tracker actions too, on their OWN private data;
+    // everyone else stays Splits-only.
+    const friendActionOk = v2EngineFor_(verified.email) === "v2db"
+      ? V2_FRIEND_FULL_ACTIONS_.indexOf(data.action) !== -1
+      : splitsFriendActionAllowed_(data.action);
+    if(!friendActionOk || !splitsIsOwnersFriend_(verified.email)){
       return jsonResponse({ ok:false, error:"This account is not allowed." });
     }
   }
+
+  // Run the action on the Google Sheet (default) or on this person's own Firestore-backed spreadsheet (v2route.js).
+  return v2RouteAndDispatch_(data, verified);
+}
+
+// The action dispatch itself (everything that used to follow the checks above in handlePwaRequestCore_).
+function pwaDispatch_(data, verified){
 
   // Every action below this point is wrapped in one shared safety net.
   // The "write" actions (saveNote, addDebt, etc.) already had their own

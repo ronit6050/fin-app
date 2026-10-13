@@ -18,7 +18,7 @@ const FILES = [
   "category.js", "noteWordModel.js", "noteMemory.js", "needWantSaving.js", "financialEvents.js", "investmentInstruments.js",
   "savingsGoals.js", "PWA.js", "Recon.js", "Logger.js", "transactions.js", "autoSettle.js", "obligationReminders.js", "appHealth.js",
   "firestore.js", "viewPublisher.js", "splits.js", "planner.js", "CCAdvisor.js", "DebtAdvisor.js", "SavingsAdvisor.js", "cash.js",
-  "v2db.js", "v2dbDiag.js", "settings.js"
+  "v2db.js", "v2dbDiag.js", "settings.js", "v2route.js"
 ];
 // Which columns of each tab the real Sheet shows as dates/times (Apps Script hands those over as Date objects)
 const DATECOLS = { Transactions: [0, 1], Transactions_Ignored: [0, 1], Cash: [1, 2, 9], Debts: [0, 5, 7], Savings: [0], Goals: [5], Investments: [0],

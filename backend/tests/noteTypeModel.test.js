@@ -21,7 +21,7 @@ const { makeWorld, assert } = require("./_fakeSheetsKit");
 
 const FILES = [
   "category.js", "noteWordModel.js", "noteMemory.js", "needWantSaving.js", "financialEvents.js",
-  "investmentInstruments.js", "savingsGoals.js", "PWA.js", "Recon.js", "Logger.js", "transactions.js", "autoSettle.js"
+  "investmentInstruments.js", "savingsGoals.js", "PWA.js", "Recon.js", "Logger.js", "transactions.js", "autoSettle.js", "v2route.js", "v2db.js"
 ];
 const HEADER = ["Date","Time","Bank","Type","Mode","Amount","Reference","Counterparty","Channel","Source",
   "RawSMS","Sender","Note","Category","TelegramMsgID","Processed","NeedWantSaving","FinancialEvent","FinancialEventName"];
