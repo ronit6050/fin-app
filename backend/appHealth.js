@@ -199,8 +199,10 @@ function loadHealthInputs_(){
     logAI("HEALTH_CHECK_NOTE", "Could not read triggers: " + err.toString());
   }
 
+  // Logs always live in the REAL Sheet (logAI writes there), even when the owner is on his private copy.
+  var realSs = SpreadsheetApp.getActiveSpreadsheet();
   var readTail = function(sheetName, cols, maxRows){
-    var sh = ss.getSheetByName(sheetName);
+    var sh = (sheetName === "AILogs" ? realSs : ss).getSheetByName(sheetName);
     if(!sh) return [];
     var last = sh.getLastRow();
     if(last < 2) return [];
