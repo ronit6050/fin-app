@@ -2257,8 +2257,10 @@
     /* Anyone who is not the owner (a friend, even with the full app): hide what only works on the owner's own Google account. */
     body.not-owner .real-owner-only { display: none !important; }
     .access-sub { font-size: 0.8rem; color: var(--text-muted); }
-    .access-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-top: 0.5px solid var(--border-hairline); }
-    .access-main { flex: 1; min-width: 0; }
+    /* Name + email on top, the status pill and a compact button underneath (the app's default button is full width). */
+    .access-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 12px 0; border-top: 0.5px solid var(--border-hairline); }
+    .access-main { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere; }
+    .access-toggle { width: auto; flex: none; margin: 0 0 0 auto; padding: 8px 18px; font-size: 0.85rem; }
     .access-name { font-weight: 600; color: var(--text-primary); }
     .access-pill { font-size: 0.72rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--chart-track-bg); color: var(--text-muted); }
     .access-pill.on { background: var(--button-fill); color: #fff; }
@@ -3553,7 +3555,7 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-13-01";
+    const APP_VERSION = "2026-10-13-02";
     const APP_CHANGELOG = "New Access screen (More > Access) shows who can use the app and lets you give a friend the full app on their own private data.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
