@@ -44,3 +44,6 @@ No Sheet in the path. Works for the owner (needs his switch) and for any full-ap
 - The old SMS-reader project stays deployed as the fallback and for Tasker. The Sheet is no longer needed for new owner messages, but is not retired yet.
 - The owner's alert still comes from the timer (about a minute), as before; an immediate alert would need the processing run inline.
 - Sender names / a new bank (e.g. Bank of Baroda) are learned the same way as before (see the shared pattern library, docs/features/v2db.md).
+
+## Fixes after the independent review (2026-10-14)
+Wrong keys on `smsIn` are throttled like `ingestSms` (30 a minute, refused without reading the database); the server waits 20 s for the lock and the phone 30 s (so a slow save cannot outlive the phone and cause an extra row); `v2dbEnableOwnerDirect` first copies any junk patterns taught since the import from the Sheet's tab into his private tab; a friend's "not a transaction" now teaches HER OWN private junk tab (never the owner's Sheet).

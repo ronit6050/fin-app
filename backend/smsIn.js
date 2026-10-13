@@ -22,9 +22,28 @@ function smsInOwnerDirectOn_(){
 // By hand from the editor. The owner must already be on the private copy.
 function v2dbEnableOwnerDirect(){
   if(v2EngineFor_(splitsKey_(PWA_ALLOWED_EMAIL)) !== "v2db") throw new Error("Switch the owner onto the private copy first (v2dbEnableOwner).");
+  var copied = smsInCopyLearnedJunk_();
   PropertiesService.getScriptProperties().setProperty("V2DB_OWNER_DIRECT", "on");
-  return "the owner's bank SMS now land directly in his private copy (the phone falls back to the old way if anything fails)";
+  return "the owner's bank SMS now land directly in his private copy (the phone falls back to the old way if anything fails); " + copied + " junk pattern(s) copied across";
 }
+// Junk patterns the owner taught the app since his data was imported live only in the Sheet's tab; the new path reads his private tab.
+// Copies any that are missing (same sender + same template = already there). Returns how many were added.
+function smsInCopyLearnedJunk_(){
+  var real = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("LearnedSpamPatterns");
+  if(!real || real.getLastRow() < 1) return 0;
+  var added = 0;
+  v2dbRun_(splitsKey_(PWA_ALLOWED_EMAIL), function(db){
+    var mine = db.getSheetByName("LearnedSpamPatterns") || db.insertSheet("LearnedSpamPatterns");
+    var have = {};
+    if(mine.getLastRow() > 0) mine.getRange(1, 1, mine.getLastRow(), 4).getValues().forEach(function(r){ have[String(r[1]) + "|" + String(r[2])] = true; });
+    real.getRange(1, 1, real.getLastRow(), 4).getValues().forEach(function(r){
+      var k = String(r[1]) + "|" + String(r[2]);
+      if(String(r[2]).length >= SMSIN_MIN_FINGERPRINT_ && !have[k]){ mine.appendRow(r); have[k] = true; added++; }
+    });
+  });
+  return added;
+}
+
 function v2dbDisableOwnerDirect(){
   PropertiesService.getScriptProperties().deleteProperty("V2DB_OWNER_DIRECT");
   return "the owner's bank SMS go the old way again (through the Sheet)";
@@ -48,12 +67,15 @@ function smsInMatchesLearnedSpam_(db, sender, sms){
 
 // The phone's call. No sign-in: the KEY is the credential and only ever unlocks its own person's space.
 function smsInHandle_(data){
+  var cacheBad = ingestCache_();
+  // Wrong keys cost the caller nothing (the address is public), so refuse after a burst WITHOUT reading the database.
+  if(ingestCount_(cacheBad, "ING_BAD") >= INGEST_MAX_BAD_PER_MIN_) return { ok: false, error: "Unknown key. Too many tries." };
   var email = "";
   try{ email = ingestEmailForKey_(data.key); }catch(e){
     try{ logAI("SMSIN_ERROR", "lookup: " + String(e && e.message).slice(0, 150)); }catch(ignore){}
     return { ok: false, error: "Couldn't check the key. Try again." };
   }
-  if(!email) return { ok: false, error: "Unknown key." };
+  if(!email){ ingestBump_(cacheBad, "ING_BAD", 60); return { ok: false, error: "Unknown key." }; }
   var isOwner = email === splitsKey_(PWA_ALLOWED_EMAIL);
   if(isOwner && !smsInOwnerDirectOn_()) return { ok: false, error: "Use the old path." };
   if(v2EngineFor_(email) !== "v2db") return { ok: false, error: isOwner ? "Use the old path." : "Full app is not switched on." };
@@ -102,7 +124,7 @@ function smsInHandle_(data){
   };
 
   try{
-    lock.waitLock(25000);
+    lock.waitLock(20000);                                      // less than the phone's 30 s wait, so a slow save never outlives the phone's patience
     var out;
     try{ out = attempt(); }
     catch(e){ if(e && e.v2dbConflict) out = attempt(); else throw e; }

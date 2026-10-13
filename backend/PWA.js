@@ -2610,6 +2610,15 @@ function markNotATransaction(row, expectFp){
     // A friend's own message is never copied into the OWNER's learned-spam list (that list lives in the owner's Sheet and would
     // hold the friend's message text). The row is still archived and cleared in the friend's own space.
     const isFriendData = (typeof V2DB_REQ_ !== "undefined") && !!V2DB_REQ_ && String(V2DB_REQ_.user).toLowerCase() !== String(PWA_ALLOWED_EMAIL).toLowerCase();
+    if(isFriendData && rawSms && sender){
+      // A friend's own junk list lives in HER private space (her new SMS path, smsIn.js, reads it there); never in the owner's Sheet.
+      const friendTemplate = normalizeForFingerprint(rawSms);
+      if(friendTemplate.length >= 20){
+        const hers = dbSs_().getSheetByName("LearnedSpamPatterns") || dbSs_().insertSheet("LearnedSpamPatterns");
+        hers.appendRow([new Date(), sender, friendTemplate, rawSms]);
+        patternLearned = true;
+      }
+    }
     if(!isFriendData && rawSms && sender){
       const template = normalizeForFingerprint(rawSms);
       if(template.length >= 20){

@@ -129,7 +129,8 @@ console.log("\n--- 7. A friend marking a message 'not a transaction' never write
   send(k, { tx: tx({ reference: "661001", amount: 3 }), sms: "Your favourite plan will stay available on Vi. Recharge today for more benefits!" , sender: "VG-611112-P" });
   const p = w.act("friend", { action: "getPending" }).transactions.filter(function(t){ return t.amount === 3; })[0];
   const r = w.act("friend", { action: "markNotATransaction", row: p.row, fp: p.fp });
-  assert(r.ok === true && r.patternLearned === false, "it is removed from her Pending, and no pattern is learned from her message");
+  assert(r.ok === true && r.patternLearned === true, "it is removed from her Pending, and the pattern is learned in HER OWN private junk list");
+  assert(JSON.stringify(w.virtualTab(FRIEND, "LearnedSpamPatterns") || []).indexOf("favourite plan") !== -1, "...which holds her message (hers to keep)");
   const spam = w.sheets.LearnedSpamPatterns;
   assert(!spam || spam.rows.length <= 1, "the owner's learned-spam list holds nothing from her");
   assert(JSON.stringify(w.sheets).indexOf("favourite plan") === -1, "her message text is nowhere in the owner's Sheet");

@@ -145,3 +145,23 @@ console.log("\n--- 8. Safe text and limits ---");
   w.__cache[day] = "400";
   assert(send(ownerKey, CAFE.replace("665226905838", "930000000001")).error === "Too many messages for now.", "a flood is cut off (400 saved messages a day per person)");
 }
+
+console.log("\n--- 9. Review fixes: wrong-key throttle, junk copied on switch-on, friends teach their own junk list ---");
+{
+  w.__cache = {};
+  const reads = []; const origGet = sb.fsGetPathMeta_;
+  sb.fsGetPathMeta_ = function(p){ reads.push(p); return origGet(p); };
+  for(let i = 0; i < 30; i++) send("z".repeat(64), CAFE);
+  const readsAfter = reads.length;
+  const refused = send(ownerKey, CAFE.replace("665226905838", "940000000001"));
+  assert(refused.ok === false && /too many/i.test(refused.error), "after 30 wrong keys in a minute even a request is refused");
+  assert(reads.length === readsAfter, "...without reading the database again");
+  sb.fsGetPathMeta_ = origGet; delete w.__cache.ING_BAD;
+  // junk taught only in the Sheet since the import is copied when the owner switches on
+  w.sheets.LearnedSpamPatterns.appendRow([new w.D(), "VM-OLDJUNK", "taught after the import: a long enough junk template here", "example"]);
+  sb.v2dbDisableOwnerDirect();
+  const msg = sb.v2dbEnableOwnerDirect();
+  assert(/1 junk pattern/.test(msg), "switching on copies the junk pattern taught since the import (" + msg + ")");
+  sb.v2dbEnableOwnerDirect();
+  assert(w.virtualTab(OWNER, "LearnedSpamPatterns").filter(function(r){ return r[1] === "VM-OLDJUNK"; }).length === 1, "and a second switch-on does not copy it twice");
+}
