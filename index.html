@@ -3555,8 +3555,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-13-02";
-    const APP_CHANGELOG = "New Access screen (More > Access) shows who can use the app and lets you give a friend the full app on their own private data.";
+    const APP_VERSION = "2026-10-13-03";
+    const APP_CHANGELOG = "Friends with the full app can now have their own bank SMS read into their own private space (Android app).";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -9426,6 +9426,7 @@
       // Has the owner switched this friend on for the FULL app? If so, upgrade right away (2026-10-13).
       callAppsScript({ action: "getMyAccess", idToken: currentUser.idToken }).then(function (d) {
         if (d && d.ok && d.fullApp && !d.isOwner) upgradeFriendToFullApp();
+        else if (d && d.ok && !d.fullApp) forgetIngestKeyOnPhone();     // switched off: stop sending their messages
       }).catch(function () { /* stay on Splits only; the next open asks again */ });
     }
 
@@ -9442,6 +9443,19 @@
       loadPendingTransactions();
       loadInvestmentInstruments();
       setupPushNotifications();
+      syncIngestKeyToPhone();
+    }
+
+    // A friend's own bank SMS (added 2026-10-13): in the Android app, give the phone this person's private key so every
+    // SMS it forwards is saved in THEIR OWN space. Does nothing in a browser or for the owner.
+    function syncIngestKeyToPhone() {
+      if (!(window.AndroidSignIn && window.AndroidSignIn.saveIngestKey)) return;
+      callAppsScript({ action: "getMyIngestKey", idToken: currentUser.idToken }).then(function (d) {
+        if (d && d.ok && d.key) window.AndroidSignIn.saveIngestKey(d.key);
+      }).catch(function () { /* the next open tries again */ });
+    }
+    function forgetIngestKeyOnPhone() {
+      try { if (window.AndroidSignIn && window.AndroidSignIn.clearIngestKey) window.AndroidSignIn.clearIngestKey(); } catch (e) { /* not the Android app */ }
     }
 
     // ---- Access panel (owner only) ----

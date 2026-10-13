@@ -22,6 +22,12 @@ function handlePwaRequest(data){
 
 function handlePwaRequestCore_(data){
 
+  // A friend's phone sending a bank SMS through the SMS reader (ingest.js). No sign-in here: the private key is the credential,
+  // and it only ever adds a transaction to its own person's private space.
+  if(data && data.action === "ingestSms"){
+    return jsonResponse(typeof ingestSmsHandle_ === "function" ? ingestSmsHandle_(data) : { ok: false, error: "Not available." });
+  }
+
   // Ask Google directly: is this sign-in proof real, and whose is it?
   const verified = verifyGoogleIdToken(data.idToken);
 

@@ -129,7 +129,40 @@ function matchesLearnedSpamPattern(sender, sms){
 //    two Zomato orders) would wrongly look like duplicates of each
 //    other.
 
+// ---- Friends' own SMS (added 2026-10-13) --------------------------------------------------------------------
+// A friend's phone sends the same fields PLUS a private "key". Such a message is classified and parsed exactly the same way,
+// but is then handed to the MAIN backend (action "ingestSms"), which saves it in THAT friend's own private space. It is never
+// written to this project's Sheet, never checked against the owner's learned-spam list, and its text is never written to the
+// owner's Logs sheet. A message with no key (the owner's phone, or Tasker) takes exactly the old path.
+const MAIN_BACKEND_URL = "https://script.google.com/macros/s/AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v/exec";
+let PERSONAL_MODE = false;
+
+// Returns "OK" (saved or already there), "REJECTED" (the key is wrong or switched off: do not retry) or "RETRY" (try again later).
+function forwardPersonalSms(key, tx, sms, sender, timestamp){
+  try{
+    const response = UrlFetchApp.fetch(MAIN_BACKEND_URL, {
+      method: "post",
+      contentType: "text/plain",
+      payload: JSON.stringify({
+        action: "ingestSms", key: key, sms: sms, sender: sender, timestamp: timestamp,
+        tx: { bank: tx.bank, type: tx.type, mode: tx.mode, amount: tx.amount, reference: tx.reference, counterparty: tx.counterparty }
+      }),
+      muteHttpExceptions: true,
+      followRedirects: true
+    });
+    const body = JSON.parse(response.getContentText());
+    if(body && body.ok === true) return "OK";
+    if(body && /^(Unknown key|Full app is not switched on|Not for the owner)/.test(String(body.error || ""))) return "REJECTED";
+    return "RETRY";
+  }catch(err){
+    return "RETRY";
+  }
+}
+
 function doPost(e){
+
+  PERSONAL_MODE = !!(e && e.parameter && e.parameter.key);
+  const personalKey = PERSONAL_MODE ? String(e.parameter.key) : "";
 
   let sms = "";
   let sender = "";
@@ -166,7 +199,7 @@ function doPost(e){
     // safety-rule comment above LEARNED_SPAM_SHEET for why this order is
     // non-negotiable. Checked before ruleParser() even runs, since a
     // matched message is ignored outright, same as a plain IGNORE.
-    if(classification === "UNCERTAIN" && matchesLearnedSpamPattern(sender, sms)){
+    if(!personalKey && classification === "UNCERTAIN" && matchesLearnedSpamPattern(sender, sms)){
 
       logWebhook(sender,sms,raw,"IGNORED (LEARNED PATTERN)");
       return ContentService.createTextOutput("IGNORED");
@@ -191,6 +224,13 @@ function doPost(e){
 
       logWebhook(sender,sms,raw,"RULE PARSED");
 
+    }
+
+    // A friend's message: hand the finished details to the main backend (their own private space) and stop here.
+    if(personalKey){
+      const outcome = forwardPersonalSms(personalKey, tx, sms, sender, timestamp);
+      logWebhook(sender,sms,raw,"PERSONAL " + outcome);
+      return ContentService.createTextOutput(outcome);
     }
 
     // Added 2026-08-26 -- real bug found live: the weekly resync job
@@ -1158,6 +1198,9 @@ function saveTransaction(data,sms,sender,timestamp){
 function logWebhook(sender,sms,raw,status){
 
   const sheet = getSheet(LOG_SHEET);
+
+  // A friend's message text is private: this Logs sheet is the owner's, so it only ever records that a message arrived.
+  if(PERSONAL_MODE){ sms = "[friend's message - text not kept]"; raw = ""; }
 
   sheet.appendRow([
     new Date(),

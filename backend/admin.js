@@ -15,18 +15,25 @@ function adminIsOwner_(verified){
 // Returns a response object for the three actions above, or null if the action is not one of them.
 function adminHandle_(data, verified){
   var action = data && data.action;
-  if(action !== "getMyAccess" && action !== "getAdminOverview" && action !== "setFriendFullApp") return null;
+  if(action !== "getMyAccess" && action !== "getAdminOverview" && action !== "setFriendFullApp" && action !== "getMyIngestKey") return null;
   var isOwner = adminIsOwner_(verified);
   try{
     if(action === "getMyAccess"){
       return { ok: true, isOwner: isOwner, fullApp: isOwner ? true : v2EngineFor_(verified.email) === "v2db" };
+    }
+    if(action === "getMyIngestKey"){
+      // The private key the friend's phone sends with every SMS (ingest.js). Only for a friend who has the full app.
+      if(isOwner) return { ok: false, error: "The owner does not need a key." };
+      if(v2EngineFor_(verified.email) !== "v2db") return { ok: false, error: "Full app is not switched on." };
+      return { ok: true, key: ingestGetOrCreateKey_(verified.email) };
     }
     if(!isOwner) return { ok: false, error: "This account is not allowed." };
     if(action === "setFriendFullApp"){
       var email = splitsKey_(data.email);
       if(!splitsValidEmail_(email) || email === splitsKey_(PWA_ALLOWED_EMAIL)) return { ok: false, error: "Pick one of your friends." };
       if(!splitsIsOwnersFriend_(email)) return { ok: false, error: "That person is not one of your friends." };
-      if(data.on === true) v2dbEnableUser(email); else v2dbDisableUser(email);
+      if(data.on === true) v2dbEnableUser(email);
+      else{ v2dbDisableUser(email); if(typeof ingestRevokeKey_ === "function") ingestRevokeKey_(email); }   // switching off also stops their SMS
       try{ logAI("ADMIN_FULL_APP", email + " -> " + (data.on === true ? "on" : "off")); }catch(ignore){}
     }
     return adminOverview_();
