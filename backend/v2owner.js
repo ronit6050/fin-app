@@ -99,9 +99,21 @@ function v2InboxSync_(db){
   var cols = Math.max(mine.getLastColumn(), 21);
   var rows = real.getRange(seen + 1, 1, last - seen, cols).getValues();
   var copied = [];
+  // Messages already in his private copy (the phone may have sent a message straight to it AND, if that reply got lost, through the
+  // old way into the Sheet): the same real reference or the identical text is the same message, so it is stamped as handled but not
+  // copied a second time. Same two rules the SMS reader itself uses.
+  var knownRefs = {}, knownTexts = {};
+  mine.getDataRange().getValues().forEach(function(r){
+    var ref = String(r[6] || "");
+    if(ref && ref.indexOf("NOREF_") !== 0 && ref.indexOf("MANUAL_") !== 0 && isFinite(Number(ref))) knownRefs[Number(ref)] = true;
+    var txt = String(r[10] || "");
+    if(txt.length > 20 && txt !== "-") knownTexts[txt] = true;
+  });
   rows.forEach(function(r, i){
     if(String(r[8]) === "Import") return;                        // a Reconcile shadow copy: already in his private copy
-    mine.appendRow(r);
+    var ref = String(r[6] || ""), txt = String(r[10] || "");
+    var already = (ref && ref.indexOf("NOREF_") !== 0 && isFinite(Number(ref)) && knownRefs[Number(ref)]) || (txt.length > 20 && txt !== "-" && knownTexts[txt]);
+    if(!already) mine.appendRow(r);
     copied.push(seen + 1 + i);
   });
   props.setProperty("inboxSheetRows", String(last));

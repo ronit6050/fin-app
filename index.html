@@ -3611,7 +3611,7 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-14-01";
+    const APP_VERSION = "2026-10-14-02";
     const APP_CHANGELOG = "New in Settings > Speed: a beta switch to read screens from our new Firebase server (it falls back to the old one by itself).";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
@@ -3842,7 +3842,8 @@
       // Also hand the sign-in proof to the service worker (added
       // 2026-09-19) — see that function's own comment for why.
       syncAuthTokenForServiceWorker(currentUser);
-      forgetIngestKeyOnPhone();   // the owner's SMS never carries a friend's key, even if one was left on this phone
+      forgetIngestKeyOnPhone();   // first drop anything left from another account (a friend's key must never stay on the owner's phone)
+      syncIngestKeyToPhone(true); // then fetch the owner's own key, if his direct-SMS switch is on
 
       showSignedInUI(currentUser);
 
@@ -3945,6 +3946,7 @@
             currentUser = savedUser;
             syncAuthTokenForServiceWorker(currentUser);
             forgetIngestKeyOnPhone();
+            syncIngestKeyToPhone(true);
             showSignedInUI(currentUser);
             loadDashboard();
             loadPendingTransactions();
@@ -9562,11 +9564,13 @@
 
     // A friend's own bank SMS (added 2026-10-13): in the Android app, give the phone this person's private key so every
     // SMS it forwards is saved in THEIR OWN space. Does nothing in a browser or for the owner.
-    function syncIngestKeyToPhone() {
+    function syncIngestKeyToPhone(isOwner) {
       if (!(window.AndroidSignIn && window.AndroidSignIn.saveIngestKey)) return;
       callAppsScript({ action: "getMyIngestKey", idToken: currentUser.idToken }).then(function (d) {
         if (d && d.ok && d.key) window.AndroidSignIn.saveIngestKey(d.key);
-      }).catch(function () { /* the next open tries again */ });
+        // The owner gets a key only while his "direct" switch is on; when it is off the phone must forget it and use the old way.
+        else if (isOwner && d && d.ok === false) forgetIngestKeyOnPhone();
+      }).catch(function () { /* a network problem: keep what the phone has; the next open tries again */ });
     }
     function forgetIngestKeyOnPhone() {
       try { if (window.AndroidSignIn && window.AndroidSignIn.clearIngestKey) window.AndroidSignIn.clearIngestKey(); } catch (e) { /* not the Android app */ }

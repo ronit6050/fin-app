@@ -23,7 +23,7 @@ function adminHandle_(data, verified){
     }
     if(action === "getMyIngestKey"){
       // The private key the friend's phone sends with every SMS (ingest.js). Only for a friend who has the full app.
-      if(isOwner) return { ok: false, error: "The owner does not need a key." };
+      if(isOwner && !(typeof smsInOwnerDirectOn_ === "function" && smsInOwnerDirectOn_() && v2EngineFor_(verified.email) === "v2db")) return { ok: false, error: "The owner does not need a key." };
       if(v2EngineFor_(verified.email) !== "v2db") return { ok: false, error: "Full app is not switched on." };
       return { ok: true, key: ingestGetOrCreateKey_(verified.email) };
     }

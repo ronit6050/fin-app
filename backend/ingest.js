@@ -19,8 +19,9 @@ function ingestHash_(key){
   return bytes.map(function(b){ return ("0" + (b & 0xff).toString(16)).slice(-2); }).join("");
 }
 
-function ingestNewKey_(){
-  return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, "");
+function ingestNewKey_(isOwner){
+  var hex = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, "");
+  return isOwner ? "own" + hex.slice(0, 61) : hex;      // the owner's key starts with "own": the phone then never drops a message, it falls back to the old way
 }
 
 // Returns the person's key, creating it the first time. Only for a friend who has the full app.
@@ -28,7 +29,7 @@ function ingestGetOrCreateKey_(email){
   var e = splitsKey_(email);
   var mine = fsGetPathMeta_("users/" + e + "/ingest/key");
   if(mine && mine.fields && mine.fields.key && INGEST_KEY_RE_.test(String(mine.fields.key))) return String(mine.fields.key);
-  var key = ingestNewKey_();
+  var key = ingestNewKey_(e === splitsKey_(PWA_ALLOWED_EMAIL));
   fsCommit_([
     { set: { path: "ingestKeys/" + ingestHash_(key), fields: { email: e }, onlyIfNew: true } },
     { set: { path: "users/" + e + "/ingest/key", fields: { key: key } } }

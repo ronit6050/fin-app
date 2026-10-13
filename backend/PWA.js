@@ -28,6 +28,11 @@ function handlePwaRequestCore_(data){
     return jsonResponse(typeof ingestSmsHandle_ === "function" ? ingestSmsHandle_(data) : { ok: false, error: "Not available." });
   }
 
+  // A phone sending a raw bank SMS straight to the person's own private space (smsIn.js). Same rule: the key is the credential.
+  if(data && data.action === "smsIn"){
+    return jsonResponse(typeof smsInHandle_ === "function" ? smsInHandle_(data) : { ok: false, error: "Not available." });
+  }
+
   // Ask Google directly: is this sign-in proof real, and whose is it?
   const verified = verifyGoogleIdToken(data.idToken);
 
@@ -2611,6 +2616,13 @@ function markNotATransaction(row, expectFp){
         const patternsSheet = getLearnedSpamPatternsSheet_();
         patternsSheet.appendRow([new Date(), sender, template, rawSms]);
         patternLearned = true;
+        // The owner on his private copy: the new SMS path (smsIn.js) reads learned junk from his private tab, so teach that too.
+        try{
+          if((typeof V2DB_REQ_ !== "undefined") && V2DB_REQ_ && String(V2DB_REQ_.user).toLowerCase() === String(PWA_ALLOWED_EMAIL).toLowerCase()){
+            const privateTab = dbSs_().getSheetByName("LearnedSpamPatterns") || dbSs_().insertSheet("LearnedSpamPatterns");
+            privateTab.appendRow([new Date(), sender, template, rawSms]);
+          }
+        }catch(ignorePrivate){}
       }
     }
 

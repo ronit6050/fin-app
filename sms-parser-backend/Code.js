@@ -281,6 +281,8 @@ function getSheet(name){
   return SpreadsheetApp.openById(SHEET_ID).getSheetByName(name);
 }
 
+// ==== SMS-PIPELINE-CORE-BEGIN ==== (everything down to SMS-PIPELINE-CORE-END is copied word for word into backend/smsPipelineCore.js
+// by tools/build_sms_pipeline.py, so the main backend can run the SAME decisions on a person's private copy. Edit here, then re-run the tool.)
 // Known bank/wallet sender IDs. "PAYZAP" (PayZapp wallet) and "ONJPTR"
 // (Jupiter) added 2026-08-27 -- both were real senders found in the
 // user's actual message history that this list didn't recognize before,
@@ -1158,6 +1160,8 @@ function isCardEchoDuplicate(tx, sms, timestamp, row){
   return true;
 
 }
+
+// ==== SMS-PIPELINE-CORE-END ====
 
 function saveTransaction(data,sms,sender,timestamp){
 
