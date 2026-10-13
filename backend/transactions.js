@@ -9,13 +9,24 @@
 // 2026-10-11). The try/finally + try/catch are insurance, even against the
 // publisher function being missing altogether: nothing about the publisher
 // may ever stop a transaction being processed.
+var TXN_PUBLISH_NOW_ = false;   // set by the real work when it handled new transactions: the Home copy must be rebuilt right away
+
 function processNewTransactions() {
-  // When the owner is switched on, this job runs on his private copy (v2owner.js); otherwise this does nothing.
-  var takeOver_ = (typeof v2OwnerTakeOver_ === "function") ? v2OwnerTakeOver_(processNewTransactions) : { ran: false }; if(takeOver_.ran) return takeOver_.value;
+  TXN_PUBLISH_NOW_ = false;
   try{
-    processNewTransactionsCore_();
+    // When the owner is switched on, the REAL WORK runs on his private copy under the shared lock (v2owner.js); otherwise it just runs.
+    // Only that part needs the lock. Rebuilding the Home copy below only READS, so it runs AFTER the lock is released: it used to run
+    // inside the lock and, being slow, made every other request that needs the lock (saves, the new SMS path) time out (2026-10-13).
+    var takeOver_ = (typeof v2OwnerTakeOver_ === "function") ? v2OwnerTakeOver_(processNewTransactionsCore_) : { ran: false };
+    if(!takeOver_.ran) processNewTransactionsCore_();
   }finally{
-    try{ publishViewsIfNeeded_(); }catch(ignore){}
+    try{
+      var rebuild = function(){
+        if(TXN_PUBLISH_NOW_){ TXN_PUBLISH_NOW_ = false; publishViewsBestEffort_("new-transactions", true); }
+        else publishViewsIfNeeded_();
+      };
+      if(typeof v2OwnerReadOnly_ === "function") v2OwnerReadOnly_(rebuild); else rebuild();
+    }catch(ignore){}
     // After the real work and the Home copy: mirror whatever changed in the Sheet into the owner's
     // private Firestore folder (v2Sync.js, "step 2" of docs/v2-firestore-native.md). Every 3 minutes at
     // most, and it can never stop a transaction, a notification or a save.
@@ -294,10 +305,9 @@ Reply to add a note for this transaction.`;
     formatQueue.slice(0, 20).forEach(function(r){ smsFormatRecordRow_(r); });
   }
 
-  // New transactions were processed: publish the Home screen again now so
-  // the copy includes them (force = skip the 15-second throttle; this runs
-  // once per timer run). Added 2026-10-11, best-effort, never throws.
-  try{ publishViewsBestEffort_("new-transactions", true); }catch(ignore){}
+  // New transactions were processed: the Home screen copy must be rebuilt now so it includes them (force = skip the 15-second
+  // throttle). The caller (processNewTransactions) does that right after the shared lock is released; this only raises the flag.
+  TXN_PUBLISH_NOW_ = true;
 }
 
 /* ===============================

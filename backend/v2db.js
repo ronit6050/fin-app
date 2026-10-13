@@ -435,16 +435,22 @@ function v2dbAnswerFailed_(result){
 }
 
 // opts.prefetch: tab names to fetch in ONE request before fn runs (much faster than opening them one by one).
+var V2DB_LAST_TIMING_ = null;     // where the last run's time went (milliseconds): reading the tabs, the work itself, writing back
+
 function v2dbRun_(user, fn, opts){
   var db = new V2Db_(user);
   var previous = V2DB_REQ_;
   V2DB_REQ_ = db;
   try{
+    var t0 = Date.now();
     if(opts && opts.prefetch && opts.prefetch.length) db.prefetch(opts.prefetch);
+    var t1 = Date.now();
     var result = fn(db);
+    var t2 = Date.now();
     // If the action reported failure ({ok:false}, which is how the app turns errors into answers), keep NONE of its
     // changes: a half-finished save must never be written.
     if(!v2dbAnswerFailed_(result)) db.flush();
+    V2DB_LAST_TIMING_ = { readMs: t1 - t0, workMs: t2 - t1, writeMs: Date.now() - t2 };
     return result;
   }finally{
     V2DB_REQ_ = previous;

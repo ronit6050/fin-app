@@ -29,7 +29,9 @@ function v2OwnerOn_(){ return v2EngineFor_(v2OwnerEmail_()) === "v2db"; }
 function v2OwnerTakeOver_(jobFn){
   if(V2DB_REQ_ || !v2OwnerOn_()) return { ran: false };
   var lock = LockService.getScriptLock();
+  var started = Date.now();
   lock.waitLock(25000);                                          // one saving job at a time, same lock as the app's saves
+  var gotLockAt = Date.now();
   try{
     var marks = { rows: [] };
     var attempt = function(){
@@ -47,11 +49,23 @@ function v2OwnerTakeOver_(jobFn){
     v2InboxStampSheet_(marks.rows);                              // only AFTER the private copy was saved
     v2InboxHeal_(V2_INBOX_MARK_);
     v2FinishSave_(value);
+    // A job that holds the shared lock for long makes every other request wait: say so in the log (only when slow), with where the time went.
+    var held = Date.now() - gotLockAt;
+    if(held > 8000){
+      try{ logAI("V2_JOB_SLOW", "lock held " + Math.round(held / 100) / 10 + "s (waited " + Math.round((gotLockAt - started) / 100) / 10 + "s for it); " + JSON.stringify(V2DB_LAST_TIMING_ || {})); }catch(ignoreLog){}
+    }
     return { ran: true, value: value };
   }finally{
     V2_AFTER_SAVE_ = [];
     try{ lock.releaseLock(); }catch(ignore){}
   }
+}
+
+// Runs fn on the owner's private copy WITHOUT the shared lock, for work that only READS (rebuilding the Home screen copy). Reads cannot
+// conflict with anyone, so holding the lock for them only made other requests time out. If the owner is not switched on, just runs fn.
+function v2OwnerReadOnly_(fn){
+  if(V2DB_REQ_ || !v2OwnerOn_()) return fn();
+  return v2dbRun_(v2OwnerEmail_(), function(){ return fn(); }, { prefetch: V2_PREFETCH_ALL_ });
 }
 
 // ---------------------------------------------------------------- shadow rows for the SMS reader

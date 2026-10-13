@@ -188,3 +188,20 @@ console.log("\n--- 10. A copied row that missed its 'handled' stamp is healed; n
   assert(w.sheets.Transactions.rows[igRow][15] === "IGNORED", "an IGNORED mark is never overwritten");
   assert(w.virtualTab(OWNER, "Transactions").filter(function(r){ return r[6] === 400001; }).length === 1, "and nothing was copied twice");
 }
+
+console.log("\n--- 11. The shared lock is released BEFORE the slow Home-screen rebuild ---");
+{
+  const w = build(); seedReal(w); const sb = w.sb;
+  sb.v2dbImportOwner(); sb.v2dbEnableOwner();
+  w.lockEvents.length = 0;
+  sb.publishViewsBestEffort_ = function(){ w.lockEvents.push("publish-now"); return true; };
+  sb.publishViewsIfNeeded_ = function(){ w.lockEvents.push("publish-if-needed"); return false; };
+  w.sheets.Transactions.appendRow(w.row(71, 500001, "Shop R", ""));
+  sb.processNewTransactions();
+  const order = w.lockEvents.join(",");
+  assert(/^wait,release,publish-now$/.test(order), "new transaction: lock taken, lock released, THEN the Home copy is rebuilt (" + order + ")");
+  w.lockEvents.length = 0;
+  sb.processNewTransactions();
+  assert(/^wait,release,publish-if-needed$/.test(w.lockEvents.join(",")), "nothing new: lock released before the cheap 'is a rebuild due?' check too (" + w.lockEvents.join(",") + ")");
+  assert(w.virtualTab(OWNER, "Transactions").filter(function(r){ return r[6] === 500001; }).length === 1, "and the transaction itself was still copied and processed once");
+}
