@@ -238,6 +238,10 @@ function pwaDispatch_(data, verified){
     return jsonResponse({ ok:true, cash: getCashData() });
   }
 
+  if(data.action === "addManualTransaction"){
+    return jsonResponse(typeof addManualTransaction_ === "function" ? addManualTransaction_(data) : { ok: false, error: "Not available." });
+  }
+
   if(data.action === "addCashEntry"){
     return jsonResponse(addCashEntryFromApp(data.type, data.amount, data.note, data.category, data.needWantSaving));
   }

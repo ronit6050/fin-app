@@ -2790,6 +2790,42 @@
            were already alerted but still have no note show up here. -->
       <section id="view-pending" class="tab-view" style="display:none">
         <h2 class="section-title">Pending Transactions</h2>
+
+        <!-- Add a transaction by hand (2026-10-13): for a payment no SMS was sent for. It lands in the list below like any other. -->
+        <button type="button" id="addManualToggle" style="margin-bottom:12px;">+ Add a transaction</button>
+        <div id="addManualForm" style="display:none; margin-bottom:16px;">
+          <div class="field">
+            <label>Type</label>
+            <select id="manualTypeInput">
+              <option value="debit">Spent</option>
+              <option value="credit">Received</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Amount (&#8377;)</label>
+            <input type="number" id="manualAmountInput" min="0" step="0.01" placeholder="0" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label id="manualWhoLabel">Paid to</label>
+            <input type="text" id="manualWhoInput" maxlength="100" placeholder="e.g. Swiggy, Rahul, Big Bazaar">
+          </div>
+          <div class="field">
+            <label>How</label>
+            <select id="manualModeInput">
+              <option value="upi">UPI</option>
+              <option value="card">Card</option>
+              <option value="netbanking">Net banking / transfer</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Date</label>
+            <input type="date" id="manualDateInput">
+          </div>
+          <button type="button" id="saveManualButton">Add</button>
+          <div id="manualResult" class="pending-result"></div>
+        </div>
+
         <div class="pending-status" id="pendingStatus"></div>
         <div id="pendingInvestmentNotices"></div>
         <div id="pendingList">
@@ -3555,8 +3591,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-13-03";
-    const APP_CHANGELOG = "Friends with the full app can now have their own bank SMS read into their own private space (Android app).";
+    const APP_VERSION = "2026-10-13-04";
+    const APP_CHANGELOG = "New: add a transaction by hand (Pending > Add a transaction) for payments no SMS was sent for.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -5827,6 +5863,15 @@
       return { ok: true, typeRequested: !!type, typeSaved: typeSaved, investmentLogged: false };
     }
 
+    function demoAddManualTransaction(d) {
+      if (!(Number(d.amount) > 0) || !d.counterparty) return { ok: false, error: "Enter an amount and who." };
+      demoState.transactions.push({
+        row: demoState.transactions.length + 2, date: d.date ? new Date(d.date + "T12:00:00") : new Date(), bank: "", type: d.type, mode: d.mode,
+        amount: Number(d.amount), counterparty: d.counterparty, note: "", category: "", needWantSaving: null
+      });
+      return { ok: true };
+    }
+
     function demoAddDebt(person, type, amount, note, dueDate) {
       if (!person || !amount) return { ok: false, error: "Enter a person and a valid amount." };
       demoState.debts.push({ date: new Date(), person: person, type: type, amount: Number(amount), note: note || "", dueDate: dueDate ? new Date(dueDate) : null, status: "Pending" });
@@ -6079,6 +6124,7 @@
           case "saveBudgets": return demoSaveBudgets(data.month, data.budgets, data.income, data.fixedObligations);
           case "moveDebtToFriend": return demoMoveDebt(data);
           case "getMyAccess": return { ok: true, isOwner: true, fullApp: true };
+          case "addManualTransaction": return demoAddManualTransaction(data);
           case "getAdminOverview": case "setFriendFullApp": return demoAccessOverview(data);
           case "getPeople": case "getPerson": case "addFriend": case "createSplit":
           case "recordSplitPayment": case "undoSplitEntry": return demoSplitsRoute(data);
@@ -6436,7 +6482,7 @@
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
       "deleteSavingsEntry", "addSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
       "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
-      "addCashEntry", "updateCashEntry", "insertReconciledTransactions",
+      "addCashEntry", "addManualTransaction", "updateCashEntry", "insertReconciledTransactions",
       "fixCreditCardTransactionMode", "updateSettings", "saveBudgets"
     ];
     const FAST_STALE_MS = 40 * 60 * 1000;   // the backend refreshes at least every 30 minutes
@@ -11584,6 +11630,67 @@
           cashNoteInputEl.value = note;
           cashResultEl.textContent = "Couldn't save (" + err.message + ") — check your connection and try again.";
         });
+    });
+
+    // ---------------------------------------------------------
+    // ADD A TRANSACTION BY HAND (2026-10-13)
+    // For a bank/UPI/card payment that no SMS was sent for. The backend adds it like an SMS row, so it
+    // appears in Pending below and you pick the note, category and Need/Want type the usual way.
+    // ---------------------------------------------------------
+    const addManualToggleEl = document.getElementById("addManualToggle");
+    const addManualFormEl   = document.getElementById("addManualForm");
+    const manualTypeEl      = document.getElementById("manualTypeInput");
+    const manualAmountEl    = document.getElementById("manualAmountInput");
+    const manualWhoEl       = document.getElementById("manualWhoInput");
+    const manualWhoLabelEl  = document.getElementById("manualWhoLabel");
+    const manualModeEl      = document.getElementById("manualModeInput");
+    const manualDateEl      = document.getElementById("manualDateInput");
+    const saveManualBtnEl   = document.getElementById("saveManualButton");
+    const manualResultEl    = document.getElementById("manualResult");
+
+    function manualTodayString() {
+      const d = new Date();
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    }
+
+    addManualToggleEl.addEventListener("click", function () {
+      const opening = addManualFormEl.style.display === "none";
+      addManualFormEl.style.display = opening ? "block" : "none";
+      if (opening) {
+        manualDateEl.value = manualTodayString();
+        manualDateEl.max = manualTodayString();
+        manualResultEl.textContent = "";
+      }
+    });
+
+    manualTypeEl.addEventListener("change", function () {
+      manualWhoLabelEl.textContent = manualTypeEl.value === "credit" ? "Received from" : "Paid to";
+    });
+
+    saveManualBtnEl.addEventListener("click", function () {
+      const amount = Number(manualAmountEl.value);
+      const who = manualWhoEl.value.trim();
+      if (!(amount > 0)) { manualResultEl.textContent = "Enter the amount."; return; }
+      if (!who) { manualResultEl.textContent = "Say who " + (manualTypeEl.value === "credit" ? "paid you." : "you paid."); return; }
+      saveManualBtnEl.disabled = true;                 // no double taps: one tap, one transaction
+      manualResultEl.textContent = "Adding...";
+      callAppsScript({
+        action: "addManualTransaction", idToken: currentUser.idToken,
+        type: manualTypeEl.value, amount: amount, counterparty: who, mode: manualModeEl.value,
+        date: manualDateEl.value || manualTodayString()
+      }).then(function (d) {
+        saveManualBtnEl.disabled = false;
+        if (!d.ok) { manualResultEl.textContent = d.error || "Couldn't add it. Try again."; return; }
+        manualAmountEl.value = "";
+        manualWhoEl.value = "";
+        manualResultEl.textContent = "";
+        addManualFormEl.style.display = "none";
+        pendingStatusEl.textContent = "Added. Pick a note and category for it below.";
+        loadPendingTransactions();                     // brings the new card into the list
+      }).catch(function () {
+        saveManualBtnEl.disabled = false;
+        manualResultEl.textContent = "Couldn't add it (check your connection). Nothing was saved. Try again.";
+      });
     });
 
     // ---------------------------------------------------------

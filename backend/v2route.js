@@ -27,7 +27,7 @@ var V2_FRIEND_FULL_ACTIONS_ = [
   "getSavingsGoals", "previewSavingsSplit", "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
   "deleteSavingsEntry", "addSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal",
   "getInvestments", "getInvestmentInstruments", "addInvestmentInstrument", "logInvestment", "updateInvestment",
-  "getCash", "addCashEntry", "updateCashEntry", "registerPushToken", "getDashboard", "getSettings", "updateSettings",
+  "getCash", "addCashEntry", "addManualTransaction", "updateCashEntry", "registerPushToken", "getDashboard", "getSettings", "updateSettings",
   "getTransactionHistory", "getPlannerData", "saveBudgets"
 ];
 

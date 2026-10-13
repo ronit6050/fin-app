@@ -42,7 +42,7 @@ var V2_WRITE_ACTIONS_ = [
   "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
   "deleteSavingsEntry", "addSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
   "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
-  "addCashEntry", "updateCashEntry", "insertReconciledTransactions",
+  "addCashEntry", "addManualTransaction", "updateCashEntry", "insertReconciledTransactions",
   "fixCreditCardTransactionMode", "updateSettings", "saveBudgets"
 ];
 
