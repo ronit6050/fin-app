@@ -115,5 +115,11 @@ expect("friend CAN read their own key folder", read(friend, "users/%s/ingest" % 
 expect("friend cannot write a key", write(friend, "ingestKeys/should-never-land"), 403)
 expect("friend cannot write into their key folder", write(friend, "users/%s/ingest/should-never-land" % FRIEND), 403)
 
+print("\n--- Shared bank-SMS pattern library (added 2026-10-13): closed to every phone, even the owner's ---")
+expect("owner's phone cannot read the SMS pattern library", read(own, "smsFormats"), 403)
+expect("friend cannot read the SMS pattern library", read(friend, "smsFormats"), 403)
+expect("nobody signed in cannot read it", read(None, "smsFormats"), 403)
+expect("friend cannot write a pattern", write(friend, "smsFormats/should-never-land"), 403)
+
 print("\n%s" % ("ALL PRIVACY CHECKS PASSED" if failures == 0 else "%d FAILED" % failures))
 sys.exit(1 if failures else 0)

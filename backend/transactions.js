@@ -147,6 +147,9 @@ function processNewTransactionsCore_() {
       // gets skipped and logged, instead of jamming the whole pipeline.
       try{
 
+        // Add this SMS's anonymised shape to the shared bank-format library (smsFormats.js). Best-effort, never throws.
+        if(typeof smsFormatRecordRow_ === "function") smsFormatRecordRow_(data[i]);
+
         // ── Auto-settle the KNOWNS first (added 2026-10-10) ──
         // A credit card bill payment, a wallet top-up, or a recurring
         // Rent/EMI/SIP the app has already seen and confirmed before is

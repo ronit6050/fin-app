@@ -123,6 +123,10 @@ function ingestSmsHandle_(data){
       }catch(ignorePush){}
       return { ok: true, saved: true };
     }, { prefetch: ["Transactions", "_Props"] });
+    // Add the (anonymised) message shape to the shared format library. Best-effort: never affects the answer.
+    if(outcome && outcome.saved && typeof smsFormatRecord_ === "function"){
+      smsFormatRecord_({ sender: sender, sms: sms, bank: tx.bank, type: type, mode: tx.mode, amount: amount, reference: reference, counterparty: counterparty });
+    }
     return outcome;
   }catch(err){
     try{ logAI("INGEST_ERROR", "save: " + String(err && err.message).slice(0, 200)); }catch(ignore){}

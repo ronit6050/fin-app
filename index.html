@@ -3394,6 +3394,15 @@
             </p>
           </div>
           <div class="settings-group">
+            <div class="settings-group-title">Bank SMS library</div>
+            <p class="pending-status" id="accessFormatsLine">Loading...</p>
+            <div id="accessFormatsList"></div>
+            <p class="pending-status" style="margin-top:8px;">
+              Every bank message the app sees is kept as an anonymous pattern (no amounts, names, account numbers or links), so a new
+              bank can be taught from real examples. Nothing links a pattern to a person.
+            </p>
+          </div>
+          <div class="settings-group">
             <div class="settings-group-title">Your own data</div>
             <p class="pending-status" id="accessOwnerLine"></p>
             <p class="pending-status" id="accessUsageLine"></p>
@@ -3591,8 +3600,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-13-04";
-    const APP_CHANGELOG = "New: add a transaction by hand (Pending > Add a transaction) for payments no SMS was sent for.";
+    const APP_VERSION = "2026-10-13-05";
+    const APP_CHANGELOG = "You can now split a payment you already noted (History > Split with a friend), and More > Access shows the shared bank-SMS library.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -6126,6 +6135,7 @@
           case "getMyAccess": return { ok: true, isOwner: true, fullApp: true };
           case "addManualTransaction": return demoAddManualTransaction(data);
           case "getAdminOverview": case "setFriendFullApp": return demoAccessOverview(data);
+          case "getSmsFormats": return { ok: true, formats: 12, senders: 4, notUnderstood: 1, top: [ { sender: "VM-BOBSMS", formats: 2, seen: 5, uncertain: 3 }, { sender: "VD-HDFCBN-S", formats: 6, seen: 40, uncertain: 0 } ] };
           case "getPeople": case "getPerson": case "addFriend": case "createSplit":
           case "recordSplitPayment": case "undoSplitEntry": return demoSplitsRoute(data);
           default: return { ok: false, error: "Unknown action." };
@@ -9513,11 +9523,31 @@
       callAppsScript({ action: "getAdminOverview", idToken: currentUser.idToken }).then(function (d) {
         if (!d.ok) { accessStatusEl.style.display = "block"; accessStatusEl.innerHTML = '<div class="pending-status">' + escapeHtml(d.error || "Couldn't load.") + '</div>'; return; }
         renderAccess(d);
+        loadSmsFormats();
       }).catch(function () {
         accessStatusEl.style.display = "block";
         accessStatusEl.innerHTML = '<div class="pending-status">Couldn\'t load. <button type="button" id="accessRetry">Retry</button></div>';
         const r = document.getElementById("accessRetry"); if (r) r.addEventListener("click", loadAccess);
       });
+    }
+    // The shared library of anonymous bank-SMS patterns (owner only): how many, from how many senders, which are not understood yet.
+    function loadSmsFormats() {
+      const line = document.getElementById("accessFormatsLine");
+      const list = document.getElementById("accessFormatsList");
+      callAppsScript({ action: "getSmsFormats", idToken: currentUser.idToken }).then(function (d) {
+        if (!d.ok) { line.textContent = "Couldn't load."; return; }
+        line.textContent = d.formats + " pattern" + (d.formats === 1 ? "" : "s") + " from " + d.senders + " sender" + (d.senders === 1 ? "" : "s") +
+          " · " + d.notUnderstood + " not understood yet";
+        list.innerHTML = "";
+        d.top.forEach(function (t) {
+          const row = document.createElement("div");
+          row.className = "access-row";
+          row.innerHTML = '<div class="access-main"><div class="access-name"></div><div class="access-sub"></div></div>';
+          row.querySelector(".access-name").textContent = t.sender;
+          row.querySelector(".access-sub").textContent = t.seen + " message" + (t.seen === 1 ? "" : "s") + " · " + t.uncertain + " not understood";
+          list.appendChild(row);
+        });
+      }).catch(function () { line.textContent = "Couldn't load."; });
     }
     function renderAccess(d) {
       accessStatusEl.style.display = "none";
@@ -13112,6 +13142,28 @@
       const noteValue = escapeHtml(txn.note || "");
       const counterpartyText = txn.counterparty ? " · " + escapeHtml(txn.counterparty) : "";
 
+      // "Split with a friend" AFTER the fact (2026-10-13): a payment you already noted (for example straight from the
+      // notification) can still be split here. Same panel and same backend action as the Pending card, with its own button.
+      const canSplitHere = txn.type !== "credit" && !txn.isNonSpendTransfer && !(txn.friendShare > 0) && !!txn.row && !!txn.fp;
+      const historySplitHtml = canSplitHere ? `
+        <div class="split-wrap">
+          <button type="button" class="link-btn split-link">Split with a friend…</button>
+          <div class="split-panel" style="display:none">
+            <div class="field"><label>With</label><select class="split-friend"></select></div>
+            <div class="split-new" style="display:none">
+              <div class="field"><label>Name</label><input type="text" class="split-new-name" placeholder="Name"></div>
+              <div class="field"><label>Mobile</label><input type="tel" class="split-new-mobile" placeholder="98765 43210"></div>
+              <div class="field"><label>Email (their Google email)</label><input type="email" class="split-new-email" placeholder="name@gmail.com"></div>
+              <button type="button" class="split-new-save secondary">Add friend</button>
+            </div>
+            <div class="field split-share-field"><label>Their share (₹)</label><input type="number" class="split-share" min="0" step="0.01"></div>
+            <div class="pending-status split-summary" style="margin:0;"></div>
+            <button type="button" class="split-now">Split now</button>
+          </div>
+          <div class="pending-status split-done" style="margin:6px 0 0;"></div>
+        </div>
+      ` : "";
+
       card.innerHTML = `
         <div class="pending-top">
           <span>₹<input type="number" class="history-amount" value="${txn.amount}" min="0" step="1" style="width:90px; font-size:1em; font-weight:bold; border:1px solid transparent; background:var(--surface-inset); color:var(--text-primary); border-radius:6px; padding:2px 4px;"></span>
@@ -13133,6 +13185,7 @@
         ${typeToggleHtml}
         <button type="button" class="history-save-btn">Save</button>
         <div class="pending-result"></div>
+        ${historySplitHtml}
       `;
 
       let selectedType = null;
@@ -13158,6 +13211,41 @@
       const amountInput    = card.querySelector(".history-amount");
       const saveButton     = card.querySelector(".history-save-btn");
       const resultEl       = card.querySelector(".pending-result");
+
+      // The split panel (shared with the Pending card). History has its own "Split now" button, so the helper is given a
+      // throwaway object in place of a Save button.
+      if (canSplitHere) {
+        const getSplit = attachSplitPanel(card, txn, { textContent: "" });
+        const splitNowBtn  = card.querySelector(".split-now");
+        const splitDoneEl  = card.querySelector(".split-done");
+        const splitSummary = card.querySelector(".split-summary");
+        splitNowBtn.addEventListener("click", function () {
+          const sp = getSplit();
+          if (!sp || sp.error) { splitSummary.style.display = "block"; splitSummary.textContent = sp ? sp.error : "Pick a friend."; return; }
+          splitNowBtn.disabled = true;
+          splitSummary.style.display = "block";
+          splitSummary.textContent = "Splitting...";
+          callAppsScript({
+            action: "createSplit", idToken: currentUser.idToken,
+            friendEmail: sp.friendEmail, totalAmount: txn.amount, friendShare: sp.share,
+            description: noteInput.value.trim() || txn.counterparty || "",
+            txRow: txn.row, txFp: txn.fp, requestId: sp.requestId
+          }).then(function (d) {
+            splitNowBtn.disabled = false;
+            if (!d.ok && !d.duplicate) { splitSummary.textContent = d.error || "Couldn't split. Try again."; return; }
+            invalidatePeople();                                  // balances changed
+            card.querySelector(".split-panel").style.display = "none";
+            card.querySelector(".split-link").style.display = "none";
+            splitDoneEl.textContent = d.duplicate
+              ? "This payment was already split."
+              : "Split with " + sp.friendName + ": they owe you " + splitMoney(sp.share) + ". Your spend is " + splitMoney(Math.round((txn.amount - sp.share) * 100) / 100) + ".";
+            if (d.sheetUpdated === false) splitDoneEl.textContent += " (Your spend total may take a moment to update.)";
+          }).catch(function (err) {
+            splitNowBtn.disabled = false;
+            splitSummary.textContent = "Couldn't split (" + err.message + "). Nothing was changed - try again.";
+          });
+        });
+      }
 
       // Whatever category was showing before any Financial Event
       // selection — restored if the user later taps "No, regular spend".
