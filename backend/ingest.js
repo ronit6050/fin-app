@@ -56,18 +56,37 @@ function ingestEmailForKey_(key){
   return doc && doc.fields && doc.fields.email ? splitsKey_(doc.fields.email) : "";
 }
 
-function ingestClip_(v, max){ return String(v === undefined || v === null ? "" : v).slice(0, max); }
+// Cut to a length, and make sure a value can never act as a spreadsheet formula if it is ever exported (a leading = + - @ gets a ' in front).
+function ingestClip_(v, max){
+  var t = String(v === undefined || v === null ? "" : v).slice(0, max);
+  return /^[=+\-@]/.test(t) ? "'" + t : t;
+}
+
+// Cheap abuse limits, kept in the script's memory (CacheService): too many wrong keys per minute, and too many messages per person.
+var INGEST_MAX_BAD_PER_MIN_ = 30;
+var INGEST_MAX_PER_PERSON_PER_BLOCK_ = 100;      // per 6-hour block
+
+function ingestCache_(){ try{ return CacheService.getScriptCache(); }catch(e){ return null; } }
+function ingestCount_(cache, key){ try{ return cache ? Number(cache.get(key) || 0) : 0; }catch(e){ return 0; } }
+function ingestBump_(cache, key, ttl){ try{ if(cache) cache.put(key, String(ingestCount_(cache, key) + 1), ttl); }catch(e){} }
 
 // The SMS reader's call. No sign-in: the KEY is the credential, and it only ever unlocks its own person's space.
 function ingestSmsHandle_(data){
+  var cache = ingestCache_();
+  // Wrong keys are free to try for an attacker (the address is public), so refuse after a burst WITHOUT reading anything.
+  if(ingestCount_(cache, "ING_BAD") >= INGEST_MAX_BAD_PER_MIN_) return { ok: false, error: "Unknown key. Too many tries." };
   var email = "";
   try{ email = ingestEmailForKey_(data.key); }catch(e){
     try{ logAI("INGEST_ERROR", "lookup: " + String(e && e.message).slice(0, 200)); }catch(ignore){}
     return { ok: false, error: "Couldn't check the key. Try again." };
   }
-  if(!email) return { ok: false, error: "Unknown key." };
+  if(!email){ ingestBump_(cache, "ING_BAD", 60); return { ok: false, error: "Unknown key." }; }
   if(email === splitsKey_(PWA_ALLOWED_EMAIL)) return { ok: false, error: "Not for the owner." };       // the owner's SMS never comes this way
   if(v2EngineFor_(email) !== "v2db") return { ok: false, error: "Full app is not switched on." };
+
+  var block = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyyMMdd") + "_" + Math.floor(Number(Utilities.formatDate(new Date(), "Asia/Kolkata", "HH")) / 6);
+  var personKey = "ING_N_" + email + "_" + block;
+  if(ingestCount_(cache, personKey) >= INGEST_MAX_PER_PERSON_PER_BLOCK_) return { ok: false, error: "Too many messages for now." };
 
   var tx = data.tx || {};
   var type = ingestClip_(tx.type, 10).toLowerCase();
@@ -93,6 +112,7 @@ function ingestSmsHandle_(data){
         return sms !== "" && String(r[10]) === sms;
       });
       if(dup) return { ok: true, saved: false, duplicate: true };
+      ingestBump_(cache, personKey, 21600);
       sheet.appendRow([
         Utilities.formatDate(when, "Asia/Kolkata", "yyyy-MM-dd"), Utilities.formatDate(when, "Asia/Kolkata", "HH:mm:ss"),
         ingestClip_(tx.bank, 40), type, ingestClip_(tx.mode, 40), hasAmount ? amount : "", reference, counterparty,

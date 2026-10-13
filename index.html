@@ -3786,6 +3786,7 @@
       // Also hand the sign-in proof to the service worker (added
       // 2026-09-19) — see that function's own comment for why.
       syncAuthTokenForServiceWorker(currentUser);
+      forgetIngestKeyOnPhone();   // the owner's SMS never carries a friend's key, even if one was left on this phone
 
       showSignedInUI(currentUser);
 
@@ -3887,6 +3888,7 @@
           } else if (savedUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase() && savedUser.idToken) {
             currentUser = savedUser;
             syncAuthTokenForServiceWorker(currentUser);
+            forgetIngestKeyOnPhone();
             showSignedInUI(currentUser);
             loadDashboard();
             loadPendingTransactions();

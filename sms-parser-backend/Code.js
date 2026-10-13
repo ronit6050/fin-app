@@ -152,7 +152,7 @@ function forwardPersonalSms(key, tx, sms, sender, timestamp){
     });
     const body = JSON.parse(response.getContentText());
     if(body && body.ok === true) return "OK";
-    if(body && /^(Unknown key|Full app is not switched on|Not for the owner)/.test(String(body.error || ""))) return "REJECTED";
+    if(body && /^(Unknown key|Full app is not switched on|Not for the owner|Too many)/.test(String(body.error || ""))) return "REJECTED";
     return "RETRY";
   }catch(err){
     return "RETRY";
