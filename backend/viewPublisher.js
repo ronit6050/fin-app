@@ -120,6 +120,18 @@ function publishViewsBestEffort_(reason, force){
   }
 }
 
+// True when a rebuild of the Home copy is actually due (something changed since the last one, or the last one is over 30 minutes old).
+// A cheap check from the script's memory only: it lets the timer skip opening the person's data at all when nothing is due.
+function publishViewsDue_(){
+  try{
+    if(!V2_PUBLISH_ENABLED) return false;
+    var cache = CacheService.getScriptCache();
+    return !!(cache.get("V2_DIRTY") || !cache.get("V2_HEARTBEAT"));
+  }catch(err){
+    return true;                      // when in doubt, let the normal path decide
+  }
+}
+
 // Called at the START of every background check. Cheap when there is
 // nothing to do: it only publishes if something changed since the last
 // publish, or if the last one was over 30 minutes ago.
@@ -157,8 +169,10 @@ function publishAfterAction_(action, response){
 
 // Run by hand from the Apps Script editor (or by me) to publish right now.
 function publishViewsNow(){
-  // When the owner is switched on, this job runs on his private copy (v2owner.js); otherwise this does nothing.
-  var takeOver_ = (typeof v2OwnerTakeOver_ === "function") ? v2OwnerTakeOver_(publishViewsNow) : { ran: false }; if(takeOver_.ran) return takeOver_.value;
+  // Only reads, so it must NOT hold the shared lock (it is a heavy rebuild): run it on the owner's private copy without the lock.
+  if(typeof v2OwnerReadOnly_ === "function" && !V2DB_REQ_ && typeof v2OwnerOn_ === "function" && v2OwnerOn_()){
+    return v2OwnerReadOnly_(function(){ return publishViewsBestEffort_("manual", true); });
+  }
   return publishViewsBestEffort_("manual", true);
 }
 

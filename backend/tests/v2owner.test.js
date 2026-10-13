@@ -196,12 +196,16 @@ console.log("\n--- 11. The shared lock is released BEFORE the slow Home-screen r
   w.lockEvents.length = 0;
   sb.publishViewsBestEffort_ = function(){ w.lockEvents.push("publish-now"); return true; };
   sb.publishViewsIfNeeded_ = function(){ w.lockEvents.push("publish-if-needed"); return false; };
+  let due = false; sb.publishViewsDue_ = function(){ return due; };
   w.sheets.Transactions.appendRow(w.row(71, 500001, "Shop R", ""));
   sb.processNewTransactions();
   const order = w.lockEvents.join(",");
   assert(/^wait,release,publish-now$/.test(order), "new transaction: lock taken, lock released, THEN the Home copy is rebuilt (" + order + ")");
   w.lockEvents.length = 0;
   sb.processNewTransactions();
-  assert(/^wait,release,publish-if-needed$/.test(w.lockEvents.join(",")), "nothing new: lock released before the cheap 'is a rebuild due?' check too (" + w.lockEvents.join(",") + ")");
+  assert(/^wait,release$/.test(w.lockEvents.join(",")), "nothing new and no rebuild due: the owner's data is NOT opened again for a rebuild (" + w.lockEvents.join(",") + ")");
+  w.lockEvents.length = 0; due = true;
+  sb.processNewTransactions();
+  assert(/^wait,release,publish-if-needed$/.test(w.lockEvents.join(",")), "a rebuild due (changed earlier / 30 minutes passed): done AFTER the lock is released (" + w.lockEvents.join(",") + ")");
   assert(w.virtualTab(OWNER, "Transactions").filter(function(r){ return r[6] === 500001; }).length === 1, "and the transaction itself was still copied and processed once");
 }
