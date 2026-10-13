@@ -75,3 +75,9 @@ version-checked; the Telegram-era `Analysis.js` chart code calls `deleteSheet`, 
 `fsBatchGetPaths_` (firestore.js) reads many documents in ONE request (`documents:batchGet`); `V2Db_.prefetch(names)` opens several tabs at once
 (a second batch only for tabs with extra pages), and `v2dbRun_(user, fn, { prefetch: [...] })` does it before the action runs. Without it every tab is its
 own half-second request. `v2dbSmokeTest()` now uses it, so re-running it measures the real design. Tab lists per action will come with the routing step.
+
+## LIVE RESULT #2 after prefetch (v2dbSmokeTest, 2026-10-13 08:57): ON PAR with the Sheet
+All cells exact; all 5 screens identical. Times (Sheet vs virtual copy): Home dashboard 3.40 s vs 3.27 s; Pending 1.36 s vs 1.32 s; History(50) 3.91 s vs
+4.24 s; Investments 0.75 s vs 1.24 s; Debts 0.16 s vs 1.83 s; read whole Transactions tab 0.57 s vs 0.91 s; one save 0.80 s (was 3.4 s).
+Debts/Investments look slow only because the smoke test prefetches ALL 14 tabs even for a tiny screen (a fixed ~1.6 s batch): the routing step must
+prefetch only the tabs each action needs. Decision: go ahead with per-person routing.
