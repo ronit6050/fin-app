@@ -70,3 +70,8 @@ version-checked; the Telegram-era `Analysis.js` chart code calls `deleteSheet`, 
   request, and avoid re-reading; expected to turn about 4 to 8 requests into 1. Re-run `v2dbSmokeTest` after that and flip only if it is no slower than the Sheet.
 - The test copy lives at `users/v2db-smoketest@example.com/` (run `v2dbSmokeTestCleanup()` in the editor to delete it).
 - Nothing is flipped; the owner's app still runs entirely on the Google Sheet.
+
+## Speed fix: prefetch (2026-10-13)
+`fsBatchGetPaths_` (firestore.js) reads many documents in ONE request (`documents:batchGet`); `V2Db_.prefetch(names)` opens several tabs at once
+(a second batch only for tabs with extra pages), and `v2dbRun_(user, fn, { prefetch: [...] })` does it before the action runs. Without it every tab is its
+own half-second request. `v2dbSmokeTest()` now uses it, so re-running it measures the real design. Tab lists per action will come with the routing step.

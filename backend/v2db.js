@@ -250,17 +250,45 @@ V2Db_.prototype.pagePath_ = function(name, n){ return this.tabPath_(name) + "/pa
 V2Db_.prototype.getSpreadsheetTimeZone = function(){ return "Asia/Kolkata"; };
 V2Db_.prototype.getId = function(){ return "v2db:" + this.user; };
 
+// Opens SEVERAL tabs in one request (two for any that have extra pages). Everything a request will need is
+// best fetched up front: each separate Firestore request costs about half a second in real Apps Script.
+V2Db_.prototype.prefetch = function(names){
+  var self = this;
+  var need = names.filter(function(n){ return !self.sheets[n] && !(self.missing && self.missing[n]) && !(self.pre && self.pre[n]); });
+  if(!need.length) return;
+  var res = fsBatchGetPaths_(need.map(function(n){ return self.pagePath_(n, 0); }));
+  self.pre = self.pre || {};
+  var more = [];
+  need.forEach(function(n){
+    var d = res[self.pagePath_(n, 0)];
+    if(!d){ (self.missing = self.missing || {})[n] = true; return; }
+    self.pre[n] = { docs: [d] };
+    for(var p = 1; p < (Number(d.fields.pages) || 1); p++) more.push([n, p]);
+  });
+  if(more.length){
+    var res2 = fsBatchGetPaths_(more.map(function(x){ return self.pagePath_(x[0], x[1]); }));
+    more.forEach(function(x){ self.pre[x[0]].docs[x[1]] = res2[self.pagePath_(x[0], x[1])]; });
+  }
+};
+
 // Opens a tab (one read; two or more only for a very large tab). null if the person has no such tab.
 V2Db_.prototype.getSheetByName = function(name){
   if(this.sheets[name]) return this.sheets[name];
   if(this.missing && this.missing[name]) return null;
-  var first = fsGetPathMeta_(this.pagePath_(name, 0));
-  if(!first){ (this.missing = this.missing || {})[name] = true; return null; }
-  var pageCount = Number(first.fields.pages) || 1;
-  var pageJsons = [String(first.fields.json || "[]")];
-  for(var p = 1; p < pageCount; p++){
-    var doc = fsGetPathMeta_(this.pagePath_(name, p));
-    pageJsons.push(doc ? String(doc.fields.json || "[]") : "[]");
+  var first, pageJsons;
+  if(this.pre && this.pre[name]){                                  // already fetched in bulk by prefetch()
+    var docs = this.pre[name].docs;
+    first = docs[0];
+    pageJsons = docs.map(function(d){ return d ? String(d.fields.json || "[]") : "[]"; });
+  } else {
+    first = fsGetPathMeta_(this.pagePath_(name, 0));
+    if(!first){ (this.missing = this.missing || {})[name] = true; return null; }
+    var pageCount = Number(first.fields.pages) || 1;
+    pageJsons = [String(first.fields.json || "[]")];
+    for(var p = 1; p < pageCount; p++){
+      var doc = fsGetPathMeta_(this.pagePath_(name, p));
+      pageJsons.push(doc ? String(doc.fields.json || "[]") : "[]");
+    }
   }
   var rows = [];
   pageJsons.forEach(function(j){ v2dbDecodeRows_(j).forEach(function(r){ rows.push(r); }); });
@@ -372,11 +400,13 @@ function v2dbAnswerFailed_(result){
   }catch(e){ return false; }
 }
 
-function v2dbRun_(user, fn){
+// opts.prefetch: tab names to fetch in ONE request before fn runs (much faster than opening them one by one).
+function v2dbRun_(user, fn, opts){
   var db = new V2Db_(user);
   var previous = V2DB_REQ_;
   V2DB_REQ_ = db;
   try{
+    if(opts && opts.prefetch && opts.prefetch.length) db.prefetch(opts.prefetch);
     var result = fn(db);
     // If the action reported failure ({ok:false}, which is how the app turns errors into answers), keep NONE of its
     // changes: a half-finished save must never be written.

@@ -137,8 +137,8 @@ function fsGuard_(isWrite){
   }
 }
 
-function fsFetch_(method, url, payload){
-  fsGuard_(method !== "get");
+function fsFetch_(method, url, payload, isRead){
+  fsGuard_(method !== "get" && !isRead);
   var options = {
     method: method,
     headers: { Authorization: "Bearer " + fsAccessToken_() },
@@ -190,6 +190,23 @@ function fsGetPathMeta_(path){
   if(r.code !== 200) throw fsError_("read", r);
   var body = JSON.parse(r.text);
   return { fields: fsDecodeFields_(body.fields || {}), updateTime: body.updateTime || "" };
+}
+
+// Reads MANY documents in ONE request (documents:batchGet): the fast way to open several tabs at once.
+// Returns { path: { fields, updateTime } | null } for every path asked (null = no such document).
+function fsBatchGetPaths_(paths){
+  var out = {};
+  if(!paths.length) return out;
+  paths.forEach(function(p){ out[p] = null; });
+  var r = fsFetch_("post", fsDocumentsUrl_() + ":batchGet", { documents: paths.map(fsResourceName_) }, true);
+  FS_USAGE_.reads += paths.length;
+  if(r.code !== 200) throw fsError_("read", r);
+  JSON.parse(r.text).forEach(function(item){
+    if(!item.found) return;
+    var path = decodeURIComponent(String(item.found.name).split("/documents/")[1]);
+    if(Object.prototype.hasOwnProperty.call(out, path)) out[path] = { fields: fsDecodeFields_(item.found.fields || {}), updateTime: item.found.updateTime || "" };
+  });
+  return out;
 }
 
 // Lists every document directly inside one collection path (pages of 300).

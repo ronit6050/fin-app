@@ -68,7 +68,7 @@ function v2dbSmokeTest(){
       var a = JSON.stringify(sc[1]());
       var sheetMs = Date.now() - t;
       t = Date.now();
-      var b = JSON.stringify(v2dbRun_(V2DB_SMOKE_USER_, sc[1]));
+      var b = JSON.stringify(v2dbRun_(V2DB_SMOKE_USER_, sc[1], { prefetch: V2DB_SMOKE_TABS_ }));
       var copyMs = Date.now() - t;
       var same = a === b;
       if(!same) allSame = false;
@@ -86,7 +86,7 @@ function v2dbSmokeTest(){
 
   // 5. a small write on the copy (test folder only), timed
   t1 = Date.now();
-  v2dbRun_(V2DB_SMOKE_USER_, function(){ var s = dbSs_().getSheetByName("Cash"); if(s) s.appendRow(["", "2026-10-13", "", "Debit", 1, "smoke test", "Other"]); return "ok"; });
+  v2dbRun_(V2DB_SMOKE_USER_, function(){ var s = dbSs_().getSheetByName("Cash"); if(s) s.appendRow(["", "2026-10-13", "", "Debit", 1, "smoke test", "Other"]); return "ok"; }, { prefetch: ["Cash"] });
   note("one save on the copy (read + change + write): " + (Date.now() - t1) + "ms");
 
   note("TOTAL " + Math.round((Date.now() - started) / 1000) + "s | every cell exact: " + (allExact ? "YES" : "NO") + " | every screen identical: " + (allSame ? "YES" : "NO"));

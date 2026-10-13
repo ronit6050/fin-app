@@ -77,6 +77,7 @@ function makeEnv(tabs, virtual){
     w.store = {}; w.clock = 0;
     const clone = function(o){ return JSON.parse(JSON.stringify(o)); };
     sb.fsGetPathMeta_ = function(p){ const d = w.store[p]; return d ? { fields: clone(d.fields), updateTime: d.updateTime } : null; };
+    sb.fsBatchGetPaths_ = function(paths){ const out = {}; paths.forEach(function(p){ const d = w.store[p]; out[p] = d ? { fields: clone(d.fields), updateTime: d.updateTime } : null; }); return out; };
     sb.fsListPath_ = function(c){ return Object.keys(w.store).filter(function(p){ return p.indexOf(c + "/") === 0 && p.slice(c.length + 1).indexOf("/") === -1; }).map(function(p){ return { id: p.split("/").pop(), fields: clone(w.store[p].fields), updateTime: w.store[p].updateTime }; }); };
     sb.fsCommit_ = function(ops){
       ops.forEach(function(op){
@@ -223,6 +224,7 @@ if(!folder){
     C.store = {}; C.clock = 0;                       // ... plus a fake Firestore for the test folder
     const clone = function(o){ return JSON.parse(JSON.stringify(o)); };
     sb.fsGetPathMeta_ = function(p){ const d = C.store[p]; return d ? { fields: clone(d.fields), updateTime: d.updateTime } : null; };
+    sb.fsBatchGetPaths_ = function(paths){ const out = {}; paths.forEach(function(p){ const d = C.store[p]; out[p] = d ? { fields: clone(d.fields), updateTime: d.updateTime } : null; }); return out; };
     sb.fsListPath_ = function(c){ return Object.keys(C.store).filter(function(p){ return p.indexOf(c + "/") === 0 && p.slice(c.length + 1).indexOf("/") === -1; }).map(function(p){ return { id: p.split("/").pop(), fields: clone(C.store[p].fields), updateTime: C.store[p].updateTime }; }); };
     sb.fsCommit_ = function(ops){
       ops.forEach(function(op){ if(op.set){ const cur = C.store[op.set.path];

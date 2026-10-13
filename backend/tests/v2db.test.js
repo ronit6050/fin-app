@@ -20,6 +20,13 @@ function fresh(){
     const d = w.store[path];
     return d ? { fields: clone(d.fields), updateTime: d.updateTime } : null;
   };
+  w.batchCalls = 0;
+  sb.fsBatchGetPaths_ = function(paths){
+    w.batchCalls++; w.reads += paths.length;
+    const out = {};
+    paths.forEach(function(p){ const d = w.store[p]; out[p] = d ? { fields: clone(d.fields), updateTime: d.updateTime } : null; });
+    return out;
+  };
   sb.fsListPath_ = function(collectionPath){
     return Object.keys(w.store).filter(function(p){ return p.indexOf(collectionPath + "/") === 0 && p.slice(collectionPath.length + 1).indexOf("/") === -1; })
       .map(function(p){ return { id: p.split("/").pop(), fields: clone(w.store[p].fields), updateTime: w.store[p].updateTime }; });
@@ -310,6 +317,50 @@ console.log("\n--- 8. Review fixes: failed answers save nothing, real errors are
   const d5 = new sb4.V2Db_("owner@example.com");
   w4.reads = 0; d5.getSheetByName("Nope"); d5.getSheetByName("Nope"); d5.getSheetByName("Nope");
   assert(w4.reads === 1, "asking again for a tab that doesn't exist costs one read, not one per ask");
+}
+
+console.log("\n--- 9. Opening many tabs in ONE request (the speed fix) ---");
+{
+  const w = fresh(), sb = w.sb;
+  sb.v2dbRun_("owner@example.com", function(db){
+    ["A", "B", "C", "D", "E"].forEach(function(n, i){ const t = db.insertSheet(n); t.appendRow(["h" + n]); t.appendRow([i]); });
+    const big = db.insertSheet("Big"); for(let i = 0; i < 2500; i++) big.appendRow([i]);
+  });
+  // without prefetch: one request per tab (and per extra page)
+  w.reads = 0; w.batchCalls = 0;
+  let sum = 0;
+  sb.v2dbRun_("owner@example.com", function(db){ ["A", "B", "C", "D", "E"].forEach(function(n){ sum += db.getSheetByName(n).getRange(2, 1).getValue(); }); });
+  assert(sum === 10 && w.reads === 5 && w.batchCalls === 0, "opening 5 tabs one by one costs 5 separate reads");
+
+  // with prefetch: everything in one request
+  w.reads = 0; w.batchCalls = 0; sum = 0;
+  sb.v2dbRun_("owner@example.com", function(db){ ["A", "B", "C", "D", "E"].forEach(function(n){ sum += db.getSheetByName(n).getRange(2, 1).getValue(); }); }, { prefetch: ["A", "B", "C", "D", "E"] });
+  assert(sum === 10 && w.batchCalls === 1 && w.reads === 5, "with prefetch the same 5 tabs arrive in ONE request");
+
+  w.reads = 0; w.batchCalls = 0;
+  sb.v2dbRun_("owner@example.com", function(db){ db.getSheetByName("Big").getRange(1, 1).setValue("x"); }, { prefetch: ["A", "Big", "NoSuchTab"] });
+  assert(w.batchCalls === 2, "a multi-page tab needs just one extra batch for its other pages (2 batch reads in all, however many tabs)" + (w.batchCalls === 2 ? "" : " got " + w.batchCalls));
+  const missing = new sb.V2Db_("owner@example.com");
+  missing.prefetch(["A", "NoSuchTab"]);
+  assert(missing.getSheetByName("NoSuchTab") === null && missing.getSheetByName("A") !== null, "a tab that does not exist comes back null (and is remembered, no second look)");
+  w.reads = 0; w.batchCalls = 0;
+  missing.prefetch(["A", "NoSuchTab"]);
+  assert(w.batchCalls === 0, "asking to prefetch tabs already fetched costs nothing");
+  const lazy = new sb.V2Db_("owner@example.com");
+  lazy.prefetch(["A"]);
+  w.reads = 0;
+  lazy.getSheetByName("B");
+  assert(w.reads === 1, "a tab that was not in the prefetch list is still opened on demand");
+
+  // data identical either way, and writes through a prefetched tab work and conflict-check correctly
+  const viaLazy = new sb.V2Db_("owner@example.com").getSheetByName("A").getDataRange().getValues();
+  const pre = new sb.V2Db_("owner@example.com"); pre.prefetch(["A"]);
+  assert(same(pre.getSheetByName("A").getDataRange().getValues(), viaLazy), "a prefetched tab holds exactly the same data as one opened on its own");
+  const db2 = new sb.V2Db_("owner@example.com"); db2.prefetch(["A"]);
+  db2.getSheetByName("A").appendRow(["via prefetch"]);
+  sb.v2dbRun_("owner@example.com", function(d){ d.getSheetByName("A").appendRow(["someone else first"]); });
+  let err = null; try{ db2.flush(); }catch(e){ err = e; }
+  assert(err && err.v2dbConflict === true, "saving a prefetched tab still refuses to overwrite someone else's change");
 }
 
 process.exitCode = process.exitCode || 0;
