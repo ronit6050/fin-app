@@ -157,7 +157,7 @@ console.log("\n--- 3. A brand-new friend gets the full app on empty, private tab
   assert(!JSON.stringify(w.virtualTab(OWNER, "SmartMemory")).includes("Cafe Z"), "...and never in the owner's");
 
   assert(JSON.stringify(w.userFolderPaths(OWNER).map(function(p){ return w.store[p]; })) === ownerFolderBefore, "the owner's folder is byte-for-byte unchanged by everything she did");
-  assert(w.userFolderPaths(FRIEND).every(function(p){ return p.indexOf("users/" + FRIEND + "/") === 0; }) && Object.keys(w.store).every(function(p){ return p.indexOf("users/" + OWNER + "/") === 0 || p.indexOf("users/" + FRIEND + "/") === 0; }), "every document is under the owner's or her own folder");
+  assert(w.userFolderPaths(FRIEND).every(function(p){ return p.indexOf("users/" + FRIEND + "/") === 0; }) && Object.keys(w.store).every(function(p){ return p === "_system/props" || p.indexOf("users/" + OWNER + "/") === 0 || p.indexOf("users/" + FRIEND + "/") === 0; }), "every document is under the owner's or her own folder (the only exception: the server-only copy of the on/off switches)");
   assert(JSON.stringify(w.sheets.Cash.rows).indexOf("lunch") === -1 && w.sheets.Debts.rows.length === 1, "the real Sheet never saw any of it");
 }
 
