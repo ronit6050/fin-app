@@ -19,6 +19,8 @@ function FakeSheet(name, rows){
 FakeSheet.prototype._width = function(){
   return this.rows.reduce(function(m, r){ return Math.max(m, r.length); }, 0);
 };
+FakeSheet.prototype.getName = function(){ return this.name; };
+FakeSheet.prototype.clearContents = function(){ this.rows = []; };
 FakeSheet.prototype.hideSheet = function(){ this.hidden = true; };
 FakeSheet.prototype.getLastRow = function(){ return this.rows.length; };
 FakeSheet.prototype.getLastColumn = function(){ return this._width(); };
@@ -111,6 +113,7 @@ function makeWorld(files){
     getActiveSpreadsheet: function(){
       return {
         getSheetByName: function(n){ return sheets[n] || null; },
+        getSheets: function(){ return Object.keys(sheets).map(function(k){ return sheets[k]; }); },
         insertSheet: function(n){ sheets[n] = new FakeSheet(n, []); return sheets[n]; }
       };
     }

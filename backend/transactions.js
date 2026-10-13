@@ -10,6 +10,8 @@
 // publisher function being missing altogether: nothing about the publisher
 // may ever stop a transaction being processed.
 function processNewTransactions() {
+  // When the owner is switched on, this job runs on his private copy (v2owner.js); otherwise this does nothing.
+  var takeOver_ = (typeof v2OwnerTakeOver_ === "function") ? v2OwnerTakeOver_(processNewTransactions) : { ran: false }; if(takeOver_.ran) return takeOver_.value;
   try{
     processNewTransactionsCore_();
   }finally{

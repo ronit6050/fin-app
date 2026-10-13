@@ -81,3 +81,17 @@ All cells exact; all 5 screens identical. Times (Sheet vs virtual copy): Home da
 4.24 s; Investments 0.75 s vs 1.24 s; Debts 0.16 s vs 1.83 s; read whole Transactions tab 0.57 s vs 0.91 s; one save 0.80 s (was 3.4 s).
 Debts/Investments look slow only because the smoke test prefetches ALL 14 tabs even for a tiny screen (a fixed ~1.6 s batch): the routing step must
 prefetch only the tabs each action needs. Decision: go ahead with per-person routing.
+
+## Owner switch-over tools (added 2026-10-13, `backend/v2owner.js`) - built, tested, NOT yet used on live data
+
+Everything needed so the owner's own data can move from the Sheet to his private Firestore copy and back. Inert until he is switched on.
+
+1. **`v2dbImportOwner()`** (run once by hand in the editor): copies every Sheet tab (except Logs/AILogs/_V2Sync) into his private folder, re-reads and checks it cell by cell, copies the per-person settings (`SETTING_*`, `lastCheckedRow`, `PWA_PUSH_TOKEN`, obligation reminders) into his `_Props`, and records the Sheet's last Transactions row as the "inbox mark". Never copies secrets. Refuses to run once he is switched on. Report goes to AILogs (`V2DB_OWNER_IMPORT`). Does not switch him on.
+2. **Background jobs on the private copy.** `processNewTransactions`, `checkDebtDueDates`, `sendDailyCashCheckin`, `checkAppHealth`, `checkUpcomingObligations`, `autoSettlePendingNow` and `publishViewsNow` start with `v2OwnerTakeOver_(fn)`: if he is switched on they run inside `v2dbRun_` (under the same lock as app saves, one retry on a clash), otherwise nothing changes.
+3. **Inbox.** The SMS reader (separate project) still writes new rows to the Sheet. Before every job, rows beyond the inbox mark are copied once into his private Transactions; the mark is saved in the same all-or-nothing step as the rows. Only after that save succeeds are the Sheet rows stamped `YES` in the Processed column (never over `IGNORED`), so switching back never re-announces them.
+4. **Spam learning** always writes to the REAL Sheet's `LearnedSpamPatterns` (the SMS reader reads it there). The Reconcile bookmark repair now uses `dbProps_()`.
+5. **`v2dbBackupOwner()`**: writes his private tabs out into a normal Google Sheet ("Finance tracker - backup of private copy", id kept in Script Property `V2OWNER_BACKUP_SHEET_ID`). Does nothing while he is not switched on. Meant for a daily trigger.
+
+Known limits: the SMS reader's duplicate check (tier 3, placeholder `NOREF_` rows from Reconcile) only sees the Sheet, so a statement-reconciled row that now lives only in the private copy is not seen by it until phase 4 (SMS writes straight to Firestore). Edits made while switched on exist only in the private copy; going back to the Sheet does not bring them (use the backup export).
+
+Switch-over order: `v2dbImportOwner()` -> check the AILogs report says ALL TABS EXACT -> `v2dbEnableOwner()` -> watch AILogs for `V2DB_REQUEST_ERROR` -> `v2dbDisableOwner()` to go back at once. Tests: `backend/tests/v2owner.test.js` (30 checks).

@@ -2647,7 +2647,8 @@ function getTransactionsIgnoredSheet_(){
 
 // Auto-creates LearnedSpamPatterns the first time it's needed.
 function getLearnedSpamPatternsSheet_(){
-  const ss = dbSs_();
+  // Always the REAL Sheet, even for a person on the private copy: the SMS reader (a separate project) reads it from there.
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName("LearnedSpamPatterns");
   if(!sheet){
     sheet = ss.insertSheet("LearnedSpamPatterns");

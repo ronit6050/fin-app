@@ -204,6 +204,8 @@ function computeObligationStatuses_(financialEventsData, txnData, today){
 // most notice before a 3-days-away payment).
 // ---------------------------------------------------------------------
 function checkUpcomingObligations(){
+  // When the owner is switched on, this job runs on his private copy (v2owner.js); otherwise this does nothing.
+  var takeOver_ = (typeof v2OwnerTakeOver_ === "function") ? v2OwnerTakeOver_(checkUpcomingObligations) : { ran: false }; if(takeOver_.ran) return takeOver_.value;
   try{
     var ss = dbSs_();
     var financialEventsSheet = ss.getSheetByName("FinancialEvents");

@@ -479,7 +479,7 @@ function resetBookmarkAfterSort_(sheet){
     if(isUnprocessedTransactionRow_(data[i])){ firstUnprocessedRow = i + 2; break; }
   }
   if(!firstUnprocessedRow) return;
-  const props = PropertiesService.getScriptProperties();
+  const props = dbProps_();
   const current = Number(props.getProperty("lastCheckedRow") || 1);
   if(current >= firstUnprocessedRow){
     props.setProperty("lastCheckedRow", String(firstUnprocessedRow - 1));

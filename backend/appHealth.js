@@ -225,6 +225,8 @@ function healthMessage_(problems){
 // The scheduled function. Silent when healthy. Never throws.
 // ---------------------------------------------------------------------
 function checkAppHealth(){
+  // When the owner is switched on, this job runs on his private copy (v2owner.js); otherwise this does nothing.
+  var takeOver_ = (typeof v2OwnerTakeOver_ === "function") ? v2OwnerTakeOver_(checkAppHealth) : { ran: false }; if(takeOver_.ran) return takeOver_.value;
   // Once a day, quietly keep the Sheet's "FriendShare" column in step with the splits database (splits.js).
   try{ if(typeof splitsAutoRepairShares_ === "function") splitsAutoRepairShares_(); }catch(ignoreRepair){}
   // Once a day, check the Firestore copy of the Sheet still matches it (v2Sync.js). A mismatch is logged

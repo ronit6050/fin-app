@@ -159,6 +159,9 @@ if(!folder){
   };
   const compareTabs = function(label, names){
     names.forEach(function(n){
+      // LearnedSpamPatterns is deliberately written to the REAL Sheet (the SMS reader reads it from there), so after writes
+      // the virtual copy of that one tab is expected to stay as imported.
+      if(n === "LearnedSpamPatterns" && /writes/.test(label)) return;
       const ta = tabJson(A.tab(n)), tb = tabJson(B.tab(n));
       assert(ta === tb, label + ": tab " + n + " is identical afterwards" + (ta === tb ? "" : " (answer key " + ta.length + " chars vs virtual " + tb.length + ")"));
     });

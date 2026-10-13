@@ -352,6 +352,8 @@ function previewAutoSettle(){
 }
 
 function autoSettlePendingNow(){
+  // When the owner is switched on, this job runs on his private copy (v2owner.js); otherwise this does nothing.
+  var takeOver_ = (typeof v2OwnerTakeOver_ === "function") ? v2OwnerTakeOver_(autoSettlePendingNow) : { ran: false }; if(takeOver_.ran) return takeOver_.value;
   var out = [];
   var log = function(s){ out.push(s); Logger.log(s); };
 
