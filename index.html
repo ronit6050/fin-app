@@ -13215,7 +13215,10 @@
       // The split panel (shared with the Pending card). History has its own "Split now" button, so the helper is given a
       // throwaway object in place of a Save button.
       if (canSplitHere) {
-        const getSplit = attachSplitPanel(card, txn, { textContent: "" });
+        // The split uses the amount CURRENTLY in the card's amount box (you may have just corrected it).
+        const currentAmount = function () { const v = parseFloat(amountInput.value); return v > 0 ? v : txn.amount; };
+        const splitTxn = { get amount() { return currentAmount(); } };
+        const getSplit = attachSplitPanel(card, splitTxn, { textContent: "" });
         const splitNowBtn  = card.querySelector(".split-now");
         const splitDoneEl  = card.querySelector(".split-done");
         const splitSummary = card.querySelector(".split-summary");
@@ -13227,7 +13230,7 @@
           splitSummary.textContent = "Splitting...";
           callAppsScript({
             action: "createSplit", idToken: currentUser.idToken,
-            friendEmail: sp.friendEmail, totalAmount: txn.amount, friendShare: sp.share,
+            friendEmail: sp.friendEmail, totalAmount: currentAmount(), friendShare: sp.share,
             description: noteInput.value.trim() || txn.counterparty || "",
             txRow: txn.row, txFp: txn.fp, requestId: sp.requestId
           }).then(function (d) {
@@ -13238,7 +13241,7 @@
             card.querySelector(".split-link").style.display = "none";
             splitDoneEl.textContent = d.duplicate
               ? "This payment was already split."
-              : "Split with " + sp.friendName + ": they owe you " + splitMoney(sp.share) + ". Your spend is " + splitMoney(Math.round((txn.amount - sp.share) * 100) / 100) + ".";
+              : "Split with " + sp.friendName + ": they owe you " + splitMoney(sp.share) + ". Your spend is " + splitMoney(Math.round((currentAmount() - sp.share) * 100) / 100) + ".";
             if (d.sheetUpdated === false) splitDoneEl.textContent += " (Your spend total may take a moment to update.)";
           }).catch(function (err) {
             splitNowBtn.disabled = false;

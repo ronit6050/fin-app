@@ -30,6 +30,18 @@ console.log("\n--- 1. The template holds nothing personal ---");
   assert(sb.smsFormatTemplate_(sms.replace("1,250.00", "99").replace("RAHUL SHARMA", "ANITA RAO").replace("rahul.sharma@okhdfc", "anita@ybl"), "Anita Rao") === t, "the same bank wording gives the SAME template for a different person and amount");
 }
 
+console.log("\n--- 1b. Names are masked even when the parser did not extract them ---");
+{
+  const greet = sb.smsFormatTemplate_("Dear RONIT NADAR, Rs.50 debited from A/c XX1234 to PRIYA SHARMA via UPI. Ref 123456. Hi Ronit, thanks.", "Priya");
+  assert(greet.indexOf("ronit") === -1 && greet.indexOf("nadar") === -1, "the account holder's own name (Dear NAME / Hi Name) is gone");
+  assert(greet.indexOf("priya") === -1 && greet.indexOf("sharma") === -1, "a payee shorter than the printed name (Priya vs PRIYA SHARMA) is fully gone");
+  assert(greet.indexOf("debited from a/c") !== -1 && greet.indexOf("via upi") !== -1, "the bank's wording is still intact");
+  const by = sb.smsFormatTemplate_("Rs.20 credited to your A/c XX9999 by ANITA D on 13-10-26 UPI Ref 999. Mr Kumar sent it", "");
+  assert(by.indexOf("anita") === -1 && by.indexOf("kumar") === -1, "names after by / Mr are gone even with no extracted payee");
+  const bank = sb.smsFormatTemplate_("Rs.20 debited from HDFC Bank A/c XX1 to Axis Bank UPI Ref 5", "HDFC Bank A");
+  assert(bank.indexOf("hdfc bank") !== -1 && bank.indexOf("axis bank") !== -1, "ordinary bank names are NOT mistaken for people");
+}
+
 console.log("\n--- 2. A friend's message is recorded; counts add up; nothing links it to her ---");
 {
   sb.v2dbEnableUser(FRIEND);
@@ -72,7 +84,7 @@ console.log("\n--- 4. The owner's own messages are recorded by the timer; other 
   w.sheets.Transactions.appendRow(row(900002, "-", "Manual", ""));
   sb.processNewTransactions();
   const after = formats().filter(function(x){ return x.f.sender === "VD-HDFCBN-S"; });
-  assert(after.length === 1 && after[0].f.template.indexOf("cafe z") === -1 && after[0].f.template.indexOf("<payee>") !== -1, "his SMS row was recorded, payee removed");
+  assert(after.length === 1 && after[0].f.template.indexOf("cafe") === -1 && (after[0].f.template.indexOf("<payee>") !== -1 || after[0].f.template.indexOf("<name>") !== -1), "his SMS row was recorded, payee removed");
   assert(formats().length === before + 1, "the Manual row (no SMS text) was not recorded");
 }
 

@@ -118,6 +118,8 @@ function processNewTransactionsCore_() {
   const financialEventsSheet = ss.getSheetByName("FinancialEvents");
   const financialEventsData  = financialEventsSheet ? financialEventsSheet.getDataRange().getValues() : [];
 
+  const formatQueue = [];   // rows that finished processing this run (see the end of this function)
+
   // Shared holder for auto-settle's big sheet reads (autoSettle.js) -
   // filled in lazily, only if a new DEBIT row actually shows up this run.
   const autoSettleHolder = { ctx: null, tried: false };
@@ -147,9 +149,6 @@ function processNewTransactionsCore_() {
       // gets skipped and logged, instead of jamming the whole pipeline.
       try{
 
-        // Add this SMS's anonymised shape to the shared bank-format library (smsFormats.js). Best-effort, never throws.
-        if(typeof smsFormatRecordRow_ === "function") smsFormatRecordRow_(data[i]);
-
         // ── Auto-settle the KNOWNS first (added 2026-10-10) ──
         // A credit card bill payment, a wallet top-up, or a recurring
         // Rent/EMI/SIP the app has already seen and confirmed before is
@@ -161,6 +160,7 @@ function processNewTransactionsCore_() {
         if(tryAutoSettleNewRow_(sheet, rowIndex, data[i], autoSettleHolder)){
           sheet.getRange(rowIndex, 15).setValue("");
           sheet.getRange(rowIndex, 16).setValue("YES");
+          formatQueue.push(data[i].slice());
           continue;
         }
 
@@ -263,6 +263,7 @@ Reply to add a note for this transaction.`;
         // Save messageId (empty if Telegram is off) and mark as processed
         sheet.getRange(rowIndex, 15).setValue(messageId);
         sheet.getRange(rowIndex, 16).setValue("YES");
+        formatQueue.push(data[i].slice());      // finished fine: its SMS shape goes to the shared library after the loop
 
       }catch(err){
         logAI("PROCESS_TXN_ERROR", "Row " + rowIndex + ": " + err.toString());
@@ -286,6 +287,12 @@ Reply to add a note for this transaction.`;
 
   // ── Remember how far we've checked ──
   props.setProperty("lastCheckedRow", String(lastRow));
+
+  // Add the finished rows' anonymised SMS shapes to the shared bank-format library (smsFormats.js). Done AFTER the alerts and the
+  // bookmark so it can never delay a notification or change what is processed; each row counted once; at most 20 per run.
+  if(typeof smsFormatRecordRow_ === "function"){
+    formatQueue.slice(0, 20).forEach(function(r){ smsFormatRecordRow_(r); });
+  }
 
   // New transactions were processed: publish the Home screen again now so
   // the copy includes them (force = skip the 15-second throttle; this runs

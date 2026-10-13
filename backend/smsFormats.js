@@ -17,13 +17,46 @@ function smsFormatHash_(text){
   return bytes.map(function(b){ return ("0" + (b & 0xff).toString(16)).slice(-2); }).join("").slice(0, 40);
 }
 
+// Words that are part of a bank's own wording, never a person's name. A name-like word is only masked if it is NOT one of these.
+var SMS_FORMAT_KEEP_WORDS_ = ("bank,upi,hdfc,sbi,icici,axis,kotak,yes,federal,baroda,bob,pnb,idfc,indusind,paytm,payzapp,phonepe,gpay,imps,neft,rtgs,atm,pos,ecom," +
+  "ref,rrn,utr,umn,avl,bal,acct,account,card,credit,debit,debited,credited,otp,not,you,your,call,sms,inr,rs,dr,cr,info,txn,mandate,wallet,savings," +
+  "current,towards,payment,received,sent,paid,transfer,transferred,withdrawn,deposited,spent,balance,available,limit,customer,cardmember,dear,regards,team," +
+  "online,net,banking,netbanking,visa,mastercard,rupay,emi,fee,charges,statement,due,min,total,date,time,on,at,for,of,the,and,via,with,from,to,by").split(",");
+
+// Masks person-name-like words (Capitalised or ALL CAPS, 2+ letters) right after "dear / hi / hello / mr / mrs / ms / sir / madam / to / from / by".
+// Done on the ORIGINAL text (capital letters are the clue). Up to 4 name words in a row; stops at the first ordinary banking word.
+function smsFormatMaskNames_(text){
+  var keep = {};
+  SMS_FORMAT_KEEP_WORDS_.forEach(function(w){ keep[w] = true; });
+  return String(text).replace(/\b(dear|hi|hello|mr|mrs|ms|sir|madam|to|from|by|paid to|sent to|received from)\b\.?[ \t]+((?:[A-Za-z][A-Za-z.'\-]*[ \t]*){1,6})/gi, function(whole, trigger, rest){
+    var words = rest.split(/[ \t]+/).filter(function(x){ return x !== ""; });
+    var out = [], masked = 0, stop = false;
+    words.forEach(function(wd){
+      var bare = wd.replace(/[.']/g, "");
+      var nameLike = !stop && masked < 4 && bare.length >= 2 && /^[A-Z]/.test(bare) && !keep[bare.toLowerCase()];
+      if(nameLike){ out.push("<name>"); masked++; }
+      else{ stop = true; out.push(wd); }
+    });
+    return trigger + " " + out.join(" ") + (/[ \t]$/.test(rest) ? " " : "");
+  });
+}
+
 // The anonymised shape of a message.
 function smsFormatTemplate_(sms, counterparty){
-  var t = String(sms || "").toLowerCase();
+  var t = smsFormatMaskNames_(String(sms || "")).toLowerCase();
+  t = t.replace(/[a-z0-9._\-]+@[a-z0-9.\-]+/g, "<vpa>");             // UPI ids and emails first (they often contain the payee's name)
   var payee = String(counterparty || "").toLowerCase().replace(/^needs review:\s*/, "").trim();
-  if(payee.length >= 3){
+  // Only remove the payee if it really holds a name-like word (a wrongly extracted "hdfc bank a" must not eat the bank's wording).
+  var payeeHasName = payee.split(/[^a-z0-9]+/).some(function(wd){ return wd.length >= 3 && SMS_FORMAT_KEEP_WORDS_.indexOf(wd) === -1 && !/^\d+$/.test(wd); });
+  if(payee.length >= 3 && payeeHasName){
     var esc = payee.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     t = t.replace(new RegExp(esc, "g"), "<payee>");
+    // also each word of the payee on its own (a short extracted name vs the longer printed one), except ordinary banking words
+    payee.split(/[^a-z0-9]+/).forEach(function(wd){
+      if(wd.length >= 3 && SMS_FORMAT_KEEP_WORDS_.indexOf(wd) === -1 && !/^\d+$/.test(wd)){
+        t = t.replace(new RegExp("\\b" + wd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "g"), "<payee>");
+      }
+    });
   }
   t = t.replace(/[a-z0-9._\-]+@[a-z0-9.\-]+/g, "<vpa>");             // UPI ids and emails
   t = t.replace(/\d+(?:[.,]\d+)*/g, "0");                              // 1,250.00 and 99 are both just "a number"
@@ -49,7 +82,7 @@ function smsFormatRecord_(info){
       path: "smsFormats/" + smsFormatHash_(sender.toLowerCase() + "|" + template),
       fields: {
         sender: sender, template: template, bank: String(info.bank || "").slice(0, 40), mode: String(info.mode || "").slice(0, 40),
-        type: String(info.type || "").slice(0, 10), lastSeenMs: Date.now()
+        type: String(info.type || "").slice(0, 10), lastSeenMs: Math.floor(Date.now() / 86400000) * 86400000   // the DAY only, never the time
       },
       adds: adds
     } }]);
