@@ -53,7 +53,7 @@ exports.api = onRequest({
   memory: "512MiB",
   timeoutSeconds: 60,
   concurrency: 1,                 // the backend code waits for each network call, so one request at a time per instance
-  maxInstances: 3,
+  maxInstances: 10,               // the app sends several requests at once when it opens; 3 left some turned away (HTTP 429)
   minInstances: 0,                // 0 = free when idle; the first request after a quiet spell is a little slower
   cors: false                     // handled by hand above (only the app's own web address)
 }, function(req, res){

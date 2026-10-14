@@ -45,7 +45,8 @@ function makeApp(setting, behaviour, opts){
       log.fetches.push(which + ":" + body.action);
       const b = behaviour[which];
       if(b === "network-error") return Promise.reject(new TypeError("Failed to fetch"));
-      return Promise.resolve({ json: function(){ return b === "unreadable" ? Promise.reject(new SyntaxError("bad json")) : Promise.resolve(typeof b === "function" ? b(body) : b); } });
+      if(b === "busy") return Promise.resolve({ status: 429, json: function(){ return Promise.reject(new SyntaxError("Too Many Requests")); } });
+      return Promise.resolve({ status: 200, json: function(){ return b === "unreadable" ? Promise.reject(new SyntaxError("bad json")) : Promise.resolve(typeof b === "function" ? b(body) : b); } });
     }
   };
   vm.createContext(sandbox);
@@ -95,6 +96,14 @@ console.log("\n--- 4. NO ANSWER: the save is never repeated ---");
     assert(a.log.fetches.join() === "new:saveNote", kind + ": Apps Script was NOT asked to do it again");
     assert(a.log.finished.join() === "false" && a.log.started === 1, kind + ": bookkeeping finishes once as a failure");
   }
+}
+
+console.log("\n--- 4b. Google turned the request away (HTTP 429, never reached the server): Apps Script does it ---");
+{
+  const a = makeApp("all", { apps: { ok: true, saved: "apps" }, new: "busy" });
+  const r = await a.call({ action: "saveNote", idToken: "x" });
+  assert(r.saved === "apps" && a.log.fetches.join() === "new:saveNote,apps:saveNote", "a 429 means nothing ran, so Apps Script saves it exactly once");
+  assert(a.log.started === 1 && a.log.finished.join() === "true", "bookkeeping finishes once");
 }
 
 console.log("\n--- 5. A real 'no' is passed on as it is ---");

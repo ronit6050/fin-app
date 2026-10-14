@@ -3672,7 +3672,7 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-14-08";
+    const APP_VERSION = "2026-10-14-09";
     const APP_CHANGELOG = "Settings > Speed has a new choice, \"Reads and saves\" (beta): saving can also go through the new fast server. History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, the app remembers when you say it is regular spend, and a lent-to note now shows up in Debts straight away (and only once).";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
@@ -4931,7 +4931,12 @@
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify(payload),
         signal: controller ? controller.signal : undefined
-      }).then(function (response) { return response.json(); })
+      }).then(function (response) {
+        // HTTP 429 = Google turned the request away because every server slot was busy: it NEVER reached our code, so nothing was saved
+        // and it is safe to ask Apps Script instead.
+        if (response.status === 429) throw new Error("fallback");
+        return response.json();
+      })
         .then(function (data) {
           if (timer) clearTimeout(timer);
           if (data && data.fallback === true) {
@@ -4942,6 +4947,7 @@
           return data;
         }, function (err) {
           if (timer) clearTimeout(timer);
+          if (err && err.message === "fallback") { newServerStatus = "save fell back to Apps Script, server busy (" + payload.action + ")"; throw err; }
           newServerStatus = "no answer for the save (" + payload.action + "), not repeated";
           throw new Error("no answer from the server");
         });
