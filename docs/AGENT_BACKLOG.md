@@ -196,3 +196,10 @@ Open items found/decided during the Firestore + SMS work. Nothing here is starte
 - Ideas: `-P` promotional-sender rule; card-last-4 box on manual entry; Split button on the notification; SMS-suggest settle; owner approval of friend-created splits; delete a friend.
 - Watch: `V2_JOB_SLOW` lines in AILogs (the timer's lock hold was ~15 s with new rows); first real Bank of Baroda messages after the multi-bank fix; Vaidehi fixing her two rows.
 - Known quirks: Firestore usage counters are per server (Apps Script vs Cloud Function not summed); old SMS reader does not know banks taught from the Access screen (only the new path does).
+
+## Added 2026-10-14 (later): shared "app knowledge" idea - NEEDS DISCUSSION, not started
+Owner's idea: the app should build up knowledge from every bank/user (owner = HDFC, Vaidehi = Bank of Baroda) so a future user on any bank gets a good experience from day one, and each new user's corrections teach the app. Proposed (not agreed) three layers, all anonymous, nothing with names/emails/amounts, closed to phones:
+1. **Bank SMS patterns:** make the existing `smsFormats` library actionable. Trust levels (seen once -> confirmed by users -> trusted); confirmed when someone fixes/uses a card; promoted after several people confirm OR owner one-tap approval in More > Access.
+2. **Shared junk:** learned "not a transaction" shapes become junk for everyone once 2+ different people mark the same one. Safety rule stays: a learned pattern can only downgrade an UNCERTAIN message, never a confident transaction.
+3. **Shared merchant -> category guesses** (e.g. Swiggy = Food). Personal history always overrides. Need/Want/Saving stays personal, never shared.
+Suggested order if approved: 1, then 2, then 3. Each needs a mockup of the Access screen first, tests, independent review, and the owner's "ship it". Open questions for the discussion: how many people before a pattern is trusted, owner approval vs automatic, what to do with a wrong shared rule, privacy/legal wording before going public.
