@@ -3670,8 +3670,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-14-06";
-    const APP_CHANGELOG = "History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, and the app now remembers when you say it is regular spend.";
+    const APP_VERSION = "2026-10-14-07";
+    const APP_CHANGELOG = "History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, the app remembers when you say it is regular spend, and a lent-to note now shows up in Debts straight away (and only once).";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -7953,6 +7953,7 @@
               restoreAfterFailedSave("Couldn't save (" + data.error + ") — check your connection and tap Save again.");
               return;
             }
+            if (savedDebtPerson) refreshDebtsAfterNoteSave();
             if (data.typeRequested && !data.typeSaved) {
               // Note/category saved fine, but the Need/Want/Saving
               // pick specifically didn't (e.g. recognized as a loan/
@@ -9228,6 +9229,14 @@
     // Fetches fresh and re-renders quietly, without the skeleton loader —
     // used after an optimistic action already showed an approximate
     // result, to bring in the real row numbers/totals a moment later.
+    // A note saved in Pending / History can create (or settle) a debt on the server ("lent to Vaidehi").
+    // The Debts list is loaded once per session, so without this it kept showing the old list until the
+    // app was reopened (found 2026-10-14: the debt existed but the screen never showed it).
+    function refreshDebtsAfterNoteSave() {
+      if (!debtsData) return;   // never loaded yet: it will load fresh the first time Debts opens
+      refreshDebtsQuiet().catch(function () { /* the next visit to Debts catches up */ });
+    }
+
     function refreshDebtsQuiet() {
       return callAppsScript({ action: "getDebts", idToken: currentUser.idToken })
         .then(function (data) {
@@ -13671,6 +13680,7 @@
         const sentCategory = categorySelect.value;
         const sentAmount   = parseFloat(amountInput.value) || txn.amount;
         const sentType     = selectedType;
+        const sentDebtPerson = selectedDebtPerson;
 
         // Captured at click time (not re-read inside .then()) so the
         // response is checked against exactly what was actually sent,
@@ -13762,6 +13772,7 @@
             }
             // otherwise: fully saved, "Saved." is already showing
             if (data.ok && txn.onSaved) txn.onSaved();   // refresh the chip counts ("Needs attention" just shrank)
+            if (data.ok && sentDebtPerson) refreshDebtsAfterNoteSave();   // a "lent to ..." note may have just created a debt
           })
           .catch(function (err) {
             revert("Couldn't save (" + err.message + ") — check your connection and tap Save again.");

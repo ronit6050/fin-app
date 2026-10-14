@@ -2002,6 +2002,19 @@ function getQuickConfirmOptions(type, counterparty, amount, mode, reference, sma
 
 // Transactions column V ("EventDeclined", index 21) = "YES" once the person said "No, regular spend" to a
 // Rent/EMI/Investment suggestion on that payment. Header is added the first time it is needed.
+// Transactions column W ("DebtLinked", index 22) = "YES" once this payment has created or settled a debt.
+var DEBT_LINKED_COL_ = 23;
+var DEBT_LINKED_HEADER_ = "DebtLinked";
+function isDebtLinkedMarker_(sheet, row){
+  return String(sheet.getRange(row, DEBT_LINKED_COL_).getValue() || "").trim().toUpperCase() === "YES";
+}
+function setDebtLinkedMarker_(sheet, row){
+  if(!String(sheet.getRange(1, DEBT_LINKED_COL_).getValue() || "").trim()){
+    sheet.getRange(1, DEBT_LINKED_COL_).setValue(DEBT_LINKED_HEADER_);
+  }
+  sheet.getRange(row, DEBT_LINKED_COL_).setValue("YES");
+}
+
 var EVENT_DECLINED_COL_ = 22;
 var EVENT_DECLINED_HEADER_ = "EventDeclined";
 function isEventDeclinedRow_(rowValues){
@@ -2511,10 +2524,27 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     // specific person live as the note was typed — direction itself is
     // always recomputed here server-side from the row's own Type and
     // note, never trusted from the frontend.
+    //
+    // Once per payment (added 2026-10-14): Transactions column W ("DebtLinked") is set to
+    // "YES" the first time this payment really creates / settles a debt. Saving the same
+    // payment again (a second Save tap, or an edit to its note) must NOT add another debt or
+    // apply the repayment twice. Found when four Save taps on one Rs.94 payment made four
+    // identical debts.
+    let debtResult = null;
     if(debtPerson){
-      const savedTxnType = (sheet.getRange(row, 4).getValue() || "").toString().toLowerCase(); // column D
-      const debtAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F
-      handleDebtAutoLink(savedTxnType, note, debtPerson, debtAmount);
+      if(isDebtLinkedMarker_(sheet, row)){
+        debtResult = { logged: false, reason: "already linked" };
+      }else{
+        const savedTxnType = (sheet.getRange(row, 4).getValue() || "").toString().toLowerCase(); // column D
+        const debtAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F
+        debtResult = handleDebtAutoLink(savedTxnType, note, debtPerson, debtAmount);
+        if(debtResult && (debtResult.logged === true || debtResult.ok === true)){
+          // Its own try/catch: the debt already exists, so a hiccup writing the marker must not turn this
+          // save into a reported failure (a retry would then add a duplicate debt).
+          try{ setDebtLinkedMarker_(sheet, row); }
+          catch(markerErr){ logAI("DEBT_LINK_MARKER_ERROR", markerErr.toString()); }
+        }
+      }
     }
 
     // Investment-instrument note match (added 2026-08-11) — see
@@ -2634,7 +2664,9 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       recordNoteUsage(counterparty, noteAmount, note);
     }
 
-    return { ok:true, typeRequested: !!type, typeSaved: typeSaved, savedType: typeSaved ? type : "", investmentLogged: investmentLogged };
+    return { ok:true, typeRequested: !!type, typeSaved: typeSaved, savedType: typeSaved ? type : "", investmentLogged: investmentLogged,
+             debtLinked: !!(debtResult && (debtResult.logged === true || debtResult.ok === true)),
+             debtAlreadyLinked: !!(debtResult && debtResult.reason === "already linked") };
   }catch(err){
     return { ok:false, error: err.toString() };
   }

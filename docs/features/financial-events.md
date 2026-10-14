@@ -598,3 +598,9 @@ the only button is "No, regular spend". There is no way to say "no, this
 is my Laptop EMI" — a payment the app doesn't guess as EMI/Rent/SIP has
 no chip row at all. Planned as part of the tagging redesign: one quiet
 "Mark as EMI / Rent / SIP / Saving…" control reachable on any card.
+
+## Fixed 2026-10-14 - a "lent to ..." note made a new debt on EVERY save, and the Debts screen did not show it
+Found when the owner marked one Rs 94 payment "Lent vaidehi for idli": the logs had no error, but the Debts data held FOUR identical Rs 94 rows. Two faults:
+1. **Debts screen never refreshed.** The list loads once per session; a debt created by a note save in Pending/History stayed invisible until the app was reopened, so the owner tapped Save again. Fixed (`index.html`): a Pending/History save that sent a debt person now calls `refreshDebtsAfterNoteSave()` (a quiet `getDebts`).
+2. **No memory that a payment already created its debt.** `saveTransactionNote` ran `handleDebtAutoLink` on every save. Fixed (`backend/PWA.js`): Transactions **column W "DebtLinked"** is set to `YES` only when the link really happened (`logged` or `ok`), and later saves of that payment skip it (`debtAlreadyLinked: true` in the answer). This also stops a repayment note being applied twice. A failed link is not marked, so fixing the note and saving again still works.
+Tests: `backend/tests/debtLinkOnce.test.js` (mutation-checked). The three extra rows already created were removed on 2026-10-14 by a separate, backed-up, read-back-verified one-off cleanup of the owner's data (not part of the code), and the kept row's payment was marked DebtLinked.
