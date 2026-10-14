@@ -1,6 +1,6 @@
 # Project status: what we have, what is done, what is next (plain words)
 
-**Last updated: 2026-10-14.** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
+**Last updated: 2026-10-14 (evening).** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
 If this file and `CLAUDE.md` disagree, this file is newer.
 
 ---
@@ -18,7 +18,7 @@ Google Cloud; the app also stops using Firestore at 90% of the free daily limit)
 | Piece | What it is | Where |
 |---|---|---|
 | The app screens | One web page, hosted free on GitHub Pages | `index.html` -> https://ronit6050.github.io/fin-app/ (push to `main` = live) |
-| The "brain" (today) | Google Apps Script web app, code in `backend/*.js` | pinned deployment `AKfycbz3Hzmi_XNM_...` (currently **@350**) |
+| The "brain" (today) | Google Apps Script web app, code in `backend/*.js` | pinned deployment `AKfycbz3Hzmi_XNM_...` (currently **@352**) |
 | The SMS reader (old way) | Separate Apps Script project | `sms-parser-backend/Code.js`, deployment `AKfycbxCwph4...` (**@20**) |
 | The data | **Firestore** (Mumbai, `asia-south1`, project `fin-app-76c40`, Blaze plan) | one private folder per person: `users/<email>/...` |
 | The old data | Google Sheet | still gets rows from the old SMS path + a backup; no longer what the app reads |
@@ -32,7 +32,8 @@ Vaidehi has the **full app** (since 2026-10-13 10:41) on her own private data.
 ## 3. What has been DONE (newest first, one line each)
 
 **2026-10-14**
-- **Per-friend screen switches (built, NOT deployed).** More > Access: under each friend with the full app, a "Screens she can see" list of on/off switches (Today, Cash, History, Investments, CC Advisor, Debts/Splits, Savings, Planner, Reconcile). Off = the More button (and the matching Home card for Cash/CC/Debts) disappears on her phone next time she opens the app. Stored as `hiddenScreens` on the friend's record in the owner's folder; new owner-only action `setFriendScreen`; `getMyAccess` returns `hidden`. For clutter, not privacy. Default = nothing hidden. Next step (not built): ask a new user questions ("do you have a credit card?") that flip the same switches. Tests: `backend/tests/admin.test.js` section 4. APP_VERSION `2026-10-14-04`.
+- **History: search, filters and short rows (LIVE: backend `@352`, app `2026-10-14-06`, commit `78a7905`).** History was one tall edit card per payment with no search. Now: a search box (note, payee, category, event name, amount), filter chips (All, Needs attention, Rent, EMI, Investment, Credits, Split, each with a count), a month picker, month headings, and one short row per payment with a tag (green = confirmed, e.g. "Laptop EMI"; yellow = "Looks like EMI, confirm?"). Tap a row to open the same edit card as before. The Rent / EMI / Investment chips show confirmed payments grouped by name with payments, total and last paid. **Needs attention** lists payments that look like Rent/EMI/Investment but are not confirmed, including ones still in Pending with no note ("Not noted yet": tapping goes to Pending). **"No, regular spend" is now remembered**: Transactions **column V "EventDeclined"** (`YES`, header added automatically; cleared if an event is confirmed later), so a declined payment stops being suggested and counted. Backend: `getTransactionHistory(offset, limit, {filter, query, month})` (filter runs before paging; old calls unchanged), `saveNote` takes `eventDeclined`. Demo Mode mirrors it. Tests: `backend/tests/historyFilters.test.js` (65 checks); two independent reviews: safe. Not yet seen by the owner on real data. Known limits: History has no "Mark as..." link to reopen a declined suggestion; a declined row stays in the open list until it reloads; first open on the real 1,000+ row sheet was not timed (look here if History feels slow). Doc: `docs/features/history.md`.
+- **Per-friend screen switches (LIVE: backend `@351`, pushed).** More > Access: under each friend with the full app, a "Screens she can see" list of on/off switches (Today, Cash, History, Investments, CC Advisor, Debts/Splits, Savings, Planner, Reconcile). Off = the More button (and the matching Home card for Cash/CC/Debts) disappears on her phone next time she opens the app. Stored as `hiddenScreens` on the friend's record in the owner's folder; new owner-only action `setFriendScreen`; `getMyAccess` returns `hidden`. For clutter, not privacy. Default = nothing hidden. Next step (not built): ask a new user questions ("do you have a credit card?") that flip the same switches. Tests: `backend/tests/admin.test.js` section 4.
 - **SMS reading for many banks.** Fixed: the app took the account BALANCE as the amount (Vaidehi's Rs 1 credit became Rs 2,974.93 and showed as "income");
   "Dr."/"Cr." wording was not understood (her debit had no direction, so "total spent" stayed 0). Now: balances are never the amount, Dr./Cr. work, more
   reference wordings, one central bank list (added Bank of Baroda, PNB, Canara, Union, IDBI, IndusInd, IDFC, Bandhan, RBL, UCO, Bank of India, KVB),
@@ -57,7 +58,7 @@ Vaidehi has the **full app** (since 2026-10-13 10:41) on her own private data.
 - Everything in the original roadmap (Telegram replacement, dashboard, CC advisor, debts, savings, investments, push, planner, dark mode, demo mode, SMS spam learning,
   auto-settle, health checks...) is **done**. `CLAUDE.md` has the details.
 
-**Tests:** 55 test files, about 1,970 checks, all passing (`node backend/tests/<name>.test.js`, same for `sms-parser-backend/tests` and `functions/tests`).
+**Tests:** 56 test files, about 2,035 checks, all passing (`node backend/tests/<name>.test.js`, same for `sms-parser-backend/tests` and `functions/tests`).
 Two special ones need `local-data/` (real messages): `smsReplay.test.js`, and the real-message part of `smsPipelineCore.test.js`.
 
 ## 4. How we work (the owner's rules)
@@ -87,7 +88,7 @@ billing account (so any billed upload returns HTTP 403 "check billing account").
 4. Vaidehi: install the new Android app (`local-data/apk/FinApp-2026-10-14-direct-sms.apk`), fix her two wrong rows in History, add more friends later (each needs the full-app switch + their key).
 5. Money plan: the Rs 300 **hard stop** is only alerts today (budget alerts set by the owner); a real automatic cut-off function is not built.
 
-**Ideas (not built, not promised):** treat unclear messages from promotional senders ending in `-P` as junk; a "card last 4 digits" box for manual card entries; a Split button on the
+**Ideas (not built, not promised):** **shared app knowledge** across banks and users (anonymous bank-SMS patterns that earn trust as people confirm them, shared junk templates, shared merchant-to-category guesses; Need/Want stays personal) - NEEDS DISCUSSION first, see `docs/AGENT_BACKLOG.md`; a "Mark as..." link in History to reopen a declined Rent/EMI suggestion; treat unclear messages from promotional senders ending in `-P` as junk; a "card last 4 digits" box for manual card entries; a Split button on the
 notification itself (Android allows only 3 buttons); suggest "settle" from a matching SMS; owner approval for splits friends create; delete a friend; owner's one leftover Vi promo row in his
 `LearnedSpamPatterns` (decision pending: delete it?); Play Store / privacy-law homework before going public (READ_SMS policy, India's DPDP Act).
 

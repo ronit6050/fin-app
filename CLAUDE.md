@@ -5,6 +5,8 @@
 > long history (it is long: newer facts are in PROJECT_STATUS.md, which wins if they disagree). If the owner asks "what's the plan / what have we
 > done / what is left", answer from PROJECT_STATUS.md.
 >
+> **Latest (2026-10-14 evening):** History now has search, filter chips (Needs attention / Rent / EMI / Investment / Credits / Split), a month picker and short tap-to-open rows; "No, regular spend" is remembered in Transactions column V. Live (backend `@352`). Details in PROJECT_STATUS.md and docs/features/history.md.
+>
 > **One-paragraph summary (2026-10-14):** the owner and friend Vaidehi now keep their data in private Firestore folders (the Google Sheet is no
 > longer what the app reads); bank SMS land directly in Firestore (old SMS path is the automatic fallback); friends get a "full app" the owner
 > switches on from More > Access; splits, split notifications, manual entry, a shared anonymous bank-SMS pattern library, multi-bank SMS reading
