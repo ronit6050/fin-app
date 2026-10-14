@@ -1980,6 +1980,46 @@
       white-space: nowrap;
     }
 
+    /* ---------- History search, filter chips and short rows (2026-10-14) ----------
+       Colors come only from existing tokens, so both themes work. The active
+       chip is the page's inverse (text color as fill) like the hero card idea. */
+    .hist-bar { margin-bottom: 10px; }
+    .hist-bar input[type="search"] { width: 100%; margin-bottom: 8px; }
+    .hist-bar select { width: 100%; margin-top: 2px; }
+    .hist-chips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 4px; -webkit-overflow-scrolling: touch; }
+    .hist-chip {
+      flex: none; width: auto; min-height: 36px;
+      padding: 6px 12px; font-size: 0.82rem; font-weight: 600;
+      color: var(--text-secondary); background: var(--surface-inset);
+      border: 1px solid transparent; border-radius: var(--radius-pill);
+    }
+    .hist-chip.active { background: var(--text-primary); color: var(--surface-card); }
+    .hist-chip .hist-count { margin-left: 5px; font-weight: 700; }
+    .hist-chip.attn:not(.active) .hist-count { color: var(--color-warning); }
+    .hist-month-head { font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin: 14px 2px 6px; }
+    .hist-row {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+      width: 100%; text-align: left; padding: 12px 14px; margin: 0;
+      background: var(--surface-card); color: var(--text-primary);
+      border: 0.5px solid var(--border-hairline); border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+    }
+    .hist-row-wrap { margin-bottom: 8px; }
+    .hist-row-wrap.open .hist-row { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+    .hist-row-wrap .pending-item { margin-bottom: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+    .hist-row .hr-main { min-width: 0; flex: 1; }
+    .hist-row .hr-title { font-weight: 600; font-size: 0.92rem; overflow-wrap: anywhere; }
+    .hist-row .hr-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+    .hist-row .hr-pill { margin-top: 6px; }
+    .hist-row .hr-amount { font-weight: 700; font-size: 0.95rem; white-space: nowrap; }
+    .hist-row .hr-amount.credit { color: var(--color-success); }
+    .hist-summary-card {
+      background: var(--surface-inset); border-radius: var(--radius-md);
+      padding: 10px 14px; margin-bottom: 10px; font-size: 0.85rem; color: var(--text-secondary);
+    }
+    .hist-summary-card div { padding: 3px 0; }
+    .hist-summary-card strong { color: var(--text-primary); }
+
     /* ---------- Status pill — small colored label for a state
        (overdue, due soon, settled, healthy, warning, alert) ---------- */
     .status-pill {
@@ -3518,6 +3558,14 @@
       <div id="view-history" style="display:none">
         <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
         <h2 class="section-title">History</h2>
+        <!-- Search + filters (2026-10-14): find a payment without scrolling.
+             The chips and the month list are filled in from each answer's counts/months. -->
+        <div class="hist-bar">
+          <input type="search" id="historySearch" placeholder="Search note, payee or amount" autocomplete="off" aria-label="Search History">
+          <div id="historyChips" class="hist-chips" role="group" aria-label="Filter History"></div>
+          <select id="historyMonth" aria-label="Jump to a month"><option value="">All months</option></select>
+        </div>
+        <div id="historySummary"></div>
         <div id="historyStatus" class="pending-status"></div>
         <div id="historyList"></div>
         <button type="button" id="historyShowMore" style="display:none">Show more</button>
@@ -3622,8 +3670,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-14-04";
-    const APP_CHANGELOG = "More > Access: you can now hide screens (CC Advisor, Reconcile, ...) for each friend who has the full app.";
+    const APP_VERSION = "2026-10-14-06";
+    const APP_CHANGELOG = "History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, and the app now remembers when you say it is regular spend.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -4337,7 +4385,8 @@
     // has to be a single shared re-check rather than two independent
     // show/hide mechanisms.
     function setupFinancialEventField(card, preselected, onChange) {
-      const selected = { type: (preselected && preselected.type) || null, name: (preselected && preselected.name) || null };
+      // declined = the person tapped "No, regular spend" (saved so the app stops suggesting it again).
+      const selected = { type: (preselected && preselected.type) || null, name: (preselected && preselected.name) || null, declined: false };
       const feField = card.querySelector(".fe-field");
       if (!feField) return selected;
 
@@ -4366,6 +4415,7 @@
           btn.classList.add("active");
           selected.type = btnType;
           selected.name = NAMEABLE_FE_TYPES.includes(btnType) ? btnName : null;
+          selected.declined = !btnType;   // the "No, regular spend" button has no event type
           if (onChange) onChange();
         });
       });
@@ -4389,6 +4439,7 @@
           emiConfirmBtn.classList.add("active");
           selected.type = feType;
           selected.name = typed;
+          selected.declined = false;
           if (onChange) onChange();
         });
       }
@@ -5032,6 +5083,8 @@
       // the real app (see docs/features/financial-events.md).
       addTxn({ date: demoDayOfThisMonth(0.15, 9, 0), type: "debit", amount: 15000, counterparty: "Landlord", note: "Monthly rent", category: "Bills", financialEvent: "Rent" });
       addTxn({ date: demoDayOfThisMonth(0.20, 11, 30), type: "debit", amount: 4000, counterparty: "Bajaj Finserv", note: "laptop emi", category: "Financial", financialEvent: "EMI", financialEventName: "Laptop EMI" });
+      addTxn({ date: demoDayOfThisMonth(0.22, 18, 0), type: "debit", amount: 4000, counterparty: "Bajaj Finserv", note: "emi for the new phone", category: "Financial" });
+      addTxn({ date: demoDayOfThisMonth(0.27, 9, 30), type: "debit", amount: 15000, counterparty: "Home Rent Payment", note: "", suggestedCategory: "Bills" });   // no note yet (in Pending); also shows under History > Needs attention
       addTxn({ date: demoDayOfThisMonth(0.25, 10, 0), type: "debit", amount: 3000, counterparty: "HDFC Mutual Fund", note: "SIP", category: "Financial", financialEvent: "Investment", financialEventName: "HDFC Nifty 50 Index Fund" });
       addTxn({ date: demoDayOfThisMonth(0.28, 10, 5), type: "debit", amount: 4000, counterparty: "HDFC Mutual Fund", note: "SIP", category: "Financial", financialEvent: "Investment", financialEventName: "HDFC Mid Cap Fund" });
       addTxn({ date: demoDayOfThisMonth(0.30, 10, 10), type: "debit", amount: 2000, counterparty: "Bandhan Mutual Fund", note: "SIP", category: "Financial", financialEvent: "Investment", financialEventName: "Bandhan Small Cap (Money2Mgt SIP)" });
@@ -5463,23 +5516,82 @@
         });
     }
 
-    function demoComputeHistory(offset, limit) {
+    function demoComputeHistory(offset, limit, opts) {
       offset = Number(offset) || 0;
       limit = Number(limit) || 20;
+      opts = opts || {};
+      const filter = opts.filter || "all";
+      const query = (opts.query || "").toString().trim().toLowerCase();
+      const monthWanted = /^\d{4}-\d{2}$/.test(opts.month || "") ? opts.month : "";
       const noted = demoState.transactions
         .filter(function (t) { return !!t.note; })
         .slice()
         .sort(function (a, b) { return b.date - a.date; })
         .map(function (t) {
+          // Same idea as the real backend: an unconfirmed payment whose note says rent / emi is a "needs attention" suggestion.
+          const text = ((t.counterparty || "") + " " + (t.note || "")).toLowerCase();
+          const suggested = (!t.financialEvent && t.type === "debit" && !t.eventDeclined) ? (/\brent\b/.test(text) ? "Rent" : (/\bemi\b/.test(text) ? "EMI" : null)) : null;
           return {
             row: t.row, date: demoFmtDateLong(t.date), time: demoFmtTime(t.date), bank: t.bank, type: t.type, mode: t.mode,
             amount: t.amount, reference: t.reference || "", counterparty: t.counterparty, note: t.note, category: t.category || "Other",
             suggestedType: t.needWantSaving || null, financialEvent: t.financialEvent || null, financialEventName: t.financialEventName || null,
-            isNonSpendTransfer: false, suggestedFinancialEvent: null, suggestedFinancialEventName: null, financialEventConfident: false,
-            suggestedInvestmentInstrument: null, investmentInstrumentConfident: false, investmentInstrumentLooksNew: false
+            isNonSpendTransfer: false, suggestedFinancialEvent: suggested, suggestedFinancialEventName: null, financialEventConfident: false,
+            suggestedInvestmentInstrument: null, investmentInstrumentConfident: false, investmentInstrumentLooksNew: false,
+            eventDeclined: !!t.eventDeclined,
+            _month: t.date.getFullYear() + "-" + demoPad2(t.date.getMonth() + 1), _attn: !!suggested
           };
         });
-      return { total: noted.length, transactions: noted.slice(offset, offset + limit) };
+      // Payments with no note yet that look like Rent / EMI: only under Needs attention, flagged unnoted.
+      const unnoted = demoState.transactions
+        .filter(function (t) { return !t.note && t.type === "debit" && /\b(rent|emi)\b/i.test(t.counterparty || ""); })
+        .slice().sort(function (a, b) { return b.date - a.date; })
+        .map(function (t) {
+          return {
+            row: t.row, date: demoFmtDateLong(t.date), time: demoFmtTime(t.date), bank: t.bank, type: t.type, mode: t.mode,
+            amount: t.amount, reference: "", counterparty: t.counterparty, note: "", category: "", suggestedType: null,
+            financialEvent: null, financialEventName: null, isNonSpendTransfer: false, unnoted: true, eventDeclined: false,
+            suggestedFinancialEvent: /\brent\b/i.test(t.counterparty) ? "Rent" : "EMI", suggestedFinancialEventName: null, financialEventConfident: false,
+            suggestedInvestmentInstrument: null, investmentInstrumentConfident: false, investmentInstrumentLooksNew: false,
+            _month: t.date.getFullYear() + "-" + demoPad2(t.date.getMonth() + 1), _attn: true
+          };
+        });
+      const counts = { all: noted.length, attn: unnoted.length, Rent: 0, EMI: 0, Investment: 0, credit: 0, split: 0 };
+      const monthsSeen = {};
+      noted.forEach(function (t) {
+        if (t._attn) counts.attn++;
+        if (t.financialEvent === "Rent" || t.financialEvent === "EMI" || t.financialEvent === "Investment") counts[t.financialEvent]++;
+        if (t.type === "credit") counts.credit++;
+        monthsSeen[t._month] = (monthsSeen[t._month] || 0) + 1;
+      });
+      const months = Object.keys(monthsSeen).sort().reverse().map(function (m) { return { month: m, count: monthsSeen[m] }; });
+      const source = filter === "attn" ? noted.concat(unnoted).sort(function (a, b) { return b.row - a.row; }) : noted;
+      const matched = source.filter(function (t) {
+        if (filter === "attn" && !t._attn) return false;
+        if ((filter === "Rent" || filter === "EMI" || filter === "Investment") && t.financialEvent !== filter) return false;
+        if (filter === "credit" && t.type !== "credit") return false;
+        if (filter === "split") return false;
+        if (monthWanted && t._month !== monthWanted) return false;
+        if (query) {
+          const hay = [t.note, t.counterparty, t.category, t.financialEventName, t.financialEvent, t.mode].join(" ").toLowerCase();
+          const q = query.replace(/[₹,\s]/g, "");
+          if (hay.indexOf(query) === -1 && !(q && /^[0-9.]+$/.test(q) && String(t.amount).indexOf(q) === 0)) return false;
+        }
+        return true;
+      });
+      let summaries = [];
+      if (filter === "Rent" || filter === "EMI" || filter === "Investment") {
+        const byName = {};
+        matched.forEach(function (t) {
+          const name = t.financialEventName || t.financialEvent;
+          const g = byName[name] || (byName[name] = { name: name, count: 0, total: 0, lastDate: t.date });
+          g.count++; g.total += t.amount;
+        });
+        summaries = Object.keys(byName).sort().map(function (k) { return byName[k]; });
+      }
+      const page = matched.slice(offset, offset + limit).map(function (t) {
+        const c = Object.assign({}, t); delete c._month; delete c._attn; return c;
+      });
+      return { total: matched.length, transactions: page, counts: counts, months: months, summaries: summaries };
     }
 
     function demoKnownDebtPeople() {
@@ -5931,11 +6043,14 @@
     // shift after a delete too), so this needed no special handling.
     // -----------------------------------------------------------
 
-    function demoSaveNote(row, note, category, counterparty, type, amount) {
+    function demoSaveNote(row, note, category, counterparty, type, amount, financialEvent, financialEventName, eventDeclined) {
       const t = demoState.transactions[row - 2];
       if (!t) return { ok: false, error: "Invalid row." };
       t.note = note || "";
       t.category = category || "";
+      // History can confirm (or clear) a Rent / EMI / Investment, so Demo Mode remembers it too.
+      if (financialEvent !== undefined) { t.financialEvent = financialEvent || ""; t.financialEventName = financialEvent ? (financialEventName || "") : ""; }
+      if (eventDeclined === true && !financialEvent) t.eventDeclined = true; else if (financialEvent) t.eventDeclined = false;
       if (amount !== undefined && amount !== null && amount !== "") t.amount = Number(amount);
       let typeSaved = false;
       if (type && !t.financialEvent) { t.needWantSaving = type; typeSaved = true; }
@@ -6159,7 +6274,7 @@
         switch (data.action) {
           case "ping": return { ok: true, message: "Hello Demo, you're verified!" };
           case "getPending": return { ok: true, transactions: demoComputePending(), knownDebtPeople: demoKnownDebtPeople() };
-          case "saveNote": return demoSaveNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount);
+          case "saveNote": return demoSaveNote(data.row, data.note, data.category, data.counterparty, data.type, data.amount, data.financialEvent, data.financialEventName, data.eventDeclined);
           case "getTodaySummary": return { ok: true, summary: demoComputeTodaySummary() };
           case "getMonthlyAnalysis": {
             const now = new Date();
@@ -6198,7 +6313,7 @@
           case "insertReconciledTransactions": return { ok: false, error: "Not available in Demo Mode." };
           case "getSettings": return { ok: true, settings: demoState.settings };
           case "updateSettings": return demoUpdateSettings(data.settings);
-          case "getTransactionHistory": return Object.assign({ ok: true }, demoComputeHistory(data.offset, data.limit), { knownDebtPeople: demoKnownDebtPeople() });
+          case "getTransactionHistory": return Object.assign({ ok: true }, demoComputeHistory(data.offset, data.limit, { filter: data.filter, query: data.query, month: data.month }), { knownDebtPeople: demoKnownDebtPeople() });
           case "getPlannerData": return { ok: true, planner: demoComputePlannerData(data.month) };
           case "saveBudgets": return demoSaveBudgets(data.month, data.budgets, data.income, data.fixedObligations);
           case "moveDebtToFriend": return demoMoveDebt(data);
@@ -7789,6 +7904,7 @@
             type:         savedType,
             financialEvent:       savedFinancialEvent,
             financialEventName:   savedFinancialEventName,
+            eventDeclined:        financialEvent.declined === true,
             debtPerson:           savedDebtPerson,
             investmentInstrument: savedInvestmentInstrument,
             direction:            savedDirection || undefined,
@@ -13567,6 +13683,13 @@
         txn.note = sentNote;
         txn.category = sentCategory;
         txn.amount = sentAmount;
+        // The short row above this card shows the event (Rent / Laptop EMI...) as a tag, so keep it in step with what was just sent.
+        const beforeEvent = { type: txn.financialEvent, name: txn.financialEventName, declined: txn.eventDeclined };
+        txn.financialEvent = financialEvent.type || null;
+        txn.financialEventName = financialEvent.name || null;
+        if (financialEvent.declined) txn.eventDeclined = true;
+        else if (financialEvent.type) txn.eventDeclined = false;
+        if (txn.onChange) txn.onChange();
         resultEl.style.color = "";
         resultEl.textContent = "Saved.";
 
@@ -13574,6 +13697,10 @@
           txn.note = before.note;
           txn.category = before.category;
           txn.amount = before.amount;
+          txn.financialEvent = beforeEvent.type;
+          txn.financialEventName = beforeEvent.name;
+          txn.eventDeclined = beforeEvent.declined;
+          if (txn.onChange) txn.onChange();
           noteInput.value = before.note;
           categorySelect.value = before.category;
           amountInput.value = before.amount;
@@ -13593,6 +13720,7 @@
           amount:       sentAmount,
           financialEvent:       financialEvent.type,
           financialEventName:   financialEvent.name,
+          eventDeclined:        financialEvent.declined === true,
           debtPerson:           selectedDebtPerson,
           investmentInstrument: sentInvestmentInstrument,
           direction:    (card.querySelector(".help-direction") || {}).value || undefined
@@ -13633,6 +13761,7 @@
               resultEl.textContent = "Saved, but this wasn't logged to Investments (looks like a duplicate of something already there) — check the Investments tab.";
             }
             // otherwise: fully saved, "Saved." is already showing
+            if (data.ok && txn.onSaved) txn.onSaved();   // refresh the chip counts ("Needs attention" just shrank)
           })
           .catch(function (err) {
             revert("Couldn't save (" + err.message + ") — check your connection and tap Save again.");
@@ -13645,11 +13774,166 @@
     // Set when a save was refused as out of date; shown once after the reload.
     let historyStaleNotice = "";
 
+    // ---- History: search, filter chips, month jump and short rows (2026-10-14) ----
+    // The backend does the filtering/searching BEFORE it cuts a page, so "Show more", the
+    // total and the chip counts are always right. A row is one short line; tapping it opens
+    // the same full edit card as before (built only when first opened).
+    const HISTORY_CHIPS = [
+      { key: "all",        label: "All" },
+      { key: "attn",       label: "Needs attention" },
+      { key: "Rent",       label: "Rent" },
+      { key: "EMI",        label: "EMI" },
+      { key: "Investment", label: "Investment" },
+      { key: "credit",     label: "Credits" },
+      { key: "split",      label: "Split" }
+    ];
+    let historyFilter = "all";
+    let historyQuery = "";
+    let historyMonth = "";
+    let historyRequestId = 0;          // a slow answer for a view you already left is ignored
+    let historyLastHeading = "";
+    const historySearchEl  = document.getElementById("historySearch");
+    const historyChipsEl   = document.getElementById("historyChips");
+    const historyMonthEl   = document.getElementById("historyMonth");
+    const historySummaryEl = document.getElementById("historySummary");
+
+    function historyMoney(n) { return "₹" + (Math.round(Number(n) * 100) / 100).toLocaleString("en-IN"); }
+
+    function renderHistoryChips(counts) {
+      historyChipsEl.innerHTML = "";
+      HISTORY_CHIPS.forEach(function (c) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "hist-chip" + (c.key === "attn" ? " attn" : "") + (c.key === historyFilter ? " active" : "");
+        b.appendChild(document.createTextNode(c.label));
+        if (counts && c.key !== "all" && counts[c.key] > 0) {
+          const n = document.createElement("span");
+          n.className = "hist-count";
+          n.textContent = counts[c.key];
+          b.appendChild(n);
+        }
+        b.addEventListener("click", function () {
+          if (historyFilter === c.key) return;
+          historyFilter = c.key;
+          loadHistory();
+        });
+        historyChipsEl.appendChild(b);
+      });
+    }
+
+    function historyMonthLabel(key) {   // "2026-10" -> "October 2026"
+      const parts = key.split("-");
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, 1).toLocaleString("en-IN", { month: "long", year: "numeric" });
+    }
+
+    function renderHistoryMonths(months) {
+      historyMonthEl.innerHTML = "";
+      const all = document.createElement("option");
+      all.value = ""; all.textContent = "All months";
+      historyMonthEl.appendChild(all);
+      (months || []).forEach(function (m) {
+        const o = document.createElement("option");
+        o.value = m.month;
+        o.textContent = historyMonthLabel(m.month) + " (" + m.count + ")";
+        historyMonthEl.appendChild(o);
+      });
+      historyMonthEl.value = historyMonth;
+      if (historyMonthEl.value !== historyMonth) historyMonth = "";   // that month no longer has rows
+    }
+
+    function renderHistorySummary(data) {
+      historySummaryEl.innerHTML = "";
+      if (data.summaries && data.summaries.length) {
+        const card = document.createElement("div");
+        card.className = "hist-summary-card";
+        data.summaries.forEach(function (s) {
+          const line = document.createElement("div");
+          line.innerHTML = "<strong>" + escapeHtml(s.name) + "</strong> · " + s.count + (s.count === 1 ? " payment" : " payments") +
+            " · " + historyMoney(s.total) + " in total · last paid " + escapeHtml(s.lastDate);
+          card.appendChild(line);
+        });
+        historySummaryEl.appendChild(card);
+      } else if (historyFilter === "attn" && data.total > 0) {
+        const card = document.createElement("div");
+        card.className = "hist-summary-card";
+        card.textContent = data.total + (data.total === 1 ? " payment looks" : " payments look") +
+          " like Rent, an EMI or an investment but " + (data.total === 1 ? "isn't" : "aren't") +
+          " confirmed yet. Open one and confirm it, or choose \"No, regular spend\" (the app then stops asking). Ones marked \"Not noted yet\" are finished in Pending.";
+        historySummaryEl.appendChild(card);
+      }
+    }
+
+    // One short line per transaction. Opening it shows the full edit card (same as before).
+    function buildHistoryRow(txn) {
+      const wrap = document.createElement("div");
+      wrap.className = "hist-row-wrap";
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "hist-row";
+      row.setAttribute("aria-expanded", "false");
+      const slot = document.createElement("div");
+      slot.style.display = "none";
+      wrap.appendChild(row);
+      wrap.appendChild(slot);
+
+      function paint() {
+        const title = txn.counterparty && txn.note ? txn.counterparty + " · " + txn.note : (txn.note || txn.counterparty || "Transaction");
+        const nws = txn.suggestedType ? " · " + txn.suggestedType : "";
+        let pill = "";
+        if (txn.financialEvent) {
+          pill = '<div class="hr-pill"><span class="status-pill success">' + escapeHtml(txn.financialEventName || txn.financialEvent) + "</span></div>";
+        } else if (txn.suggestedFinancialEvent && txn.type === "debit" && !txn.isNonSpendTransfer && !txn.eventDeclined) {
+          pill = '<div class="hr-pill"><span class="status-pill warning">' + (txn.unnoted ? "Not noted yet · looks like " : "Looks like ") + escapeHtml(txn.suggestedFinancialEvent) +
+            (txn.suggestedFinancialEventName ? ": " + escapeHtml(txn.suggestedFinancialEventName) : "") + (txn.unnoted ? "" : " — confirm?") + "</span></div>";
+        }
+        const share = txn.friendShare > 0 ? " · split, your share " + historyMoney(txn.amount - txn.friendShare) : "";
+        const isCredit = txn.type === "credit";
+        row.innerHTML =
+          '<div class="hr-main"><div class="hr-title">' + escapeHtml(title) + "</div>" +
+          '<div class="hr-sub">' + escapeHtml(txn.date) + " · " + (txn.unnoted ? "finish it in Pending" : escapeHtml(txn.category || "Other") + escapeHtml(nws) + escapeHtml(share)) + "</div>" + pill + "</div>" +
+          '<div class="hr-amount' + (isCredit ? " credit" : "") + '">' + (isCredit ? "+" : "") + historyMoney(txn.amount) + "</div>";
+      }
+      paint();
+      txn.onChange = paint;
+      txn.onSaved = refreshHistoryCounts;
+
+      let card = null;
+      row.addEventListener("click", function () {
+        // A payment with no note yet is finished in Pending (note, category and the Rent / EMI / SIP choice all live there).
+        if (txn.unnoted) { switchTab("pending"); return; }
+        const opening = slot.style.display === "none";
+        if (opening && !card) {
+          card = buildHistoryItem(txn);
+          slot.appendChild(card);
+        }
+        slot.style.display = opening ? "" : "none";
+        wrap.classList.toggle("open", opening);
+        row.setAttribute("aria-expanded", opening ? "true" : "false");
+      });
+      return wrap;
+    }
+
+    // After a save the chip numbers may have changed (a confirmed Rent leaves "Needs attention"):
+    // a tiny request just for the counts. The list on screen is left alone so open cards stay open.
+    function refreshHistoryCounts() {
+      callAppsScript({ action: "getTransactionHistory", idToken: currentUser.idToken, offset: 0, limit: 1 })
+        .then(function (data) { if (data && data.ok && data.counts) renderHistoryChips(data.counts); })
+        .catch(function () { /* the numbers catch up next time the list loads */ });
+    }
+
     function loadHistory() {
       historyOffset = 0;
+      historyRequestId++;
+      historyLastHeading = "";
+      historySummaryEl.innerHTML = "";
       showSkeletonStatus(historyListEl);
       historyStatusEl.textContent = "";
       historyShowMoreEl.style.display = "none";
+      // Chips show the new selection at once (their counts arrive with the answer).
+      Array.prototype.forEach.call(historyChipsEl.children, function (b, i) {
+        b.classList.toggle("active", HISTORY_CHIPS[i].key === historyFilter);
+      });
+      if (!historyChipsEl.children.length) renderHistoryChips(null);
       loadMoreHistory();
     }
 
@@ -13658,14 +13942,19 @@
       // load, N on a "show more" continuation) — used below to tell
       // which case an error/success belongs to.
       const isFirstPage = historyOffset === 0;
+      const requestId = historyRequestId;
 
       callAppsScript({
         action:  "getTransactionHistory",
         idToken: currentUser.idToken,
         offset:  historyOffset,
-        limit:   HISTORY_PAGE_SIZE
+        limit:   HISTORY_PAGE_SIZE,
+        filter:  historyFilter,
+        query:   historyQuery,
+        month:   historyMonth
       })
         .then(function (data) {
+          if (requestId !== historyRequestId) return;   // you already changed the search/filter
           if (!data.ok) {
             if (isAuthError(data.error)) { handleSessionExpired(); return; }
             // A fresh-load failure replaces the skeleton with a full
@@ -13679,18 +13968,37 @@
             return;
           }
 
-          if (isFirstPage) historyListEl.innerHTML = ""; // clear the skeleton
+          if (isFirstPage) {
+            historyListEl.innerHTML = ""; // clear the skeleton
+            if (data.counts) renderHistoryChips(data.counts);
+            if (data.months) renderHistoryMonths(data.months);
+            renderHistorySummary(data);
+          }
 
           if (data.knownDebtPeople) knownDebtPeople = data.knownDebtPeople;
           if (data.noteWordModel) setNoteWordModel(data.noteWordModel);
           data.transactions.forEach(function (txn) {
-            historyListEl.appendChild(buildHistoryItem(txn));
+            const heading = (txn.date || "").split(" ").slice(1).join(" ");   // "12 Oct 2026" -> "Oct 2026"
+            if (heading && heading !== historyLastHeading) {
+              historyLastHeading = heading;
+              const h = document.createElement("div");
+              h.className = "hist-month-head";
+              h.textContent = heading;
+              historyListEl.appendChild(h);
+            }
+            historyListEl.appendChild(buildHistoryRow(txn));
           });
           historyOffset += data.transactions.length;
 
-          historyStatusEl.textContent = (historyOffset === 0 && data.total === 0)
-            ? "No transactions noted yet."
-            : "Showing " + historyOffset + " of " + data.total;
+          if (historyOffset === 0 && data.total === 0) {
+            historyStatusEl.textContent = historyFilter === "attn" && !historyQuery && !historyMonth
+              ? "Nothing needs your attention."
+              : (historyQuery || historyMonth ? "No transactions match." :
+                 (historyFilter === "split" ? "No split payments yet." :
+                  (historyFilter === "all" ? "No transactions noted yet." : "No confirmed payments here yet.")));
+          } else {
+            historyStatusEl.textContent = "Showing " + historyOffset + " of " + data.total;
+          }
           if (historyStaleNotice) {
             historyStatusEl.textContent = historyStaleNotice + " — " + historyStatusEl.textContent;
             historyStaleNotice = "";
@@ -13699,6 +14007,7 @@
           historyShowMoreEl.style.display = (historyOffset < data.total) ? "block" : "none";
         })
         .catch(function (err) {
+          if (requestId !== historyRequestId) return;
           if (isFirstPage) {
             showLoadError(historyListEl, "Couldn't load: " + err.message, loadHistory);
           } else {
@@ -13708,6 +14017,22 @@
     }
 
     historyShowMoreEl.addEventListener("click", loadMoreHistory);
+
+    // Search as you type (waits a moment so it doesn't ask the server on every key).
+    let historySearchTimer = null;
+    historySearchEl.addEventListener("input", function () {
+      clearTimeout(historySearchTimer);
+      historySearchTimer = setTimeout(function () {
+        const q = historySearchEl.value.trim();
+        if (q === historyQuery) return;
+        historyQuery = q;
+        loadHistory();
+      }, 350);
+    });
+    historyMonthEl.addEventListener("change", function () {
+      historyMonth = historyMonthEl.value;
+      loadHistory();
+    });
 
   </script>
 

@@ -125,6 +125,7 @@ function pwaDispatch_(data, verified){
     // itself is still remembered (you really did type it).
     const replyOpts = data.autoType ? { learnCategory: false, learnTypeVote: false } : {};
     if(data.direction) replyOpts.direction = data.direction;       // "debit" / "credit": the person's answer when the SMS did not say
+    if(data.eventDeclined === true) replyOpts.eventDeclined = true; // the person tapped "No, regular spend" on a Rent/EMI/Investment suggestion
     return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, noteType, data.amount, data.financialEvent, data.financialEventName, data.debtPerson, data.investmentInstrument, data.fp, replyOpts));
   }
 
@@ -298,7 +299,7 @@ function pwaDispatch_(data, verified){
   }
 
   if(data.action === "getTransactionHistory"){
-    return jsonResponse({ ok:true, ...getTransactionHistory(data.offset, data.limit), knownDebtPeople: getKnownDebtPeople() });
+    return jsonResponse({ ok:true, ...getTransactionHistory(data.offset, data.limit, { filter: data.filter, query: data.query, month: data.month }), knownDebtPeople: getKnownDebtPeople() });
   }
 
   // ── Planner (Phase 1, added 2026-08-18, backend/planner.js) ──
@@ -1999,13 +2000,47 @@ function getQuickConfirmOptions(type, counterparty, amount, mode, reference, sma
   return { guesses: guesses, replyCategory: category || "Other" };
 }
 
+// Transactions column V ("EventDeclined", index 21) = "YES" once the person said "No, regular spend" to a
+// Rent/EMI/Investment suggestion on that payment. Header is added the first time it is needed.
+var EVENT_DECLINED_COL_ = 22;
+var EVENT_DECLINED_HEADER_ = "EventDeclined";
+function isEventDeclinedRow_(rowValues){
+  return String(rowValues[EVENT_DECLINED_COL_ - 1] || "").trim().toUpperCase() === "YES";
+}
+function setEventDeclinedMarker_(sheet, row, declined){
+  const cell = sheet.getRange(row, EVENT_DECLINED_COL_);
+  if(declined){
+    if(!String(sheet.getRange(1, EVENT_DECLINED_COL_).getValue() || "").trim()){
+      sheet.getRange(1, EVENT_DECLINED_COL_).setValue(EVENT_DECLINED_HEADER_);
+    }
+    cell.setValue("YES");
+  }else if(String(cell.getValue() || "").trim() !== ""){
+    cell.setValue("");
+  }
+}
+
 // Already-noted transactions (the opposite filter from
 // getPendingTransactions) for the History screen's browse-and-edit flow.
 // offset/limit paginate, newest first — defaults to the first 20.
 // See docs/features/history.md.
-function getTransactionHistory(offset, limit){
+//
+// opts (all optional, added 2026-10-14 so History is searchable):
+//   filter: "all" (default) | "attn" (looks like Rent/EMI/Investment but not
+//           confirmed yet; ALSO lists payments with no note yet, flagged
+//           unnoted:true, which are finished in Pending) | "Rent" | "EMI" |
+//           "Investment" (confirmed) | "credit" | "split"
+//   query:  text, matched against note, payee, category, event name, amount
+//   month:  "yyyy-MM"
+// The filter runs BEFORE the offset/limit cut, so pages and totals are right.
+// Also returns counts (for the filter chips), the months that have rows (for
+// the month picker) and, for Rent/EMI/Investment, a per-name summary.
+function getTransactionHistory(offset, limit, opts){
   offset = Number(offset) || 0;
   limit  = Number(limit) || 20;
+  opts   = opts || {};
+  const filter = (opts.filter || "all").toString();
+  const query  = (opts.query || "").toString().trim().toLowerCase().slice(0, 80);
+  const monthWanted = /^\d{4}-\d{2}$/.test((opts.month || "").toString()) ? opts.month.toString() : "";
 
   const ss    = dbSs_();
   const sheet = ss.getSheetByName("Transactions");
@@ -2018,20 +2053,35 @@ function getTransactionHistory(offset, limit){
   // investmentInstruments.js for what this is used for.
   const investInstrumentsData = getInvestmentInstrumentsSheet_().getDataRange().getValues();
 
+  const tz = Session.getScriptTimeZone();
+  const monthCache = {};   // many rows share a day, so format each distinct date once
+  function monthKeyOf_(d){
+    const t = new Date(d).getTime();
+    if(isNaN(t)) return "";
+    if(!monthCache.hasOwnProperty(t)) monthCache[t] = Utilities.formatDate(new Date(t), tz, "yyyy-MM");
+    return monthCache[t];
+  }
+
   const noted = [];
+  const unnotedRows = [];
 
   for(let i = 1; i < data.length; i++){
     const processed = (data[i][15] || "").toString().trim();
     const note       = (data[i][12] || "").toString().trim();
 
     if(processed !== "YES") continue;
-    if(!note) continue;
+    if(!note){
+      // No note yet = still a Pending payment. Remembered only so "Needs attention" can point at the ones
+      // that look like Rent/EMI/Investment (History itself never lists unnoted payments).
+      if(!isEmptyTransactionRow_(data[i])) unnotedRows.push(i);
+      continue;
+    }
 
     noted.push({
       row:          i + 1,
       fp:           rowFingerprint_(data[i]),   // stale-card safeguard, see rowFingerprint_
-      date:         Utilities.formatDate(new Date(data[i][0]), Session.getScriptTimeZone(), "dd MMM yyyy"),
-      time:         Utilities.formatDate(new Date(data[i][1]), Session.getScriptTimeZone(), "HH:mm"),
+      date:         Utilities.formatDate(new Date(data[i][0]), tz, "dd MMM yyyy"),
+      time:         Utilities.formatDate(new Date(data[i][1]), tz, "HH:mm"),
       bank:         data[i][2] || "",
       type:         data[i][3] || "",
       mode:         data[i][4] || "",
@@ -2043,12 +2093,106 @@ function getTransactionHistory(offset, limit){
       category:     data[i][13] || "Other",
       savedType:    (data[i][16] || "").toString().trim() || null, // column Q — what was actually chosen, if anything
       financialEvent:     (data[i][17] || "").toString().trim() || null, // column R — already-confirmed Rent/EMI/Investment, if any
-      financialEventName: (data[i][18] || "").toString().trim() || null  // column S — only meaningful when financialEvent is "EMI"
+      financialEventName: (data[i][18] || "").toString().trim() || null, // column S — only meaningful when financialEvent is "EMI"
+      eventDeclined: isEventDeclinedRow_(data[i]),                       // column V — said "No, regular spend" to the suggestion
+      _month:       monthKeyOf_(data[i][0])
     });
   }
 
   noted.reverse(); // newest first
-  const page = noted.slice(offset, offset + limit);
+
+  // ---- "Needs attention": looks like Rent/EMI/Investment, not confirmed ----
+  // Same suggestion the card itself shows (suggestFinancialEvent), computed
+  // for every unconfirmed debit so the chip can show an honest count. A CC
+  // bill payment / wallet top-up is never a Rent/EMI/Investment question.
+  noted.forEach(function(t){
+    t._attn = false;
+    if(t.financialEvent || t.type !== "debit" || t.eventDeclined) return;
+    if(!suggestFinancialEvent(t.counterparty, t.amount, financialEventsData, t.note)) return;
+    const nonSpend = isCreditCardBillPayment(t.mode, t.counterparty, t.note, t.amount, data) || isWalletTopUp(t.counterparty, t.reference);
+    t._attn = !nonSpend;
+  });
+
+  // Payments with no note yet that look like Rent/EMI/Investment: listed under "Needs attention" only
+  // (never in All), tagged unnoted:true so the screen sends the person to Pending to finish them.
+  const unnoted = [];
+  unnotedRows.forEach(function(i){
+    const type = (data[i][3] || "").toString();
+    if(type !== "debit") return;
+    const cp = data[i][7] || "";
+    const amt = Number(data[i][5]) || 0;
+    const mode = data[i][4] || "";
+    const ref = data[i][6] || "";
+    if(!suggestFinancialEvent(cp, amt, financialEventsData, "")) return;
+    if(isCreditCardBillPayment(mode, cp, "", amt, data) || isWalletTopUp(cp, ref)) return;
+    unnoted.push({
+      row: i + 1, fp: rowFingerprint_(data[i]),
+      date: Utilities.formatDate(new Date(data[i][0]), tz, "dd MMM yyyy"),
+      time: Utilities.formatDate(new Date(data[i][1]), tz, "HH:mm"),
+      bank: data[i][2] || "", type: type, mode: mode, amount: amt, friendShare: txnFriendShare_(data[i]),
+      reference: ref, counterparty: cp, note: "", category: "", savedType: null,
+      financialEvent: null, financialEventName: null, eventDeclined: false,
+      unnoted: true, _month: monthKeyOf_(data[i][0]), _attn: true
+    });
+  });
+  unnoted.reverse(); // newest first, like the rest
+
+  const counts = { all: noted.length, attn: unnoted.length, Rent: 0, EMI: 0, Investment: 0, credit: 0, split: 0 };
+  const monthsSeen = {};
+  noted.forEach(function(t){
+    if(t._attn) counts.attn++;
+    if(t.financialEvent === "Rent" || t.financialEvent === "EMI" || t.financialEvent === "Investment") counts[t.financialEvent]++;
+    if(t.type === "credit") counts.credit++;
+    if(t.friendShare > 0) counts.split++;
+    if(t._month) monthsSeen[t._month] = (monthsSeen[t._month] || 0) + 1;
+  });
+  const months = Object.keys(monthsSeen).sort().reverse().map(function(m){ return { month: m, count: monthsSeen[m] }; });
+
+  function matchesQuery_(t){
+    if(!query) return true;
+    const hay = [t.note, t.counterparty, t.category, t.financialEventName, t.financialEvent, t.mode].join(" ").toLowerCase();
+    if(hay.indexOf(query) !== -1) return true;
+    // Amount: "4000", "4,000" and "₹4000" all find a Rs 4,000 payment.
+    const q = query.replace(/[₹,\s]/g, "");
+    return q !== "" && /^[0-9.]+$/.test(q) && String(t.amount).indexOf(q) === 0;
+  }
+  function matchesFilter_(t){
+    switch(filter){
+      case "attn":       return t._attn;
+      case "Rent":
+      case "EMI":
+      case "Investment": return t.financialEvent === filter;
+      case "credit":     return t.type === "credit";
+      case "split":      return t.friendShare > 0;
+      default:           return true;
+    }
+  }
+
+  // "Needs attention" also shows the not-yet-noted ones, merged newest first; every other view is noted rows only.
+  const source = filter === "attn" ? noted.concat(unnoted).sort(function(a, b){ return b.row - a.row; }) : noted;
+  const matched = source.filter(function(t){
+    return matchesFilter_(t) && matchesQuery_(t) && (!monthWanted || t._month === monthWanted);
+  });
+
+  // Rent/EMI/Investment: one line per event name (payments, total, last paid)
+  // so "how much have I paid on the laptop EMI" is answered at a glance.
+  let summaries = [];
+  if(filter === "Rent" || filter === "EMI" || filter === "Investment"){
+    const byName = {};
+    matched.forEach(function(t){   // newest first, so the first row seen per name is the last payment
+      const name = t.financialEventName || t.financialEvent;
+      const g = byName[name] || (byName[name] = { name: name, count: 0, total: 0, lastDate: t.date });
+      g.count++;
+      g.total += t.amount - (t.friendShare > 0 ? t.friendShare : 0);
+    });
+    summaries = Object.keys(byName).map(function(k){
+      byName[k].total = Math.round(byName[k].total * 100) / 100;
+      return byName[k];
+    });
+    summaries.sort(function(a, b){ return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
+  }
+
+  const page = matched.slice(offset, offset + limit);
 
   page.forEach(function(t){
     // Show what was ACTUALLY chosen for this specific transaction, not a
@@ -2061,6 +2205,8 @@ function getTransactionHistory(offset, limit){
     // be worse than no suggestion at all.
     t.suggestedType = t.savedType;
     delete t.savedType;
+    delete t._month;
+    delete t._attn;
 
     // Rent/Investment suggestion — only relevant if this row hasn't
     // already been confirmed one way or the other. Lets an older
@@ -2069,7 +2215,8 @@ function getTransactionHistory(offset, limit){
     // t.note matters a lot more here than in Pending — a real bank
     // Counterparty rarely says "rent," but the user's own note often
     // does (fixed 2026-08-10, see docs/features/financial-events.md).
-    const feSuggestion = (!t.financialEvent && t.type === "debit")
+    // A payment the person already said "No, regular spend" to is not suggested again (column V).
+    const feSuggestion = (!t.financialEvent && t.type === "debit" && !t.eventDeclined)
       ? suggestFinancialEvent(t.counterparty, t.amount, financialEventsData, t.note)
       : null;
     t.suggestedFinancialEvent = feSuggestion ? feSuggestion.type : null;
@@ -2099,8 +2246,11 @@ function getTransactionHistory(offset, limit){
   });
 
   return {
-    total:        noted.length,
-    transactions: page
+    total:        matched.length,
+    transactions: page,
+    counts:       counts,
+    months:       months,
+    summaries:    summaries
   };
 }
 
@@ -2338,6 +2488,16 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       // steps as a human tapping "Yes" on the chip — the two can never
       // drift apart. Behavior here is unchanged.
       applyFinancialEventToRow_(sheet, row, effectiveFinancialEvent, effectiveFinancialEventName, counterparty, note);
+    }
+
+    // "No, regular spend" (added 2026-10-14): remember that the person looked at the Rent/EMI/Investment
+    // suggestion for THIS payment and said no, so History stops listing it under "Needs attention" and
+    // stops re-asking. Own column (V, "EventDeclined") so column R keeps meaning only Rent/EMI/Investment.
+    // Confirming an event later clears it.
+    if(opts.eventDeclined === true && !effectiveFinancialEvent){
+      setEventDeclinedMarker_(sheet, row, true);
+    }else if(effectiveFinancialEvent){
+      setEventDeclinedMarker_(sheet, row, false);
     }
 
     // Debts auto-linking (added 2026-08-10) — a lending-flavored note

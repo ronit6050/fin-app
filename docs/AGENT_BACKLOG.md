@@ -203,3 +203,5 @@ Owner's idea: the app should build up knowledge from every bank/user (owner = HD
 2. **Shared junk:** learned "not a transaction" shapes become junk for everyone once 2+ different people mark the same one. Safety rule stays: a learned pattern can only downgrade an UNCERTAIN message, never a confident transaction.
 3. **Shared merchant -> category guesses** (e.g. Swiggy = Food). Personal history always overrides. Need/Want/Saving stays personal, never shared.
 Suggested order if approved: 1, then 2, then 3. Each needs a mockup of the Access screen first, tests, independent review, and the owner's "ship it". Open questions for the discussion: how many people before a pattern is trusted, owner approval vs automatic, what to do with a wrong shared rule, privacy/legal wording before going public.
+
+- **History search/filters (built 2026-10-14, not deployed):** see docs/features/history.md. ("No, regular spend" is remembered in Transactions column V, and Needs attention also lists not-yet-noted payments, both done 2026-10-14.) Idea not built: a "Mark as..." link in History to reopen a declined suggestion.
