@@ -2264,6 +2264,17 @@
     .access-name { font-weight: 600; color: var(--text-primary); }
     .access-pill { font-size: 0.72rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--chart-track-bg); color: var(--text-muted); }
     .access-pill.on { background: var(--button-fill); color: #fff; }
+    /* Per-friend screen switches (2026-10-14): a small list under a friend who has the full app. */
+    .access-screens { flex: 1 1 100%; border-top: 0.5px solid var(--border-hairline); margin-top: 4px; }
+    .access-screens-head { width: auto; background: none; color: var(--text-muted); box-shadow: none; padding: 8px 0; font-size: 0.82rem; font-weight: 500; text-align: left; }
+    .access-screen-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; font-size: 0.9rem; color: var(--text-primary); }
+    .access-switch { position: relative; flex: none; width: 38px; height: 22px; padding: 0; border-radius: 11px; background: var(--chart-track-bg); box-shadow: none; transition: background .15s; }
+    .access-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+    .access-switch.on { background: var(--button-fill); }
+    .access-switch.on::after { transform: translateX(16px); }
+    .access-switch:disabled { opacity: 0.6; }
+    /* Screens the owner hid for this person: their More button and their Home card disappear. */
+    .screen-hidden { display: none !important; }
     .split-panel .field label { display: block; }
     .split-panel .field input, .split-panel .field select { width: 100%; box-sizing: border-box; }
     .ledger-row {
@@ -3611,8 +3622,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-14-03";
-    const APP_CHANGELOG = "Bank messages the app cannot fully read now ask you (spent or received, amount) instead of guessing; Access > Bank SMS library lets you teach it a new bank.";
+    const APP_VERSION = "2026-10-14-04";
+    const APP_CHANGELOG = "More > Access: you can now hide screens (CC Advisor, Reconcile, ...) for each friend who has the full app.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -3716,6 +3727,7 @@
 
     // Shows the app and hides everything else
     function showSignedInUI(user) {
+      applyHiddenScreens([]);   // start clean; a friend's own list arrives a moment later (getMyAccess)
       signInBox.style.display = "none";
       loginHero.style.display = "none";
       trustLine.style.display = "none";
@@ -6192,7 +6204,7 @@
           case "moveDebtToFriend": return demoMoveDebt(data);
           case "getMyAccess": return { ok: true, isOwner: true, fullApp: true };
           case "addManualTransaction": return demoAddManualTransaction(data);
-          case "getAdminOverview": case "setFriendFullApp": return demoAccessOverview(data);
+          case "getAdminOverview": case "setFriendFullApp": case "setFriendScreen": return demoAccessOverview(data);
           case "getSmsFormats": return { ok: true, formats: 12, senders: 4, notUnderstood: 1, top: [ { sender: "VM-BOBSMS", formats: 2, seen: 5, uncertain: 3 }, { sender: "VD-HDFCBN-S", formats: 6, seen: 40, uncertain: 0 } ] };
           case "getPeople": case "getPerson": case "addFriend": case "createSplit":
           case "recordSplitPayment": case "undoSplitEntry": return demoSplitsRoute(data);
@@ -6249,7 +6261,14 @@
       const st = demoSplitsState();
       st.fullApp = st.fullApp || {};
       if (data.action === "setFriendFullApp") st.fullApp[String(data.email || "").toLowerCase()] = data.on === true;
-      const people = st.friends.map(function (f) { return { name: f.name, email: f.email, fullApp: !!st.fullApp[f.email], balance: demoFriendBalance(f) }; });
+      st.hidden = st.hidden || {};
+      if (data.action === "setFriendScreen") {
+        const key = String(data.email || "").toLowerCase();
+        const cur = (st.hidden[key] || []).filter(function (n) { return n !== data.screen; });
+        if (data.visible !== true) cur.push(data.screen);
+        st.hidden[key] = SWITCHABLE_SCREENS.filter(function (n) { return cur.indexOf(n) !== -1; });
+      }
+      const people = st.friends.map(function (f) { return { name: f.name, email: f.email, fullApp: !!st.fullApp[f.email], hidden: st.hidden[f.email] || [], balance: demoFriendBalance(f) }; });
       const full = people.filter(function (p) { return p.fullApp; }).length;
       return { ok: true, owner: { email: "demo", onPrivateCopy: true, lastBackup: "" },
         totals: { everyone: people.length + 1, friends: people.length, fullApp: full, splitsOnly: people.length - full },
@@ -8079,6 +8098,9 @@
 
     // The less-frequent screens that live INSIDE the "More" tab
     const moreMenuEl = document.getElementById("moreMenu");
+    // The screens the owner may hide for a friend (same list as ADMIN_SCREENS_ in backend/admin.js).
+    const SWITCHABLE_SCREENS = ["today", "cash", "history", "investments", "cc", "debts", "savings", "planner", "reconcile"];
+    let hiddenScreens = [];   // screens the owner hid for this person (2026-10-14), see applyHiddenScreens
     const subViews = {
       today:       document.getElementById("view-today"),
       cc:          document.getElementById("view-cc"),
@@ -8202,6 +8224,7 @@
 
     // Shows one of the 5 sub-screens, hiding the menu grid
     function showMoreSubView(name) {
+      if (hiddenScreens.indexOf(name) !== -1) { showMoreMenu(); return; }   // owner hid this one for her
       moreMenuEl.style.display = "none";
       Object.keys(subViews).forEach(function (key) {
         subViews[key].style.display = (key === name) ? "block" : "none";
@@ -9565,9 +9588,22 @@
       showMoreSubView("debts");                     // also loads the people list
       // Has the owner switched this friend on for the FULL app? If so, upgrade right away (2026-10-13).
       callAppsScript({ action: "getMyAccess", idToken: currentUser.idToken }).then(function (d) {
-        if (d && d.ok && d.fullApp && !d.isOwner) upgradeFriendToFullApp();
+        if (d && d.ok && d.fullApp && !d.isOwner) { applyHiddenScreens(d.hidden); upgradeFriendToFullApp(); }
         else if (d && d.ok && !d.fullApp) forgetIngestKeyOnPhone();     // switched off: stop sending their messages
       }).catch(function () { /* stay on Splits only; the next open asks again */ });
+    }
+
+    // Screens the owner hid for this person (2026-10-14). Names match the More menu buttons' data-target; Home's stat cards
+    // for cash / cc / debts use the same names in data-widget. Hiding is for clutter, not privacy.
+    function applyHiddenScreens(list) {
+      hiddenScreens = Array.isArray(list) ? list.filter(function (n) { return SWITCHABLE_SCREENS.indexOf(n) !== -1; }) : [];
+      document.querySelectorAll(".more-menu-item[data-target], .stat-card[data-widget]").forEach(function (el) {
+        const name = el.dataset.target || el.dataset.widget;
+        el.classList.toggle("screen-hidden", hiddenScreens.indexOf(name) !== -1);
+      });
+      // If she is standing on a screen that just got hidden, go back to the menu.
+      const here = (history.state && history.state.subView) || null;
+      if (here && hiddenScreens.indexOf(here) !== -1) showMoreMenu();
     }
 
     // A friend the owner switched on: show the whole tracker, working on THEIR OWN private data (the backend enforces that).
@@ -9661,6 +9697,66 @@
         });
       }).catch(function () { line.textContent = "Couldn't load."; });
     }
+    // The names the owner sees for each switchable screen (same order as the More menu).
+    const SCREEN_LABELS = [
+      ["today", "Today's Summary", ""], ["cash", "Cash", "also hides the Cash card on Home"], ["history", "History", ""],
+      ["investments", "Investments", ""], ["cc", "CC Advisor", "also hides the CC card on Home"],
+      ["debts", "Debts and Splits", "also hides the Debts card on Home"], ["savings", "Savings and Wish List", ""],
+      ["planner", "Planner", ""], ["reconcile", "Reconcile", "bank statement upload is built for HDFC"]
+    ];
+    // One friend's list of on/off switches. A switch ON means she can see that screen. Saves on every tap.
+    function buildScreenSwitches(p) {
+      const wrap = document.createElement("div");
+      wrap.className = "access-screens";
+      const hiddenNow = (p.hidden || []);
+      const head = document.createElement("button");
+      head.type = "button";
+      head.className = "access-screens-head";
+      const setHead = function (open) {
+        const n = (p.hidden || []).length;
+        head.textContent = (open ? "Hide screens list" : "Screens she can see") + (n ? "  ·  " + n + " hidden" : "") + (open ? "" : "  ›");
+      };
+      const body = document.createElement("div");
+      body.style.display = "none";
+      setHead(false);
+      head.addEventListener("click", function () {
+        const open = body.style.display === "none";
+        body.style.display = open ? "block" : "none";
+        setHead(open);
+      });
+      SCREEN_LABELS.forEach(function (it) {
+        const r = document.createElement("div");
+        r.className = "access-screen-row";
+        r.innerHTML = '<div><div class="sl"></div><div class="access-sub ss"></div></div><button type="button" class="access-switch" role="switch"></button>';
+        r.querySelector(".sl").textContent = it[1];
+        const sub = r.querySelector(".ss");
+        if (it[2]) sub.textContent = it[2]; else sub.style.display = "none";
+        const sw = r.querySelector(".access-switch");
+        const visible = hiddenNow.indexOf(it[0]) === -1;
+        sw.classList.toggle("on", visible);
+        sw.setAttribute("aria-checked", visible ? "true" : "false");
+        sw.setAttribute("aria-label", it[1]);
+        sw.addEventListener("click", function () {
+          const want = !sw.classList.contains("on");          // what the owner is asking for
+          sw.disabled = true;
+          callAppsScript({ action: "setFriendScreen", idToken: currentUser.idToken, email: p.email, screen: it[0], visible: want }).then(function (res) {
+            if (res.ok) {
+              // Re-draw from the server's answer but keep this friend's list open, so several taps in a row feel natural.
+              const wasOpen = body.style.display !== "none";
+              renderAccess(res);
+              if (wasOpen) {
+                const again = Array.from(document.querySelectorAll("#accessList .access-screens-head")).find(function (h) { return h.closest(".access-row").querySelector(".access-sub").textContent === p.email; });
+                if (again) again.click();
+              }
+            } else { sw.disabled = false; alert(res.error || "Couldn't save. Try again."); }
+          }).catch(function () { sw.disabled = false; alert("Couldn't save. Check your connection and try again."); });
+        });
+        body.appendChild(r);
+      });
+      wrap.appendChild(head);
+      wrap.appendChild(body);
+      return wrap;
+    }
     function renderAccess(d) {
       accessStatusEl.style.display = "none";
       accessContentEl.style.display = "block";
@@ -9692,6 +9788,8 @@
             if (r.ok) renderAccess(r); else { btn.disabled = false; btn.textContent = r.error || "Try again"; }
           }).catch(function () { btn.disabled = false; btn.textContent = "Try again"; });
         });
+        // Screen switches (2026-10-14): only for a friend who has the full app. Tap the heading to open the list.
+        if (p.fullApp) row.appendChild(buildScreenSwitches(p));
         list.appendChild(row);
       });
       document.getElementById("accessOwnerLine").textContent = d.owner.onPrivateCopy

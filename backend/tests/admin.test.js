@@ -53,3 +53,36 @@ console.log("\n--- 3. Switching a friend's full app ---");
   assert(stranger.ok === false, "a stranger cannot switch anyone on");
   assert(w.errors("ADMIN_FULL_APP").length === 2, "each switch was logged (" + w.errors("ADMIN_FULL_APP").length + ")");
 }
+
+console.log("\n--- 4. Hiding screens for one friend (2026-10-14) ---");
+{
+  const hid = function(){ return w.act("owner", { action: "getAdminOverview" }).people.filter(function(p){ return p.email === FRIEND; })[0].hidden; };
+  w.act("owner", { action: "setFriendFullApp", email: FRIEND, on: true });
+  assert(JSON.stringify(hid()) === "[]", "by default nothing is hidden");
+  assert(JSON.stringify(w.act("friend", { action: "getMyAccess" }).hidden) === "[]", "so her phone is told nothing is hidden");
+  const r = w.act("owner", { action: "setFriendScreen", email: FRIEND, screen: "cc", visible: false });
+  assert(r.ok && JSON.stringify(r.people.filter(function(p){ return p.email === FRIEND; })[0].hidden) === '["cc"]', "hiding CC Advisor is reflected at once");
+  w.act("owner", { action: "setFriendScreen", email: FRIEND, screen: "reconcile", visible: false });
+  w.act("owner", { action: "setFriendScreen", email: FRIEND, screen: "cc", visible: false });
+  assert(JSON.stringify(hid()) === '["cc","reconcile"]', "hiding twice adds it only once, in a fixed order: " + JSON.stringify(hid()));
+  assert(JSON.stringify(w.act("friend", { action: "getMyAccess" }).hidden) === '["cc","reconcile"]', "her phone is told what is hidden");
+  w.act("owner", { action: "setFriendScreen", email: FRIEND, screen: "cc", visible: true });
+  assert(JSON.stringify(hid()) === '["reconcile"]', "showing it again removes only that one");
+  assert(w.act("owner", { action: "setFriendScreen", email: FRIEND, screen: "home", visible: false }).ok === false, "Home cannot be hidden (not a switchable screen)");
+  assert(w.act("owner", { action: "setFriendScreen", email: FRIEND, screen: "cc" }).ok === false, "must say show or hide");
+  assert(w.act("owner", { action: "setFriendScreen", email: "nobody@example.com", screen: "cc", visible: false }).ok === false, "only one of his friends");
+  assert(w.act("owner", { action: "setFriendScreen", email: OWNER, screen: "cc", visible: false }).ok === false, "not his own address");
+  assert(w.act("friend", { action: "setFriendScreen", email: FRIEND, screen: "reconcile", visible: true }).ok === false && JSON.stringify(hid()) === '["reconcile"]', "a friend cannot change her own list");
+  assert(w.act("stranger", { action: "setFriendScreen", email: FRIEND, screen: "cc", visible: false }).ok === false, "a stranger cannot either");
+  assert(JSON.stringify(w.act("owner", { action: "getMyAccess" }).hidden) === "[]", "the owner is never told anything is hidden");
+  // adding/removing a friend's balance later must not wipe the list
+  w.store["users/" + OWNER + "/friends/" + FRIEND].fields.balancePaise = 500;
+  assert(JSON.stringify(hid()) === '["reconcile"]', "list survives other changes to the friend's record");
+  // a bad stored value is ignored, not trusted
+  w.store["users/" + OWNER + "/friends/" + FRIEND].fields.hiddenScreens = ["cc", "bogus", "cc"];
+  assert(JSON.stringify(hid()) === '["cc"]', "unknown or repeated stored names are cleaned out");
+  // switching her full app off: she is Splits-only and sees no hidden list
+  w.act("owner", { action: "setFriendFullApp", email: FRIEND, on: false });
+  assert(JSON.stringify(w.act("friend", { action: "getMyAccess" }).hidden || []) === "[]", "Splits-only friends get an empty list");
+  assert(w.errors("ADMIN_SCREEN").length >= 4, "each change was logged");
+}

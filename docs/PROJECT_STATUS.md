@@ -32,6 +32,7 @@ Vaidehi has the **full app** (since 2026-10-13 10:41) on her own private data.
 ## 3. What has been DONE (newest first, one line each)
 
 **2026-10-14**
+- **Per-friend screen switches (built, NOT deployed).** More > Access: under each friend with the full app, a "Screens she can see" list of on/off switches (Today, Cash, History, Investments, CC Advisor, Debts/Splits, Savings, Planner, Reconcile). Off = the More button (and the matching Home card for Cash/CC/Debts) disappears on her phone next time she opens the app. Stored as `hiddenScreens` on the friend's record in the owner's folder; new owner-only action `setFriendScreen`; `getMyAccess` returns `hidden`. For clutter, not privacy. Default = nothing hidden. Next step (not built): ask a new user questions ("do you have a credit card?") that flip the same switches. Tests: `backend/tests/admin.test.js` section 4. APP_VERSION `2026-10-14-04`.
 - **SMS reading for many banks.** Fixed: the app took the account BALANCE as the amount (Vaidehi's Rs 1 credit became Rs 2,974.93 and showed as "income");
   "Dr."/"Cr." wording was not understood (her debit had no direction, so "total spent" stayed 0). Now: balances are never the amount, Dr./Cr. work, more
   reference wordings, one central bank list (added Bank of Baroda, PNB, Canara, Union, IDBI, IndusInd, IDFC, Bandhan, RBL, UCO, Bank of India, KVB),
