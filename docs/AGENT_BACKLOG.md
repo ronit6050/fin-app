@@ -185,3 +185,14 @@ still unanswered as of 2026-08-11.)
   verified with a new test before pushing. Deployed live (`@302`) and
   pushed to GitHub. See CLAUDE.md's 2026-08-12 "Backend cleanup pass"
   entry and [docs/features/savings-v2.md](features/savings-v2.md).
+
+---
+## Added 2026-10-14 (see docs/PROJECT_STATUS.md for the full picture)
+Open items found/decided during the Firestore + SMS work. Nothing here is started unless marked.
+- **BLOCKED (waiting on Google):** deploy the Cloud Function (`firebase deploy --only functions`) once the billing account's identity verification finishes.
+- Move saving, then the SMS door, then timers to the new server; retire the Sheet + the old SMS-reader project (docs/v2-firestore-native.md phases 5-6).
+- Rs 300 automatic hard-stop (only budget alerts exist today).
+- Owner chores: daily trigger for `v2dbBackupOwner`; Firestore backups/PITR; decide whether to delete the one leftover Vi promo row in his LearnedSpamPatterns.
+- Ideas: `-P` promotional-sender rule; card-last-4 box on manual entry; Split button on the notification; SMS-suggest settle; owner approval of friend-created splits; delete a friend.
+- Watch: `V2_JOB_SLOW` lines in AILogs (the timer's lock hold was ~15 s with new rows); first real Bank of Baroda messages after the multi-bank fix; Vaidehi fixing her two rows.
+- Known quirks: Firestore usage counters are per server (Apps Script vs Cloud Function not summed); old SMS reader does not know banks taught from the Access screen (only the new path does).

@@ -1,5 +1,17 @@
 # Project: Personal Expense Tracker (PWA)
 
+> **START HERE: read [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) first** (updated 2026-10-14). It is the short, plain-words picture:
+> what the app is now, what is done, what is blocked, what is next, the switches/rollbacks, and the owner's rules. The rest of this file is the
+> long history (it is long: newer facts are in PROJECT_STATUS.md, which wins if they disagree). If the owner asks "what's the plan / what have we
+> done / what is left", answer from PROJECT_STATUS.md.
+>
+> **One-paragraph summary (2026-10-14):** the owner and friend Vaidehi now keep their data in private Firestore folders (the Google Sheet is no
+> longer what the app reads); bank SMS land directly in Firestore (old SMS path is the automatic fallback); friends get a "full app" the owner
+> switches on from More > Access; splits, split notifications, manual entry, a shared anonymous bank-SMS pattern library, multi-bank SMS reading
+> (balance-safe amounts, Dr./Cr., teach-a-bank) are all live. The code still runs on Apps Script; the move to Firebase Cloud Functions is built
+> and tested but **blocked until Google finishes verifying the billing account's identity (a few days)**. Then: deploy it, move saving/SMS/timers over,
+> retire the Sheet and old SMS reader. Cost cap Rs 300/month, no outside companies, privacy first, ask before every deploy.
+
 ## Who I am
 - I am a complete beginner learning to build my app.
 - Explain things simply (like to a beginner). Comment code clearly.
