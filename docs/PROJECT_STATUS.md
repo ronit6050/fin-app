@@ -81,6 +81,7 @@ Deploy needs `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"` on this PC (default 10 s 
 while the switch is on, Settings > Speed has "Reads and saves", a save with no answer is never repeated. Proven on the REAL database in a throwaway test person: two servers saving at once, 12/12
 saved, balance exact, lock released, cleaned up (`functions/tests/live_scratch.js`). Details + exact turn-on order + rollback: `docs/features/cloud-functions.md` "Step 2". Waiting on the owner's "ship it"
 (deploy order: function, then `clasp push`/`clasp deploy`, then `git push`, then switch on, then try on ONE phone).
+**SMS DOOR on the new server: BUILT, TESTED, INDEPENDENTLY REVIEWED (safe to ship), NOT DEPLOYED YET (2026-10-14 night).** The phone tries 3 doors in order: new server, Apps Script `smsIn`, old reader; only `{"ok":true}` stops the chain, duplicates are caught by the existing rules. Server switch `v2dbEnableFunctionSms` / `v2dbDisableFunctionSms` (needs saving on too). Proven on the real database in a made-up person incl. two servers receiving one message at once -> exactly one row. New APK: `local-data/apk/FinApp-2026-10-14-new-server-sms.apk` (Android repo commit `79a8e6c`, not installed anywhere yet). Details + turn-on order: `docs/features/sms-direct-landing.md` "Step 2".
 (Old text below is the history of the block.)
 
 **The new server (Cloud Functions) could not be deployed.** Google said: *"Your identity verification is in progress. Please allow a few days."* on the

@@ -23,7 +23,7 @@ const BASE = "https://firestore.googleapis.com/v1/projects/" + PROJECT + "/datab
 function makeRt(){
   const rt = createRuntime({
     localEmail: SCRATCH, ownerEmail: SCRATCH, log: function(){},
-    sharedProps: function(){ return { V2DB_OWNER: "on", V2_FN_WRITES: "on" }; }
+    sharedProps: function(){ return { V2DB_OWNER: "on", V2_FN_WRITES: "on", V2DB_OWNER_DIRECT: "on", V2_FN_SMS: "on" }; }
   });
   rt.sandbox.LEASE_PATH_ = LOCK_PATH;                 // a test-only lock document: never blocks the real app
   return rt;
@@ -47,7 +47,10 @@ function deleteTree(docPath){
   });
   api("DELETE", BASE + "/" + docPath);
 }
-function cleanup(){ try{ deleteTree("users/" + SCRATCH); }catch(e){ console.log("cleanup (user): " + e.message); } try{ api("DELETE", BASE + "/" + LOCK_PATH); }catch(e){} }
+const KEYHASH_FILE = require("node:path").join(require("node:os").tmpdir(), "fnwrites_scratch_keyhash.txt");
+function cleanup(){
+  try{ const fsx = require("node:fs"); if(fsx.existsSync(KEYHASH_FILE)){ api("DELETE", BASE + "/ingestKeys/" + fsx.readFileSync(KEYHASH_FILE, "utf8").trim()); fsx.unlinkSync(KEYHASH_FILE); } }catch(e){ console.log("cleanup (key): " + e.message); }
+  try{ deleteTree("users/" + SCRATCH); }catch(e){ console.log("cleanup (user): " + e.message); } try{ api("DELETE", BASE + "/" + LOCK_PATH); }catch(e){} }
 
 // ---- worker mode: one "server" doing N saves ----
 if(process.argv[2] === "worker"){
@@ -60,6 +63,14 @@ if(process.argv[2] === "worker"){
     out.push({ ok: r.ok === true, ms: Date.now() - t0, error: r.error || "" });
   }
   console.log("RESULT " + JSON.stringify(out));
+  process.exit(0);
+}
+
+if(process.argv[2] === "smsworker"){
+  const rt = makeRt(), key = process.env.QA_KEY, sms = process.argv[3];
+  const out = [];
+  for(let i = 0; i < 3; i++) out.push(call(rt, { action: "smsIn", key: key, sms: sms, sender: "HDFCBK", timestamp: Math.floor(Date.now() / 1000) }));
+  console.log("RESULT " + JSON.stringify(out.map(function(r){ return r.ok ? r.outcome : "ERR:" + r.error; })));
   process.exit(0);
 }
 
@@ -91,6 +102,43 @@ function assert(cond, msg){ if(!cond){ console.error("FAIL: " + msg); failures++
       const p2 = call(rt, { action: "getPending" });
       assert(!(p2.transactions || []).some(function(x){ return /QA Shop/.test(x.counterparty || ""); }), "and it leaves Pending");
     }
+    console.log("\n--- 1b. The SMS door: a bank SMS lands in the test person's private space ---");
+    const key = rt.sandbox.ingestGetOrCreateKey_(SCRATCH);
+    require("node:fs").writeFileSync(KEYHASH_FILE, rt.sandbox.ingestHash_(key));
+    process.env.QA_KEY = key;
+    const sms1 = "Sent Rs.250.00 From HDFC Bank A/C x1234 To QA Pizza On 14/10/26 Ref 710000000001 Not You? Call 18002586161";
+    const ts = Math.floor(Date.now() / 1000);
+    const s1 = call(rt, { action: "smsIn", key: key, sms: sms1, sender: "HDFCBK", timestamp: ts });
+    assert(s1.ok === true && s1.outcome === "SAVED", "a real-looking debit SMS is SAVED: " + JSON.stringify(s1));
+    // (for the owner a new SMS row stays "not yet alerted" on purpose: the timer sends the notification, then it shows in Pending - so read the rows)
+    const rowsOf = function(){ return rt.sandbox.v2dbRun_(SCRATCH, function(db){ return db.getSheetByName("Transactions").getDataRange().getValues(); }, { prefetch: ["Transactions"] }); };
+    const pizza = rowsOf().filter(function(r){ return /QA Pizza/i.test(String(r[7])); });
+    assert(pizza.length === 1 && Number(pizza[0][5]) === 250 && pizza[0][3] === "debit" && pizza[0][2] === "HDFC", "and the row is in the private Transactions tab with the right amount, type and bank");
+    const s2 = call(rt, { action: "smsIn", key: key, sms: sms1, sender: "HDFCBK", timestamp: ts });
+    assert(s2.ok === true && s2.outcome === "DUPLICATE", "the same message again is a DUPLICATE (not saved twice)");
+    const s3 = call(rt, { action: "smsIn", key: key, sms: "Get a Loan on your HDFC Bank Credit Card at ZERO fee https://1.hdfc.bank.in/x", sender: "HDFCBK", timestamp: ts });
+    assert(s3.ok === true && s3.outcome === "IGNORED", "a promo with a link is IGNORED");
+    const bad = call(rt, { action: "smsIn", key: "z".repeat(40), sms: sms1, sender: "HDFCBK", timestamp: ts });
+    assert(bad.ok === false && /Unknown key/.test(bad.error), "a wrong key is refused");
+    let throttled = false;
+    for(let i = 0; i < 8; i++){ const b = call(rt, { action: "smsIn", key: "y".repeat(40 + i), sms: sms1, sender: "HDFCBK", timestamp: ts }); if(/Too many/.test(b.error || "")) throttled = true; }
+    assert(throttled, "a burst of wrong keys is throttled (6 a minute on the new server)");
+    // two servers get the SAME new message at the same moment (a phone retry racing a slow first try)
+    const sms2 = "Sent Rs.333.00 From HDFC Bank A/C x1234 To QA Burger On 14/10/26 Ref 710000000002 Not You? Call 18002586161";
+    const runSms = function(){
+      return new Promise(function(resolve){
+        const p = spawn(process.execPath, [__filename, "smsworker", sms2], { env: process.env });
+        let text = ""; p.stdout.on("data", function(d){ text += d; }); p.stderr.on("data", function(d){ text += d; });
+        p.on("close", function(){ resolve(text); });
+      });
+    };
+    const [x1, x2] = await Promise.all([runSms(), runSms()]);
+    const outs = [x1, x2].map(function(t){ const m3 = /RESULT (.*)/.exec(t); return m3 ? JSON.parse(m3[1]) : ["no result: " + t.slice(0, 200)]; });
+    console.log("two servers x 3 sends of one message -> " + JSON.stringify(outs));
+    const flat = outs[0].concat(outs[1]);
+    assert(flat.filter(function(o){ return o === "SAVED"; }).length === 1 && flat.filter(function(o){ return o === "DUPLICATE"; }).length === 5, "exactly ONE saved, the other five are duplicates");
+    assert(rowsOf().filter(function(r){ return /QA Burger/i.test(String(r[7])); }).length === 1, "and the Transactions tab holds that message exactly once");
+
     // refreshViews rebuilds the Home copy: capture it instead of writing (the real one belongs to the real owner)
     const captured = [];
     rt.sandbox.fsSetDocument_ = function(col, id, fields){ captured.push({ col: col, id: id, fields: fields }); return true; };

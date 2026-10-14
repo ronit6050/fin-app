@@ -72,6 +72,20 @@ exports.api = onRequest({
   }
 
   const action = data ? String(data.action) : "";
+  // THE SMS DOOR (added 2026-10-14): a phone sends a raw bank SMS + its private key (no Google sign-in: the key is the credential, exactly as on
+  // Apps Script). Only while the owner has switched it on. Any answer except {"ok":true} makes the phone carry on with its old chain, and the
+  // same message arriving twice is caught by the duplicate rules, so a failure or a timeout here can never lose or double a message.
+  if(action === "smsIn"){
+    try{
+      const rt = getRuntime();
+      if(!rt.smsEnabled() || !rt.writesEnabled()){ res.status(200).json({ ok: false, fallback: true, error: "Use the old path." }); return; }
+      res.status(200).json(rt.call(data));
+    }catch(err){
+      console.error(JSON.stringify({ severity: "ERROR", type: "FUNCTION_ERROR", action: action, message: String(err && err.message).slice(0, 300) }));
+      res.status(200).json({ ok: false, error: "Try again." });
+    }
+    return;
+  }
   const isWrite = WRITE_ACTIONS.indexOf(action) !== -1;
   if(!data || (!isWrite && READ_ACTIONS.indexOf(action) === -1 && EXTRA_READ_ACTIONS.indexOf(action) === -1)){
     res.status(200).json({ ok: false, fallback: true, error: "Not available on the new server yet." });

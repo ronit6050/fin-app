@@ -50,3 +50,30 @@ Wrong keys on `smsIn` are throttled like `ingestSms` (30 a minute, refused witho
 
 ## First real test, 2026-10-13 23:16: the direct path fell back safely and exposed a lock jam
 The phone tried `smsIn`, it failed with "Lock timeout: another process was holding the lock for too long", and the phone used the old way (the Sheet got the row: nothing lost). `registerPushToken` timed out the same way. Cause: the owner's timer (`processNewTransactions`) ran EVERYTHING inside the shared script lock, including rebuilding the Home screen copy (`publishViews...`, a heavy calculation plus a write), so the lock was held for 70+ seconds. Fix: only the real work runs under the lock now; the Home copy is rebuilt AFTER it is released, without the lock (`v2OwnerReadOnly_`, reads only). `V2DB_LAST_TIMING_` records where a run's time goes (reading, work, writing) and a job that holds the lock for more than 8 s writes `V2_JOB_SLOW` to AILogs with that breakdown. Tests: `backend/tests/v2owner.test.js` section 11.
+
+## Step 2 (built 2026-10-14, NOT live): the SMS door on the NEW server (Cloud Functions)
+The phone now tries **three doors in order**: (0) the new server `https://asia-south1-fin-app-76c40.cloudfunctions.net/api` (action `smsIn`, same
+code and same rules as Apps Script's `smsIn`), (1) Apps Script `smsIn`, (2) the old SMS reader. ONLY `{"ok":true}` stops the chain; anything else
+(HTTP error, timeout, "Use the old path", "Try again") goes on to the next door. If a slow door finishes AFTER the phone moved on, the next door sees
+the same message and answers DUPLICATE (reference / identical text rules), so a message is never lost or doubled.
+
+**Server-side switch (instant rollback, no phone change):** `v2dbEnableFunctionSms()` / `v2dbDisableFunctionSms()` (Script Property `V2_FN_SMS`, copied to
+`_system/props`). The new server serves `smsIn` only when BOTH `V2_FN_SMS` and `V2_FN_WRITES` are on; otherwise it answers `{"ok":false,"fallback":true,"error":"Use the old path."}`.
+The owner's own `V2DB_OWNER_DIRECT` switch is now copied to the new server too (`exportFlagsToFunctions`), so "owner direct off" still means the old way.
+`index.js` handles `smsIn` BEFORE any Google sign-in (the key is the credential, as on Apps Script). `ingestSms` (the old reader's hand-off) is NOT served here.
+
+A "switch off" function (`v2dbDisableFunctionSms`, `v2dbDisableFunctionWrites`, `v2dbDisableOwnerDirect`) now THROWS a plain message if copying the change to the new server failed (otherwise the new server would silently keep the old setting). The taught-bank list is cached per server instance for up to 10 minutes, so a newly taught bank can be recognised up to 10 minutes later on the new server (until then it is saved as UNCERTAIN, never lost).
+
+**Limits that changed:** the wrong-key throttle and the per-person daily cap live in each server instance's memory, and there can be up to 10 instances.
+So the new server allows fewer wrong keys per minute per instance (6, set in `shim.js`) than Apps Script (30); keys are 32-80 random characters and are format-checked
+before any database read. The 400-a-day cap is per instance (loose by up to 10x; still needs a valid key).
+**Owner alerts:** unchanged: a saved owner row is "not yet alerted"; the Apps Script timer (still on Apps Script) sends the notification. A friend's plain push is sent
+by the new server with its own identity (not yet proven live; see cloud-functions.md).
+
+**Proof:** `functions/tests/writes.test.js` 4b (switches), and `functions/tests/live_scratch.js` section 1b on the REAL Firestore in a made-up person: SMS saved with the right
+amount/type/bank, same message again = DUPLICATE, promo with a link = IGNORED, wrong key refused then throttled, and TWO servers sending the same new message 3 times each at the
+same moment -> exactly ONE row. Android: `SmsForwardWorker.kt` (commit `79a8e6c` in `D:\Fin-app Application`), APK `local-data/apk/FinApp-2026-10-14-new-server-sms.apk`.
+
+**Turn on (each step reversible):** (1) deploy function + backend (inert while `V2_FN_SMS` is off); (2) install the new APK on the owner's phone (adb or copy it over);
+(3) run `v2dbEnableFunctionSms` (and `v2dbEnableFunctionWrites` must already be on); (4) send a real SMS: the function logs show the request, Pending shows it within about a minute;
+(5) widen to Vaidehi's phone. **Roll back:** `v2dbDisableFunctionSms` (instant; the phone just uses door 1 again).

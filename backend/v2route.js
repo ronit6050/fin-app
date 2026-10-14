@@ -92,12 +92,19 @@ function exportFlagsToFunctions(){
     var fields = { V2DB_USERS: JSON.stringify(v2dbUsersOn_()), updatedAtMs: Date.now() };
     if(p.getProperty("V2DB_OWNER") === "on") fields.V2DB_OWNER = "on";
     if(p.getProperty("V2_FN_WRITES") === "on") fields.V2_FN_WRITES = "on";      // the new server may SAVE (sharedLock.js)
+    if(p.getProperty("V2DB_OWNER_DIRECT") === "on") fields.V2DB_OWNER_DIRECT = "on";   // the owner's SMS may land directly (smsIn.js)
+    if(p.getProperty("V2_FN_SMS") === "on") fields.V2_FN_SMS = "on";                  // the new server may take bank SMS (the SMS door)
     fsCommit_([{ set: { path: "_system/props", fields: fields } }]);
     return true;
   }catch(err){
     try{ logAI("FLAGS_EXPORT_ERROR", String(err && err.message).slice(0, 200)); }catch(ignore){}
     return false;
   }
+}
+
+// Switching something OFF must never look done when the new server did not hear about it (it keeps the old setting until the copy works).
+function flagsExportOrThrow_(what){
+  if(!exportFlagsToFunctions()) throw new Error(what + " is switched off HERE, but copying that to the new server FAILED, so the new server may still be using it. Run exportFlagsToFunctions() again until it says true (check AILogs for FLAGS_EXPORT_ERROR).");
 }
 
 function v2dbEnableUser(email){
@@ -123,7 +130,13 @@ function v2dbDisableOwner(){ PropertiesService.getScriptProperties().deletePrope
 // write at once. Turn ON only after the new server's save support is deployed. Turn off to go back to Apps Script alone (instant).
 // The app still decides per phone (Settings > Speed) whether to send saves to the new server.
 function v2dbEnableFunctionWrites(){ PropertiesService.getScriptProperties().setProperty("V2_FN_WRITES", "on"); exportFlagsToFunctions(); return "the new server may now save"; }
-function v2dbDisableFunctionWrites(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_WRITES"); exportFlagsToFunctions(); return "saving is back on Apps Script only"; }
+function v2dbDisableFunctionWrites(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_WRITES"); flagsExportOrThrow_("New-server saving"); return "saving is back on Apps Script only"; }
+
+// The SMS door on the new server (added 2026-10-14): the Android app tries the new server FIRST for each bank SMS (action smsIn, same code and
+// same rules as Apps Script's smsIn). Anything but {ok:true} makes the phone carry on with its old chain (Apps Script smsIn, then the old reader),
+// so no message is lost. Needs saving on the new server switched on too (v2dbEnableFunctionWrites). Off = the new server answers "use the old path".
+function v2dbEnableFunctionSms(){ PropertiesService.getScriptProperties().setProperty("V2_FN_SMS", "on"); exportFlagsToFunctions(); return "the new server now takes bank SMS (phones that know about it)"; }
+function v2dbDisableFunctionSms(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_SMS"); flagsExportOrThrow_("New-server bank SMS"); return "bank SMS no longer go to the new server"; }
 
 // ---------------------------------------------------------------- new people
 // Creates any template tab the person doesn't have yet (empty, headers only). Cheap when the tabs already exist: one check.

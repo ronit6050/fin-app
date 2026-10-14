@@ -19,9 +19,10 @@ function assert(cond, msg){
 }
 
 // ---- load index.js with the Firebase wrapper and the runtime replaced by fakes ----
-const state = { writesOn: false, calls: [], throwOn: null };
+const state = { writesOn: false, smsOn: false, calls: [], throwOn: null };
 const fakeRuntime = {
   writesEnabled: function(){ return state.writesOn; },
+  smsEnabled: function(){ return state.smsOn; },
   call: function(data){ state.calls.push(data.action); if(state.throwOn === data.action) throw new Error("boom"); return { ok: true, echoed: data.action }; }
 };
 const realLoad = Module._load;
@@ -88,6 +89,27 @@ console.log("\n--- 4. A problem DURING a save is never retried elsewhere ---");
   const r = post({ action: "getPending", idToken: "x" });
   assert(r.json.ok === false && r.json.fallback === true, "a failed READ still falls back to Apps Script");
   console.error = origError; state.throwOn = null;
+}
+
+console.log("\n--- 4b. The SMS door (action smsIn, no Google sign-in: the key is the credential) ---");
+{
+  state.writesOn = true; state.smsOn = false; state.calls = [];
+  let r = post({ action: "smsIn", key: "k", sms: "x", sender: "y" });
+  assert(r.json.ok === false && r.json.fallback === true && /old path/i.test(r.json.error) && state.calls.length === 0, "switch OFF: 'use the old path' and the backend code is not called");
+  state.smsOn = true; state.writesOn = false;
+  r = post({ action: "smsIn", key: "k", sms: "x", sender: "y" });
+  assert(r.json.ok === false && r.json.fallback === true && state.calls.length === 0, "SMS on but saving off: still 'use the old path' (an SMS is a save)");
+  state.smsOn = true; state.writesOn = true;
+  r = post({ action: "smsIn", key: "k", sms: "x", sender: "y" });
+  assert(r.json.ok === true && state.calls.join() === "smsIn", "both switches on: the message goes through the backend code");
+  state.throwOn = "smsIn"; state.calls = [];
+  const origError = console.error; console.error = function(){};
+  r = post({ action: "smsIn", key: "k", sms: "x", sender: "y" });
+  console.error = origError; state.throwOn = null;
+  assert(r.json.ok === false && !r.json.fallback && /try again/i.test(r.json.error), "a crash gives a plain 'try again' (the phone then uses its old chain; duplicates are caught there)");
+  const ing = post({ action: "ingestSms", key: "k" });
+  assert(ing.json.ok === false && ing.json.fallback === true, "the old reader's hand-off action (ingestSms) is NOT served here");
+  state.smsOn = false; state.writesOn = true;
 }
 
 console.log("\n--- 5. Housekeeping ---");

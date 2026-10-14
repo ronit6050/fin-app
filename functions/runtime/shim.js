@@ -230,6 +230,9 @@ function createRuntime(opts){
       }
     };
   `, sandbox);
+  // Wrong-key limit for the SMS doors: the count lives in each server instance's own memory and there can be several instances, so each one
+  // allows fewer wrong keys a minute than Apps Script does (30). A real phone never sends a wrong key.
+  vm.runInContext("INGEST_MAX_BAD_PER_MIN_ = 6;", sandbox);
   // A person who is not on the Firestore copy has nowhere to work on this server: tell the app to use Apps Script instead.
   vm.runInContext(`
     var __origRoute = v2RouteAndDispatch_;
@@ -250,8 +253,14 @@ function createRuntime(opts){
     const shared = opts.sharedProps ? opts.sharedProps() : loadSharedProps();
     Object.keys(shared).forEach(function(k){ props[k] = shared[k]; });
     // a switch that was removed in Apps Script must disappear here too
-    ["V2DB_OWNER", "V2_FN_WRITES"].forEach(function(k){ if(!(k in shared)) delete props[k]; });
+    ["V2DB_OWNER", "V2_FN_WRITES", "V2DB_OWNER_DIRECT", "V2_FN_SMS"].forEach(function(k){ if(!(k in shared)) delete props[k]; });
     propsLoadedAt = Date.now();
+  }
+
+  // True when the owner has allowed this server to take bank SMS (Apps Script: v2dbEnableFunctionSms()). Re-read every 20 s.
+  function smsEnabled(){
+    refreshProps();
+    return props.V2_FN_SMS === "on";
   }
 
   // True when the owner has allowed this server to SAVE (Apps Script: v2dbEnableFunctionWrites()). Re-read every 20 s.
@@ -267,7 +276,7 @@ function createRuntime(opts){
     return JSON.parse(out.getContent());
   }
 
-  return { sandbox: sandbox, call: call, props: props, refreshProps: refreshProps, writesEnabled: writesEnabled, filesLoaded: files };
+  return { sandbox: sandbox, call: call, props: props, refreshProps: refreshProps, writesEnabled: writesEnabled, smsEnabled: smsEnabled, filesLoaded: files };
 }
 
 module.exports = { createRuntime, formatDate, parseDate, tzOffsetMinutes };

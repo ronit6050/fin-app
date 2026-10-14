@@ -24,6 +24,7 @@ function v2dbEnableOwnerDirect(){
   if(v2EngineFor_(splitsKey_(PWA_ALLOWED_EMAIL)) !== "v2db") throw new Error("Switch the owner onto the private copy first (v2dbEnableOwner).");
   var copied = smsInCopyLearnedJunk_();
   PropertiesService.getScriptProperties().setProperty("V2DB_OWNER_DIRECT", "on");
+  exportFlagsToFunctions();                                  // the new server reads this switch too
   return "the owner's bank SMS now land directly in his private copy (the phone falls back to the old way if anything fails); " + copied + " junk pattern(s) copied across";
 }
 // Junk patterns the owner taught the app since his data was imported live only in the Sheet's tab; the new path reads his private tab.
@@ -46,6 +47,7 @@ function smsInCopyLearnedJunk_(){
 
 function v2dbDisableOwnerDirect(){
   PropertiesService.getScriptProperties().deleteProperty("V2DB_OWNER_DIRECT");
+  flagsExportOrThrow_("The owner's direct SMS");
   return "the owner's bank SMS go the old way again (through the Sheet)";
 }
 
