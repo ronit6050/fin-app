@@ -31,3 +31,9 @@ Replay of 2,685 real events old-vs-new path still identical.
 
 **To repair rows already saved wrongly:** the person edits them in the app (History: amount box; the new box for a blank direction). Nothing was changed in anyone's data by hand.
 **Deploy:** main backend (`clasp deploy`) + SMS reader (`clasp deploy` of sms-parser-backend, optional, same fixes for the old path) + `git push` (web app).
+
+## After the independent review (same day)
+- A number in a **mandate / UMN / auto-pay** message is never used as the transaction reference (it is the mandate's and repeats every month).
+- Tier 1 of the duplicate check (same reference) now also requires the **same amount** when both amounts are known: a monthly charge under one number is never dropped as a "duplicate".
+- Balance words must start a word ("overdue Rs 100" is a real amount); "Rs 100 Balance Enquiry fee" is a charge, not a balance; "Dr. Achar" is not "Dr. ... A/c".
+- A stray invisible character (a backspace written instead of `\b`) was found in one rule while fixing this and corrected.

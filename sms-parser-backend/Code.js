@@ -370,7 +370,7 @@ function hasMoneyMovementSignal(text){
   if(text.includes("without otp")) return true; // e.g. "Rs.89 without OTP/PIN HDFC Bank Card x5555 At..."
   // "Dr. from A/c ..." / "Cr. to A/c ..." (Bank of Baroda style; added 2026-10-14). Deliberately narrow (must be followed by from/to/by/A/c)
   // so a doctor's "Dr." in a promotion never counts as money moving.
-  if(/(?<![a-z])(dr|cr)\.?\s+(from|to|by|a\/c|ac|your)/.test(text)) return true;
+  if(/(?<![a-z])(dr|cr)\.?\s+(from|to|by|a\/c|ac\b|your)(?![a-z])/.test(text)) return true;
 
   return false;
 
@@ -706,8 +706,8 @@ function classifyDetail(sms,sender){
 // "Rs 500 available", "Total outstanding Rs 500" ...
 function isBalanceLikeAmount(before, after){
   const b = before.slice(-40).toLowerCase();
-  if(/(avl|avail|available|bal|balance|limit|outstanding|o\/s|closing|due|min(imum)?\s+due|total\s+due)\.?[\s:=\-]*(bal(ance)?\.?)?[\s:=\-]*(is|of|:)?[\s:=\-]*$/.test(b)) return true;
-  if(/^\s*(is\s+)?(available|avl|balance|bal)\b/.test(after.slice(0, 20).toLowerCase())) return true;
+  if(/(?<![a-z])(avl|avail|available|bal|balance|limit|outstanding|o\/s|closing|due|min(imum)?\s+due|total\s+due)\.?[\s:=\-]*(bal(ance)?\.?)?[\s:=\-]*(is|of|:)?[\s:=\-]*$/.test(b)) return true;
+  if(/^\s*(is\s+)?(available|avl|balance|bal)\b(?!\s+(enquiry|inquiry|transfer|alert|check))/.test(after.slice(0, 40).toLowerCase())) return true;
   return false;
 }
 
@@ -853,9 +853,11 @@ function ruleParser(sms,sender){
   if(!ref) ref = text.match(/utr[:\s]?(\d{6,})/i);
   if(!ref) ref = text.match(/txn\s?id[:\s]?(\d{6,})/i);
   // more wordings (added 2026-10-14): "UPI Ref No 628...", "Reference number: 628...", "RRN 628...", "UTR No. 628..."
-  if(!ref) ref = text.match(/ref(?:erence)?\.?\s*(?:no|number|id|#)?\.?\s*[:\-#]?\s*(\d{6,})/i);
-  if(!ref) ref = text.match(/rrn\s*(?:no)?\.?\s*[:\-]?\s*(\d{6,})/i);
-  if(!ref) ref = text.match(/utr\s*(?:no)?\.?\s*[:\-]?\s*(\d{6,})/i);
+  // ... but never from a mandate / auto-pay / UMN message: that number belongs to the MANDATE and is the same on every monthly charge.
+  const isMandateText = /mandate|umn|e-?nach|standing instruction/.test(text);
+  if(!ref && !isMandateText) ref = text.match(/ref(?:erence)?\.?\s*(?:no|number|id|#)?\.?\s*[:\-#]?\s*(\d{6,})/i);
+  if(!ref && !isMandateText) ref = text.match(/rrn\s*(?:no)?\.?\s*[:\-]?\s*(\d{6,})/i);
+  if(!ref && !isMandateText) ref = text.match(/utr\s*(?:no)?\.?\s*[:\-]?\s*(\d{6,})/i);
 
   if(ref)
       obj.reference = ref[1];
@@ -1020,6 +1022,10 @@ function isDuplicate(tx, sms, timestamp){
     for(let i=0;i<rows.length;i++){
       const existingRef = String(rows[i][6] || "");
       if(existingRef && existingRef.indexOf("NOREF_") !== 0 && Number(existingRef) === Number(ref)){
+        // The same reference with a DIFFERENT amount is a different transaction (e.g. a monthly charge under one mandate number): never a
+        // duplicate. If either amount is unknown, the reference alone decides, exactly as before. (added 2026-10-14)
+        const a1 = Number(tx.amount), a2 = Number(rows[i][5]);
+        if(a1 > 0 && a2 > 0 && Math.abs(a1 - a2) >= 0.01) continue;
         return {duplicate:true, reason:"reference match"};
       }
     }

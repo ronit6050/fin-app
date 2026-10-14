@@ -116,3 +116,19 @@ console.log("\n--- 5. The person's answer fills a blank direction (never overwri
   const r3 = w2.act("owner", { action: "saveNote", row: 2, fp: sb2.rowFingerprint_(w2.sheets.Transactions.rows[1]), note: "chai", category: "Food", counterparty: "x", amount: 25 });
   assert(w2.sheets.Transactions.rows[1][5] === 25, "an amount typed on the card is saved (for messages where no amount could be read)");
 }
+
+console.log("\n--- 6. Review fixes: mandate numbers, same reference but another amount, word edges ---");
+{
+  assert(!parse("HDFCBK", "AutoPay Mandate Ref No 4567890123: Rs.199.00 debited from A/c XX1234 for NETFLIX").reference, "a mandate's number is never used as the transaction reference");
+  assert(!parse("HDFCBK", "Mandate Set Rs.15000.00 For Google Cloud From HDFC Bank A/c x8774 UMN: 8f28e1333a32411a823cbb8a70a6ffdc@ok Mandate Reference Number 99887766").reference, "...and neither is a number in a UMN/mandate message");
+  const w3 = build(); const sb3 = w3.sb;
+  w3.addSheet("Transactions", [TXN_HEADER, ["2026-10-01", "10:00:00", "HDFC", "debit", "other", 199, "4567890123", "netflix", "SMS", "Phone", "text one", "HDFCBK"]]);
+  const dup = sb3.SmsPipeline.isDuplicate({ amount: "199.00", type: "debit", reference: "4567890123", counterparty: "netflix" }, "a re-sent message", 1791863517);
+  const other = sb3.SmsPipeline.isDuplicate({ amount: "299.00", type: "debit", reference: "4567890123", counterparty: "netflix" }, "next month's different charge", 1791863517);
+  assert(dup.duplicate === true, "the same reference AND the same amount is still a duplicate (a re-sent message)");
+  assert(other.duplicate === false, "the same reference with a DIFFERENT amount is a different transaction, never dropped");
+  assert(P.findTransactionAmount("overdue rs 100 debited") === "100", "'overdue Rs 100': the amount is not skipped (word edge)");
+  assert(P.findTransactionAmount("rs.100 balance enquiry fee debited") === "100", "'Rs.100 Balance Enquiry fee' is a real charge, not a balance");
+  assert(P.findTransactionAmount("rs.500 available for withdrawal. rs.200 debited") === "200", "but 'Rs 500 available for withdrawal' is still skipped");
+  assert(P.classifyDetail("Dr. Achar clinic: flat Rs 500 off on your visit", "VM-HDFCBK-P").result !== "TRANSACTION", "'Dr. Achar' in a promotion is not 'Dr. ... A/c'");
+}
