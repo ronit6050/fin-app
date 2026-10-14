@@ -15,7 +15,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const crypto = require("node:crypto");
 const { syncFetch, syncSleep } = require("./syncfetch");
-const { getFirestoreToken } = require("./tokens");
+const { getFirestoreToken, getMessagingToken } = require("./tokens");
 
 const TZ = "Asia/Kolkata";
 const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || "fin-app-76c40";
@@ -129,8 +129,10 @@ function createRuntime(opts){
   const theCache = makeCache();
   sandbox.CacheService = { getScriptCache: function(){ return theCache; }, getUserCache: function(){ return theCache; }, getDocumentCache: function(){ return theCache; } };
 
-  // One request at a time per instance (see syncfetch.js), so the lock has nothing to wait for.
-  sandbox.LockService = { getScriptLock: function(){ return { waitLock: function(){}, tryLock: function(){ return true; }, releaseLock: function(){}, hasLock: function(){ return true; } }; }, getUserLock: function(){ return this.getScriptLock(); } };
+  // One request at a time per instance (see syncfetch.js), but there can be several instances AND Apps Script saving at the same time,
+  // so the lock is the shared Firestore "lease" (backend/sharedLock.js, defined once the backend files are loaded below).
+  sandbox.V2_ON_NEW_SERVER_ = true;
+  sandbox.LockService = { getScriptLock: function(){ return sandbox.fsLeaseLock_(); }, getUserLock: function(){ return sandbox.fsLeaseLock_(); } };
 
   sandbox.Utilities = {
     formatDate: formatDate,
@@ -185,7 +187,13 @@ function createRuntime(opts){
   // ---- load the backend files (same global scope, like Apps Script) ----
   const files = fs.readdirSync(backendDir).filter(function(f){ return f.endsWith(".js") && !SKIP_FILES.has(f); }).sort();
   files.forEach(function(f){
-    vm.runInContext(fs.readFileSync(path.join(backendDir, f), "utf8"), sandbox, { filename: f });
+    let src = fs.readFileSync(path.join(backendDir, f), "utf8");
+    // Local testing only: a made-up "owner" so a test never touches the real owner's data. Refused on Firebase itself.
+    if(opts.ownerEmail && f === "PWA.js"){
+      if(process.env.K_SERVICE) throw new Error("The test owner shortcut must never run on Firebase.");
+      src = src.replace(/const PWA_ALLOWED_EMAIL = "[^"]*";/, 'const PWA_ALLOWED_EMAIL = ' + JSON.stringify(String(opts.ownerEmail)) + ';');
+    }
+    vm.runInContext(src, sandbox, { filename: f });
   });
 
   // ---- overrides that replace Apps Script-only behaviour ----
@@ -197,6 +205,31 @@ function createRuntime(opts){
   // Logs go to Cloud Logging (searchable in the Firebase console) instead of the AILogs tab.
   sandbox.__log = function(type, message){ log(JSON.stringify({ severity: /ERROR/i.test(type) ? "ERROR" : "INFO", type: type, message: String(message).slice(0, 1500) })); };
   vm.runInContext("logAI = function(type, message){ __log(type, message); };", sandbox);
+  // Push notifications (e.g. "Vaidehi split a payment with you"): Apps Script signs in with a key kept in Script Properties; this server
+  // uses its own identity instead (same message, same Firebase project). Never throws, like the original.
+  sandbox.__fcmToken = getMessagingToken;
+  vm.runInContext(`
+    sendPushToToken_ = function(deviceToken, title, body, extraData){
+      try{
+        if(!deviceToken) return;
+        var accessToken = __fcmToken();
+        if(!accessToken) return;
+        var dataPayload = { title: title, body: body };
+        if(extraData){
+          Object.keys(extraData).forEach(function(key){
+            if(extraData[key] !== null && extraData[key] !== undefined) dataPayload[key] = String(extraData[key]);
+          });
+        }
+        var response = UrlFetchApp.fetch("https://fcm.googleapis.com/v1/projects/" + __projectId + "/messages:send", {
+          method: "post", contentType: "application/json", headers: { Authorization: "Bearer " + accessToken },
+          payload: JSON.stringify({ message: { token: deviceToken, data: dataPayload } }), muteHttpExceptions: true
+        });
+        logAI("PUSH_SENT", response.getContentText());
+      }catch(err){
+        logAI("PUSH_ERROR", err.toString());
+      }
+    };
+  `, sandbox);
   // A person who is not on the Firestore copy has nowhere to work on this server: tell the app to use Apps Script instead.
   vm.runInContext(`
     var __origRoute = v2RouteAndDispatch_;
@@ -217,8 +250,14 @@ function createRuntime(opts){
     const shared = opts.sharedProps ? opts.sharedProps() : loadSharedProps();
     Object.keys(shared).forEach(function(k){ props[k] = shared[k]; });
     // a switch that was removed in Apps Script must disappear here too
-    ["V2DB_OWNER"].forEach(function(k){ if(!(k in shared)) delete props[k]; });
+    ["V2DB_OWNER", "V2_FN_WRITES"].forEach(function(k){ if(!(k in shared)) delete props[k]; });
     propsLoadedAt = Date.now();
+  }
+
+  // True when the owner has allowed this server to SAVE (Apps Script: v2dbEnableFunctionWrites()). Re-read every 20 s.
+  function writesEnabled(){
+    refreshProps();
+    return props.V2_FN_WRITES === "on";
   }
 
   // Runs one request through the REAL backend code and returns the parsed answer.
@@ -228,7 +267,7 @@ function createRuntime(opts){
     return JSON.parse(out.getContent());
   }
 
-  return { sandbox: sandbox, call: call, props: props, refreshProps: refreshProps, filesLoaded: files };
+  return { sandbox: sandbox, call: call, props: props, refreshProps: refreshProps, writesEnabled: writesEnabled, filesLoaded: files };
 }
 
 module.exports = { createRuntime, formatDate, parseDate, tzOffsetMinutes };

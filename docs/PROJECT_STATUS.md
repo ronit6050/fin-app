@@ -1,4 +1,4 @@
-# Project status: what we have, what is done, what is next (plain words)
+﻿# Project status: what we have, what is done, what is next (plain words)
 
 **Last updated: 2026-10-14 (late evening).** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
 If this file and `CLAUDE.md` disagree, this file is newer.
@@ -73,8 +73,18 @@ Two special ones need `local-data/` (real messages): `smsReplay.test.js`, and th
 
 ## 5. IN PROGRESS and BLOCKED
 
-**The new server (Cloud Functions) cannot be deployed yet.** Google says: *"Your identity verification is in progress. Please allow a few days."* on the
-billing account (so any billed upload returns HTTP 403 "check billing account"). Nothing is wrong in our code or project. Firestore and everything else work.
+**UPDATE 2026-10-14 night: the new server IS DEPLOYED** (`api`, asia-south1, https://asia-south1-fin-app-76c40.cloudfunctions.net/api) after the owner fixed the billing
+account (it was "not open" until a payment step was done). Tested: unsigned ping refused, unsupported action answers `fallback:true`. Image cleanup rule set (delete build images older than 1 day).
+Deploy needs `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"` on this PC (default 10 s code-inspection timeout is too short). NOT yet done: signed-in test from the app (turn on Settings > Speed > New server (beta)) and speed comparison.
+**SAVING on the new server: BUILT, TESTED, INDEPENDENTLY REVIEWED (safe while its switch is OFF), DEPLOYED 2026-10-14 night (function updated, backend @354, app 2026-10-14-08) with the switch OFF.** Shared "only one server saves" lock
+(`backend/sharedLock.js`), a switch `V2_FN_WRITES` (`v2dbEnableFunctionWrites` / `v2dbDisableFunctionWrites` in the Apps Script editor), function accepts the everyday save actions only
+while the switch is on, Settings > Speed has "Reads and saves", a save with no answer is never repeated. Proven on the REAL database in a throwaway test person: two servers saving at once, 12/12
+saved, balance exact, lock released, cleaned up (`functions/tests/live_scratch.js`). Details + exact turn-on order + rollback: `docs/features/cloud-functions.md` "Step 2". Waiting on the owner's "ship it"
+(deploy order: function, then `clasp push`/`clasp deploy`, then `git push`, then switch on, then try on ONE phone).
+(Old text below is the history of the block.)
+
+**The new server (Cloud Functions) could not be deployed.** Google said: *"Your identity verification is in progress. Please allow a few days."* on the
+billing account (so any billed upload returned HTTP 403 "check billing account"). Nothing was wrong in our code or project. Firestore and everything else work.
 - **Ready to go:** `functions/` (runs the same `backend/*.js` via a small "pretend Apps Script" layer, read-only screens first), `firebase.json`, the beta switch in the app
   (Settings > Speed > "New server (beta)", off by default, falls back to Apps Script automatically), the `_system/props` copy of the on/off switches (seeded).
 - **To finish once Google verifies:** from `D:\fin-app` run `firebase deploy --only functions` (Firebase CLI is installed on the owner's PC and logged in as the owner; in PowerShell add

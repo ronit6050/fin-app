@@ -104,4 +104,39 @@ console.log("\n--- 6. The shared switches are read, and a removed switch disappe
   assert(rt.sandbox.v2EngineFor_("ronitnadar9@gmail.com") === "sheet" && rt.sandbox.v2EngineFor_("a@x.com") === "sheet", "after the switches are turned off in Apps Script, they are off here too");
 }
 
+console.log("\n--- 7. Saving on the new server: switch, shared lock, push (added 2026-10-14) ---");
+{
+  let flags = {};
+  const rt = createRuntime({ localEmail: "ronitnadar9@gmail.com", sharedProps: function(){ return flags; } });
+  assert(rt.writesEnabled() === false, "saving is OFF unless the owner switched it on");
+  flags = { V2_FN_WRITES: "on" };
+  const realNow = Date.now; Date.now = function(){ return realNow() + 60000; };
+  assert(rt.writesEnabled() === true, "switched on -> saving is allowed (re-read from the shared switches)");
+  flags = {};
+  Date.now = function(){ return realNow() + 200000; };
+  assert(rt.writesEnabled() === false, "switched off again -> a removed switch disappears here too");
+  Date.now = realNow;
+
+  assert(rt.sandbox.V2_ON_NEW_SERVER_ === true, "the backend knows it is running on the new server");
+  const lock = rt.sandbox.LockService.getScriptLock();
+  assert(typeof lock.waitLock === "function" && typeof lock.releaseLock === "function" && lock.hasLock() === false, "the lock is the shared Firestore lease (not held until asked)");
+  assert(rt.sandbox.sharedLock_() !== undefined && rt.sandbox.fnWritesOn_ !== undefined, "the shared lock helper is loaded");
+
+  // push: a message goes to Google's push service with this server's own identity (token fetch replaced by a fake), never throws
+  const sent = [];
+  rt.sandbox.__fcmToken = function(){ return "fake-token"; };
+  rt.sandbox.UrlFetchApp = { fetch: function(url, o){ sent.push({ url: url, o: o }); return { getResponseCode: function(){ return 200; }, getContentText: function(){ return "{\"name\":\"ok\"}"; } }; } };
+  rt.sandbox.sendPushToToken_("device-1", "Hello", "World", { kind: "split", n: 5 });
+  assert(sent.length === 1 && /fcm\.googleapis\.com\/v1\/projects\/.+\/messages:send$/.test(sent[0].url), "a push is sent to Firebase Cloud Messaging");
+  const msg = JSON.parse(sent[0].o.payload).message;
+  assert(msg.token === "device-1" && msg.data.title === "Hello" && msg.data.body === "World" && msg.data.n === "5" && msg.data.kind === "split", "same message shape as Apps Script (all values as text)");
+  assert(sent[0].o.headers.Authorization === "Bearer fake-token", "signed in with this server's own identity");
+  rt.sandbox.sendPushToToken_("", "x", "y");
+  assert(sent.length === 1, "no device token -> nothing sent");
+  rt.sandbox.__fcmToken = function(){ throw new Error("no permission"); };
+  let threw = false;
+  try{ rt.sandbox.sendPushToToken_("device-1", "x", "y"); }catch(e){ threw = true; }
+  assert(!threw, "a push problem never breaks a save");
+}
+
 console.log(failures === 0 ? "\nALL OK" : "\n" + failures + " FAILED");

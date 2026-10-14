@@ -28,7 +28,7 @@ function v2OwnerOn_(){ return v2EngineFor_(v2OwnerEmail_()) === "v2db"; }
 // or { ran: true, value } when the job was run here on his private copy.
 function v2OwnerTakeOver_(jobFn){
   if(V2DB_REQ_ || !v2OwnerOn_()) return { ran: false };
-  var lock = LockService.getScriptLock();
+  var lock = sharedLock_({ failOpen: true });                    // the background timer: never skipped because of the lock (sharedLock.js)
   var started = Date.now();
   lock.waitLock(25000);                                          // one saving job at a time, same lock as the app's saves
   var gotLockAt = Date.now();

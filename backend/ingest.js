@@ -100,7 +100,7 @@ function ingestSmsHandle_(data){
   var counterparty = ingestClip_(tx.counterparty, 200);
   var reference = ingestClip_(tx.reference, 60);
 
-  var lock = LockService.getScriptLock();
+  var lock = sharedLock_({ failOpen: true });         // a bank SMS must never be dropped because of the lock (sharedLock.js)
   try{
     lock.waitLock(25000);
     var outcome = v2dbRun_(email, function(db){

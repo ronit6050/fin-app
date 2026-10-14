@@ -91,6 +91,7 @@ function exportFlagsToFunctions(){
     var p = PropertiesService.getScriptProperties();
     var fields = { V2DB_USERS: JSON.stringify(v2dbUsersOn_()), updatedAtMs: Date.now() };
     if(p.getProperty("V2DB_OWNER") === "on") fields.V2DB_OWNER = "on";
+    if(p.getProperty("V2_FN_WRITES") === "on") fields.V2_FN_WRITES = "on";      // the new server may SAVE (sharedLock.js)
     fsCommit_([{ set: { path: "_system/props", fields: fields } }]);
     return true;
   }catch(err){
@@ -118,6 +119,12 @@ function v2dbDisableUser(email){
 function v2dbEnableOwner(){ PropertiesService.getScriptProperties().setProperty("V2DB_OWNER", "on"); exportFlagsToFunctions(); return "owner is now on the Firestore-backed spreadsheet"; }
 function v2dbDisableOwner(){ PropertiesService.getScriptProperties().deleteProperty("V2DB_OWNER"); exportFlagsToFunctions(); return "owner is back on the Google Sheet"; }
 
+// Lets the NEW server (Cloud Functions) save too, and makes Apps Script's saves/SMS/timer also take the shared lease so the two never
+// write at once. Turn ON only after the new server's save support is deployed. Turn off to go back to Apps Script alone (instant).
+// The app still decides per phone (Settings > Speed) whether to send saves to the new server.
+function v2dbEnableFunctionWrites(){ PropertiesService.getScriptProperties().setProperty("V2_FN_WRITES", "on"); exportFlagsToFunctions(); return "the new server may now save"; }
+function v2dbDisableFunctionWrites(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_WRITES"); exportFlagsToFunctions(); return "saving is back on Apps Script only"; }
+
 // ---------------------------------------------------------------- new people
 // Creates any template tab the person doesn't have yet (empty, headers only). Cheap when the tabs already exist: one check.
 function v2dbEnsureTemplate_(db){
@@ -141,7 +148,7 @@ function v2RouteAndDispatch_(data, verified){
   var lock = null;
   try{
     if(v2IsSavingAction_(data.action)){
-      lock = LockService.getScriptLock();
+      lock = sharedLock_();                       // Apps Script's lock (+ the shared lease once the new server also saves): sharedLock.js
       lock.waitLock(25000);                       // one saving request at a time
     }
     var attempt = function(){

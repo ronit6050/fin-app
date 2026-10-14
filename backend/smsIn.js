@@ -133,7 +133,7 @@ function smsInHandle_(data){
   try{ if(cache && Number(cache.get(perDay) || 0) >= 400) return { ok: false, error: "Too many messages for now." }; }catch(ignoreLimit){}
 
   smsInLoadTaughtBanks_();                                      // the banks taught from the Access screen (cached)
-  var lock = LockService.getScriptLock();
+  var lock = sharedLock_({ failOpen: true });         // a bank SMS must never be dropped because of the lock (sharedLock.js)
   var attempt = function(){
     return v2dbRun_(email, function(db){
       v2dbEnsureTemplate_(db);

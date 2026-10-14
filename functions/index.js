@@ -2,8 +2,8 @@
 //
 // PLAIN-ENGLISH WHAT THIS IS: the front door of the NEW server (Firebase Cloud Functions). The app sends the same requests it sends to
 // Apps Script; this runs the SAME backend code (backend/*.js, copied in at deploy time) next to the database. For now it only answers
-// the READ-ONLY screens. Anything else, or any problem, gets a "fallback" answer and the app asks Apps Script instead, so nothing can
-// break. See docs/features/cloud-functions.md.
+// the READ-ONLY screens, plus (since 2026-10-14, only while the owner switches it on) the everyday SAVE actions. Anything else, or a
+// problem with a read, gets a "fallback" answer and the app asks Apps Script instead, so nothing can break. See docs/features/cloud-functions.md.
 
 const { onRequest } = require("firebase-functions/v2/https");
 const path = require("node:path");
@@ -15,6 +15,16 @@ const ALLOWED_ORIGINS = ["https://ronit6050.github.io"];
 const READ_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
   "getDebts", "getCash", "getInvestments", "getInvestmentInstruments", "getSavingsGoals", "getTransactionHistory", "getPlannerData",
   "getSettings", "getPeople", "getPerson"];
+// SAVING actions (added 2026-10-14). Accepted ONLY while the owner has switched saving on (Apps Script: v2dbEnableFunctionWrites()),
+// and only for people on the Firestore copy. Deliberately NOT here: Reconcile/statement actions (they use the owner's Google Drive),
+// Access/admin actions, the SMS doors and the timers - those stay on Apps Script.
+const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "addDebt", "settleDebt", "recordDebtPayment",
+  "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
+  "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
+  "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
+  "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "refreshViews"];
+// Answers that never change anything but were not on the read list at first.
+const EXTRA_READ_ACTIONS = ["previewSavingsSplit"];
 const MAX_BODY_BYTES = 200000;
 
 let runtime = null;     // built once per server instance (the backend code is loaded then, not on every request)
@@ -61,15 +71,25 @@ exports.api = onRequest({
     return;
   }
 
-  if(!data || READ_ACTIONS.indexOf(String(data.action)) === -1){
+  const action = data ? String(data.action) : "";
+  const isWrite = WRITE_ACTIONS.indexOf(action) !== -1;
+  if(!data || (!isWrite && READ_ACTIONS.indexOf(action) === -1 && EXTRA_READ_ACTIONS.indexOf(action) === -1)){
     res.status(200).json({ ok: false, fallback: true, error: "Not available on the new server yet." });
     return;
   }
 
   try{
-    res.status(200).json(getRuntime().call(data));
+    const rt = getRuntime();
+    // fallback:true means "NOTHING was done here, ask Apps Script": safe to repeat there. Saving is off unless the owner turned it on.
+    if(isWrite && !rt.writesEnabled()){
+      res.status(200).json({ ok: false, fallback: true, error: "Saving is not switched on for the new server." });
+      return;
+    }
+    res.status(200).json(rt.call(data));
   }catch(err){
-    console.error(JSON.stringify({ severity: "ERROR", type: "FUNCTION_ERROR", action: data.action, message: String(err && err.message).slice(0, 300) }));
-    res.status(200).json({ ok: false, fallback: true, error: "The new server hit a problem." });
+    console.error(JSON.stringify({ severity: "ERROR", type: "FUNCTION_ERROR", action: action, message: String(err && err.message).slice(0, 300) }));
+    // For a SAVE we cannot be sure nothing was written, so never tell the app to repeat it elsewhere (that could save it twice).
+    if(isWrite) res.status(200).json({ ok: false, error: "Couldn't complete that. Check it before trying again." });
+    else res.status(200).json({ ok: false, fallback: true, error: "The new server hit a problem." });
   }
 });

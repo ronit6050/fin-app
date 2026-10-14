@@ -3491,12 +3491,14 @@
             <label>New server (beta)</label>
             <select id="settingsNewServer">
               <option value="off">Off - Apps Script only</option>
-              <option value="on">On - try the new fast server first</option>
+              <option value="on">Reads only - screens come from the new fast server</option>
+              <option value="all">Reads and saves - saving also uses the new server</option>
             </select>
           </div>
           <p class="pending-status" id="settingsNewServerStatus" style="margin-top:6px;">
-            Reading screens from our own Firebase server, next to the database. If anything is wrong the app quietly uses the old
-            server instead, so it cannot break your screens.
+            Our own Firebase server, next to the database. Reads: if anything is wrong the app quietly uses the old server instead.
+            Saves (only works once the owner has switched it on): if the new server says it did nothing, the old server does it; if
+            there is no answer at all the app does NOT try again by itself, so nothing is ever saved twice.
           </p>
           <p class="pending-status" style="margin-top:8px;">
             On: the app reads a ready-made copy of your screens, so fresh numbers
@@ -3670,8 +3672,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-14-07";
-    const APP_CHANGELOG = "History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, the app remembers when you say it is regular spend, and a lent-to note now shows up in Debts straight away (and only once).";
+    const APP_VERSION = "2026-10-14-08";
+    const APP_CHANGELOG = "Settings > Speed has a new choice, \"Reads and saves\" (beta): saving can also go through the new fast server. History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, the app remembers when you say it is regular spend, and a lent-to note now shows up in Debts straight away (and only once).";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -4881,6 +4883,20 @@
       if (newServerEnabled() && NEW_SERVER_ACTIONS.indexOf(payload.action) !== -1) {
         return callNewServer(payload).catch(function () { return callAppsScriptDirect(payload, isWrite, counted); });
       }
+      // SAVING on the new server (2026-10-14): only when "Reads and saves" is picked in Settings. Saves are different from reads:
+      // we may only ask Apps Script to do it again when the new server SAYS it did nothing (fallback). If we simply got no answer
+      // (network drop, timeout) it may or may not have saved, so repeating it could save it twice: the normal "couldn't save"
+      // handling of each screen takes over instead.
+      if (newServerSaves() && NEW_SERVER_WRITE_ACTIONS.indexOf(payload.action) !== -1) {
+        return callNewServerWrite(payload).then(function (data) {
+          if (isWrite) fastWriteFinished(!!(data && data.ok), counted);
+          return data;
+        }, function (err) {
+          if (err && err.message === "fallback") return callAppsScriptDirect(payload, isWrite, counted);
+          if (isWrite) fastWriteFinished(false, counted);
+          throw err;
+        });
+      }
       return callAppsScriptDirect(payload, isWrite, counted);
     }
 
@@ -4889,10 +4905,46 @@
     const NEW_SERVER_URL = "https://asia-south1-fin-app-76c40.cloudfunctions.net/api";
     const NEW_SERVER_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
       "getDebts", "getCash", "getInvestments", "getInvestmentInstruments", "getSavingsGoals", "getTransactionHistory", "getPlannerData", "getSettings",
-      "getPeople", "getPerson"];
+      "getPeople", "getPerson", "previewSavingsSplit"];
+    // The saving actions the new server accepts (must match WRITE_ACTIONS in functions/index.js; one it does not know just answers "fallback").
+    const NEW_SERVER_WRITE_ACTIONS = ["saveNote", "markNotATransaction", "addDebt", "settleDebt", "recordDebtPayment",
+      "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
+      "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
+      "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
+      "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry"];
     let newServerStatus = "";     // shown in Settings: what the last request used and how long it took
+    // localStorage "newServer": "on" = read screens from the new server; "all" = reads AND saves (2026-10-14).
     function newServerEnabled() {
-      try { return localStorage.getItem("newServer") === "on" && !demoMode; } catch (e) { return false; }
+      try { const v = localStorage.getItem("newServer"); return (v === "on" || v === "all") && !demoMode; } catch (e) { return false; }
+    }
+    function newServerSaves() {
+      try { return localStorage.getItem("newServer") === "all" && !demoMode; } catch (e) { return false; }
+    }
+    // One SAVE sent to the new server. Resolves with the answer; rejects with Error("fallback") ONLY when the server says it did
+    // nothing; any other problem rejects with a different error (we cannot know whether it saved, so never repeat it elsewhere). The wait (70 s) must stay longer than the function's timeoutSeconds (60 s): otherwise the phone could give up on a save that still completes.
+    function callNewServerWrite(payload) {
+      const started = Date.now();
+      const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+      const timer = controller ? setTimeout(function () { controller.abort(); }, 70000) : null;   // longer than the function's own 60 s limit, so a slow save is never given up on while it is still running
+      return fetch(NEW_SERVER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(payload),
+        signal: controller ? controller.signal : undefined
+      }).then(function (response) { return response.json(); })
+        .then(function (data) {
+          if (timer) clearTimeout(timer);
+          if (data && data.fallback === true) {
+            newServerStatus = "save fell back to Apps Script (" + payload.action + ")";
+            throw new Error("fallback");
+          }
+          newServerStatus = "new server saved in " + (Date.now() - started) + " ms (" + payload.action + ")";
+          return data;
+        }, function (err) {
+          if (timer) clearTimeout(timer);
+          newServerStatus = "no answer for the save (" + payload.action + "), not repeated";
+          throw new Error("no answer from the server");
+        });
     }
     function callNewServer(payload) {
       const started = Date.now();
@@ -6863,8 +6915,12 @@
         init.signal = controller.signal;
         abortTimer = setTimeout(function () { controller.abort(); }, 20000);
       }
-      fetch(APPS_SCRIPT_URL, init)
-        .then(function (response) { return response.json(); })
+      // Rebuilding the Home copy is safe to repeat, so with "Reads and saves" on it is tried on the new server first (right next to
+      // the database, so right after a save it is quicker) and falls back to Apps Script on ANY problem.
+      const viaApps = function () { return fetch(APPS_SCRIPT_URL, init).then(function (response) { return response.json(); }); };
+      (newServerSaves()
+        ? callNewServer({ action: "refreshViews", idToken: currentUser.idToken }).catch(viaApps)
+        : viaApps())
         .then(function (res) {
           if (abortTimer) clearTimeout(abortTimer);
           const good = !!(res && res.ok && res.published && res.builtAt);
@@ -12611,10 +12667,10 @@
 
     // New server (beta) switch (local to this phone, takes effect immediately) + what the last request used.
     const settingsNewServerEl = document.getElementById("settingsNewServer");
-    try { settingsNewServerEl.value = localStorage.getItem("newServer") === "on" ? "on" : "off"; } catch (e) { /* default Off */ }
+    try { const v = localStorage.getItem("newServer"); settingsNewServerEl.value = v === "all" ? "all" : (v === "on" ? "on" : "off"); } catch (e) { /* default Off */ }
     settingsNewServerEl.addEventListener("change", function () {
       try {
-        if (settingsNewServerEl.value === "on") localStorage.setItem("newServer", "on");
+        if (settingsNewServerEl.value === "on" || settingsNewServerEl.value === "all") localStorage.setItem("newServer", settingsNewServerEl.value);
         else localStorage.removeItem("newServer");
       } catch (e) { /* ignore */ }
     });
