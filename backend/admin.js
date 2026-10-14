@@ -15,7 +15,7 @@ function adminIsOwner_(verified){
 // Returns a response object for the three actions above, or null if the action is not one of them.
 function adminHandle_(data, verified){
   var action = data && data.action;
-  if(action !== "getMyAccess" && action !== "getAdminOverview" && action !== "setFriendFullApp" && action !== "getMyIngestKey" && action !== "getSmsFormats") return null;
+  if(action !== "getMyAccess" && action !== "getAdminOverview" && action !== "setFriendFullApp" && action !== "getMyIngestKey" && action !== "getSmsFormats" && action !== "teachBank" && action !== "forgetBank") return null;
   var isOwner = adminIsOwner_(verified);
   try{
     if(action === "getMyAccess"){
@@ -29,6 +29,8 @@ function adminHandle_(data, verified){
     }
     if(!isOwner) return { ok: false, error: "This account is not allowed." };
     if(action === "getSmsFormats") return smsFormatsSummary_();
+    if(action === "teachBank") return smsInTeachBank_(data.sender, data.bank, false);
+    if(action === "forgetBank") return smsInTeachBank_(data.sender, "", true);
     if(action === "setFriendFullApp"){
       var email = splitsKey_(data.email);
       if(!splitsValidEmail_(email) || email === splitsKey_(PWA_ALLOWED_EMAIL)) return { ok: false, error: "Pick one of your friends." };

@@ -111,11 +111,25 @@ function smsFormatsSummary_(){
     var seen = Number(f.seen || 0), unc = Number(f.uncertain || 0);
     total++;
     var s = String(f.sender || "?");
-    var b = bySender[s] || (bySender[s] = { sender: s, formats: 0, seen: 0, uncertain: 0 });
+    var b = bySender[s] || (bySender[s] = { sender: s, token: "", bank: "", formats: 0, seen: 0, uncertain: 0 });
     b.formats++; b.seen += seen; b.uncertain += unc;
+    if(f.bank && !b.bank) b.bank = String(f.bank);
     if(unc > 0 && unc >= seen / 2) notUnderstood++;
   });
-  var list = Object.keys(bySender).map(function(k){ return bySender[k]; });
-  list.sort(function(a, b){ return b.uncertain - a.uncertain || b.seen - a.seen; });
-  return { ok: true, formats: total, senders: list.length, notUnderstood: notUnderstood, top: list.slice(0, 8) };
+  // The banks taught from the Access screen, and which senders still have no bank at all (the ones worth teaching).
+  var taught = {};
+  try{
+    var doc = fsGetPathMeta_("_system/bankSenders");
+    taught = doc && doc.fields && doc.fields.map ? JSON.parse(String(doc.fields.map)) : {};
+  }catch(err){ taught = {}; }
+  var list = Object.keys(bySender).map(function(k){
+    var b = bySender[k];
+    b.token = typeof smsInSenderToken_ === "function" ? smsInSenderToken_(b.sender) : "";
+    if(!b.bank && b.token && taught[b.token]) b.bank = String(taught[b.token]);
+    b.needsBank = !b.bank && b.uncertain > 0;
+    return b;
+  });
+  list.sort(function(a, b){ return (b.needsBank ? 1 : 0) - (a.needsBank ? 1 : 0) || b.uncertain - a.uncertain || b.seen - a.seen; });
+  var taughtList = Object.keys(taught).map(function(t){ return { token: t, bank: String(taught[t]) }; });
+  return { ok: true, formats: total, senders: list.length, notUnderstood: notUnderstood, top: list.slice(0, 10), taught: taughtList };
 }

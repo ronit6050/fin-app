@@ -289,11 +289,36 @@ function getSheet(name){
 // so their SMS never even reached the parsing logic. Jupiter is
 // expected to be temporary (user is planning to stop using that app),
 // kept simple on purpose rather than given its own special handling.
-const KNOWN_SENDERS = ["HDFC","FED","SBI","ICICI","AXIS","KOTAK","YES","PAYTM","PAYZAP","ONJPTR"];
+// THE bank list (added 2026-10-14): every bank/wallet this reader recognises, as [text found in the sender name, bank name saved]. Both
+// "is this a known sender?" and "which bank is it?" read THIS list, so teaching a new bank is one line here (order matters only when
+// a sender contains two tokens: the LATER one wins, exactly as before). The first ten are the original ones, in the original order.
+const BANK_SENDER_TOKENS = [
+  ["HDFC","HDFC"], ["FED","FEDERAL"], ["SBI","SBI"], ["ICICI","ICICI"], ["AXIS","AXIS"], ["KOTAK","KOTAK"], ["YES","YES"],
+  ["PAYTM","PAYTM"], ["PAYZAP","PAYZAPP"], ["ONJPTR","JUPITER"],
+  // added 2026-10-14 (public bank sender names; the sender looks like "VM-BOBSMS-S", the bank is the middle part)
+  ["BOBSMS","BOB"], ["BOBTXN","BOB"], ["BOBCRD","BOB"], ["BARODA","BOB"], ["PNBSMS","PNB"], ["PNBBNK","PNB"], ["CANBNK","CANARA"], ["CANARA","CANARA"],
+  ["UBINBK","UNION"], ["UNIONB","UNION"], ["IDBIBK","IDBI"], ["INDUSB","INDUSIND"], ["INDBNK","INDUSIND"], ["IDFCFB","IDFC"],
+  ["BANDHN","BANDHAN"], ["RBLBNK","RBL"], ["UCOBNK","UCO"], ["BOIIND","BANK OF INDIA"], ["CBSSBI","SBI"], ["KVBANK","KVB"]
+];
+const KNOWN_SENDERS = BANK_SENDER_TOKENS.map(function(t){ return t[0]; });
+
+// Banks taught later without changing any code (the main backend hands them in; this reader never uses it). Same shape: { TOKEN: "BANK" }.
+let EXTRA_SENDERS = {};
+function setExtraSenders(map){ EXTRA_SENDERS = (map && typeof map === "object") ? map : {}; }
 
 function isKnownSender(sender){
   const s = sender.toUpperCase();
-  return KNOWN_SENDERS.some(function(b){ return s.includes(b); });
+  return KNOWN_SENDERS.some(function(b){ return s.includes(b); }) ||
+         Object.keys(EXTRA_SENDERS).some(function(b){ return b && s.includes(String(b).toUpperCase()); });
+}
+
+// Which bank a sender belongs to ("" if none).
+function bankFromSender(sender){
+  const s = String(sender || "").toUpperCase();
+  let bank = "";
+  BANK_SENDER_TOKENS.forEach(function(t){ if(s.includes(t[0])) bank = t[1]; });
+  Object.keys(EXTRA_SENDERS).forEach(function(k){ if(k && s.includes(String(k).toUpperCase())) bank = String(EXTRA_SENDERS[k]); });
+  return bank;
 }
 
 function hasRupeeAmount(text){
@@ -343,6 +368,9 @@ function hasMoneyMovementSignal(text){
   if(text.includes("txn") && (text.includes("card") || text.includes("upi") || text.includes("atm"))) return true; // e.g. HDFC's "Txn Rs.109.08 On HDFC Bank Card..."
   if(text.includes("autopay") && text.includes("success")) return true; // e.g. "AutoPay (E-mandate) Success for Rs.199"
   if(text.includes("without otp")) return true; // e.g. "Rs.89 without OTP/PIN HDFC Bank Card x5555 At..."
+  // "Dr. from A/c ..." / "Cr. to A/c ..." (Bank of Baroda style; added 2026-10-14). Deliberately narrow (must be followed by from/to/by/A/c)
+  // so a doctor's "Dr." in a promotion never counts as money moving.
+  if(/(?<![a-z])(dr|cr)\.?\s+(from|to|by|a\/c|ac|your)/.test(text)) return true;
 
   return false;
 
@@ -673,6 +701,32 @@ function classifyDetail(sms,sender){
 
 }
 
+// Does the text just before (and after) a money amount say it is a balance/limit/outstanding figure rather than the amount of THIS
+// transaction? Bank-agnostic: "Avl Bal Rs 500", "AvlBal: Rs500", "Available balance is INR 500", "Bal: 500", "Limit Rs 40000",
+// "Rs 500 available", "Total outstanding Rs 500" ...
+function isBalanceLikeAmount(before, after){
+  const b = before.slice(-40).toLowerCase();
+  if(/(avl|avail|available|bal|balance|limit|outstanding|o\/s|closing|due|min(imum)?\s+due|total\s+due)\.?[\s:=\-]*(bal(ance)?\.?)?[\s:=\-]*(is|of|:)?[\s:=\-]*$/.test(b)) return true;
+  if(/^\s*(is\s+)?(available|avl|balance|bal)\b/.test(after.slice(0, 20).toLowerCase())) return true;
+  return false;
+}
+
+// The first money amount in the message that is NOT a balance figure, as text without commas ("1250.00"), or "" if there is none.
+// Same three spellings as before (Rs / INR / the rupee sign) and the same capture, so a normal message gives the same text as before.
+function findTransactionAmount(text){
+  const re = /(?<![a-z])(?:rs|inr)\.?\s?([\d,]+\.?\d*)|₹\s?([\d,]+\.?\d*)/gi;
+  let m;
+  while((m = re.exec(text)) !== null){
+    const raw = (m[1] !== undefined ? m[1] : m[2]) || "";
+    if(!/\d/.test(raw)) continue;
+    const before = text.slice(0, m.index);
+    const after = text.slice(m.index + m[0].length);
+    if(isBalanceLikeAmount(before, after)) continue;
+    return raw.replace(/,/g, "");
+  }
+  return "";
+}
+
 function ruleParser(sms,sender){
 
   const text = sms.toLowerCase();
@@ -680,13 +734,13 @@ function ruleParser(sms,sender){
   let obj = {};
 
   // AMOUNT DETECTION (handles Rs./INR./₹, with or without a space)
-  let amt =
-    text.match(/rs\.?\s?([\d,]+\.?\d*)/i) ||
-    text.match(/inr\.?\s?([\d,]+\.?\d*)/i) ||
-    text.match(/₹\s?([\d,]+\.?\d*)/i);
-
-  if(amt){
-    obj.amount = amt[1].replace(/,/g,"");
+  // Rewritten 2026-10-14. The old version looked for "Rs" first and "INR" second WHEREVER they were in the message, so a Bank of Baroda
+  // credit ("credited with INR 1.00 ... AvlBal: Rs2974.93") was saved as Rs 2974.93: the account BALANCE. Now every amount in the
+  // message is looked at in order, and one that is a balance / available limit / outstanding figure is never the transaction amount.
+  // If every amount in a message is a balance, no amount is guessed (the message goes to review instead).
+  const amount = findTransactionAmount(text);
+  if(amount !== ""){
+    obj.amount = amount;
   }
 
   // TYPE DETECTION (debit vs credit)
@@ -723,6 +777,16 @@ function ruleParser(sms,sender){
   )
       obj.type = "credit";
 
+  // "Dr." / "Cr." (added 2026-10-14, Bank of Baroda: "Rs.100.00 Dr. from A/c XX and Cr. to someone@upi"). Only used when none of the
+  // words above settled it, so every message that worked before gives the same answer. When both appear, the account holder's side
+  // is the one that comes first ("Dr. from my account" = debit).
+  if(!obj.type){
+    const dr = text.search(/(?<![a-z])dr\.?(?![a-z])/i);
+    const cr = text.search(/(?<![a-z])cr\.?(?![a-z])/i);
+    if(dr !== -1 && (cr === -1 || dr < cr)) obj.type = "debit";
+    else if(cr !== -1) obj.type = "credit";
+  }
+
 
   // MODE DETECTION (CARD PRIORITY)
 
@@ -758,6 +822,12 @@ function ruleParser(sms,sender){
 
   }
 
+  else if(/[a-z0-9._-]+@[a-z]+(?![a-z]|\.[a-z])/i.test(text)){
+
+    obj.mode = "upi";      // a payee like name@bank is a UPI address (added 2026-10-14); an e-mail like help@shop.com has ".com" after it and is not; a full stop ending a sentence ("...@pz. Ref") is not part of the address
+
+  }
+
   else{
 
     obj.mode = "other";
@@ -771,18 +841,8 @@ function ruleParser(sms,sender){
   // from any recognized sender always gets a real Bank value, not a
   // blank one).
 
-  const s = sender.toUpperCase();
-
-  if(s.includes("HDFC")) obj.bank = "HDFC";
-  if(s.includes("FED")) obj.bank = "FEDERAL";
-  if(s.includes("SBI")) obj.bank = "SBI";
-  if(s.includes("ICICI")) obj.bank = "ICICI";
-  if(s.includes("AXIS")) obj.bank = "AXIS";
-  if(s.includes("KOTAK")) obj.bank = "KOTAK";
-  if(s.includes("YES")) obj.bank = "YES";
-  if(s.includes("PAYTM")) obj.bank = "PAYTM";
-  if(s.includes("PAYZAP")) obj.bank = "PAYZAPP";
-  if(s.includes("ONJPTR")) obj.bank = "JUPITER";
+  const knownBank = bankFromSender(sender);       // from the ONE bank list above (plus any taught later)
+  if(knownBank) obj.bank = knownBank;
 
 
   // REFERENCE DETECTION
@@ -792,6 +852,10 @@ function ruleParser(sms,sender){
   if(!ref) ref = text.match(/upi\s(\d{6,})/i);
   if(!ref) ref = text.match(/utr[:\s]?(\d{6,})/i);
   if(!ref) ref = text.match(/txn\s?id[:\s]?(\d{6,})/i);
+  // more wordings (added 2026-10-14): "UPI Ref No 628...", "Reference number: 628...", "RRN 628...", "UTR No. 628..."
+  if(!ref) ref = text.match(/ref(?:erence)?\.?\s*(?:no|number|id|#)?\.?\s*[:\-#]?\s*(\d{6,})/i);
+  if(!ref) ref = text.match(/rrn\s*(?:no)?\.?\s*[:\-]?\s*(\d{6,})/i);
+  if(!ref) ref = text.match(/utr\s*(?:no)?\.?\s*[:\-]?\s*(\d{6,})/i);
 
   if(ref)
       obj.reference = ref[1];
@@ -889,6 +953,14 @@ function genericCounterparty(text){
 // nothing rather than a wrong merchant ("never take Block as a
 // merchant").
 function extractCounterparty(text){
+  const found = extractCounterpartyRaw(text);
+  // "...credited to your A/c XX1234 by ..." makes the generic rule read "your a" as a merchant: it never is (added 2026-10-14).
+  if(/^your(\s|$)/i.test(found)) return "";
+  // "to SWIGGY via UPI": the word "via" is not part of the name (added 2026-10-14).
+  return found.replace(/\s+via$/i, "");
+}
+
+function extractCounterpartyRaw(text){
 
   const card = extractCardMerchant(text);
   if(card && !isBoilerplateCounterparty(card)) return card;

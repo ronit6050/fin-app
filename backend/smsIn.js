@@ -65,6 +65,46 @@ function smsInMatchesLearnedSpam_(db, sender, sms){
   return false;
 }
 
+// Banks the owner taught the app from the Access screen (Firestore _system/bankSenders = { TOKEN: "BANK" }), remembered for 10 minutes.
+// Handed to the SMS decision code so a new bank's sender is recognised without any code change.
+function smsInLoadTaughtBanks_(){
+  var map = {};
+  try{
+    var cache = CacheService.getScriptCache();
+    var cached = cache ? cache.get("SMSIN_BANKS") : null;
+    if(cached !== null && cached !== undefined){ map = JSON.parse(cached); }
+    else{
+      var doc = fsGetPathMeta_("_system/bankSenders");
+      map = doc && doc.fields && doc.fields.map ? JSON.parse(String(doc.fields.map)) : {};
+      if(cache) cache.put("SMSIN_BANKS", JSON.stringify(map), 600);
+    }
+  }catch(err){ map = {}; }
+  SmsPipeline.setExtraSenders(map);
+  return map;
+}
+
+// The token a sender is taught by: "VM-BOBSMS-S" -> "BOBSMS", "JD-JioPay-S" -> "JIOPAY". Empty if it cannot be told.
+function smsInSenderToken_(sender){
+  var t = String(sender || "").trim().toUpperCase().replace(/^[A-Z]{2}-/, "").replace(/-[A-Z]$/, "");
+  return /^[A-Z0-9]{3,20}$/.test(t) ? t : "";
+}
+
+// Owner-only (Access screen): teach / forget a bank. Saved in Firestore so the new SMS path uses it within 10 minutes.
+function smsInTeachBank_(sender, bank, forget){
+  var token = /^[A-Z0-9]{3,20}$/.test(String(sender || "").toUpperCase()) ? String(sender).toUpperCase() : smsInSenderToken_(sender);
+  if(!token) return { ok: false, error: "That sender name is not usable." };
+  var name = String(bank || "").trim().toUpperCase();
+  if(!forget && !/^[A-Z0-9 &.\-]{2,30}$/.test(name)) return { ok: false, error: "Type the bank's name (letters and numbers, up to 30)." };
+  var doc = fsGetPathMeta_("_system/bankSenders");
+  var map = {};
+  try{ map = doc && doc.fields && doc.fields.map ? JSON.parse(String(doc.fields.map)) : {}; }catch(e){ map = {}; }
+  if(forget) delete map[token]; else map[token] = name;
+  if(Object.keys(map).length > 200) return { ok: false, error: "Too many taught banks." };
+  fsCommit_([{ set: { path: "_system/bankSenders", fields: { map: JSON.stringify(map), updatedAtMs: Date.now() } } }]);
+  try{ CacheService.getScriptCache().remove("SMSIN_BANKS"); }catch(ignore){}
+  return { ok: true, token: token, taught: map };
+}
+
 // The phone's call. No sign-in: the KEY is the credential and only ever unlocks its own person's space.
 function smsInHandle_(data){
   var cacheBad = ingestCache_();
@@ -92,6 +132,7 @@ function smsInHandle_(data){
   var perDay = "SMSIN_N_" + email + "_" + Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyyMMdd");
   try{ if(cache && Number(cache.get(perDay) || 0) >= 400) return { ok: false, error: "Too many messages for now." }; }catch(ignoreLimit){}
 
+  smsInLoadTaughtBanks_();                                      // the banks taught from the Access screen (cached)
   var lock = LockService.getScriptLock();
   var attempt = function(){
     return v2dbRun_(email, function(db){

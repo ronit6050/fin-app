@@ -124,6 +124,7 @@ function pwaDispatch_(data, verified){
     // must not teach the shop's category memory or add a Need/Want vote. The typed note
     // itself is still remembered (you really did type it).
     const replyOpts = data.autoType ? { learnCategory: false, learnTypeVote: false } : {};
+    if(data.direction) replyOpts.direction = data.direction;       // "debit" / "credit": the person's answer when the SMS did not say
     return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, noteType, data.amount, data.financialEvent, data.financialEventName, data.debtPerson, data.investmentInstrument, data.fp, replyOpts));
   }
 
@@ -2302,6 +2303,13 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
 
     sheet.getRange(row, 13).setValue(note);     // column M
     sheet.getRange(row, 14).setValue(category); // column N
+
+    // Direction (added 2026-10-14): when the app could not tell from the SMS whether money was SPENT or RECEIVED (a bank wording it has
+    // not met yet), the person says so on the card. Only ever fills a BLANK Type (column D); a row that already has one is never flipped.
+    const wantedDirection = String(opts.direction || "").toLowerCase();
+    if((wantedDirection === "debit" || wantedDirection === "credit") && !String(sheet.getRange(row, 4).getValue() || "").trim()){
+      sheet.getRange(row, 4).setValue(wantedDirection);           // column D
+    }
 
     if(amount !== undefined && amount !== null && amount !== ""){
       sheet.getRange(row, 6).setValue(Number(amount)); // column F

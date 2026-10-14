@@ -17,7 +17,7 @@ DST = os.path.join(ROOT, "backend", "smsPipelineCore.js")
 BEGIN = "// ==== SMS-PIPELINE-CORE-BEGIN ===="
 END = "// ==== SMS-PIPELINE-CORE-END ===="
 
-EXPORTS = ["classifySms", "classifyDetail", "ruleParser", "isDuplicate", "isKnownSender", "hasRupeeAmount", "hasMoneyMovementSignal"]
+EXPORTS = ["classifySms", "classifyDetail", "ruleParser", "isDuplicate", "isKnownSender", "hasRupeeAmount", "hasMoneyMovementSignal", "setExtraSenders", "bankFromSender", "findTransactionAmount"]
 
 
 def build():

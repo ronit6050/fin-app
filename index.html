@@ -3611,8 +3611,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-14-02";
-    const APP_CHANGELOG = "New in Settings > Speed: a beta switch to read screens from our new Firebase server (it falls back to the old one by itself).";
+    const APP_VERSION = "2026-10-14-03";
+    const APP_CHANGELOG = "Bank messages the app cannot fully read now ask you (spent or received, amount) instead of guessing; Access > Bank SMS library lets you teach it a new bank.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -7255,6 +7255,19 @@
       return mixed ? { kind: "mixed", word: mixed.word, counts: mixed.counts } : null;
     }
 
+    // "Help the app read this" (added 2026-10-14): when a bank's wording could not be fully read (spent/received missing, or no amount found), the
+    // card asks the person instead of guessing. Returns the HTML (or "") for a card; the answers are read back at Save time.
+    function buildHelpHtml(txn, askAmount) {
+      const needsDirection = !txn.type;
+      const needsAmount = askAmount && !(txn.amount > 0);
+      if (!needsDirection && !needsAmount) return "";
+      return '<div class="field help-field" style="border:1px dashed var(--color-warning, #b58900); border-radius:10px; padding:10px;">' +
+        '<label>The app could not fully read this message. Please check:</label>' +
+        (needsDirection ? '<select class="help-direction"><option value="">Was it spent or received?</option><option value="debit">Spent (money went out)</option><option value="credit">Received (money came in)</option></select>' : '') +
+        (needsAmount ? '<input type="number" class="help-amount" min="0" step="0.01" placeholder="Amount (\u20b9)" style="margin-top:8px;">' : '') +
+        '</div>';
+    }
+
     function buildPendingItem(txn) {
       const card = document.createElement("div");
       card.className = "pending-item";
@@ -7369,6 +7382,7 @@
           <span>${escapeHtml(txn.mode)}</span>
         </div>
         <div class="pending-meta">${txn.date} ${txn.time} · ${escapeHtml(txn.bank)}${counterpartyText}</div>
+        ${buildHelpHtml(txn, true)}
         <div class="field">
           <label>Note</label>
           <input type="text" class="note-input" value="${escapeHtml(txn.suggestedNote || txn.counterparty || "")}" placeholder="What was this for?">
@@ -7715,6 +7729,14 @@
         const savedCategory = categorySelect.value;
         const savedType     = selectedType;
 
+        // The "help the app read this" answers (only present when the message could not be fully read)
+        const helpDirEl = card.querySelector(".help-direction");
+        const helpAmtEl = card.querySelector(".help-amount");
+        if (helpDirEl && !helpDirEl.value) { resultEl.style.color = "var(--color-danger)"; resultEl.textContent = "Choose whether this was spent or received."; return; }
+        if (helpAmtEl && !(parseFloat(helpAmtEl.value) > 0)) { resultEl.style.color = "var(--color-danger)"; resultEl.textContent = "Enter the amount."; return; }
+        const savedDirection = helpDirEl ? helpDirEl.value : "";
+        const savedAmountHelp = helpAmtEl ? parseFloat(helpAmtEl.value) : null;
+
         // Splits (2026-10-12): if a split is set up, check it BEFORE the card
         // disappears, so a mistake (no friend picked, bad share) is fixed in place.
         const splitArm = getSplit();
@@ -7749,7 +7771,9 @@
             financialEvent:       savedFinancialEvent,
             financialEventName:   savedFinancialEventName,
             debtPerson:           savedDebtPerson,
-            investmentInstrument: savedInvestmentInstrument
+            investmentInstrument: savedInvestmentInstrument,
+            direction:            savedDirection || undefined,
+            amount:               savedAmountHelp === null ? undefined : savedAmountHelp
           });
         }
 
@@ -9599,12 +9623,40 @@
         line.textContent = d.formats + " pattern" + (d.formats === 1 ? "" : "s") + " from " + d.senders + " sender" + (d.senders === 1 ? "" : "s") +
           " · " + d.notUnderstood + " not understood yet";
         list.innerHTML = "";
+        function reload() { loadSmsFormats(); }
         d.top.forEach(function (t) {
           const row = document.createElement("div");
           row.className = "access-row";
           row.innerHTML = '<div class="access-main"><div class="access-name"></div><div class="access-sub"></div></div>';
-          row.querySelector(".access-name").textContent = t.sender;
-          row.querySelector(".access-sub").textContent = t.seen + " message" + (t.seen === 1 ? "" : "s") + " · " + t.uncertain + " not understood";
+          row.querySelector(".access-name").textContent = t.sender + (t.bank ? "  ·  " + t.bank : "");
+          row.querySelector(".access-sub").textContent = t.seen + " message" + (t.seen === 1 ? "" : "s") + " · " + t.uncertain + " not understood" + (t.needsBank ? " · bank not known yet" : "");
+          // A sender with no known bank: teach it (no code change; the new SMS path uses it within about 10 minutes)
+          if (t.needsBank && t.token) {
+            const teach = document.createElement("div");
+            teach.style.cssText = "flex:1 1 100%; display:flex; gap:8px; align-items:center;";
+            teach.innerHTML = '<input type="text" class="teach-bank" maxlength="30" placeholder="Bank name, e.g. Bank of Baroda" style="flex:1; min-width:0;"><button type="button" class="access-toggle">Teach</button>';
+            const input = teach.querySelector(".teach-bank"), btn = teach.querySelector("button");
+            btn.addEventListener("click", function () {
+              if (!input.value.trim()) { input.placeholder = "Type the bank name first"; return; }
+              btn.disabled = true; btn.textContent = "Saving...";
+              callAppsScript({ action: "teachBank", idToken: currentUser.idToken, sender: t.sender, bank: input.value.trim() })
+                .then(function (r) { if (r.ok) reload(); else { btn.disabled = false; btn.textContent = r.error || "Try again"; } })
+                .catch(function () { btn.disabled = false; btn.textContent = "Try again"; });
+            });
+            row.appendChild(teach);
+          }
+          list.appendChild(row);
+        });
+        // Banks already taught (can be forgotten)
+        (d.taught || []).forEach(function (b) {
+          const row = document.createElement("div");
+          row.className = "access-row";
+          row.innerHTML = '<div class="access-main"><div class="access-name"></div><div class="access-sub">taught by you</div></div><button type="button" class="access-toggle">Forget</button>';
+          row.querySelector(".access-name").textContent = b.token + "  ·  " + b.bank;
+          row.querySelector("button").addEventListener("click", function () {
+            this.disabled = true;
+            callAppsScript({ action: "forgetBank", idToken: currentUser.idToken, sender: b.token }).then(reload).catch(function () {});
+          });
           list.appendChild(row);
         });
       }).catch(function () { line.textContent = "Couldn't load."; });
@@ -13244,6 +13296,7 @@
           <span>${escapeHtml(txn.mode)}</span>
         </div>
         <div class="pending-meta">${txn.date} ${txn.time} · ${escapeHtml(txn.bank)}${counterpartyText}</div>
+        ${buildHelpHtml(txn, false)}
         ${txn.friendShare > 0 ? `<div class="pending-meta" style="margin-top:2px;">₹${txn.friendShare.toLocaleString("en-IN")} of this was a friend's share · your spend ₹${(Math.round((txn.amount - txn.friendShare) * 100) / 100).toLocaleString("en-IN")}</div>` : ""}
         <div class="field">
           <label>Note</label>
@@ -13443,7 +13496,8 @@
           financialEvent:       financialEvent.type,
           financialEventName:   financialEvent.name,
           debtPerson:           selectedDebtPerson,
-          investmentInstrument: sentInvestmentInstrument
+          investmentInstrument: sentInvestmentInstrument,
+          direction:    (card.querySelector(".help-direction") || {}).value || undefined
         })
           .then(function (data) {
             if (!data.ok) {
