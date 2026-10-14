@@ -2822,16 +2822,25 @@ function markNotATransaction(row, expectFp){
     if(!isFriendData && rawSms && sender){
       const template = normalizeForFingerprint(rawSms);
       if(template.length >= 20){
-        const patternsSheet = getLearnedSpamPatternsSheet_();
-        patternsSheet.appendRow([new Date(), sender, template, rawSms]);
-        patternLearned = true;
+        // The owner's Google Sheet list is what the OLD SMS reader reads. The new server (Cloud Functions) has no Google Sheet at all, so
+        // there only the private list is taught (the new SMS door reads that one). On Apps Script nothing changes.
+        const onNewServer = (typeof V2_ON_NEW_SERVER_ !== "undefined") && !!V2_ON_NEW_SERVER_;
+        let sheetTaught = false;
+        if(!onNewServer){
+          const patternsSheet = getLearnedSpamPatternsSheet_();
+          patternsSheet.appendRow([new Date(), sender, template, rawSms]);
+          sheetTaught = true;
+        }
         // The owner on his private copy: the new SMS path (smsIn.js) reads learned junk from his private tab, so teach that too.
+        let privateTaught = false;
         try{
           if((typeof V2DB_REQ_ !== "undefined") && V2DB_REQ_ && String(V2DB_REQ_.user).toLowerCase() === String(PWA_ALLOWED_EMAIL).toLowerCase()){
             const privateTab = dbSs_().getSheetByName("LearnedSpamPatterns") || dbSs_().insertSheet("LearnedSpamPatterns");
             privateTab.appendRow([new Date(), sender, template, rawSms]);
+            privateTaught = true;
           }
         }catch(ignorePrivate){}
+        patternLearned = sheetTaught || privateTaught;
       }
     }
 
