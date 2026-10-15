@@ -1,17 +1,19 @@
 # Project: Personal Expense Tracker (PWA)
 
-> **START HERE: read [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) first** (updated 2026-10-14). It is the short, plain-words picture:
+> **START HERE: read [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) first** (updated 2026-10-15). It is the short, plain-words picture:
 > what the app is now, what is done, what is blocked, what is next, the switches/rollbacks, and the owner's rules. The rest of this file is the
 > long history (it is long: newer facts are in PROJECT_STATUS.md, which wins if they disagree). If the owner asks "what's the plan / what have we
 > done / what is left", answer from PROJECT_STATUS.md.
 >
-> **Latest (2026-10-14 evening):** History now has search, filter chips (Needs attention / Rent / EMI / Investment / Credits / Split), a month picker and short tap-to-open rows; "No, regular spend" is remembered in Transactions column V. Live (backend `@352`). Details in PROJECT_STATUS.md and docs/features/history.md.
+> **Latest (2026-10-15): the new server is LIVE.** The same backend code now also runs on Firebase Cloud Functions (Mumbai) and handles the owner's screens, saves, bank SMS, the 5-minute alert timer, the four daily jobs and Reconcile; Apps Script remains as an automatic fallback and for the Access screen / global switches until it is retired (after 3 clean days). Billing is no longer blocked. Full details, switches and rollbacks: PROJECT_STATUS.md and docs/features/cloud-functions.md (Steps 1-6).
+>
+> **Earlier (2026-10-14 evening):** History now has search, filter chips (Needs attention / Rent / EMI / Investment / Credits / Split), a month picker and short tap-to-open rows; "No, regular spend" is remembered in Transactions column V. Live (backend `@352`). Details in PROJECT_STATUS.md and docs/features/history.md.
 >
 > **One-paragraph summary (2026-10-14):** the owner and friend Vaidehi now keep their data in private Firestore folders (the Google Sheet is no
 > longer what the app reads); bank SMS land directly in Firestore (old SMS path is the automatic fallback); friends get a "full app" the owner
 > switches on from More > Access; splits, split notifications, manual entry, a shared anonymous bank-SMS pattern library, multi-bank SMS reading
 > (balance-safe amounts, Dr./Cr., teach-a-bank) are all live. The code still runs on Apps Script; the move to Firebase Cloud Functions is built
-> and tested but **blocked until Google finishes verifying the billing account's identity (a few days)**. Then: deploy it, move saving/SMS/timers over,
+> and tested and, since 2026-10-15, **deployed and live** (the billing check finished). Then: deploy it, move saving/SMS/timers over,
 > retire the Sheet and old SMS reader. Cost cap Rs 300/month, no outside companies, privacy first, ask before every deploy.
 
 ## Who I am

@@ -1,6 +1,6 @@
 ﻿# Project status: what we have, what is done, what is next (plain words)
 
-**Last updated: 2026-10-14 (late evening).** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
+**Last updated: 2026-10-15 (morning, India time).** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
 If this file and `CLAUDE.md` disagree, this file is newer.
 
 ---
@@ -18,18 +18,30 @@ Google Cloud; the app also stops using Firestore at 90% of the free daily limit)
 | Piece | What it is | Where |
 |---|---|---|
 | The app screens | One web page, hosted free on GitHub Pages | `index.html` -> https://ronit6050.github.io/fin-app/ (push to `main` = live) |
-| The "brain" (today) | Google Apps Script web app, code in `backend/*.js` | pinned deployment `AKfycbz3Hzmi_XNM_...` (currently **@353**) |
+| The "brain" (two copies of the SAME code) | **New server: Firebase Cloud Functions** (`api` + scheduled `tick`, Mumbai) AND the old Google Apps Script web app, code in `backend/*.js` | function URL `https://asia-south1-fin-app-76c40.cloudfunctions.net/api`; Apps Script pinned deployment `AKfycbz3Hzmi_XNM_...` (currently **@359**) |
 | The SMS reader (old way) | Separate Apps Script project | `sms-parser-backend/Code.js`, deployment `AKfycbxCwph4...` (**@20**) |
 | The data | **Firestore** (Mumbai, `asia-south1`, project `fin-app-76c40`, Blaze plan) | one private folder per person: `users/<email>/...` |
 | The old data | Google Sheet | still gets rows from the old SMS path + a backup; no longer what the app reads |
 | Android app | WebView + native SMS reading + push | separate repo `D:\Fin-app Application` |
-| New server (not live yet) | Firebase Cloud Functions running the SAME `backend` code | `functions/` (see section 5) |
+| New server code | runs the SAME `backend` code through a small "pretend Apps Script" layer | `functions/` (details: `docs/features/cloud-functions.md`) |
 | Private test data (never commit) | owner's exports, APKs | `local-data/` (git-ignored) |
 
 Who is switched on: the owner is on the Firestore copy (since 2026-10-13 ~09:30) and his SMS land **directly** in Firestore (since ~23:15 that day).
 Vaidehi has the **full app** (since 2026-10-13 10:41) on her own private data.
 
 ## 3. What has been DONE (newest first, one line each)
+
+**2026-10-15 (the big move to the new server)**
+- **The new server is LIVE for the owner** (Settings > Speed > New server = "Reads and saves" on his phone; app `2026-10-15-02`). Screens answer in about 0.2-1 s instead of 3-10 s. Everything below is in `docs/features/cloud-functions.md` (Steps 1-6) with tests, rollbacks and limits.
+- **Saving** goes through the new server with one shared "only one server saves at a time" lock (`backend/sharedLock.js`, a Firestore lease). A save with no answer is never repeated by the app (it could double-save). Switch: `V2_FN_WRITES`.
+- **Bank SMS** door: the phone tries the new server first, then Apps Script `smsIn`, then the old reader; only `{"ok":true}` stops the chain, duplicates are caught by the existing rules. Switch: `V2_FN_SMS`. New Android app: `local-data/apk/FinApp-2026-10-14-new-server-sms.apk` (installed on the owner's phone; the owner shares it with Vaidehi).
+- **The 5-minute alert timer** runs on the new server (Cloud Scheduler job `tick`, free tier). A quiet tick reads ONE tiny document; real work only when something changed or every 30 min. Apps Script steps aside only while the new server's heartbeat is fresh (under 12 min), otherwise it takes the job back by itself. Switch: `V2_FN_TIMER`. **Switched ON by the owner 2026-10-15 ~09:10 India time; first tick verified (heartbeat written, no errors). Still to see: a real SMS alerted exactly once by the new timer.**
+- **The four daily jobs** (Rent/EMI reminder 8:30, debt due dates 9:00, app health 9:30, evening cash check-in 20:00, India time) run from the same tick, once a day each, with catch-up after downtime. The Apps Script versions step aside while the new server is alive.
+- **Reconcile** (statement upload): spreadsheet statements (.xls/.xlsx) are read ON THE PHONE (SheetJS, lazy-loaded) and the rows are sent, so Google Drive is no longer needed; card PDFs already worked that way. Also fixed a real name clash (`extractCardLast4` defined twice): the card-statement "fix payment mode" suggestion is now exactly "card 8132". **Not yet tried with a real bank file (none was available): first real upload should be eyeballed.**
+- **Settings > Speed > "Send a test notification (new server)"**: proves push works from the new server (it does; the owner confirmed).
+- **Backups:** Firestore point-in-time recovery (7 days) switched on 2026-10-15 (well under Re 1/month at this size).
+- Independent reviews (`change-reviewer`) of every step: all "safe to ship"; their findings (dead-man protection, guarded switch-on, failure back-off, Home copy freshness, name clash, ...) were fixed before deploying.
+- Tests: 63 files, all pass. Real-database proof scripts (never in the automatic suite; need the robot key): `functions/tests/live_scratch.js` (saves, two servers at once, SMS door, timer, daily jobs) and `functions/tests/live_sweep.js` (every save action + Reconcile). They use a made-up person and clean up after themselves.
 
 **2026-10-14**
 - **"Lent to ..." saved four debts, and Debts showed none (FIXED, LIVE: backend `@353`, app `2026-10-14-07`).** One Rs 94 payment noted "Lent vaidehi for idli" made FOUR identical debts: no error in the logs, but (1) the Debts screen loads once per session and never refreshed after a note save, so the owner tapped Save again, and (2) every Save re-created the debt. Now the payment remembers it already created its debt (Transactions **column W "DebtLinked"**, set only when the link really happened; also stops a "paid back" note applying twice) and the Debts list refreshes right after a Pending/History save. The 3 extra rows were removed from the owner's private data with a backed-up, read-back-verified one-off (backup in `local-data/backups/debt-cleanup-*`, audit line in `local-data/audit/changes.jsonl`), and the kept payment was marked linked. Test: `backend/tests/debtLinkOnce.test.js`; independent review: safe. Doc: `docs/features/financial-events.md`.
@@ -71,57 +83,48 @@ Two special ones need `local-data/` (real messages): `smsReplay.test.js`, and th
 - Real data (owner's or friends') is **never committed**, never pasted into docs/tests; invented examples only. Do not hand-edit a friend's data: let them fix it in the app.
 - Free tier only / Rs 300 cap. No third-party companies.
 
-## 5. IN PROGRESS and BLOCKED
+## 5. IN PROGRESS
 
-**UPDATE 2026-10-14 night: the new server IS DEPLOYED** (`api`, asia-south1, https://asia-south1-fin-app-76c40.cloudfunctions.net/api) after the owner fixed the billing
-account (it was "not open" until a payment step was done). Tested: unsigned ping refused, unsupported action answers `fallback:true`. Image cleanup rule set (delete build images older than 1 day).
-Deploy needs `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"` on this PC (default 10 s code-inspection timeout is too short). NOT yet done: signed-in test from the app (turn on Settings > Speed > New server (beta)) and speed comparison.
-**SAVING on the new server: BUILT, TESTED, INDEPENDENTLY REVIEWED (safe while its switch is OFF), DEPLOYED 2026-10-14 night (function updated, backend @354, app 2026-10-14-08) with the switch OFF.** Shared "only one server saves" lock
-(`backend/sharedLock.js`), a switch `V2_FN_WRITES` (`v2dbEnableFunctionWrites` / `v2dbDisableFunctionWrites` in the Apps Script editor), function accepts the everyday save actions only
-while the switch is on, Settings > Speed has "Reads and saves", a save with no answer is never repeated. Proven on the REAL database in a throwaway test person: two servers saving at once, 12/12
-saved, balance exact, lock released, cleaned up (`functions/tests/live_scratch.js`). Details + exact turn-on order + rollback: `docs/features/cloud-functions.md` "Step 2". Waiting on the owner's "ship it"
-(deploy order: function, then `clasp push`/`clasp deploy`, then `git push`, then switch on, then try on ONE phone).
-**SMS DOOR on the new server: BUILT, TESTED, INDEPENDENTLY REVIEWED (safe to ship), NOT DEPLOYED YET (2026-10-14 night).** The phone tries 3 doors in order: new server, Apps Script `smsIn`, old reader; only `{"ok":true}` stops the chain, duplicates are caught by the existing rules. Server switch `v2dbEnableFunctionSms` / `v2dbDisableFunctionSms` (needs saving on too). Proven on the real database in a made-up person incl. two servers receiving one message at once -> exactly one row. New APK: `local-data/apk/FinApp-2026-10-14-new-server-sms.apk` (Android repo commit `79a8e6c`, not installed anywhere yet). Details + turn-on order: `docs/features/sms-direct-landing.md` "Step 2".
-(Old text below is the history of the block.)
-
-**The new server (Cloud Functions) could not be deployed.** Google said: *"Your identity verification is in progress. Please allow a few days."* on the
-billing account (so any billed upload returned HTTP 403 "check billing account"). Nothing was wrong in our code or project. Firestore and everything else work.
-- **Ready to go:** `functions/` (runs the same `backend/*.js` via a small "pretend Apps Script" layer, read-only screens first), `firebase.json`, the beta switch in the app
-  (Settings > Speed > "New server (beta)", off by default, falls back to Apps Script automatically), the `_system/props` copy of the on/off switches (seeded).
-- **To finish once Google verifies:** from `D:\fin-app` run `firebase deploy --only functions` (Firebase CLI is installed on the owner's PC and logged in as the owner; in PowerShell add
-  `$env:Path += ";$env:APPDATA\npm"`). Then check the function URL answers, turn the beta on in Settings, compare speed. See `docs/features/cloud-functions.md`.
-- **What is live and what is not:** the app's beta switch IS already live (harmless while off). The function itself is NOT deployed, so turning the switch on today would only fall back to Apps Script.
+**Nothing is blocked.** The billing problem is solved and the new server is deployed. What is running right now on the new server: reads, saves, bank SMS (door 0), the 5-minute alert timer, the four daily jobs, Reconcile.
+**Still on Apps Script on purpose (and why):**
+- The **global on/off switches** (`V2DB_OWNER`, `V2DB_USERS`, `V2_FN_*`, `V2DB_OWNER_DIRECT`) live in Apps Script's Script Properties and are copied to the new server (`_system/props`). The **Access screen** (give/remove a friend's full app, teach a bank) therefore stays on Apps Script until the switches themselves move into Firestore.
+- The **inbox copy** (rows the OLD SMS doors wrote into the Google Sheet are copied into the private copy by the Apps Script timer, because the new server has no Google Sheet). Goes away when the old doors are switched off.
+- The **old SMS reader** project and the **Google Sheet** (kept as fallback / archive).
+- `v2dbBackupOwner` (exports the private data to a normal Google Sheet): replaced in practice by Firestore backups; can be retired.
 
 ## 6. NEXT (in order) and ideas not started
 
-1. **When Google verifies billing:** deploy the function (above), measure real speed vs Apps Script.
-2. **Move saving to the new server** (needs a proper lock / "only one server writes a person at a time" rule), then the SMS door, then the timers (Cloud Scheduler).
-3. **Retire the Google Sheet and old SMS-reader project** (Sheet becomes a plain backup; Tasker already off). Phase 5/6 of `docs/v2-firestore-native.md`.
-4. Vaidehi: install the new Android app (`local-data/apk/FinApp-2026-10-14-direct-sms.apk`), fix her two wrong rows in History, add more friends later (each needs the full-app switch + their key).
-5. Money plan: the Rs 300 **hard stop** is only alerts today (budget alerts set by the owner); a real automatic cut-off function is not built.
+1. **See a real transaction alerted by the new timer** (owner: tell me when a real bank SMS notification arrives; I check the logs: exactly once, from the new server). Also try a real Reconcile upload.
+2. **Vaidehi** installs the new app (the owner shares `FinApp-2026-10-14-new-server-sms.apk`); check her messages arrive through the new server.
+3. **After 3 clean days** (owner approved 2026-10-15): switch off the old SMS reader and stop the Sheet copy (the Sheet stays as a read-only archive), then remove the old fallback code after a final review. "Clean" = no new-server errors, no doubled or missing alerts, SMS all saved. Before that: delete the four Apps Script daily triggers and the (now no-op) timer's duplicate if any (Apps Script > Triggers).
+4. **Move the global switches into Firestore** (so the Access screen can run on the new server and Script Properties can go), then retire Apps Script completely.
+5. Cost: the Rs 300 limit stays **alerts only** (owner's decision 2026-10-15). Watch Cloud Billing and the Access screen's Firestore usage for the first days (the tick adds roughly 600 reads a day).
 
-**Ideas (not built, not promised):** **shared app knowledge** across banks and users (anonymous bank-SMS patterns that earn trust as people confirm them, shared junk templates, shared merchant-to-category guesses; Need/Want stays personal) - NEEDS DISCUSSION first, see `docs/AGENT_BACKLOG.md`; a "Mark as..." link in History to reopen a declined Rent/EMI suggestion; treat unclear messages from promotional senders ending in `-P` as junk; a "card last 4 digits" box for manual card entries; a Split button on the
-notification itself (Android allows only 3 buttons); suggest "settle" from a matching SMS; owner approval for splits friends create; delete a friend; owner's one leftover Vi promo row in his
-`LearnedSpamPatterns` (decision pending: delete it?); Play Store / privacy-law homework before going public (READ_SMS policy, India's DPDP Act).
+**Ideas (not built, not promised):** **shared app knowledge** across banks and users (see `docs/AGENT_BACKLOG.md`, needs discussion); a "Mark as..." link in History to reopen a declined Rent/EMI suggestion; treat unclear messages from promotional senders ending in `-P` as junk; a "card last 4 digits" box for manual card entries; a Split button on the
+notification itself (Android allows only 3 buttons); suggest "settle" from a matching SMS; owner approval for splits friends create; delete a friend; Play Store / privacy-law homework before going public (READ_SMS policy, India's DPDP Act); warn when a statement has more than 5,000 rows (the phone reader stops there).
 
 ## 7. Owner's own chores (only he can do)
 
-- Add a daily timer for `v2dbBackupOwner` (Apps Script > Triggers) so his private data is also exported as a normal Google Sheet.
-- Turn on Firestore backups / point-in-time recovery in the Firebase console.
-- Keep an eye on the Google billing verification email/page; tell me when it says verified.
+- Share the new app (`local-data/apk/FinApp-2026-10-14-new-server-sms.apk`) with Vaidehi and have her open it once.
+- In the Apps Script editor > Triggers: after a day of the new timer, delete the four daily triggers (`sendDailyCashCheckin`, `checkDebtDueDates`, `checkUpcomingObligations`, `checkAppHealth`). Keep `processNewTransactions` (it only copies old-door rows now).
+- Tell me when a real SMS notification arrives (to verify exactly-once), and after the first real Reconcile upload.
 
-## 8. Switches and rollbacks (run in the Apps Script editor; pick the file's function, press Run)
+## 8. Switches and rollbacks (run in the Apps Script editor; pick the file's function, press Run; all instant)
 
 | Want | Run |
 |---|---|
+| New server alert timer OFF (Apps Script alerts again) | `v2dbDisableFunctionTimer` (on: `v2dbEnableFunctionTimer`, needs saving on) |
+| New server takes bank SMS OFF (phone uses Apps Script / old reader) | `v2dbDisableFunctionSms` (on: `v2dbEnableFunctionSms`) |
+| New server saving OFF (saves fall back to Apps Script) | `v2dbDisableFunctionWrites` (on: `v2dbEnableFunctionWrites`) |
+| One phone back to Apps Script only | Settings > Speed > New server = Off (or "Reads only") |
 | Owner back on the Google Sheet (instant) | `v2dbDisableOwner` (turn on: `v2dbEnableOwner`; import fresh copy first: `v2dbImportOwner`, refuses when on) |
 | Owner's SMS back to the old way | `v2dbDisableOwnerDirect` (turn on: `v2dbEnableOwnerDirect`) |
 | Give/remove a friend's full app | the Access screen, or `v2dbEnableUser("email")` / `v2dbDisableUser("email")` |
-| Re-copy the on/off switches for the new server | `exportFlagsToFunctions` |
-| New server off | Settings > Speed > New server (beta) = Off |
+| Re-copy the on/off switches to the new server | `exportFlagsToFunctions` |
 
-Deploy commands: backend `cd backend; clasp push -f; clasp deploy -i <id> -d "..."`; SMS reader the same in `sms-parser-backend/`; web app `git push`; Android: `JAVA_HOME` = Android Studio's `jbr`,
-`gradlew assembleDebug --offline`, install with `adb install -r` (adb: `C:\Users\ronit\AppData\Local\Android\Sdk\platform-tools\adb.exe`).
+The "disable" functions throw a plain message if the new server could not be told (so a rollback never silently half-works). Deploy commands: new server `cd D:\fin-app` then in PowerShell
+`$env:Path += ";$env:APPDATA\npm"; $env:FUNCTIONS_DISCOVERY_TIMEOUT = "60"; firebase deploy --only functions`; backend `cd backend; clasp push -f; clasp deploy -i <id> -d "..."`; SMS reader the same in `sms-parser-backend/`; web app `git push`;
+Android: `JAVA_HOME` = Android Studio's `jbr`, `gradlew assembleDebug --offline`, install with `adb install -r` (adb: `C:\Users\ronit\AppData\Local\Android\Sdk\platform-tools\adb.exe`). Logs of the new server: Firebase console > Functions > Logs, or the Cloud Logging API.
 
 ## 9. Things that bit us (so they do not again)
 
@@ -129,6 +132,8 @@ Deploy commands: backend `cd backend; clasp push -f; clasp deploy -i <id> -d "..
 - **Timers run the newest pushed code at once**; a slow job inside the shared lock makes saves time out. Watch `V2_JOB_SLOW` in the AILogs tab.
 - Moving to Firestore: measure real Apps Script time first (one sync run took 148 s and was switched off).
 - When writing files from the command line, backslashes get mangled: use the Write/Edit tools for anything with `\`.
+- **Real-database test scripts must never touch real documents**: `live_scratch.js` once wrote the REAL `_system/timer` heartbeat (a fake "the new server is alive"). They now use their own test paths (`_system/timer_qa`, `_system/lock_qa`) and a made-up person.
+- Scripts written into files with Python heredocs lose backslashes/newlines in this environment: use the editor tools for edits that contain `\n`.
 - The SMS reader is the riskiest file in the app: keep its tests, run the real-message comparison (`smsPipelineCore.test.js`, `smsReplay.test.js`) before any change.
 
 ## 10. Where to read more
