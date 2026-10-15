@@ -73,6 +73,22 @@ console.log("\n--- 1. Reading ---");
   assert(w3.sb.flagGet_("V2DB_USERS") === JSON.stringify(["a@x.com"]) && !("updatedAtMs" in w3.sb.flagsAll_()) && !("other" in w3.sb.flagsAll_()), "only the known switches are ever returned");
 }
 
+console.log("\n--- 1b. The old settings (the fallback) are kept current by every successful read ---");
+{
+  const w = makeWorld({ props: { V2DB_OWNER: "on", V2DB_USERS: "[]", V2_FN_TIMER: "on", FIREBASE_SERVICE_ACCOUNT: "secret", SETTING_CC_LIMIT: "70000" } });
+  // the NEW server added a friend and turned the timer off: the document changed, Apps Script's own settings did not
+  w.docs["_system/props"] = { fields: { V2DB_OWNER: "on", V2DB_USERS: JSON.stringify(["new@x.com"]) }, updateTime: "t9" };
+  w.sb.flagGet_("V2DB_OWNER");
+  assert(w.props.V2DB_USERS === JSON.stringify(["new@x.com"]) && w.props.V2_FN_TIMER === undefined && w.props.V2DB_OWNER === "on", "after a successful read the old settings equal the shared document (added, changed and removed switches)");
+  assert(w.props.FIREBASE_SERVICE_ACCOUNT === "secret" && w.props.SETTING_CC_LIMIT === "70000", "and nothing that is not one of the six switches is touched");
+  w.sb.FLAGS_MEMO_ = null; w.now += 40000; w.failRead = true;
+  assert(w.sb.flagGet_("V2DB_USERS") === JSON.stringify(["new@x.com"]), "so the fallback is right even for a change made by the other server");
+  const cold = makeWorld({ props: { V2DB_USERS: "[]" } });
+  cold.failRead = true;
+  cold.sb.flagGet_("V2DB_USERS");
+  assert(cold.props.V2DB_USERS === "[]", "a failed read never changes the old settings");
+}
+
 console.log("\n--- 2. A busy minute costs one database read ---");
 {
   const w = makeWorld();

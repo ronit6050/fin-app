@@ -35,6 +35,20 @@ function flagsLegacy_(){
   return out;
 }
 
+// Makes Apps Script's own old settings equal the shared document (only the six switches; only writes what differs, which is rare). The new server
+// can change a switch but cannot touch Apps Script's Script Properties, so without this the fallback could go stale. Never throws.
+function flagsMirrorToLegacy_(value){
+  try{
+    var p = PropertiesService.getScriptProperties();
+    FLAGS_NAMES_.forEach(function(n){
+      var want = (typeof value[n] === "string" && value[n] !== "") ? value[n] : null;
+      var have = p.getProperty(n);
+      if(want === null){ if(have !== null && have !== undefined) p.deleteProperty(n); }
+      else if(have !== want) p.setProperty(n, want);
+    });
+  }catch(e){}
+}
+
 function flagsPick_(fields){
   var out = {};
   FLAGS_NAMES_.forEach(function(n){ if(fields && typeof fields[n] === "string") out[n] = fields[n]; });
@@ -61,6 +75,7 @@ function flagsAll_(){
       try{
         var doc = fsGetPathMeta_(FLAGS_DOC_);
         value = doc && doc.fields ? flagsPick_(doc.fields) : flagsLegacy_();     // no document yet: the old settings
+        if(doc && doc.fields) flagsMirrorToLegacy_(value);                       // keep the fallback (old Script Properties) current, whoever changed a switch
         try{ if(cache){ cache.put(FLAGS_CACHE_KEY_, JSON.stringify(value), FLAGS_CACHE_TTL_); cache.put(FLAGS_LAST_KEY_, JSON.stringify(value), FLAGS_LAST_TTL_); } }catch(e){}
       }catch(readErr){
         var last = null;
