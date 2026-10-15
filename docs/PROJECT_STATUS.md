@@ -1,6 +1,6 @@
 ﻿# Project status: what we have, what is done, what is next (plain words)
 
-**Last updated: 2026-10-15 (morning, India time).** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
+**Last updated: 2026-10-15 (afternoon, India time).** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
 If this file and `CLAUDE.md` disagree, this file is newer.
 
 ---
@@ -18,7 +18,7 @@ Google Cloud; the app also stops using Firestore at 90% of the free daily limit)
 | Piece | What it is | Where |
 |---|---|---|
 | The app screens | One web page, hosted free on GitHub Pages | `index.html` -> https://ronit6050.github.io/fin-app/ (push to `main` = live) |
-| The "brain" (two copies of the SAME code) | **New server: Firebase Cloud Functions** (`api` + scheduled `tick`, Mumbai) AND the old Google Apps Script web app, code in `backend/*.js` | function URL `https://asia-south1-fin-app-76c40.cloudfunctions.net/api`; Apps Script pinned deployment `AKfycbz3Hzmi_XNM_...` (currently **@359**) |
+| The "brain" (two copies of the SAME code) | **New server: Firebase Cloud Functions** (`api` + scheduled `tick`, Mumbai) AND the old Google Apps Script web app, code in `backend/*.js` | function URL `https://asia-south1-fin-app-76c40.cloudfunctions.net/api`; Apps Script pinned deployment `AKfycbz3Hzmi_XNM_...` (currently **@361**) |
 | The SMS reader (old way) | Separate Apps Script project | `sms-parser-backend/Code.js`, deployment `AKfycbxCwph4...` (**@20**) |
 | The data | **Firestore** (Mumbai, `asia-south1`, project `fin-app-76c40`, Blaze plan) | one private folder per person: `users/<email>/...` |
 | The old data | Google Sheet | still gets rows from the old SMS path + a backup; no longer what the app reads |
@@ -32,6 +32,10 @@ Vaidehi has the **full app** (since 2026-10-13 10:41) on her own private data.
 ## 3. What has been DONE (newest first, one line each)
 
 **2026-10-15 (the big move to the new server)**
+- **The on/off switches live in the database now** (`backend/flags.js`, document `_system/props`): both servers read AND change them; a failed change changes nothing; emergency brake `v2dbFlagsLegacyOn` (Apps Script reads only its own old settings); Apps Script's old settings are refreshed after every successful read so the fallback stays current. Friend add/remove works from the freshest list (two servers cannot lose one). Docs: `docs/features/cloud-functions.md` Step 7.
+- **ONE shared Firestore usage counter** (`_system/usage_<yyyymmdd>`): every server adds to it, so the daily safety limit (45,000 reads / 18,000 writes) and the Access screen's "today's use" now cover the new server too (before, the new server's use was not counted). The meter can never block real work (unreadable totals count as zero). Known: Apps Script runs that never call a flush are still not counted (same as before). Step 8.
+- **The Access screen runs on the new server** (`getAdminOverview`, `getSmsFormats`, `setFriendFullApp`, `setFriendScreen`, `teachBank`, `forgetBank`, `getMyIngestKey`; app `2026-10-15-03`).
+- **Reconcile confirmed on a REAL bank statement** by the owner (statement read on the phone, two missing transactions added, no errors).
 - **The new server is LIVE for the owner** (Settings > Speed > New server = "Reads and saves" on his phone; app `2026-10-15-02`). Screens answer in about 0.2-1 s instead of 3-10 s. Everything below is in `docs/features/cloud-functions.md` (Steps 1-6) with tests, rollbacks and limits.
 - **Saving** goes through the new server with one shared "only one server saves at a time" lock (`backend/sharedLock.js`, a Firestore lease). A save with no answer is never repeated by the app (it could double-save). Switch: `V2_FN_WRITES`.
 - **Bank SMS** door: the phone tries the new server first, then Apps Script `smsIn`, then the old reader; only `{"ok":true}` stops the chain, duplicates are caught by the existing rules. Switch: `V2_FN_SMS`. New Android app: `local-data/apk/FinApp-2026-10-14-new-server-sms.apk` (installed on the owner's phone; the owner shares it with Vaidehi).
@@ -87,18 +91,19 @@ Two special ones need `local-data/` (real messages): `smsReplay.test.js`, and th
 
 **Nothing is blocked.** The billing problem is solved and the new server is deployed. What is running right now on the new server: reads, saves, bank SMS (door 0), the 5-minute alert timer, the four daily jobs, Reconcile.
 **Still on Apps Script on purpose (and why):**
-- The **global on/off switches** (`V2DB_OWNER`, `V2DB_USERS`, `V2_FN_*`, `V2DB_OWNER_DIRECT`) live in Apps Script's Script Properties and are copied to the new server (`_system/props`). The **Access screen** (give/remove a friend's full app, teach a bank) therefore stays on Apps Script until the switches themselves move into Firestore.
 - The **inbox copy** (rows the OLD SMS doors wrote into the Google Sheet are copied into the private copy by the Apps Script timer, because the new server has no Google Sheet). Goes away when the old doors are switched off.
 - The **old SMS reader** project and the **Google Sheet** (kept as fallback / archive).
+- A **raw statement file** (a scanned PDF that needs OCR, or a phone that cannot read the spreadsheet) still falls back to Apps Script's Google Drive path.
 - `v2dbBackupOwner` (exports the private data to a normal Google Sheet): replaced in practice by Firestore backups; can be retired.
+- The switches, the usage counter and the Access screen are NO LONGER tied to Apps Script (done 2026-10-15).
 
 ## 6. NEXT (in order) and ideas not started
 
-1. **See a real transaction alerted by the new timer** (owner: tell me when a real bank SMS notification arrives; I check the logs: exactly once, from the new server). Also try a real Reconcile upload.
-2. **Vaidehi** installs the new app (the owner shares `FinApp-2026-10-14-new-server-sms.apk`); check her messages arrive through the new server.
-3. **After 3 clean days** (owner approved 2026-10-15): switch off the old SMS reader and stop the Sheet copy (the Sheet stays as a read-only archive), then remove the old fallback code after a final review. "Clean" = no new-server errors, no doubled or missing alerts, SMS all saved. Before that: delete the four Apps Script daily triggers and the (now no-op) timer's duplicate if any (Apps Script > Triggers).
-4. **Move the global switches into Firestore** (so the Access screen can run on the new server and Script Properties can go), then retire Apps Script completely.
-5. Cost: the Rs 300 limit stays **alerts only** (owner's decision 2026-10-15). Watch Cloud Billing and the Access screen's Firestore usage for the first days (the tick adds roughly 600 reads a day).
+1. **See a real transaction alerted by the new timer** (owner: tell me when a real bank SMS notification arrives; I check the logs: exactly once, from the new server).
+2. **Vaidehi** installs the new app (`FinApp-2026-10-14-new-server-sms.apk`); check her messages arrive through the new server.
+3. **After 3 clean days (about 2026-10-18; owner approved)**: check the logs (errors, doubled or missing alerts, SMS all saved), then switch off the old SMS reader and stop the Sheet copy (the Sheet stays a read-only archive), then remove the old fallback code after a final review, then turn Apps Script off. Before that: delete the four Apps Script daily triggers (they are harmless no-ops while the new server is alive).
+4. **Retire the last Apps Script pieces:** the inbox copy (needs the old doors off), the Drive fallback for a raw statement file, `v2dbBackupOwner`, and the editor-run functions (a small "switches" screen could replace them).
+5. Cost: the Rs 300 limit stays **alerts only** (owner's decision). Watch Cloud Billing and the Access screen's usage for the first days (expect a few hundred extra writes a day from the counter and the tick).
 
 **Ideas (not built, not promised):** **shared app knowledge** across banks and users (see `docs/AGENT_BACKLOG.md`, needs discussion); a "Mark as..." link in History to reopen a declined Rent/EMI suggestion; treat unclear messages from promotional senders ending in `-P` as junk; a "card last 4 digits" box for manual card entries; a Split button on the
 notification itself (Android allows only 3 buttons); suggest "settle" from a matching SMS; owner approval for splits friends create; delete a friend; Play Store / privacy-law homework before going public (READ_SMS policy, India's DPDP Act); warn when a statement has more than 5,000 rows (the phone reader stops there).
