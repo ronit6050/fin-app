@@ -153,3 +153,23 @@ so the health check's "logged errors" part only sees Apps Script-side errors. Th
 **Tests:** `backend/tests/fnTimer.test.js` sections 10-12 (68 checks): each job once a day at its time, catch-up after downtime, one failing job does not stop the others, Apps Script steps aside only while alive,
 health-check timers; real database: `functions/tests/live_scratch.js` section 1d runs all four jobs with the real code and no stand-ins (no errors, evening notification produced, second tick runs none).
 **Backups:** Firestore point-in-time recovery (7 days) was switched on 2026-10-15 (`pointInTimeRecoveryEnablement`), cost well under Re 1 a month at this size.
+
+## Step 6: Reconcile (statement upload) on the new server (built 2026-10-15)
+
+**Before:** the bank/card statement file was uploaded to Apps Script, which used YOUR Google Drive to convert it into a Sheet. The new server has no Drive.
+**Now:** a spreadsheet statement (`.xls` / `.xlsx`) is read ON THE PHONE (index.html: `loadSheetJs`, `sheetRowsFromWorkbook`, `extractSheetRowsClientSide`; SheetJS 0.18.5 from cdnjs, loaded
+only when such a file is picked, open-source, runs on the phone; the same idea as pdf.js for card PDFs). The phone sends the rows (first sheet, counted from the very first row, max 5,000 rows x 30 columns)
+instead of the file. `Recon.js` wraps the rows like a Sheet (`reconSheetFromRows_`) so the existing parsers and the existing matching are unchanged. Both servers accept `rows` (so it works on Apps Script too);
+a PDF card statement still sends its text (pdf.js). If the phone cannot read the file at all it sends the raw file as before (Apps Script's Drive path, until Apps Script is retired); the new server answers
+`fallback:true` for a raw file with no rows/text.
+**On the new server:** `reconcileStatement` and `reconcileCreditCardStatement` are accepted only with rows/text; `insertReconciledTransactions` and `fixCreditCardTransactionMode` (the saves) need new-server saving on.
+`Recon.js` and `Credit Card.js` are now loaded there (their Drive helpers are never called). The "shadow copy of a reconciled row into the old Google Sheet" (for the OLD SMS reader's duplicate check) is skipped on the
+new server (no Sheet): harmless while the owner's SMS go through the new door; it matters only for a message that falls all the way back to the old reader. Request body limit raised to 1 MB for statement rows.
+**Number dates:** `parseIndianDate` now also reads a spreadsheet date number (days since 1899-12-30).
+**Tests:** `backend/tests/reconcileRows.test.js` (30 checks: text/number/date-object dates, card statement, bad input, save with no Sheet, re-upload adds nothing), `backend/tests/reconcileXlsEndToEnd.test.js`
+(a genuine binary .xls made with SheetJS, read by the real index.html code, then previewed; skipped unless SheetJS is installed: `XLSX_DIR`), `functions/tests/writes.test.js` 4d, `backend/tests/newServerClient.test.js`,
+and `functions/tests/live_sweep.js` (real database: preview, save, second upload finds nothing).
+**NOT yet verified:** a real statement file from the bank (none was available): the layout assumptions (data from sheet row 23; columns date, narration, reference, value date, withdrawal, deposit) are the ones the
+old Drive-based code already used, and the end-to-end test reproduces them with a real .xls. First real use: upload a recent statement from More > Reconcile and check the counts look right.
+**Access screen:** deliberately NOT moved yet. Its "give/remove a friend's full app" switch lives in Apps Script's own settings (Script Properties); moving it means moving all the global switches into Firestore, which is
+planned together with retiring Apps Script (after the 3 clean days).

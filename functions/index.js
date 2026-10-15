@@ -23,10 +23,12 @@ const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "addDebt", "settleDebt
   "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
   "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
   "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
-  "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "refreshViews"];
+  "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "refreshViews",
+  "insertReconciledTransactions", "fixCreditCardTransactionMode"];                 // Reconcile's saves (owner only, enforced by the backend)
 // Answers that never change anything but were not on the read list at first.
-const EXTRA_READ_ACTIONS = ["previewSavingsSplit", "pushTest"];   // pushTest: owner-only, sends ONE test notification to his own phone
-const MAX_BODY_BYTES = 200000;
+const EXTRA_READ_ACTIONS = ["previewSavingsSplit", "pushTest",    // pushTest: owner-only, sends ONE test notification to his own phone
+  "reconcileStatement", "reconcileCreditCardStatement"];         // Reconcile previews: only when the phone sent the statement's rows/text (no Google Drive here); saves nothing
+const MAX_BODY_BYTES = 1000000;            // a year of statement rows is the biggest legitimate request
 
 let runtime = null;     // built once per server instance (the backend code is loaded then, not on every request)
 
@@ -90,6 +92,13 @@ exports.api = onRequest({
   const isWrite = WRITE_ACTIONS.indexOf(action) !== -1;
   if(!data || (!isWrite && READ_ACTIONS.indexOf(action) === -1 && EXTRA_READ_ACTIONS.indexOf(action) === -1)){
     res.status(200).json({ ok: false, fallback: true, error: "Not available on the new server yet." });
+    return;
+  }
+
+  // A statement preview needs the rows (or, for a card PDF, the text) that the phone read itself: with only the raw file this server cannot read
+  // it (no Google Drive), so it says "nothing done, ask Apps Script" (which still can, until Apps Script is retired).
+  if((action === "reconcileStatement" || action === "reconcileCreditCardStatement") && !(Array.isArray(data.rows) || (typeof data.statementText === "string" && data.statementText))){
+    res.status(200).json({ ok: false, fallback: true, error: "This server needs the statement already read on the phone." });
     return;
   }
 

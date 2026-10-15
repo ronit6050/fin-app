@@ -14,6 +14,10 @@ function normalizeRef(ref){
 /* ===== SAFE DATE PARSER ===== */
 function parseIndianDate(dateVal){
   if(dateVal instanceof Date) return dateVal;
+  // A spreadsheet date stored as a plain number (days since 1899-12-30) - what the phone-side reader hands over for a true date cell.
+  if(typeof dateVal === "number" && isFinite(dateVal) && dateVal > 20000 && dateVal < 80000){
+    return new Date(new Date(1899, 11, 30).getTime() + Math.round(dateVal) * 86400000);
+  }
   try{
     const parts = dateVal.toString().split("/");
     if(parts.length === 3){
@@ -426,12 +430,33 @@ function fixTransactionMode(row, mode, expectFp){
 // converted to a Sheet via Drive the same way the old Telegram upload
 // flow did (already enabled for this project). Cleans up both temporary
 // Drive files afterward, whether this succeeds or fails.
-function reconcileStatementPreview(fileBase64, fileName){
+// A statement that was already read into rows (added 2026-10-15): the phone reads the .xls itself (index.html, SheetJS) and sends the
+// rows, so no Google Drive is needed (the new server has none). Wraps them like a Sheet so the existing parsers work unchanged.
+// Cells are plain text/numbers; a cell that is {__date: milliseconds} becomes a real Date.
+function reconSheetFromRows_(rows){
+  if(!Array.isArray(rows) || rows.length < 1 || rows.length > 20000) throw new Error("That statement could not be read (no rows).");
+  const clean = rows.map(function(r){
+    if(!Array.isArray(r)) return [];
+    return r.slice(0, 40).map(function(c){
+      if(c && typeof c === "object" && typeof c.__date === "number") return new Date(c.__date);
+      if(c === null || c === undefined) return "";
+      return (typeof c === "number" || typeof c === "string") ? c : String(c);
+    });
+  });
+  return { getDataRange: function(){ return { getValues: function(){ return clean; } }; } };
+}
+
+function reconcileStatementPreview(fileBase64, fileName, rows){
 
   let driveFile = null;
   let convertedFile = null;
 
   try{
+    if(rows){
+      const rowTxns = parseBankSheet(reconSheetFromRows_(rows));
+      const rowResult = previewReconciliation(rowTxns);
+      return { ok: true, total: rowResult.total, matched: rowResult.matched, missing: rowResult.missing, notesFound: rowResult.notesFound };
+    }
     const blob = Utilities.newBlob(
       Utilities.base64Decode(fileBase64),
       MimeType.MICROSOFT_EXCEL,
@@ -860,7 +885,7 @@ function extractTextFromStatementPdf(fileBase64, fileName){
 // parseCreditCardSheet / parseCreditCardStatementText), so an approved
 // entry correctly counts as card spend everywhere Mode is checked (CC
 // Advisor, isCreditCardBillPayment, Analysis's Card bucket).
-function reconcileCreditCardStatementPreview(fileBase64, fileName, statementText){
+function reconcileCreditCardStatementPreview(fileBase64, fileName, statementText, rows){
 
   const isPdf = /\.pdf$/i.test(fileName || "");
 
@@ -871,7 +896,9 @@ function reconcileCreditCardStatementPreview(fileBase64, fileName, statementText
     let ccTxns;
     let cardLast4 = null;
 
-    if(statementText){
+    if(rows){
+      ccTxns = parseCreditCardSheet(reconSheetFromRows_(rows));          // already read on the phone: no Google Drive needed
+    } else if(statementText){
       ccTxns = parseCreditCardStatementText(statementText);
       cardLast4 = extractCardLast4(statementText);
     } else if(isPdf){

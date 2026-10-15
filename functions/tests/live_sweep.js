@@ -71,6 +71,19 @@ try{
   const item2 = (pend2.transactions || []).find(function(x){ return /QA Cafe/.test(x.counterparty || ""); });
   run("saveNote", { action: "saveNote", row: item2 && item2.row, note: "qa coffee", category: "Food", counterparty: "QA Cafe", type: "Want", fp: item2 && item2.fp });
 
+  // Reconcile with statement rows read on the phone (no Google Drive on the new server)
+  const nowD = new Date(), p2 = function(n){ return String(n).padStart(2, "0"); };
+  const dstr = p2(nowD.getDate()) + "/" + p2(nowD.getMonth() + 1) + "/" + String(nowD.getFullYear()).slice(2);
+  const stmt = []; while(stmt.length < 22) stmt.push([]);
+  stmt.push([dstr, "UPI-QA RECON SHOP-QA@ybl-HDFC0000001-0000999001-testnote", "0000999001", dstr, 61, "", 5000]);
+  stmt.push([dstr, "UPI-QA CAFE-QA2@ybl-HDFC0000001-0000999002-tea", "0000999002", dstr, 29, "", 4971]);
+  const prev = run("reconcileStatement (rows)", { action: "reconcileStatement", rows: stmt });
+  const toAdd = (prev.missing || []).map(function(m){ return { date: m.rawDate, type: m.type, mode: m.mode, amount: m.amount, ref: m.ref, name: m.name, note: m.note, category: "Other", needWantSaving: "" }; });
+  run("insertReconciledTransactions", { action: "insertReconciledTransactions", source: "Bank Statement", transactions: toAdd });
+  const prev2 = call({ action: "reconcileStatement", rows: stmt });
+  results.push({ label: "reconcile twice finds nothing new", ok: prev2.ok === true && (prev2.missing || []).length === 0 && prev2.matched === 2, env: false });
+  console.log((prev2.ok === true && (prev2.missing || []).length === 0 ? "ok           " : "no (see)     ") + "reconcile again: nothing missing (matched " + prev2.matched + ")");
+
   // debts
   run("addDebt", { action: "addDebt", person: "QA Pal", type: "LENT", amount: 100, note: "qa", dueDate: "" });
   const debts = call({ action: "getDebts" });

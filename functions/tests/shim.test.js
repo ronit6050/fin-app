@@ -54,7 +54,8 @@ console.log("\n--- 3. The backend code all loads; there is no real Sheet ---");
 {
   const rt = createRuntime({ sharedProps: noFlags });
   assert(rt.filesLoaded.length >= 25 && rt.filesLoaded.indexOf("PWA.js") !== -1 && rt.filesLoaded.indexOf("v2db.js") !== -1, "the backend files loaded (" + rt.filesLoaded.length + ")");
-  assert(rt.filesLoaded.indexOf("telegram.js") === -1 && rt.filesLoaded.indexOf("Recon.js") === -1 && rt.filesLoaded.indexOf("main.js") === -1, "the retired bot and the Drive/statement files are not loaded");
+  assert(rt.filesLoaded.indexOf("telegram.js") === -1 && rt.filesLoaded.indexOf("main.js") === -1, "the retired bot files are not loaded");
+  assert(rt.filesLoaded.indexOf("Recon.js") !== -1 && rt.filesLoaded.indexOf("Credit Card.js") !== -1, "Reconcile's files ARE loaded (the phone sends the statement rows, so no Google Drive is needed)");
   let threw = false;
   try{ rt.sandbox.SpreadsheetApp.getActiveSpreadsheet().insertSheet("x"); }catch(e){ threw = /no Google Sheet/.test(e.message); }
   assert(threw, "trying to create a real Sheet tab fails loudly");

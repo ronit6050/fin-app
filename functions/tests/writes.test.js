@@ -75,7 +75,7 @@ console.log("\n--- 2. Saving switched ON ---");
 console.log("\n--- 3. Always stays on Apps Script ---");
 {
   state.writesOn = true; state.calls = [];
-  ["insertReconciledTransactions", "reconcileStatement", "fixCreditCardTransactionMode", "setFriendScreen", "getMyIngestKey", "ingestSms", "smsIn",
+  ["setFriendScreen", "getMyIngestKey", "ingestSms", "smsIn",
    "moveDebtToFriend", "teachBank", "removeFriendAccess", "somethingMadeUp"].forEach(function(a){
     const r = post({ action: a, idToken: "x" });
     assert(r.json.ok === false && r.json.fallback === true, a + " -> fallback even with saving on");
@@ -114,6 +114,26 @@ console.log("\n--- 4b. The SMS door (action smsIn, no Google sign-in: the key is
   const ing = post({ action: "ingestSms", key: "k" });
   assert(ing.json.ok === false && ing.json.fallback === true, "the old reader's hand-off action (ingestSms) is NOT served here");
   state.smsOn = false; state.writesOn = true;
+}
+
+console.log("\n--- 4d. Reconcile on the new server (statement rows read on the phone) ---");
+{
+  state.writesOn = true; state.calls = [];
+  let r = post({ action: "reconcileStatement", idToken: "x", rows: [["a"]] });
+  assert(r.json.ok === true && state.calls.join() === "reconcileStatement", "a bank statement preview WITH rows is answered here");
+  r = post({ action: "reconcileCreditCardStatement", idToken: "x", statementText: "01/01/2026 10:00 SHOP 10.00" });
+  assert(r.json.ok === true, "a card statement preview with the phone-read text is answered here");
+  state.calls = [];
+  r = post({ action: "reconcileStatement", idToken: "x", fileBase64: "AAAA", fileName: "s.xls" });
+  assert(r.json.ok === false && r.json.fallback === true && state.calls.length === 0, "the raw file alone (no rows) is 'nothing done, ask Apps Script': this server has no Google Drive");
+  r = post({ action: "reconcileCreditCardStatement", idToken: "x", fileBase64: "AAAA", fileName: "s.pdf" });
+  assert(r.json.ok === false && r.json.fallback === true && state.calls.length === 0, "same for a scanned card PDF that needs the OCR fallback");
+  r = post({ action: "insertReconciledTransactions", idToken: "x", transactions: [] });
+  assert(r.json.ok === true && state.calls.join() === "insertReconciledTransactions", "saving the approved rows is accepted (while saving is on)");
+  state.writesOn = false; state.calls = [];
+  r = post({ action: "insertReconciledTransactions", idToken: "x", transactions: [] });
+  assert(r.json.fallback === true && state.calls.length === 0, "and refused with fallback while saving is off");
+  state.writesOn = true;
 }
 
 console.log("\n--- 4c. The scheduled alert timer (tick) and the test notification ---");

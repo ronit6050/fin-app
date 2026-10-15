@@ -119,8 +119,14 @@ console.log("\n--- 5. A real 'no' is passed on as it is ---");
 console.log("\n--- 6. Things that stay on Apps Script, reads that fall back, Demo Mode ---");
 {
   const a = makeApp("all", { apps: OK, new: OK });
-  await a.call({ action: "insertReconciledTransactions", idToken: "x" });
-  assert(a.log.fetches.join() === "apps:insertReconciledTransactions", "Reconcile is never sent to the new server");
+  await a.call({ action: "setFriendFullApp", idToken: "x" });
+  assert(a.log.fetches.join() === "apps:setFriendFullApp", "the Access admin actions stay on Apps Script (their switches live there)");
+  const rc = makeApp("all", { apps: OK, new: OK });
+  await rc.call({ action: "insertReconciledTransactions", idToken: "x" });
+  assert(rc.log.fetches.join() === "new:insertReconciledTransactions", "Reconcile's save now goes to the new server (with 'Reads and saves')");
+  const rp = makeApp("on", { apps: OK, new: OK });
+  await rp.call({ action: "reconcileStatement", idToken: "x", rows: [["a"]] });
+  assert(rp.log.fetches.join() === "new:reconcileStatement", "a statement preview (a read) goes to the new server when it is on");
   const r = makeApp("all", { apps: { ok: true, from: "apps" }, new: "network-error" });
   const got = await r.call({ action: "getPending", idToken: "x" });
   assert(got.from === "apps" && r.log.fetches.join() === "new:getPending,apps:getPending", "a READ that fails on the new server falls back to Apps Script (reads are safe to repeat)");

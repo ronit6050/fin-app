@@ -93,6 +93,7 @@ function v2OwnerReadOnly_(fn){
 var V2_AFTER_SAVE_ = [];
 
 function v2QueueShadowRow_(row){
+  if((typeof V2_ON_NEW_SERVER_ !== "undefined") && V2_ON_NEW_SERVER_) return;          // the new server has no Google Sheet to copy into
   if(!V2DB_REQ_ || String(V2DB_REQ_.user).toLowerCase() !== v2OwnerEmail_()) return;
   V2_AFTER_SAVE_.push(row.slice());
 }

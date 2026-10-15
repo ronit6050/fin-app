@@ -275,7 +275,7 @@ function pwaDispatch_(data, verified){
   }
 
   if(data.action === "reconcileStatement"){
-    return jsonResponse(reconcileStatementPreview(data.fileBase64, data.fileName));
+    return jsonResponse(reconcileStatementPreview(data.fileBase64, data.fileName, data.rows));
   }
 
   // Added 2026-08-25 — same idea as reconcileStatement above, but for a
@@ -283,7 +283,7 @@ function pwaDispatch_(data, verified){
   // reconcileCreditCardStatementPreview comment for why this is a
   // separate action rather than a branch inside the bank one.
   if(data.action === "reconcileCreditCardStatement"){
-    return jsonResponse(reconcileCreditCardStatementPreview(data.fileBase64, data.fileName, data.statementText));
+    return jsonResponse(reconcileCreditCardStatementPreview(data.fileBase64, data.fileName, data.statementText, data.rows));
   }
 
   if(data.action === "insertReconciledTransactions"){

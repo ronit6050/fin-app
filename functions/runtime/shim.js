@@ -24,7 +24,7 @@ const PROPS_TTL_MS = 20000;
 
 // Backend files that are NOT loaded: the retired Telegram bot, the statement/Drive features, the (switched off) old mirror, and
 // the diagnostics that need a real Sheet. Everything else is loaded in file-name order.
-const SKIP_FILES = new Set(["main.js", "handlers.js", "telegram.js", "Credit Card.js", "Recon.js", "v2Sync.js", "v2dbDiag.js", "Analysis.js", "Summary.js", "AIAdvisor.js"]);
+const SKIP_FILES = new Set(["main.js", "handlers.js", "telegram.js", "v2Sync.js", "v2dbDiag.js", "Analysis.js", "Summary.js", "AIAdvisor.js"]);
 
 // ---------------------------------------------------------------- time helpers
 function tzParts(ms, tz){
