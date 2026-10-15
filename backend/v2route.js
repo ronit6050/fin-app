@@ -141,7 +141,16 @@ function v2dbEnableFunctionSms(){ PropertiesService.getScriptProperties().setPro
 // (push with the quick-confirm buttons), settles the known ones, and rebuilds the Home copy. While this is ON the Apps Script timer only copies rows
 // that the old SMS doors wrote into the Google Sheet (so nothing is announced twice). Needs saving on the new server too, and push proven there
 // (Settings > Speed > "Send a test notification"). Off = Apps Script does everything again, instantly.
-function v2dbEnableFunctionTimer(){ PropertiesService.getScriptProperties().setProperty("V2_FN_TIMER", "on"); exportFlagsToFunctions(); return "the new server now runs the alert timer; Apps Script only copies old-door rows"; }
+function v2dbEnableFunctionTimer(){
+  var p = PropertiesService.getScriptProperties();
+  if(p.getProperty("V2_FN_WRITES") !== "on") throw new Error("Switch on new-server saving first (v2dbEnableFunctionWrites): the new server's timer needs it.");
+  p.setProperty("V2_FN_TIMER", "on");
+  if(!exportFlagsToFunctions()){
+    p.deleteProperty("V2_FN_TIMER");
+    throw new Error("Could not tell the new server about the switch (see AILogs, FLAGS_EXPORT_ERROR), so NOTHING was switched on. Try again.");
+  }
+  return "the new server will run the alert timer once its first tick arrives (up to 5 minutes); until then, and whenever it stops ticking, Apps Script keeps alerting";
+}
 function v2dbDisableFunctionTimer(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_TIMER"); flagsExportOrThrow_("The new-server timer"); return "Apps Script runs the whole timer again"; }
 
 function v2dbDisableFunctionSms(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_SMS"); flagsExportOrThrow_("New-server bank SMS"); return "bank SMS no longer go to the new server"; }

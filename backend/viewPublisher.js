@@ -162,6 +162,8 @@ function publishAfterAction_(action, response){
     }else{
       CacheService.getScriptCache().put("V2_DIRTY", "1", 21600);   // the timer publishes it
     }
+    // The new-server timer (fnTimer.js) cannot see another server's memory: tell it through the database that the Home copy is stale.
+    if(typeof fnTimerOn_ === "function" && fnTimerOn_() && typeof timerMarkDirty_ === "function") timerMarkDirty_();
   }catch(err){
     v2LogErrorOncePerHour_(err);
   }

@@ -118,7 +118,7 @@ exports.tick = onSchedule({
   timeZone: "Asia/Kolkata",
   region: "asia-south1",
   memory: "512MiB",
-  timeoutSeconds: 120,
+  timeoutSeconds: 300,                  // a run that is killed before it saves would announce the same transactions again next tick: give it room
   maxInstances: 1,
   retryCount: 0
 }, function(){

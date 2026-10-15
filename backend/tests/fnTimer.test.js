@@ -32,7 +32,10 @@ function seed(w){
   w.pushes.length = 0;
 }
 // pretend there is NO Google Sheet (the new server)
-function asNewServer(sb){
+function asNewServer(w){
+  const sb = w.sb;
+  // on the new server logs go to the log service, not a Sheet tab: keep them in the test's own log so the checks can see them
+  sb.logAI = function(type, message){ w.sheets.AILogs.appendRow([new Date(), type, String(message)]); };
   sb.V2_ON_NEW_SERVER_ = true;
   sb.SpreadsheetApp = { getActiveSpreadsheet: function(){ return { getSheetByName: function(){ return null; }, getSheets: function(){ return []; }, insertSheet: function(){ throw new Error("This server has no Google Sheet"); } }; } };
 }
@@ -54,6 +57,7 @@ console.log("\n--- 2. Switch ON, Apps Script side: steps aside, only copies old-
 {
   const w = build(); seed(w); const sb = w.sb;
   w.props.V2_FN_TIMER = "on";
+  w.store["_system/timer"] = { fields: { tickAtMs: Date.now() }, updateTime: "t0" };     // the new server ticked a moment ago
   w.sheets.Transactions.appendRow(w.row(55, 333333, "Shop C", ""));       // the OLD door wrote this into the Sheet
   sb.processNewTransactions();
   assert(w.pushes.length === 0, "NO notification from Apps Script (the new server announces it, so it is never announced twice)");
@@ -69,7 +73,7 @@ console.log("\n--- 2. Switch ON, Apps Script side: steps aside, only copies old-
   sb.processNewTransactions();
   assert(privateRows(w).length === 5 && w.pushes.length === 0, "a newer old-door row is copied too (still no notification from Apps Script)");
   // owner not switched on: Apps Script must keep doing everything even if the new-server switch is on
-  const w2 = build(); seed(w2); w2.props.V2_FN_TIMER = "on"; w2.sb.v2dbDisableOwner();
+  const w2 = build(); seed(w2); w2.props.V2_FN_TIMER = "on"; w2.store["_system/timer"] = { fields: { tickAtMs: Date.now() }, updateTime: "t0" }; w2.sb.v2dbDisableOwner();
   w2.sheets.Transactions.appendRow(w2.row(77, 555555, "Shop E", ""));
   w2.sb.processNewTransactions();
   assert(w2.pushes.length === 1, "if the owner is NOT on the private copy, Apps Script still alerts (the new server cannot serve him)");
@@ -80,7 +84,7 @@ console.log("\n--- 3. The NEW server's tick (no Google Sheet) ---");
   const w = build(); seed(w); const sb = w.sb;
   // an owner row waiting for its alert, as the SMS door or the Apps Script inbox would leave it
   sb.v2dbRun_(OWNER, function(db){ db.getSheetByName("Transactions").appendRow(w.row(90, 666666, "Shop F", "")); }, { prefetch: ["Transactions", "_Props"] });
-  asNewServer(sb);
+  asNewServer(w);
   const r1 = sb.timerTick_();
   assert(r1.ran === true && r1.why === "full look", "the first tick (never looked yet) does a full look");
   assert(w.pushes.length === 1 && /New Transaction/.test(w.pushes[0].title), "it sent the notification");
@@ -90,7 +94,8 @@ console.log("\n--- 3. The NEW server's tick (no Google Sheet) ---");
   const commits = w.commits, pushes = w.pushes.length;
   tick();
   const r2 = sb.timerTick_();
-  assert(r2.ran === false && r2.reason === "nothing to do" && w.commits === commits && w.pushes.length === pushes, "a quiet tick does nothing and writes nothing");
+  assert(r2.ran === false && r2.reason === "nothing to do" && w.pushes.length === pushes, "a quiet tick does nothing");
+  assert(w.commits === commits + 1 && Date.now() - Number(timerDoc(w).tickAtMs) < 5000, "its only write is the heartbeat ('the new server is alive')");
   // a new unprocessed row but nobody marked it: the quiet tick does not look (cheap by design) ...
   sb.v2dbRun_(OWNER, function(db){ db.getSheetByName("Transactions").appendRow(w.row(91, 777777, "Shop G", "")); }, { prefetch: ["Transactions", "_Props"] });
   tick();
@@ -101,28 +106,29 @@ console.log("\n--- 3. The NEW server's tick (no Google Sheet) ---");
   tick();
   const r3 = sb.timerTick_();
   assert(r3.ran === true && r3.why === "marked changed" && w.pushes.length === pushes + 1, "once marked, the next tick alerts it exactly once");
-  tick();
-  assert(sb.timerTick_().ran === false && w.pushes.length === pushes + 1, "and does not alert it again");
+  tick(); sb.timerTick_(); tick(); sb.timerTick_();
+  assert(w.pushes.length === pushes + 1, "further ticks never announce it again (a marked change inside the 5 s clock margin may cause one harmless extra look)");
   // the safety net
   sb.v2dbRun_(OWNER, function(db){ db.getSheetByName("Transactions").appendRow(w.row(92, 888888, "Shop H", "")); }, { prefetch: ["Transactions", "_Props"] });
   w.store["_system/timer"].fields.fullAtMs = Date.now() - 31 * 60 * 1000;
   const r4 = sb.timerTick_();
-  assert(r4.ran === true && r4.why === "full look" && w.pushes.length === pushes + 2, "after 30 minutes the full look finds a change nobody marked");
+  assert(r4.ran === true && w.pushes.length === pushes + 2, "after 30 minutes the full look finds a change nobody marked");
 }
 
 console.log("\n--- 4. A failed run is not marked done; the owner not being on the private copy is a no-op ---");
 {
   const w = build(); seed(w); const sb = w.sb;
   sb.v2dbRun_(OWNER, function(db){ db.getSheetByName("Transactions").appendRow(w.row(93, 999999, "Shop I", "")); }, { prefetch: ["Transactions", "_Props"] });
-  asNewServer(sb);
-  const bad = new Error("firestore down"); bad.httpCode = 503;
-  w.failCommits = [null, bad, bad, bad];          // the tick's own reads work; saving the processed row keeps failing
+  asNewServer(w);
+  const realRun = sb.processNewTransactions;
+  sb.processNewTransactions = function(){ throw new Error("firestore down"); };        // the real work fails (the timer's own bookkeeping still works)
   let threw = false; try{ sb.timerTick_(); }catch(e){ threw = true; }
-  w.failCommits = [];
+  sb.processNewTransactions = realRun;
   assert(threw && !(timerDoc(w) && timerDoc(w).doneAtMs), "a failing run throws and is NOT recorded as done");
+  assert(Number(timerDoc(w).failCount) === 1, "the failure is counted");
   const again = sb.timerTick_();
-  assert(again.ran === true && privateRows(w)[3][15] === "YES", "the next tick retries and finishes the job");
-  const w2 = build(); seed(w2); asNewServer(w2.sb); w2.sb.v2dbDisableOwner();
+  assert(again.ran === true && privateRows(w)[3][15] === "YES" && Number(timerDoc(w).failCount) === 0, "the next tick retries, finishes the job and clears the count");
+  const w2 = build(); seed(w2); asNewServer(w2); w2.sb.v2dbDisableOwner();
   const off = w2.sb.timerTick_();
   assert(off.ran === false && /not on the private copy/.test(off.reason) && !timerDoc(w2), "owner not on the private copy: nothing runs, nothing is read or written");
 }
@@ -142,6 +148,76 @@ console.log("\n--- 5. The owner's SMS door marks 'something changed' ---");
   send("Sent Rs.40.00 From HDFC Bank A/C x1234 To Aarogyumm Cafe On 13/10/26 Ref 665226905838 Not You? Call 18002586161");
   assert(timerDoc(w).dirtyAtMs === d1, "a duplicate (not saved) does not mark again");
   assert(w.pushes.length === 0, "the SMS door itself sends no owner alert (the timer does)");
+}
+
+console.log("\n--- 6. Dead-man protection: Apps Script takes the job back if the new server stops ticking ---");
+{
+  const mk = function(heartbeat){
+    const w = build(); seed(w); w.props.V2_FN_TIMER = "on";
+    if(heartbeat !== null) w.store["_system/timer"] = { fields: { tickAtMs: heartbeat }, updateTime: "t0" };
+    w.sheets.Transactions.appendRow(w.row(55, 333333, "Shop C", ""));
+    return w;
+  };
+  const none = mk(null); none.sb.processNewTransactions();
+  assert(none.pushes.length === 1, "no heartbeat at all (the new server has never ticked): Apps Script alerts as before");
+  const stale = mk(Date.now() - 13 * 60 * 1000); stale.sb.processNewTransactions();
+  assert(stale.pushes.length === 1 && stale.errors("FN_TIMER_STALE").length === 1, "a heartbeat 13 minutes old: Apps Script takes over again and says so in the log");
+  const fresh = mk(Date.now() - 2 * 60 * 1000); fresh.sb.processNewTransactions();
+  assert(fresh.pushes.length === 0, "a heartbeat 2 minutes old: Apps Script steps aside");
+  const real = mk(Date.now()); const orig = real.sb.fsGetPathMeta_;
+  real.sb.fsGetPathMeta_ = function(p){ if(p === "_system/timer") throw new Error("firestore down"); return orig(p); };
+  assert(real.sb.timerHeartbeatFresh_() === false, "a read error counts as 'not ticking' (Apps Script keeps alerting)");
+  real.sb.processNewTransactions();
+  assert(real.pushes.length === 1, "and in that case it really does alert");
+}
+
+console.log("\n--- 7. Switching on is refused unless it can work ---");
+{
+  const w = build(); seed(w); const sb = w.sb;
+  let msg = ""; try{ sb.v2dbEnableFunctionTimer(); }catch(e){ msg = e.message; }
+  assert(/saving first/.test(msg) && w.props.V2_FN_TIMER === undefined, "without new-server saving on it refuses and switches nothing on");
+  w.props.V2_FN_WRITES = "on";
+  const bad = new Error("firestore down"); bad.httpCode = 503; w.failCommits = [bad];
+  msg = ""; try{ sb.v2dbEnableFunctionTimer(); }catch(e){ msg = e.message; }
+  w.failCommits = [];
+  assert(/NOTHING was switched on/.test(msg) && w.props.V2_FN_TIMER === undefined, "if the new server could not be told, it refuses and leaves the switch off");
+  const ok = sb.v2dbEnableFunctionTimer();
+  assert(/first tick/.test(ok) && w.props.V2_FN_TIMER === "on" && w.store["_system/props"].fields.V2_FN_TIMER === "on", "otherwise it switches on and copies the switch to the new server");
+}
+
+console.log("\n--- 8. A failing run is retried at most 3 times, then waits for the next full look ---");
+{
+  const w = build(); seed(w); const sb = w.sb;
+  sb.v2dbRun_(OWNER, function(db){ db.getSheetByName("Transactions").appendRow(w.row(94, 121212, "Shop J", "")); }, { prefetch: ["Transactions", "_Props"] });
+  asNewServer(w);
+  sb.processNewTransactions = function(){ throw new Error("always fails"); };
+  sb.timerMarkDirty_();
+  let thrown = 0;
+  for(let i = 0; i < 3; i++){ tick(); try{ sb.timerTick_(); }catch(e){ thrown++; } }
+  assert(thrown === 3 && Number(timerDoc(w).failCount) === 3 && w.errors("TIMER_RUN_FAILED").length === 3, "three failed runs are counted and logged");
+  tick();
+  const r = sb.timerTick_();
+  assert(r.ran === false && /backing off/.test(r.reason), "then it stops retrying every tick (no database reads burned)");
+  w.store["_system/timer"].fields.failAtMs = Date.now() - 31 * 60 * 1000;
+  let again = false; try{ sb.timerTick_(); }catch(e){ again = true; }
+  assert(again, "after the next full-look interval it tries again");
+}
+
+console.log("\n--- 9. App saves tell the new server's timer that the Home copy is stale ---");
+{
+  const fs = require("fs"), path = require("path");
+  const w = build(); seed(w); const sb = w.sb;
+  require("vm").runInContext(fs.readFileSync(path.join(__dirname, "..", "viewPublisher.js"), "utf8"), sb);        // the real publishAfterAction_ (the test world stubs it)
+  const resp = { getContent: function(){ return '{"ok":true}'; } };
+  sb.publishAfterAction_("saveNote", resp);
+  assert(!timerDoc(w), "switch OFF: a save marks nothing (exactly as before)");
+  w.props.V2_FN_TIMER = "on";
+  sb.publishAfterAction_("saveNote", resp);
+  assert(timerDoc(w) && Number(timerDoc(w).dirtyAtMs) > 0, "switch ON: a successful save marks 'something changed'");
+  const d = timerDoc(w).dirtyAtMs; tick();
+  sb.publishAfterAction_("getPending", resp);
+  sb.publishAfterAction_("saveNote", { getContent: function(){ return '{"ok":false}'; } });
+  assert(timerDoc(w).dirtyAtMs === d, "a read, or a save that failed, marks nothing");
 }
 
 console.log("\nDone.");

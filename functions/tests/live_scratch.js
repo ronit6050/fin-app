@@ -143,6 +143,7 @@ function assert(cond, msg){ if(!cond){ console.error("FAIL: " + msg); failures++
     const usage = function(){ return rt.sandbox.FS_USAGE_ ? rt.sandbox.FS_USAGE_.reads : 0; };
     rt.sandbox.sendPushNotification = function(t, b){ pushedTitles.push(t); return { sent: true, code: 200, detail: "fake" }; };
     const pushedTitles = [];
+    const settle = Date.now() + 6000; while(Date.now() < settle){}        // marks newer than the 5 s clock margin would make the next tick look again (harmless, but this test wants a clean quiet tick)
     const tk1 = rt.runTimer();
     assert(tk1.ran === true, "the first tick runs (never looked yet): " + JSON.stringify(tk1));
     assert(pushedTitles.filter(function(x){ return /New Transaction/.test(x); }).length >= 1, "it alerted the waiting SMS rows (" + pushedTitles.length + " notification(s))");
@@ -160,7 +161,10 @@ function assert(cond, msg){ if(!cond){ console.error("FAIL: " + msg); failures++
     const until = Date.now() + 5; while(Date.now() < until){}
     const tk3 = rt.runTimer();
     assert(tk3.ran === true && pushedTitles.length === pushesBefore + 1, "the next tick alerts it exactly once");
-    assert(rt.runTimer().ran === false, "and goes quiet again");
+    rt.runTimer();                                                          // (a mark made just before a run may be looked at once more: harmless)
+    const settle2 = Date.now() + 6000; while(Date.now() < settle2){}
+    rt.runTimer();
+    assert(rt.runTimer().ran === false && pushedTitles.length === pushesBefore + 1, "and goes quiet again, with no repeat announcement");
 
     // refreshViews rebuilds the Home copy: capture it instead of writing (the real one belongs to the real owner)
     const captured = [];

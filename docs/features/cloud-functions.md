@@ -123,5 +123,14 @@ are provided by the shim; `v2OwnerTakeOver_` skips the Sheet-only inbox/stamp/he
 "Send a test notification (new server)" and confirm it arrives; (3) run `v2dbEnableFunctionTimer` in the Apps Script editor; (4) send a test SMS: the notification should arrive within ~5 minutes
 (function logs show `TICK ran:true`), exactly once; (5) watch Today's Firestore use on the Access screen for a day. **Roll back:** `v2dbDisableFunctionTimer` (Apps Script alerts again at once).
 
-**Known limits:** an alert can be up to 5 minutes late (same as the Apps Script timer); the Home copy is rebuilt by the new server only when a run happens (marked change or every 30 min); the
+**Fixes after the independent review (2026-10-15; the first version was "safe with the switch off, NOT safe to switch on"):**
+(1) **Dead-man protection.** Every tick (even a quiet one) writes a heartbeat (`tickAtMs`). Apps Script steps aside ONLY while that heartbeat is under 12 minutes old; if the new server stops
+ticking (scheduler job paused, function down, a switch that did not arrive) Apps Script takes the whole job back by itself and logs `FN_TIMER_STALE`. `v2dbEnableFunctionTimer` now refuses unless
+new-server saving is on and the new server was really told (otherwise it leaves the switch off). A quiet tick is now 1 read + 1 write. (2) **No endless repeat announcements.** A run that fails is not marked
+done and is retried, but after 3 failed runs in a row it waits for the next full look (`failCount`, logged `TIMER_RUN_FAILED`); the function's time limit is 300 s. (3) **Home copy stays fresh.** Every successful
+app save marks "changed" (`publishAfterAction_`, only while the timer switch is on), and a marked tick makes the new server rebuild the Home copy. (Also: "done" is stamped 5 s before the run started, to
+tolerate a small difference between the Apps Script and Cloud Run clocks; a mark made in that window is looked at once more, harmlessly.)
+Tests: `backend/tests/fnTimer.test.js` (44 checks), and the real-database `live_scratch.js` section 1c.
+
+**Known limits:** an alert can be up to 5 minutes late (same as the Apps Script timer); a push that Google refuses still marks the row alerted (same as before; the test button is the proof); the Home copy is rebuilt by the new server only when a run happens (marked change or every 30 min); the
 in-memory "Home copy due" flags are per instance, so a cold instance may rebuild it one extra time.

@@ -15,9 +15,17 @@ function processNewTransactions() {
   TXN_PUBLISH_NOW_ = false;
   // The new server (Cloud Functions) runs the alerts now (switch V2_FN_TIMER, v2dbEnableFunctionTimer): Apps Script only keeps copying
   // old-door rows from the Sheet into the owner's private copy, so the same transaction is never announced twice.
+  // It steps aside ONLY while the new server is really ticking (a fresh heartbeat, fnTimer.js): if that ever stops, this timer takes the whole job
+  // back by itself, so alerts can never silently stop.
   if(typeof fnTimerOn_ === "function" && fnTimerOn_() && typeof v2OwnerOn_ === "function" && v2OwnerOn_() && !((typeof V2_ON_NEW_SERVER_ !== "undefined") && V2_ON_NEW_SERVER_)){
-    v2OwnerInboxOnly_();
-    return;
+    if(typeof timerHeartbeatFresh_ === "function" && timerHeartbeatFresh_()){
+      v2OwnerInboxOnly_();
+      return;
+    }
+    try{
+      var c_ = CacheService.getScriptCache();
+      if(!c_.get("FN_TIMER_STALE_LOGGED")){ c_.put("FN_TIMER_STALE_LOGGED", "1", 3600); logAI("FN_TIMER_STALE", "The new server is not ticking (no fresh heartbeat): the Apps Script timer is doing the whole job."); }
+    }catch(ignore){}
   }
   try{
     // When the owner is switched on, the REAL WORK runs on his private copy under the shared lock (v2owner.js); otherwise it just runs.
