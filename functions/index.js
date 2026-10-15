@@ -15,11 +15,11 @@ const ALLOWED_ORIGINS = ["https://ronit6050.github.io"];
 // The only actions this server answers (all read-only). Everything else is refused with fallback:true.
 const READ_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
   "getDebts", "getCash", "getInvestments", "getInvestmentInstruments", "getSavingsGoals", "getTransactionHistory", "getPlannerData",
-  "getSettings", "getPeople", "getPerson"];
+  "getSettings", "getPeople", "getPerson", "getIgnoredTransactions"];
 // SAVING actions (added 2026-10-14). Accepted ONLY while the owner has switched saving on (Apps Script: v2dbEnableFunctionWrites()),
 // and only for people on the Firestore copy. Deliberately NOT here: Reconcile/statement actions (they use the owner's Google Drive),
 // Access/admin actions, the SMS doors and the timers - those stay on Apps Script.
-const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "addDebt", "settleDebt", "recordDebtPayment",
+const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
   "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
   "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
   "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",

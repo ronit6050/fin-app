@@ -38,7 +38,7 @@ var V2_HEARTBEAT_SECONDS_ = 1800;
 // not on this list (all the "get..." and "preview..." ones, ping) never
 // triggers a publish.
 var V2_WRITE_ACTIONS_ = [
-  "saveNote", "markNotATransaction", "addDebt", "settleDebt", "recordDebtPayment",
+  "saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
   "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
   "deleteSavingsEntry", "addSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
   "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",

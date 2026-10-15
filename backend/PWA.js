@@ -146,6 +146,14 @@ function pwaDispatch_(data, verified){
     return jsonResponse(markNotATransaction(data.row, data.fp));
   }
 
+  // Added 2026-10-15: undo for "Not a transaction" (a real payment was removed by mistake). See getIgnoredTransactions below.
+  if(data.action === "getIgnoredTransactions"){
+    return jsonResponse(getIgnoredTransactions());
+  }
+  if(data.action === "restoreIgnoredTransaction"){
+    return jsonResponse(restoreIgnoredTransaction(data.archiveRow, data.fp));
+  }
+
   if(data.action === "getTodaySummary"){
     return jsonResponse({ ok:true, summary: getTodaySummary() });
   }
@@ -2800,6 +2808,10 @@ function markNotATransaction(row, expectFp){
     const rawSms = (rowValues[10] || "").toString(); // column K
     const sender = (rowValues[11] || "").toString(); // column L
 
+    // Only teach the spam filter from a message the reader itself was unsure about (its counterparty starts with "NEEDS REVIEW").
+    // A normal, readable payment that someone removed (maybe by mistake) must never become a "learned junk" pattern. (2026-10-15)
+    const looksLikeJunk = /^NEEDS REVIEW/i.test((rowValues[7] || "").toString().trim());
+
     // 1. Archive the FULL row, exactly as it is, before touching
     // anything else — this is a move, not a delete-and-forget.
     const ignoredSheet = getTransactionsIgnoredSheet_();
@@ -2819,7 +2831,7 @@ function markNotATransaction(row, expectFp){
     // A friend's own message is never copied into the OWNER's learned-spam list (that list lives in the owner's Sheet and would
     // hold the friend's message text). The row is still archived and cleared in the friend's own space.
     const isFriendData = (typeof V2DB_REQ_ !== "undefined") && !!V2DB_REQ_ && String(V2DB_REQ_.user).toLowerCase() !== String(PWA_ALLOWED_EMAIL).toLowerCase();
-    if(isFriendData && rawSms && sender){
+    if(isFriendData && rawSms && sender && looksLikeJunk){
       // A friend's own junk list lives in HER private space (her new SMS path, smsIn.js, reads it there); never in the owner's Sheet.
       const friendTemplate = normalizeForFingerprint(rawSms);
       if(friendTemplate.length >= 20){
@@ -2828,7 +2840,7 @@ function markNotATransaction(row, expectFp){
         patternLearned = true;
       }
     }
-    if(!isFriendData && rawSms && sender){
+    if(!isFriendData && rawSms && sender && looksLikeJunk){
       const template = normalizeForFingerprint(rawSms);
       if(template.length >= 20){
         // The owner's Google Sheet list is what the OLD SMS reader reads. The new server (Cloud Functions) has no Google Sheet at all, so
@@ -2879,7 +2891,110 @@ function markNotATransaction(row, expectFp){
     // next time, rather than always claiming so. Same "don't let two
     // different outcomes look identical" rule this app already applies
     // elsewhere (e.g. saveTransactionNote's typeSaved/investmentLogged).
-    return { ok:true, patternLearned: patternLearned };
+    // archiveRow + fp let the app offer "Undo" right away (restoreIgnoredTransaction below).
+    return { ok:true, patternLearned: patternLearned, archiveRow: ignoredSheet.getLastRow(), fp: rowFingerprint_(rowValues) };
+  }catch(err){
+    return { ok:false, error: err.toString() };
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// UNDO FOR "NOT A TRANSACTION" (added 2026-10-15). Found live: a friend tapped it on a REAL payment by mistake and there was
+// no way back (the archive in Transactions_Ignored was never read by anything). Now:
+//   getIgnoredTransactions()  - the recently removed items (newest first, last 60 days, at most 30) for a "Removed items" list;
+//   restoreIgnoredTransaction(archiveRow, fp) - puts one back into Transactions as a normal Pending item (Processed "YES", no note),
+//     unless a live row with the same real reference and amount already exists (a resync may have saved it again), forgets the
+//     learned-junk pattern that tap created (if any), and marks the archive row "RESTORED" so it can't be restored twice.
+// The archive row's own column P stays "YES" until restored, so the list only shows items still removed.
+// ---------------------------------------------------------------------------------------------------------------------------
+function getIgnoredTransactions(){
+  try{
+    const sh = dbSs_().getSheetByName("Transactions_Ignored");
+    if(!sh || sh.getLastRow() < 2) return { ok:true, items:[] };
+    const data = sh.getDataRange().getValues();
+    const tz = Session.getScriptTimeZone();
+    const cutoff = Date.now() - 60 * 86400000;
+    const fmt = function(v, f){ try{ const d = new Date(v); return isNaN(d.getTime()) ? "" : Utilities.formatDate(d, tz, f); }catch(e){ return ""; } };
+    const items = [];
+    for(let i = data.length - 1; i >= 1 && items.length < 30; i--){
+      const r = data[i];
+      if(String(r[15] || "").trim() !== "YES") continue;
+      const t = new Date(r[0]).getTime();
+      if(isNaN(t) || t < cutoff) continue;
+      items.push({
+        archiveRow: i + 1, fp: rowFingerprint_(r),
+        date: fmt(r[0], "dd MMM yyyy"), time: fmt(r[1], "HH:mm"),
+        amount: Number(r[5]) || 0, type: String(r[3] || ""), mode: String(r[4] || ""),
+        counterparty: String(r[7] || ""), sms: String(r[10] || "").slice(0, 220)
+      });
+    }
+    return { ok:true, items: items };
+  }catch(err){
+    return { ok:false, error: err.toString() };
+  }
+}
+
+// Blanks every learned-junk pattern that came from this exact message (same sender + same fingerprint). Blank rows are harmless:
+// the readers ignore a pattern shorter than 20 characters. Returns how many were forgotten.
+function forgetLearnedSpam_(sender, rawSms){
+  const template = normalizeForFingerprint(String(rawSms || ""));
+  if(template.length < 20 || !sender) return 0;
+  const blank = function(sh){
+    if(!sh || sh.getLastRow() < 2) return 0;
+    const vals = sh.getDataRange().getValues();
+    let n = 0;
+    for(let i = 1; i < vals.length; i++){
+      if(String(vals[i][1]) === String(sender) && String(vals[i][2]) === template){
+        sh.getRange(i + 1, 1, 1, vals[i].length).setValues([new Array(vals[i].length).fill("")]);
+        n++;
+      }
+    }
+    return n;
+  };
+  let forgotten = 0;
+  const isFriendData = (typeof V2DB_REQ_ !== "undefined") && !!V2DB_REQ_ && String(V2DB_REQ_.user).toLowerCase() !== String(PWA_ALLOWED_EMAIL).toLowerCase();
+  const onNewServer = (typeof V2_ON_NEW_SERVER_ !== "undefined") && !!V2_ON_NEW_SERVER_;
+  if(!isFriendData && !onNewServer){ forgotten += blank(getLearnedSpamPatternsSheet_()); }
+  try{
+    if((typeof V2DB_REQ_ !== "undefined") && V2DB_REQ_){ forgotten += blank(dbSs_().getSheetByName("LearnedSpamPatterns")); }
+  }catch(ignorePrivate){}
+  return forgotten;
+}
+
+function restoreIgnoredTransaction(archiveRow, expectFp){
+  try{
+    const ss = dbSs_();
+    const arch = ss.getSheetByName("Transactions_Ignored");
+    if(!arch || !Number.isInteger(archiveRow) || archiveRow < 2 || archiveRow > arch.getLastRow()){
+      return { ok:false, error:"Invalid row." };
+    }
+    const r = arch.getDataRange().getValues()[archiveRow - 1];
+    if(String(r[15] || "").trim() !== "YES"){
+      return { ok:false, error:"This one was already restored (or isn't a removed transaction) — nothing was changed." };
+    }
+    if(expectFp !== undefined && expectFp !== null && expectFp !== "" && rowFingerprint_(r) !== String(expectFp)){
+      return staleRowResponse_();
+    }
+    const txn = ss.getSheetByName("Transactions");
+    const live = txn.getDataRange().getValues();
+    // Already back? Same REAL reference and same amount in a live row (a resync can save the message again after it was removed).
+    const ref = String(r[6] === null || r[6] === undefined ? "" : r[6]).trim();
+    let alreadyBack = false;
+    if(ref && ref.indexOf("NOREF_") !== 0){
+      for(let i = 1; i < live.length; i++){
+        if(String(live[i][6] === null || live[i][6] === undefined ? "" : live[i][6]).trim() === ref
+           && Math.abs(Number(live[i][5]) - Number(r[5])) < 0.01
+           && String(live[i][15] || "").trim() !== "IGNORED"){ alreadyBack = true; break; }
+      }
+    }
+    if(!alreadyBack){
+      const copy = r.slice();
+      copy[15] = "YES";                  // Processed: it shows in Pending (needs YES and no note) without a second alert
+      txn.appendRow(copy);
+    }
+    const forgotten = forgetLearnedSpam_(String(r[11] || ""), String(r[10] || ""));
+    arch.getRange(archiveRow, 16).setValue("RESTORED");
+    return { ok:true, restored: !alreadyBack, alreadyBack: alreadyBack, patternsForgotten: forgotten };
   }catch(err){
     return { ok:false, error: err.toString() };
   }

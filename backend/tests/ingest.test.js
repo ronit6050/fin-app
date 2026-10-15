@@ -133,7 +133,7 @@ console.log("\n--- 7. A friend marking a message 'not a transaction' never write
 {
   sb.CacheService = { getScriptCache: function(){ return { get: function(){ return null; }, put: function(){}, remove: function(){} }; } };   // fresh limits
   const k = w.act("friend", { action: "getMyIngestKey" }).key;
-  send(k, { tx: tx({ reference: "661001", amount: 3 }), sms: "Your favourite plan will stay available on Vi. Recharge today for more benefits!" , sender: "VG-611112-P" });
+  send(k, { tx: tx({ reference: "661001", amount: 3, counterparty: "NEEDS REVIEW: Vi plan" }), sms: "Your favourite plan will stay available on Vi. Recharge today for more benefits!" , sender: "VG-611112-P" });
   const p = w.act("friend", { action: "getPending" }).transactions.filter(function(t){ return t.amount === 3; })[0];
   const r = w.act("friend", { action: "markNotATransaction", row: p.row, fp: p.fp });
   assert(r.ok === true && r.patternLearned === true, "it is removed from her Pending, and the pattern is learned in HER OWN private junk list");

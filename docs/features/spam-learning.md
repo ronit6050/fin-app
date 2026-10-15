@@ -257,3 +257,14 @@ non-integer/missing row is rejected cleanly; `normalizeForFingerprint`'s
 exact contract (lowercase-then-replace ordering, URL/number stripping,
 whitespace collapsing, null/undefined safety). Full existing backend
 suite (19 files) still passes.
+
+## Undo for "Not a transaction" (added 2026-10-15)
+
+**What went wrong:** a friend tapped "Not a transaction" on a REAL payment by mistake. The row was archived in `Transactions_Ignored`, but nothing could read the archive, so there was no way back.
+
+**What changed:**
+- **Real payments are never taught as junk.** Only a row the reader was unsure about (counterparty starts with "NEEDS REVIEW") adds a pattern to the learned-junk list. A normal readable payment is just archived.
+- **Undo.** `markNotATransaction` now also returns `archiveRow` and `fp`. The app's confirmation has an **Undo** button, and the Pending screen has a **Removed items** list (last 60 days, at most 30) with a **Put back** button on each.
+- **Stronger warning.** A card that looks like a real payment (readable merchant, amount above zero) asks "Looks like a real payment, tap again to remove".
+- **New actions** (`backend/PWA.js`): `getIgnoredTransactions` (read) and `restoreIgnoredTransaction(archiveRow, fp)` (write). Restore appends the row back to Transactions (Processed YES, so it shows in Pending without a second alert), forgets the learned pattern from that exact message (blanks the row; readers ignore anything shorter than 20 characters), and marks the archive row `RESTORED` in column P so it cannot be restored twice. If a live row with the same real reference and amount already exists (a resync saved it again), nothing is added and the answer says `alreadyBack`.
+- Works for the owner (Sheet archive / private copy) and for friends (their own private archive). Tests: `backend/tests/markNotATransaction.test.js` (undo section).

@@ -2624,6 +2624,47 @@
       background: transparent;
     }
 
+    /* ---------- Undo for "Not a transaction" (2026-10-15) ---------- */
+    .pending-notice .pending-notice-undo {
+      width: auto;
+      flex-shrink: 0;
+      margin: 0 0 0 auto;
+      background: transparent;
+      box-shadow: none;
+      border: 1.5px solid currentColor;
+      color: inherit;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 4px 14px;
+      cursor: pointer;
+    }
+    .removed-toggle {
+      width: auto;
+      margin: 18px auto 0;
+      display: block;
+      background: transparent;
+      box-shadow: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 10px 8px;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .removed-item {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      margin-top: 10px;
+    }
+    .removed-item .removed-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-weight: 700; }
+    .removed-item .removed-meta { color: var(--text-muted); font-size: 0.78rem; margin-top: 2px; }
+    .removed-item .removed-sms { color: var(--text-muted); font-size: 0.75rem; margin-top: 6px; word-break: break-word; }
+    .removed-item .restore-btn { width: auto; margin: 10px 0 0 auto; display: block; padding: 8px 18px; font-size: 0.85rem; }
+
     /* ---------- "Back" button on More's sub-screens ----------
        Redesigned 2026-08-11 — was a small plain-text link ("← Back"),
        undersized for a thumb and the one place in the app still using a
@@ -2885,6 +2926,8 @@
           <div class="skeleton-block" style="height:120px; margin-bottom:12px;"></div>
         </div>
         <button type="button" id="showMoreButton" style="display:none">Show more</button>
+        <button type="button" class="removed-toggle" id="removedToggle">Removed items — bring one back</button>
+        <div id="removedList" style="display:none"></div>
       </section>
 
       <!-- ===== TAB: Monthly Analysis ===== -->
@@ -3676,8 +3719,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-15-03";
-    const APP_CHANGELOG = "Settings > Speed has a new choice, \"Reads and saves\" (beta): saving can also go through the new fast server. History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, the app remembers when you say it is regular spend, and a lent-to note now shows up in Debts straight away (and only once).";
+    const APP_VERSION = "2026-10-15-04";
+    const APP_CHANGELOG = "\"Not a transaction\" can now be undone: after tapping it there is an Undo, and a \"Removed items\" list at the bottom of Pending lets you bring any removed payment back (a real payment now also gets an extra warning first). Settings > Speed has a new choice, \"Reads and saves\" (beta): saving can also go through the new fast server. History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, the app remembers when you say it is regular spend, and a lent-to note now shows up in Debts straight away (and only once).";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -4101,7 +4144,7 @@
     // text swaps, leaving any icon alone; every older plain-text button
     // (Settle, Mark Purchased) has no such child, so it falls back to the
     // original whole-button behavior unchanged.
-    function bindConfirmAction(button, handler) {
+    function bindConfirmAction(button, handler, confirmText) {
       const labelEl = button.querySelector(".btn-label");
       const originalText = labelEl ? labelEl.textContent : button.textContent;
       let revertTimer = null;
@@ -4118,7 +4161,7 @@
           handler(e);
         } else {
           button.dataset.confirming = "1";
-          setLabel("Tap again to confirm");
+          setLabel(confirmText || "Tap again to confirm");
           revertTimer = setTimeout(function () {
             button.dataset.confirming = "";
             setLabel(originalText);
@@ -4832,10 +4875,16 @@
     // confirmation (2026-09-18) since it's the same shape of problem —
     // Pending's Save/removal is optimistic, so there's no card left on
     // screen to show a one-off confirmation on.
-    function showPendingNotice(message) {
+    // action (optional): { label, onClick(noticeEl) } adds a small button (used for "Undo" after Not a transaction).
+    function showPendingNotice(message, action) {
       const notice = document.createElement("div");
       notice.className = "pending-notice";
-      notice.innerHTML = `<span>${escapeHtml(message)}</span><button type="button" class="pending-notice-dismiss" aria-label="Dismiss">×</button>`;
+      notice.innerHTML = `<span>${escapeHtml(message)}</span>${action ? '<button type="button" class="pending-notice-undo"></button>' : ""}<button type="button" class="pending-notice-dismiss" aria-label="Dismiss">×</button>`;
+      if (action) {
+        const actionBtn = notice.querySelector(".pending-notice-undo");
+        actionBtn.textContent = action.label;
+        actionBtn.addEventListener("click", function () { actionBtn.disabled = true; action.onClick(notice); });
+      }
       notice.querySelector(".pending-notice-dismiss").addEventListener("click", function () {
         notice.remove();
       });
@@ -4909,9 +4958,9 @@
     const NEW_SERVER_URL = "https://asia-south1-fin-app-76c40.cloudfunctions.net/api";
     const NEW_SERVER_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
       "getDebts", "getCash", "getInvestments", "getInvestmentInstruments", "getSavingsGoals", "getTransactionHistory", "getPlannerData", "getSettings",
-      "getPeople", "getPerson", "previewSavingsSplit", "reconcileStatement", "reconcileCreditCardStatement", "getAdminOverview", "getSmsFormats"];
+      "getPeople", "getPerson", "getIgnoredTransactions", "previewSavingsSplit", "reconcileStatement", "reconcileCreditCardStatement", "getAdminOverview", "getSmsFormats"];
     // The saving actions the new server accepts (must match WRITE_ACTIONS in functions/index.js; one it does not know just answers "fallback").
-    const NEW_SERVER_WRITE_ACTIONS = ["saveNote", "markNotATransaction", "addDebt", "settleDebt", "recordDebtPayment",
+    const NEW_SERVER_WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
       "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
       "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
@@ -6373,6 +6422,8 @@
           case "reconcileStatement": return { ok: false, error: "Bank statement upload isn't available in Demo Mode." };
           case "reconcileCreditCardStatement": return { ok: false, error: "Credit card statement upload isn't available in Demo Mode." };
           case "fixCreditCardTransactionMode": return { ok: false, error: "Not available in Demo Mode." };
+          case "getIgnoredTransactions": return { ok: true, items: [] };
+          case "restoreIgnoredTransaction": return { ok: false, error: "Not available in Demo Mode." };
           case "insertReconciledTransactions": return { ok: false, error: "Not available in Demo Mode." };
           case "getSettings": return { ok: true, settings: demoState.settings };
           case "updateSettings": return demoUpdateSettings(data.settings);
@@ -6743,7 +6794,7 @@
     //    copies are held back and older ones are dropped (see fastMinBuiltAt).
     //  - Settings -> Fast loading = Off switches all of this off.
     const FAST_WRITE_ACTIONS = [
-      "saveNote", "markNotATransaction", "addDebt", "settleDebt", "recordDebtPayment",
+      "saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
       "deleteSavingsEntry", "addSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
       "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
@@ -8089,6 +8140,9 @@
       // since the card is already gone by the time the response comes
       // back. Failure puts the card back at the top with a clear error,
       // exactly like Save's own restoreAfterFailedSave above.
+      // A card whose merchant was read fine and has a real amount looks like a REAL payment (a junk SMS the reader was unsure about
+      // is shown as "NEEDS REVIEW: ..."): ask in stronger words so it isn't tapped by mistake.
+      const looksLikeRealPayment = !/^NEEDS REVIEW/i.test(String(txn.counterparty || "")) && Number(txn.amount) > 0;
       bindConfirmAction(notTxnButton, function () {
         const idx = allPending.findIndex(function (t) { return t.row === txn.row; });
         if (idx !== -1) allPending.splice(idx, 1);
@@ -8105,9 +8159,11 @@
               // markNotATransaction's own comment) — don't promise a
               // similar message will be caught next time when it
               // wasn't actually possible to make that guarantee.
+              // Undo stays on the notice until dismissed; the "Removed items" list at the bottom of Pending always has it too.
               showPendingNotice(data.patternLearned
-                ? "Won't flag messages like this again."
-                : "Removed. (That message was too short to learn from, so a similar one might show up again.)");
+                ? "Removed. Won't flag messages like this again."
+                : "Removed. If that was a mistake, tap Undo (or find it under Removed items below).",
+                data.archiveRow ? { label: "Undo", onClick: function (noticeEl) { restoreRemovedItem(data.archiveRow, data.fp, noticeEl); } } : null);
             } else if (data.stale) {
               showPendingNotice(data.error);   // see the stale-card note on Pending's Save
               loadPendingTransactions();
@@ -8129,10 +8185,67 @@
           resultEl.textContent = message;
           pendingListEl.insertBefore(card, pendingListEl.firstChild);
         }
-      });
+      }, looksLikeRealPayment ? "Looks like a real payment — tap again to remove" : undefined);
 
       return card;
     }
+
+    // ---------- Removed items (undo for "Not a transaction", 2026-10-15) ----------
+    const removedToggleEl = document.getElementById("removedToggle");
+    const removedListEl = document.getElementById("removedList");
+
+    function restoreRemovedItem(archiveRow, fp, noticeEl) {
+      return callAppsScript({ action: "restoreIgnoredTransaction", idToken: currentUser.idToken, archiveRow: archiveRow, fp: fp })
+        .then(function (data) {
+          if (noticeEl) noticeEl.remove();
+          if (data.ok) {
+            showPendingNotice(data.alreadyBack ? "That payment was already back in your list." : "Put back in Pending.");
+            loadPendingTransactions();
+            if (removedListEl.style.display !== "none") loadRemovedItems();
+          } else if (data.stale) {
+            showPendingNotice(data.error);
+          } else {
+            showPendingNotice("Couldn't put it back (" + data.error + ").");
+          }
+        })
+        .catch(function (err) {
+          if (noticeEl) noticeEl.remove();
+          showPendingNotice("Couldn't put it back (" + err.message + ") — check your connection and try again.");
+        });
+    }
+
+    function loadRemovedItems() {
+      removedListEl.innerHTML = '<div class="removed-meta" style="color:var(--text-muted); padding-top:10px;">Loading…</div>';
+      callAppsScript({ action: "getIgnoredTransactions", idToken: currentUser.idToken })
+        .then(function (data) {
+          if (!data.ok) { removedListEl.innerHTML = '<div class="removed-meta" style="color:var(--text-muted); padding-top:10px;">Couldn\'t load (' + escapeHtml(data.error || "error") + ').</div>'; return; }
+          if (!data.items.length) { removedListEl.innerHTML = '<div class="removed-meta" style="color:var(--text-muted); padding-top:10px;">Nothing removed in the last 60 days.</div>'; return; }
+          removedListEl.innerHTML = "";
+          data.items.forEach(function (it) {
+            const el = document.createElement("div");
+            el.className = "removed-item";
+            el.innerHTML = '<div class="removed-top"><span></span><span></span></div><div class="removed-meta"></div><div class="removed-sms"></div><button type="button" class="restore-btn">Put back</button>';
+            const tops = el.querySelectorAll(".removed-top span");
+            tops[0].textContent = it.counterparty || "Unknown";
+            tops[1].textContent = it.amount ? "₹" + it.amount.toLocaleString("en-IN") : "";
+            el.querySelector(".removed-meta").textContent = [it.date, it.time, it.type, it.mode].filter(Boolean).join(" · ");
+            el.querySelector(".removed-sms").textContent = it.sms || "";
+            const btn = el.querySelector(".restore-btn");
+            btn.addEventListener("click", function () {
+              btn.disabled = true; btn.textContent = "Putting back…";
+              restoreRemovedItem(it.archiveRow, it.fp, null).then(function () { if (el.isConnected) { btn.disabled = false; btn.textContent = "Put back"; } });
+            });
+            removedListEl.appendChild(el);
+          });
+        })
+        .catch(function (err) { removedListEl.innerHTML = '<div class="removed-meta" style="color:var(--text-muted); padding-top:10px;">Couldn\'t load (' + escapeHtml(err.message) + ').</div>'; });
+    }
+
+    removedToggleEl.addEventListener("click", function () {
+      const open = removedListEl.style.display !== "none";
+      removedListEl.style.display = open ? "none" : "block";
+      if (!open) loadRemovedItems();
+    });
 
     // ---------------------------------------------------------
     // IN-APP NOTIFICATIONS — checks for new transactions every minute

@@ -164,7 +164,10 @@ function loadBackendSandbox(){
 
   const sandbox = {
     SpreadsheetApp: env.SpreadsheetApp,
-    console: console
+    console: console,
+    // used by rowFingerprint_ / getIgnoredTransactions (added with the undo feature, 2026-10-15)
+    Session: { getScriptTimeZone: function(){ return "Asia/Kolkata"; } },
+    Utilities: { formatDate: function(d, tz, f){ const iso = new Date(d.getTime() + 5.5 * 3600000).toISOString(); return f === "dd MMM yyyy" ? iso.slice(0, 10) : f === "HH:mm" ? iso.slice(11, 16) : f === "yyyy-MM-dd" ? iso.slice(0, 10) : iso; } }
   };
   // Every backend file asks dbSs_() for the spreadsheet (v2db.js); outside a virtual-spreadsheet request that is the real one.
   sandbox.dbSs_ = function(){ return sandbox.SpreadsheetApp.getActiveSpreadsheet(); };
@@ -439,6 +442,72 @@ function pendingSpamRow(overrides){
   assert(f("") === "", "empty input normalizes to an empty string");
   assert(f(null) === "" && f(undefined) === "", "null/undefined are handled safely, never throw");
   assert(f("A") === f("A"), "same input always normalizes identically (deterministic)");
+})();
+
+// ---------------------------------------------------------------------
+// UNDO (added 2026-10-15). A real ₹160 payment was removed by mistake with no way back. Now: a real, readable payment is never
+// taught to the junk filter; every removal can be listed and restored; restoring forgets any learned pattern and can't happen twice.
+// ---------------------------------------------------------------------
+function realPaymentRow(){
+  const today = new Date().toISOString().slice(0, 10);
+  return [today, "02:15", "BOB", "debit", "upi", 160, "665447361134", "q720611479@ybl", "SMS", "Phone",
+    "Rs.160.00 Dr. from A/C XXXXXX0000 and Cr. to q000000000@ybl. Ref:665447361134. AvlBal:Rs2731.26(2026:10:15 02:15:27). Not you? Call 18005700/5000-BOB",
+    "VM-BOBSMS-S", "", "", "", "YES", "", "", ""];
+}
+(function testUndo(){
+  // A. a real payment removed by mistake: archived, NOT taught to the junk filter, and the answer carries what the app needs for Undo
+  let { sandbox, env } = loadBackendSandbox();
+  env.seedSheet("Transactions", [TXN_HEADER, realPaymentRow()]);
+  const m = sandbox.markNotATransaction(2);
+  assert(m.ok === true && m.patternLearned === false, "a readable real payment is archived but NOT learned as junk (patternLearned false)");
+  const learned = env.sheetsByName["LearnedSpamPatterns"];
+  assert(!learned || learned.rows.length <= 1, "nothing was written to the learned-junk list for a real payment");
+  assert(m.archiveRow === 2 && typeof m.fp === "string" && m.fp.length > 0, "the answer carries archiveRow and fp so the app can offer Undo");
+
+  // B. it shows in the removed list
+  const list = sandbox.getIgnoredTransactions();
+  assert(list.ok === true && list.items.length === 1 && list.items[0].amount === 160 && list.items[0].counterparty === "q720611479@ybl", "the removed list shows the Rs 160 payment");
+
+  // C. restore: back in Transactions as a normal pending row, once only
+  const bad = sandbox.restoreIgnoredTransaction(2, "not-the-right-fingerprint");
+  assert(bad.ok === false && bad.stale === true, "a wrong fingerprint is refused (stale card safeguard)");
+  assert(sandbox.restoreIgnoredTransaction(99, m.fp).ok === false && sandbox.restoreIgnoredTransaction("2", m.fp).ok === false, "an out-of-range or non-number archive row is refused");
+  const r = sandbox.restoreIgnoredTransaction(2, m.fp);
+  assert(r.ok === true && r.restored === true, "restore succeeds");
+  const txn = env.sheetsByName["Transactions"].rows;
+  const back = txn[txn.length - 1];
+  assert(txn.length === 3 && back[5] === 160 && back[6] === "665447361134" && back[15] === "YES" && back[12] === "", "the payment is back as a new Transactions row, Processed YES, no note");
+  assert(isTombstoned(txn[1]), "the old removed row stays an empty marker (no row numbers shifted)");
+  assert(env.sheetsByName["Transactions_Ignored"].rows[1][15] === "RESTORED", "the archive row is marked RESTORED");
+  assert(sandbox.getIgnoredTransactions().items.length === 0, "the removed list is now empty");
+  assert(sandbox.restoreIgnoredTransaction(2, m.fp).ok === false, "restoring the same item twice is refused");
+  assert(env.sheetsByName["Transactions"].rows.length === 3, "and nothing extra was added by the second attempt");
+
+  // D. a junk message that WAS learned: restoring forgets that pattern
+  ({ sandbox, env } = loadBackendSandbox());
+  env.seedSheet("Transactions", [TXN_HEADER, pendingSpamRow()]);
+  const mj = sandbox.markNotATransaction(2);
+  assert(mj.ok === true && mj.patternLearned === true, "a NEEDS REVIEW junk row is still learned as before");
+  const rj = sandbox.restoreIgnoredTransaction(mj.archiveRow, mj.fp);
+  assert(rj.ok === true && rj.patternsForgotten === 1, "restoring it forgets the learned pattern (1)");
+  const pat = env.sheetsByName["LearnedSpamPatterns"].rows[1];
+  assert(pat.every(function(c){ return c === ""; }), "the learned pattern row is blanked (readers ignore a blank pattern)");
+
+  // E. a resync already saved the same payment again: restoring does not make a second copy
+  ({ sandbox, env } = loadBackendSandbox());
+  env.seedSheet("Transactions", [TXN_HEADER, realPaymentRow()]);
+  const me = sandbox.markNotATransaction(2);
+  env.sheetsByName["Transactions"].rows.push(realPaymentRow());
+  const re = sandbox.restoreIgnoredTransaction(me.archiveRow, me.fp);
+  assert(re.ok === true && re.alreadyBack === true && re.restored === false, "same real reference and amount already live: reported as already back");
+  assert(env.sheetsByName["Transactions"].rows.length === 3, "no duplicate row was added");
+  assert(env.sheetsByName["Transactions_Ignored"].rows[1][15] === "RESTORED", "the archive row is still closed out");
+
+  // F. nothing removed yet
+  ({ sandbox, env } = loadBackendSandbox());
+  env.seedSheet("Transactions", [TXN_HEADER, realPaymentRow()]);
+  const empty = sandbox.getIgnoredTransactions();
+  assert(empty.ok === true && empty.items.length === 0, "with nothing removed the list is empty and does not fail");
 })();
 
 console.log("\nDone.");
