@@ -1,6 +1,6 @@
 ﻿# Project status: what we have, what is done, what is next (plain words)
 
-**Last updated: 2026-10-15 (afternoon, India time).** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
+**Last updated: 2026-10-15 (evening, India time).** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
 If this file and `CLAUDE.md` disagree, this file is newer.
 
 ---
@@ -18,7 +18,7 @@ Google Cloud; the app also stops using Firestore at 90% of the free daily limit)
 | Piece | What it is | Where |
 |---|---|---|
 | The app screens | One web page, hosted free on GitHub Pages | `index.html` -> https://ronit6050.github.io/fin-app/ (push to `main` = live) |
-| The "brain" (two copies of the SAME code) | **New server: Firebase Cloud Functions** (`api` + scheduled `tick`, Mumbai) AND the old Google Apps Script web app, code in `backend/*.js` | function URL `https://asia-south1-fin-app-76c40.cloudfunctions.net/api`; Apps Script pinned deployment `AKfycbz3Hzmi_XNM_...` (currently **@361**) |
+| The "brain" (two copies of the SAME code) | **New server: Firebase Cloud Functions** (`api` + scheduled `tick`, Mumbai) AND the old Google Apps Script web app, code in `backend/*.js` | function URL `https://asia-south1-fin-app-76c40.cloudfunctions.net/api`; Apps Script pinned deployment `AKfycbz3Hzmi_XNM_...` (currently **@363**) |
 | The SMS reader (old way) | Separate Apps Script project | `sms-parser-backend/Code.js`, deployment `AKfycbxCwph4...` (**@20**) |
 | The data | **Firestore** (Mumbai, `asia-south1`, project `fin-app-76c40`, Blaze plan) | one private folder per person: `users/<email>/...` |
 | The old data | Google Sheet | still gets rows from the old SMS path + a backup; no longer what the app reads |
@@ -32,6 +32,8 @@ Vaidehi has the **full app** (since 2026-10-13 10:41) on her own private data.
 ## 3. What has been DONE (newest first, one line each)
 
 **2026-10-15 (the big move to the new server)**
+- **"Not a transaction" can be undone (2026-10-15, app `2026-10-15-04`, backend @363, new server updated).** A friend removed a REAL payment by mistake and there was no way back. Now: an **Undo** button on the confirmation, a **Removed items** list at the bottom of Pending (last 60 days) with **Put back**, a stronger warning when the card looks like a real payment, and the junk filter only learns from "NEEDS REVIEW" messages (never from a readable payment). Restoring never doubles a row and forgets the learned pattern. Docs: `docs/features/spam-learning.md`, tests in `backend/tests/markNotATransaction.test.js`.
+- **A monthly SIP SMS was being dropped as a "copy" (2026-10-15, SMS reader @21, backend @362, new server).** A message that repeats word for word every month (e.g. the NSE e-mandate debit) was thrown away because last month's identical text existed. Identical text is now a duplicate only when the earlier row is from the SAME India day (retries and resyncs carry the original time, so they are still caught). Fixed in all three places that had the rule (SMS reader, friends' SMS door, Sheet-to-private-copy inbox). The missed Rs 2,000 SIP of 15 Oct was re-sent from the phone (debug hook) and saved. Docs: `docs/features/sms-junk-and-echo-filter.md` is unchanged; the rule lives in `sms-parser-backend/Code.js` (`sameMessageDay`), test `sms-parser-backend/tests/recurringSameText2026-10-15.test.js`.
 - **The on/off switches live in the database now** (`backend/flags.js`, document `_system/props`): both servers read AND change them; a failed change changes nothing; emergency brake `v2dbFlagsLegacyOn` (Apps Script reads only its own old settings); Apps Script's old settings are refreshed after every successful read so the fallback stays current. Friend add/remove works from the freshest list (two servers cannot lose one). Docs: `docs/features/cloud-functions.md` Step 7.
 - **ONE shared Firestore usage counter** (`_system/usage_<yyyymmdd>`): every server adds to it, so the daily safety limit (45,000 reads / 18,000 writes) and the Access screen's "today's use" now cover the new server too (before, the new server's use was not counted). The meter can never block real work (unreadable totals count as zero). Known: Apps Script runs that never call a flush are still not counted (same as before). Step 8.
 - **The Access screen runs on the new server** (`getAdminOverview`, `getSmsFormats`, `setFriendFullApp`, `setFriendScreen`, `teachBank`, `forgetBank`, `getMyIngestKey`; app `2026-10-15-03`).
@@ -112,6 +114,8 @@ notification itself (Android allows only 3 buttons); suggest "settle" from a mat
 
 - Share the new app (`local-data/apk/FinApp-2026-10-14-new-server-sms.apk`) with Vaidehi and have her open it once.
 - In the Apps Script editor > Triggers: after a day of the new timer, delete the four daily triggers (`sendDailyCashCheckin`, `checkDebtDueDates`, `checkUpcomingObligations`, `checkAppHealth`). Keep `processNewTransactions` (it only copies old-door rows now).
+- Vaidehi: update the app, then Pending > bottom > "Removed items" > "Put back" on her Rs 160 payment (15 Oct, to q720611479@ybl). Also tap "Not a transaction" on the junk entry I created while re-sending the SIP SMS (counterparty "NEEDS REVIEW", no amount) in your Pending.
+- If the old Tasker weekly resync is still running: check its HTTP Request sends a `timestamp` (SMS date divided by 1000). Without it an old repeating SMS with no reference could be saved a second time.
 - Tell me when a real SMS notification arrives (to verify exactly-once), and after the first real Reconcile upload.
 
 ## 8. Switches and rollbacks (run in the Apps Script editor; pick the file's function, press Run; all instant)
