@@ -409,6 +409,8 @@ ${entry.person}
    Run every morning via trigger
 ======================================= */
 function checkDebtDueDates(){
+  // The new server's timer runs this once a day when it is ticking (fnTimer.js); Apps Script then steps aside.
+  if((typeof V2DB_REQ_ === "undefined" || !V2DB_REQ_) && typeof timerDailySkip_ === "function" && timerDailySkip_("debts")) return;
   // When the owner is switched on, this job runs on his private copy (v2owner.js); otherwise this does nothing.
   var takeOver_ = (typeof v2OwnerTakeOver_ === "function") ? v2OwnerTakeOver_(checkDebtDueDates) : { ran: false }; if(takeOver_.ran) return takeOver_.value;
 

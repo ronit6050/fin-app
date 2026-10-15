@@ -37,6 +37,7 @@ function asNewServer(w){
   // on the new server logs go to the log service, not a Sheet tab: keep them in the test's own log so the checks can see them
   sb.logAI = function(type, message){ w.sheets.AILogs.appendRow([new Date(), type, String(message)]); };
   sb.V2_ON_NEW_SERVER_ = true;
+  sb.timerIstClock_ = function(){ return { date: "2026-10-15", minutes: 180 }; };       // 03:00 India time: no daily job is due unless a test says so
   sb.SpreadsheetApp = { getActiveSpreadsheet: function(){ return { getSheetByName: function(){ return null; }, getSheets: function(){ return []; }, insertSheet: function(){ throw new Error("This server has no Google Sheet"); } }; } };
 }
 const tick = function(ms){ const t = Date.now(); while(Date.now() - t < (ms || 3)){} };      // let the clock move on a few ms
@@ -218,6 +219,94 @@ console.log("\n--- 9. App saves tell the new server's timer that the Home copy i
   sb.publishAfterAction_("getPending", resp);
   sb.publishAfterAction_("saveNote", { getContent: function(){ return '{"ok":false}'; } });
   assert(timerDoc(w).dirtyAtMs === d, "a read, or a save that failed, marks nothing");
+}
+
+console.log("\n--- 10. The four daily jobs run from the tick: once a day, at their time, with catch-up ---");
+{
+  const w = build(); seed(w); const sb = w.sb;
+  asNewServer(w);
+  const ran = [];
+  ["checkUpcomingObligations", "checkDebtDueDates", "checkAppHealth", "sendDailyCashCheckin"].forEach(function(n){ sb[n] = function(){ ran.push(n); }; });
+  let clock = { date: "2026-10-15", minutes: 8 * 60 };
+  sb.timerIstClock_ = function(){ return clock; };
+  tick(); sb.timerTick_();                                                        // first tick: a full look (never looked) but no daily job yet
+  assert(ran.length === 0, "08:00: nothing is due yet");
+  const commits0 = w.commits;
+  clock = { date: "2026-10-15", minutes: 8 * 60 + 31 }; tick();
+  const r1 = sb.timerTick_();
+  assert(ran.join() === "checkUpcomingObligations" && r1.daily.join() === "obligations", "08:31: the Rent/EMI reminder runs");
+  assert(timerDoc(w).daily_obligations === "2026-10-15", "and today's date is recorded for it");
+  tick(); sb.timerTick_();
+  assert(ran.length === 1, "the next tick does not run it again");
+  clock = { date: "2026-10-15", minutes: 9 * 60 + 5 }; tick(); sb.timerTick_();
+  assert(ran.join() === "checkUpcomingObligations,checkDebtDueDates", "09:05: debt due dates");
+  clock = { date: "2026-10-15", minutes: 9 * 60 + 40 }; tick(); sb.timerTick_();
+  assert(ran.slice(-1)[0] === "checkAppHealth", "09:40: the app health check");
+  clock = { date: "2026-10-15", minutes: 20 * 60 + 2 }; tick(); sb.timerTick_();
+  assert(ran.slice(-1)[0] === "sendDailyCashCheckin" && ran.length === 4, "20:02: the cash check-in; each of the four ran exactly once today");
+  tick(); sb.timerTick_(); tick(); sb.timerTick_();
+  assert(ran.length === 4, "more ticks the same day run nothing more");
+  clock = { date: "2026-10-16", minutes: 9 * 60 + 10 }; tick(); sb.timerTick_();
+  assert(ran.slice(4).join() === "checkUpcomingObligations,checkDebtDueDates", "the next day at 09:10 the two jobs whose time has passed run again (health and cash wait for their time)");
+}
+
+console.log("\n--- 10b. Catch-up after downtime, and one failing job does not stop the others ---");
+{
+  const w = build(); seed(w); const sb = w.sb;
+  asNewServer(w);
+  const ran = [];
+  ["checkUpcomingObligations", "checkAppHealth", "sendDailyCashCheckin"].forEach(function(n){ sb[n] = function(){ ran.push(n); }; });
+  sb.checkDebtDueDates = function(){ throw new Error("debts exploded"); };
+  sb.timerIstClock_ = function(){ return { date: "2026-10-15", minutes: 21 * 60 }; };        // the server was down all day: first tick at 21:00
+  const r = sb.timerTick_();
+  assert(ran.join() === "checkUpcomingObligations,checkAppHealth,sendDailyCashCheckin", "all the jobs that were missed run, in order; the failing one does not stop the rest");
+  assert(w.errors("DAILY_JOB_FAILED").length === 1 && /debts exploded/.test(w.errors("DAILY_JOB_FAILED")[0][2]), "the failure is logged");
+  assert(timerDoc(w).daily_debts === "2026-10-15", "and a failed job still counts as today's run (it cannot repeat every 5 minutes)");
+  tick();
+  assert(sb.timerTick_().ran === false && ran.length === 3, "nothing runs again");
+}
+
+console.log("\n--- 11. The Apps Script versions step aside only while the new server is alive ---");
+{
+  const mk = function(heartbeatAgoMs, dailyDone){
+    const w = build(); seed(w); w.props.V2_FN_TIMER = "on";
+    const fields = {}; if(heartbeatAgoMs !== null) fields.tickAtMs = Date.now() - heartbeatAgoMs; if(dailyDone) fields.daily_cash = dailyDone;
+    if(Object.keys(fields).length) w.store["_system/timer"] = { fields: fields, updateTime: "t0" };
+    w.sb.timerIstClock_ = function(){ return { date: "2026-10-15", minutes: 20 * 60 + 30 }; };
+    w.sent = []; w.sb.sendMessage = function(t){ w.sent.push(t); };
+    return w;
+  };
+  const off = build(); seed(off);
+  assert(off.sb.timerDailySkip_("cash") === false, "switch OFF: never skips (Apps Script does the job exactly as before)");
+  const alive = mk(60 * 1000, null);
+  assert(alive.sb.timerDailySkip_("cash") === true, "new server alive (heartbeat 1 minute old): Apps Script skips");
+  alive.sb.sendDailyCashCheckin();
+  assert(alive.sent.length === 0, "so the Apps Script cash check-in sends nothing");
+  const dead = mk(20 * 60 * 1000, null);
+  assert(dead.sb.timerDailySkip_("cash") === false && dead.store["_system/timer"].fields.daily_cash === "2026-10-15", "new server silent for 20 minutes: Apps Script runs it AND marks the day done");
+  const done = mk(20 * 60 * 1000, "2026-10-15");
+  assert(done.sb.timerDailySkip_("cash") === true, "already done today by someone: skip");
+  const nobeat = mk(null, null);
+  assert(nobeat.sb.timerDailySkip_("cash") === false, "no heartbeat ever: Apps Script runs it");
+  const dead2 = mk(20 * 60 * 1000, null);
+  dead2.sb.sendDailyCashCheckin();
+  assert(dead2.sent.length === 1 && dead2.store["_system/timer"].fields.daily_cash === "2026-10-15", "and the Apps Script cash check-in really sends once (through the owner's private copy) and marks the day");
+  dead2.sb.sendDailyCashCheckin();
+  assert(dead2.sent.length === 1, "a second call the same day sends nothing more");
+  const noOwner = mk(60 * 1000, null); noOwner.sb.v2dbDisableOwner();
+  assert(noOwner.sb.timerDailySkip_("cash") === false, "owner not on the private copy: never skips");
+}
+
+console.log("\n--- 12. The health check does not inspect Apps Script timers on the new server ---");
+{
+  const w = build(); seed(w); const sb = w.sb;
+  asNewServer(w);
+  sb.ScriptApp = { getProjectTriggers: function(){ return []; } };               // the new server has none
+  const input = sb.loadHealthInputs_();
+  assert(input.triggerHandlers === null, "no timers are read there (so no false 'timer missing' alarm)");
+  const w2 = build(); seed(w2);
+  w2.sb.ScriptApp = { getProjectTriggers: function(){ return [{ getHandlerFunction: function(){ return "processNewTransactions"; } }]; } };
+  assert(w2.sb.loadHealthInputs_().triggerHandlers.join() === "processNewTransactions", "on Apps Script it still reads them, as before");
 }
 
 console.log("\nDone.");

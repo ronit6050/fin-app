@@ -18,6 +18,12 @@
 // did not arrive) the Apps Script timer takes over again by itself, so alerts can never silently stop. Both sides use the same "Processed"
 // marks and the same save lock, so running together for a moment cannot announce a transaction twice.
 //
+// DAILY JOBS (added 2026-10-15): the four once-a-day jobs (upcoming Rent/EMI reminder 8:30, debt due dates 9:00, app health 9:30, cash check-in
+// 20:00, India time) run from the SAME tick, so there is no extra scheduler job. The tick already reads the timer document, so checking "is a daily
+// job due" costs nothing extra: each job stores the date it last ran (daily_<name>) in that document and runs once a day at the first tick after its time.
+// The Apps Script versions of these four jobs step aside while the new server is ticking (timerDailySkip_); if it is not, they run as before and mark
+// the day done so the new server never repeats them.
+//
 // SWITCH: Script Property V2_FN_TIMER (v2dbEnableFunctionTimer / v2dbDisableFunctionTimer). While it is off the new server's tick does nothing
 // and the Apps Script timer does everything, exactly as before.
 
@@ -54,6 +60,53 @@ function timerHeartbeatFresh_(){
   }
 }
 
+// The four daily jobs: key, India-time hour/minute after which the first tick runs it.
+var TIMER_DAILY_JOBS_ = [
+  { key: "obligations", hour: 8,  minute: 30 },
+  { key: "debts",       hour: 9,  minute: 0  },
+  { key: "health",      hour: 9,  minute: 30 },
+  { key: "cash",        hour: 20, minute: 0  }
+];
+
+function timerDailyRunner_(key){
+  if(key === "obligations") return checkUpcomingObligations;
+  if(key === "debts") return checkDebtDueDates;
+  if(key === "health") return checkAppHealth;
+  if(key === "cash") return sendDailyCashCheckin;
+  return null;
+}
+
+// India date + minutes since midnight (a function so tests can set the clock).
+function timerIstClock_(){
+  var now = new Date();
+  return {
+    date: Utilities.formatDate(now, "Asia/Kolkata", "yyyy-MM-dd"),
+    minutes: Number(Utilities.formatDate(now, "Asia/Kolkata", "H")) * 60 + Number(Utilities.formatDate(now, "Asia/Kolkata", "m"))
+  };
+}
+
+// Used by the APPS SCRIPT versions of the daily jobs. True = "do not run: the new server does it". While the new-server timer is on:
+//   - already done today by either side -> skip;
+//   - the new server is ticking (fresh heartbeat) -> skip (it runs the job at its time today);
+//   - otherwise (not ticking) -> run it here, and mark the day done so the new server does not repeat it.
+// Never skips when the switch is off, on the new server itself, or for a person who is not on the private copy. Any doubt = run it.
+function timerDailySkip_(key){
+  try{
+    if(typeof fnTimerOn_ !== "function" || !fnTimerOn_()) return false;
+    if((typeof V2_ON_NEW_SERVER_ !== "undefined") && V2_ON_NEW_SERVER_) return false;
+    if(typeof v2OwnerOn_ !== "function" || !v2OwnerOn_()) return false;
+    var f = (fsGetPathMeta_(TIMER_DOC_) || {}).fields || {};
+    var today = timerIstClock_().date;
+    if(f["daily_" + key] === today) return true;
+    var beat = Number(f.tickAtMs || 0);
+    if(beat > 0 && (Date.now() - beat) < TIMER_STALE_MS_) return true;
+    var m = {}; m["daily_" + key] = today; timerWrite_(m);          // running it here: the new server must not repeat it today
+    return false;
+  }catch(e){
+    return false;
+  }
+}
+
 // Runs on the NEW server only (called by functions/index.js "tick"). Returns what it did.
 function timerTick_(){
   var startedAt = Date.now();
@@ -62,27 +115,47 @@ function timerTick_(){
   var f = (doc && doc.fields) || {};
   var dirtyAt = Number(f.dirtyAtMs || 0), doneAt = Number(f.doneAtMs || 0), fullAt = Number(f.fullAtMs || 0);
   var fails = Number(f.failCount || 0), failAt = Number(f.failAtMs || 0);
+  var clock = timerIstClock_();
+  var dueDaily = TIMER_DAILY_JOBS_.filter(function(j){ return clock.minutes >= j.hour * 60 + j.minute && f["daily_" + j.key] !== clock.date; });
   var dirty = dirtyAt > doneAt;
   var fullDue = (startedAt - fullAt) >= TIMER_FULL_EVERY_MS_;
-  if(!dirty && !fullDue){
+  if(!dirty && !fullDue && !dueDaily.length){
     timerWrite_({ tickAtMs: startedAt });                        // heartbeat: "the new server is alive"
     return { ran: false, reason: "nothing to do" };
   }
-  if(fails >= TIMER_MAX_FAILS_ && (startedAt - failAt) < TIMER_FULL_EVERY_MS_){
-    timerWrite_({ tickAtMs: startedAt });
-    return { ran: false, reason: "backing off after " + fails + " failed runs" };
+  var wantWork = dirty || fullDue;
+  var blocked = wantWork && fails >= TIMER_MAX_FAILS_ && (startedAt - failAt) < TIMER_FULL_EVERY_MS_;
+  var fields = { tickAtMs: startedAt };
+  var workError = null, workRan = false;
+  if(wantWork && !blocked){
+    // A save from the app only flags "the Home copy is stale" in the memory of the server that handled it: make THIS server rebuild it.
+    if(dirty){ try{ CacheService.getScriptCache().put("V2_DIRTY", "1", 21600); }catch(ignoreCache){} }
+    try{
+      processNewTransactions();
+      workRan = true;
+      // "done" is (a little before) the moment this run STARTED: anything marked while it ran is newer, so it is picked up next tick
+      fields.doneAtMs = startedAt - TIMER_CLOCK_MARGIN_MS_; fields.fullAtMs = startedAt; fields.failCount = 0;
+    }catch(err){
+      // NOT marked done, so a later tick retries; after TIMER_MAX_FAILS_ in a row it waits for the next full look (no reads burned every 5 minutes)
+      workError = err;
+      fields.failCount = fails + 1; fields.failAtMs = startedAt;
+      try{ logAI("TIMER_RUN_FAILED", "run " + (fails + 1) + ": " + String(err && err.message).slice(0, 200)); }catch(ignore){}
+    }
   }
-  // A save from the app only flags "the Home copy is stale" in the memory of the server that handled it: make THIS server rebuild it.
-  if(dirty){ try{ CacheService.getScriptCache().put("V2_DIRTY", "1", 21600); }catch(ignoreCache){} }
-  try{
-    processNewTransactions();
-  }catch(err){
-    // NOT marked done, so a later tick retries; after TIMER_MAX_FAILS_ in a row it waits for the next full look (no reads burned every 5 minutes)
-    timerWrite_({ tickAtMs: startedAt, failCount: fails + 1, failAtMs: startedAt });
-    try{ logAI("TIMER_RUN_FAILED", "run " + (fails + 1) + ": " + String(err && err.message).slice(0, 200)); }catch(ignore){}
-    throw err;
-  }
-  // "done" is (a little before) the moment this run STARTED: anything marked while it ran is newer, so it is picked up next tick
-  timerWrite_({ tickAtMs: startedAt, doneAtMs: startedAt - TIMER_CLOCK_MARGIN_MS_, fullAtMs: startedAt, failCount: 0 });
-  return { ran: true, why: dirty ? "marked changed" : "full look" };
+  // The once-a-day jobs. A failing job is logged and still counted as today's run (so it cannot repeat every 5 minutes).
+  var ranDaily = [];
+  dueDaily.forEach(function(j){
+    try{
+      var run = timerDailyRunner_(j.key);
+      if(run) run();
+      ranDaily.push(j.key);
+    }catch(e){
+      try{ logAI("DAILY_JOB_FAILED", j.key + ": " + String(e && e.message).slice(0, 200)); }catch(ignore){}
+    }
+    fields["daily_" + j.key] = clock.date;
+  });
+  timerWrite_(fields);
+  if(workError) throw workError;
+  return workRan ? { ran: true, why: dirty ? "marked changed" : "full look", daily: ranDaily }
+                 : { ran: false, reason: blocked ? "backing off after " + fails + " failed runs" : "daily jobs", daily: ranDaily };
 }

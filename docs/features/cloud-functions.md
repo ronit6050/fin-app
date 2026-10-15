@@ -134,3 +134,22 @@ Tests: `backend/tests/fnTimer.test.js` (44 checks), and the real-database `live_
 
 **Known limits:** an alert can be up to 5 minutes late (same as the Apps Script timer); a push that Google refuses still marks the row alerted (same as before; the test button is the proof); the Home copy is rebuilt by the new server only when a run happens (marked change or every 30 min); the
 in-memory "Home copy due" flags are per instance, so a cold instance may rebuild it one extra time.
+
+## Step 5: the four daily jobs on the new server (built 2026-10-15)
+
+The once-a-day jobs (upcoming Rent/EMI reminder **8:30**, debt due dates **9:00**, app health **9:30**, evening cash check-in **20:00**, India time) now run from the SAME 5-minute tick
+(`backend/fnTimer.js`: `TIMER_DAILY_JOBS_`, `timerTick_`): no extra scheduler job, no extra cost. Each job stores the date it last ran (`daily_obligations`, `daily_debts`, `daily_health`, `daily_cash`)
+in `_system/timer` (the document the tick already reads), and runs once a day at the first tick after its time. If the new server was down, the first tick after it comes back catches up all
+missed jobs of that day. A failing job is logged (`DAILY_JOB_FAILED`) and still counts as today's run (it cannot repeat every 5 minutes); the other jobs still run. They only run while the timer switch
+(`V2_FN_TIMER`) is on.
+
+**The Apps Script versions** (`sendDailyCashCheckin`, `checkDebtDueDates`, `checkUpcomingObligations`, `checkAppHealth`) call `timerDailySkip_` first: while the switch is on they skip if today's run is already
+recorded OR the new server's heartbeat is fresh (it will run the job at its time); if the new server is not ticking they run as before AND record the day, so it never repeats. Switch off = exactly as
+before. **After the new timer has run for a day you can delete the four Apps Script triggers** (they become harmless no-ops while the new server is alive, but are not needed).
+
+**Health check on the new server:** it no longer inspects Apps Script timers there (it would raise a false "timer missing" alarm every day); errors of the new server are in Cloud Logging, not the AILogs tab,
+so the health check's "logged errors" part only sees Apps Script-side errors. The new timer is watched by its heartbeat instead.
+
+**Tests:** `backend/tests/fnTimer.test.js` sections 10-12 (68 checks): each job once a day at its time, catch-up after downtime, one failing job does not stop the others, Apps Script steps aside only while alive,
+health-check timers; real database: `functions/tests/live_scratch.js` section 1d runs all four jobs with the real code and no stand-ins (no errors, evening notification produced, second tick runs none).
+**Backups:** Firestore point-in-time recovery (7 days) was switched on 2026-10-15 (`pointInTimeRecoveryEnablement`), cost well under Re 1 a month at this size.

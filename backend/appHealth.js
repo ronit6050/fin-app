@@ -193,10 +193,14 @@ function loadHealthInputs_(){
   var ss = dbSs_();
 
   var triggerHandlers = null;
-  try{
-    triggerHandlers = ScriptApp.getProjectTriggers().map(function(t){ return t.getHandlerFunction(); });
-  }catch(err){
-    logAI("HEALTH_CHECK_NOTE", "Could not read triggers: " + err.toString());
+  // The new server has no Apps Script timers to inspect (its own timer is checked by the heartbeat, fnTimer.js): skip that check there.
+  var onNewServer = (typeof V2_ON_NEW_SERVER_ !== "undefined") && !!V2_ON_NEW_SERVER_;
+  if(!onNewServer){
+    try{
+      triggerHandlers = ScriptApp.getProjectTriggers().map(function(t){ return t.getHandlerFunction(); });
+    }catch(err){
+      logAI("HEALTH_CHECK_NOTE", "Could not read triggers: " + err.toString());
+    }
   }
 
   // Logs always live in the REAL Sheet (logAI writes there), even when the owner is on his private copy.
@@ -227,6 +231,8 @@ function healthMessage_(problems){
 // The scheduled function. Silent when healthy. Never throws.
 // ---------------------------------------------------------------------
 function checkAppHealth(){
+  // The new server's timer runs this once a day when it is ticking (fnTimer.js); Apps Script then steps aside.
+  if((typeof V2DB_REQ_ === "undefined" || !V2DB_REQ_) && typeof timerDailySkip_ === "function" && timerDailySkip_("health")) return;
   // When the owner is switched on, this job runs on his private copy (v2owner.js); otherwise this does nothing.
   var takeOver_ = (typeof v2OwnerTakeOver_ === "function") ? v2OwnerTakeOver_(checkAppHealth) : { ran: false }; if(takeOver_.ran) return takeOver_.value;
   // Once a day, quietly keep the Sheet's "FriendShare" column in step with the splits database (splits.js).

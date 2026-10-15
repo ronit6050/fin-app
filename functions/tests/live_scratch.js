@@ -15,6 +15,7 @@ const { createRuntime } = require("../runtime/shim");
 const { syncFetch } = require("../runtime/syncfetch");
 const { getFirestoreToken } = require("../runtime/tokens");
 
+const LOGS = [];
 const SCRATCH = "qa-fnwrites@example.com";
 const LOCK_PATH = "_system/lock_qa";
 const PROJECT = "fin-app-76c40";
@@ -22,10 +23,11 @@ const BASE = "https://firestore.googleapis.com/v1/projects/" + PROJECT + "/datab
 
 function makeRt(){
   const rt = createRuntime({
-    localEmail: SCRATCH, ownerEmail: SCRATCH, log: function(){},
+    localEmail: SCRATCH, ownerEmail: SCRATCH, log: function(l){ LOGS.push(String(l)); },
     sharedProps: function(){ return { V2DB_OWNER: "on", V2_FN_WRITES: "on", V2DB_OWNER_DIRECT: "on", V2_FN_SMS: "on", V2_FN_TIMER: "on" }; }
   });
-  rt.sandbox.LEASE_PATH_ = LOCK_PATH;                 // a test-only lock document: never blocks the real app
+  rt.sandbox.LEASE_PATH_ = LOCK_PATH;
+  rt.sandbox.TIMER_DOC_ = "_system/timer_qa";             // the test must never touch the REAL timer document (its heartbeat tells Apps Script the new server is alive)                 // a test-only lock document: never blocks the real app
   return rt;
 }
 const call = function(rt, data){ return rt.call(Object.assign({ idToken: "local" }, data)); };
@@ -50,7 +52,7 @@ function deleteTree(docPath){
 const KEYHASH_FILE = require("node:path").join(require("node:os").tmpdir(), "fnwrites_scratch_keyhash.txt");
 function cleanup(){
   try{ const fsx = require("node:fs"); if(fsx.existsSync(KEYHASH_FILE)){ api("DELETE", BASE + "/ingestKeys/" + fsx.readFileSync(KEYHASH_FILE, "utf8").trim()); fsx.unlinkSync(KEYHASH_FILE); } }catch(e){ console.log("cleanup (key): " + e.message); }
-  try{ deleteTree("users/" + SCRATCH); }catch(e){ console.log("cleanup (user): " + e.message); } try{ api("DELETE", BASE + "/" + LOCK_PATH); }catch(e){} }
+  try{ deleteTree("users/" + SCRATCH); }catch(e){ console.log("cleanup (user): " + e.message); } try{ api("DELETE", BASE + "/" + LOCK_PATH); }catch(e){} try{ api("DELETE", BASE + "/_system/timer_qa"); }catch(e){} }
 
 // ---- worker mode: one "server" doing N saves ----
 if(process.argv[2] === "worker"){
@@ -143,6 +145,7 @@ function assert(cond, msg){ if(!cond){ console.error("FAIL: " + msg); failures++
     const usage = function(){ return rt.sandbox.FS_USAGE_ ? rt.sandbox.FS_USAGE_.reads : 0; };
     rt.sandbox.sendPushNotification = function(t, b){ pushedTitles.push(t); return { sent: true, code: 200, detail: "fake" }; };
     const pushedTitles = [];
+    rt.sandbox.timerIstClock_ = function(){ return { date: "2026-10-15", minutes: 180 }; };           // 03:00 India time: no daily job due during the alert checks
     const settle = Date.now() + 6000; while(Date.now() < settle){}        // marks newer than the 5 s clock margin would make the next tick look again (harmless, but this test wants a clean quiet tick)
     const tk1 = rt.runTimer();
     assert(tk1.ran === true, "the first tick runs (never looked yet): " + JSON.stringify(tk1));
@@ -165,6 +168,18 @@ function assert(cond, msg){ if(!cond){ console.error("FAIL: " + msg); failures++
     const settle2 = Date.now() + 6000; while(Date.now() < settle2){}
     rt.runTimer();
     assert(rt.runTimer().ran === false && pushedTitles.length === pushesBefore + 1, "and goes quiet again, with no repeat announcement");
+
+    console.log("\n--- 1d. The four daily jobs on the real database (real code, no stand-ins) ---");
+    LOGS.length = 0;
+    rt.sandbox.timerIstClock_ = function(){ return { date: "2026-10-15", minutes: 21 * 60 }; };      // pretend it is 21:00 India time, nothing run yet today
+    const pushesBeforeDaily = pushedTitles.length;
+    const dj = rt.runTimer();
+    assert(dj.daily && dj.daily.length === 4, "all four daily jobs ran: " + JSON.stringify(dj));
+    const badLogs = LOGS.filter(function(l){ return /DAILY_JOB_FAILED|_ERROR|THROWN/.test(l); });
+    assert(badLogs.length === 0, "with no errors logged" + (badLogs.length ? ": " + badLogs.join(" | ").slice(0, 400) : ""));
+    assert(pushedTitles.slice(pushesBeforeDaily).some(function(x){ return /Evening Check-in/.test(x); }), "the evening cash check-in produced its notification");
+    const again = rt.runTimer();
+    assert(!again.daily || again.daily.length === 0, "a second tick the same day runs none of them again");
 
     // refreshViews rebuilds the Home copy: capture it instead of writing (the real one belongs to the real owner)
     const captured = [];
