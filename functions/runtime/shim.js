@@ -7,8 +7,8 @@
 // backend/v2db.js), so nothing here ever needs a real Sheet. If something does try to use one, it fails loudly and the app
 // quietly falls back to the Apps Script server.
 //
-// Shared state with Apps Script (the on/off switches V2DB_OWNER / V2DB_USERS) is read from the Firestore document _system/props,
-// which Apps Script keeps up to date (see v2route.js, exportFlagsToFunctions).
+// The on/off switches (V2DB_OWNER / V2DB_USERS / V2_FN_*) live in the Firestore document _system/props, shared with Apps Script (backend/flags.js):
+// this server reads them into its own copy of "Script Properties" every 20 seconds, and flagsSet_ writes them back to the same document.
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -265,7 +265,7 @@ function createRuntime(opts){
     const shared = opts.sharedProps ? opts.sharedProps() : loadSharedProps();
     Object.keys(shared).forEach(function(k){ props[k] = shared[k]; });
     // a switch that was removed in Apps Script must disappear here too
-    ["V2DB_OWNER", "V2_FN_WRITES", "V2DB_OWNER_DIRECT", "V2_FN_SMS", "V2_FN_TIMER"].forEach(function(k){ if(!(k in shared)) delete props[k]; });
+    ["V2DB_OWNER", "V2DB_USERS", "V2_FN_WRITES", "V2DB_OWNER_DIRECT", "V2_FN_SMS", "V2_FN_TIMER"].forEach(function(k){ if(!(k in shared)) delete props[k]; });
     propsLoadedAt = Date.now();
   }
 

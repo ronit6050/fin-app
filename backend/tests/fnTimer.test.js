@@ -57,7 +57,7 @@ console.log("\n--- 1. Switch OFF (default): the Apps Script timer alerts as befo
 console.log("\n--- 2. Switch ON, Apps Script side: steps aside, only copies old-door rows ---");
 {
   const w = build(); seed(w); const sb = w.sb;
-  w.props.V2_FN_TIMER = "on";
+  w.sb.flagsSet_({ V2_FN_TIMER: "on" });
   w.store["_system/timer"] = { fields: { tickAtMs: Date.now() }, updateTime: "t0" };     // the new server ticked a moment ago
   w.sheets.Transactions.appendRow(w.row(55, 333333, "Shop C", ""));       // the OLD door wrote this into the Sheet
   sb.processNewTransactions();
@@ -74,7 +74,7 @@ console.log("\n--- 2. Switch ON, Apps Script side: steps aside, only copies old-
   sb.processNewTransactions();
   assert(privateRows(w).length === 5 && w.pushes.length === 0, "a newer old-door row is copied too (still no notification from Apps Script)");
   // owner not switched on: Apps Script must keep doing everything even if the new-server switch is on
-  const w2 = build(); seed(w2); w2.props.V2_FN_TIMER = "on"; w2.store["_system/timer"] = { fields: { tickAtMs: Date.now() }, updateTime: "t0" }; w2.sb.v2dbDisableOwner();
+  const w2 = build(); seed(w2); w2.sb.flagsSet_({ V2_FN_TIMER: "on" }); w2.store["_system/timer"] = { fields: { tickAtMs: Date.now() }, updateTime: "t0" }; w2.sb.v2dbDisableOwner();
   w2.sheets.Transactions.appendRow(w2.row(77, 555555, "Shop E", ""));
   w2.sb.processNewTransactions();
   assert(w2.pushes.length === 1, "if the owner is NOT on the private copy, Apps Script still alerts (the new server cannot serve him)");
@@ -154,7 +154,7 @@ console.log("\n--- 5. The owner's SMS door marks 'something changed' ---");
 console.log("\n--- 6. Dead-man protection: Apps Script takes the job back if the new server stops ticking ---");
 {
   const mk = function(heartbeat){
-    const w = build(); seed(w); w.props.V2_FN_TIMER = "on";
+    const w = build(); seed(w); w.sb.flagsSet_({ V2_FN_TIMER: "on" });
     if(heartbeat !== null) w.store["_system/timer"] = { fields: { tickAtMs: heartbeat }, updateTime: "t0" };
     w.sheets.Transactions.appendRow(w.row(55, 333333, "Shop C", ""));
     return w;
@@ -176,14 +176,14 @@ console.log("\n--- 7. Switching on is refused unless it can work ---");
 {
   const w = build(); seed(w); const sb = w.sb;
   let msg = ""; try{ sb.v2dbEnableFunctionTimer(); }catch(e){ msg = e.message; }
-  assert(/saving first/.test(msg) && w.props.V2_FN_TIMER === undefined, "without new-server saving on it refuses and switches nothing on");
-  w.props.V2_FN_WRITES = "on";
+  assert(/saving first/.test(msg) && w.sb.flagGet_("V2_FN_TIMER") === null, "without new-server saving on it refuses and switches nothing on");
+  w.sb.flagsSet_({ V2_FN_WRITES: "on" });
   const bad = new Error("firestore down"); bad.httpCode = 503; w.failCommits = [bad];
   msg = ""; try{ sb.v2dbEnableFunctionTimer(); }catch(e){ msg = e.message; }
   w.failCommits = [];
-  assert(/NOTHING was switched on/.test(msg) && w.props.V2_FN_TIMER === undefined, "if the new server could not be told, it refuses and leaves the switch off");
+  assert(/NOTHING was changed/.test(msg) && w.sb.flagGet_("V2_FN_TIMER") === null, "if the new server could not be told, it refuses and leaves the switch off");
   const ok = sb.v2dbEnableFunctionTimer();
-  assert(/first tick/.test(ok) && w.props.V2_FN_TIMER === "on" && w.store["_system/props"].fields.V2_FN_TIMER === "on", "otherwise it switches on and copies the switch to the new server");
+  assert(/first tick/.test(ok) && w.sb.flagGet_("V2_FN_TIMER") === "on" && w.store["_system/props"].fields.V2_FN_TIMER === "on", "otherwise it switches on and copies the switch to the new server");
 }
 
 console.log("\n--- 8. A failing run is retried at most 3 times, then waits for the next full look ---");
@@ -212,7 +212,7 @@ console.log("\n--- 9. App saves tell the new server's timer that the Home copy i
   const resp = { getContent: function(){ return '{"ok":true}'; } };
   sb.publishAfterAction_("saveNote", resp);
   assert(!timerDoc(w), "switch OFF: a save marks nothing (exactly as before)");
-  w.props.V2_FN_TIMER = "on";
+  w.sb.flagsSet_({ V2_FN_TIMER: "on" });
   sb.publishAfterAction_("saveNote", resp);
   assert(timerDoc(w) && Number(timerDoc(w).dirtyAtMs) > 0, "switch ON: a successful save marks 'something changed'");
   const d = timerDoc(w).dirtyAtMs; tick();
@@ -269,7 +269,7 @@ console.log("\n--- 10b. Catch-up after downtime, and one failing job does not st
 console.log("\n--- 11. The Apps Script versions step aside only while the new server is alive ---");
 {
   const mk = function(heartbeatAgoMs, dailyDone){
-    const w = build(); seed(w); w.props.V2_FN_TIMER = "on";
+    const w = build(); seed(w); w.sb.flagsSet_({ V2_FN_TIMER: "on" });
     const fields = {}; if(heartbeatAgoMs !== null) fields.tickAtMs = Date.now() - heartbeatAgoMs; if(dailyDone) fields.daily_cash = dailyDone;
     if(Object.keys(fields).length) w.store["_system/timer"] = { fields: fields, updateTime: "t0" };
     w.sb.timerIstClock_ = function(){ return { date: "2026-10-15", minutes: 20 * 60 + 30 }; };

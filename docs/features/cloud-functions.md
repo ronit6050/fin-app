@@ -173,3 +173,22 @@ and `functions/tests/live_sweep.js` (real database: preview, save, second upload
 old Drive-based code already used, and the end-to-end test reproduces them with a real .xls. First real use: upload a recent statement from More > Reconcile and check the counts look right.
 **Access screen:** deliberately NOT moved yet. Its "give/remove a friend's full app" switch lives in Apps Script's own settings (Script Properties); moving it means moving all the global switches into Firestore, which is
 planned together with retiring Apps Script (after the 3 clean days).
+
+## Step 7: the on/off switches live in the database (built 2026-10-15)
+
+**Before:** the global switches (`V2DB_OWNER`, `V2DB_USERS`, `V2DB_OWNER_DIRECT`, `V2_FN_WRITES`, `V2_FN_SMS`, `V2_FN_TIMER`) were kept in Apps Script's Script Properties and COPIED to the Firestore document
+`_system/props` for the new server, which could read them but never change them. **Now** `_system/props` IS the switch store (`backend/flags.js`): both servers read it and either can change it.
+- **Reading** (`flagGet_`, `flagOn_`, `flagsAll_`): the new server reads its own copy (the shim loads the document every 20 s, unchanged); Apps Script reads the document and remembers it 30 s (one read a busy minute),
+  falls back to the last copy seen (6 h), then to the old Script Properties. **Emergency brake:** run `v2dbFlagsLegacyOn` (Script Property `FLAGS_LEGACY=on`): Apps Script ignores the database and reads only its own
+  Script Properties again (`v2dbFlagsLegacyOff` undoes it).
+- **Changing** (`flagsSet_`): changes only the named switches, safely when two writers collide (the second looks again; "only if unchanged since"), keeps Apps Script's old Script Properties in step (so the fallback is right),
+  updates this server's memory at once, and throws a plain "NOTHING was changed" message if the database refused. All `v2dbEnable.../v2dbDisable...` functions (`v2route.js`) and `v2dbEnableOwnerDirect` use it. A secret or any other
+  setting can never be written here (only the six names are accepted).
+- `exportFlagsToFunctions()` now only seeds a MISSING document from the old settings (never overwrites). Before this went live the real document was checked: it held all six switches (owner on, one friend, all new-server switches on).
+- **Why:** the new server can now change switches itself, which is one of the two things that kept the Access screen (give/remove a friend's full app) on Apps Script. The other is the **Firestore usage meter** (below).
+**Still on Apps Script on purpose after this step:** the Access screen's actions. Its "today's Firestore use" numbers come from a per-server counter kept in Script Properties (`FS_USAGE_*`, `fsFlushUsage_`, also the daily safety limit
+that protects the free allowance): the new server's own usage is not in it (a known limit since step 1), so moving the screen now would show wrong numbers. NEXT: make the usage meter a shared Firestore counter, then move the Access
+actions (setFriendFullApp, setFriendScreen, teachBank, forgetBank, getAdminOverview, getSmsFormats, getMyIngestKey) to the new server.
+**Tests:** `backend/tests/flags.test.js` (reads, 30 s memory, outage fallbacks, emergency brake, create/keep/remove, two writers at once, failed save changes nothing, new-server mode, seeding; the race check is proven to fail without
+the protection), the existing owner/route/timer/lock tests now set switches through `flagsSet_`, and the real-database `functions/tests/live_flags.js` (own test document `_system/props_qa`: change seen by another server, three servers
+changing three different switches at the same instant over 4 rounds, all landed).

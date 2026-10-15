@@ -70,90 +70,61 @@ function v2dbPrefetchFor_(action){
 }
 
 // ---------------------------------------------------------------- who is switched on
+// The switches live in the shared database document _system/props (backend/flags.js): both servers read AND change them.
 function v2dbUsersOn_(){
-  try{ var list = JSON.parse(PropertiesService.getScriptProperties().getProperty("V2DB_USERS") || "[]"); return Array.isArray(list) ? list : []; }
+  try{ var list = JSON.parse(flagGet_("V2DB_USERS") || "[]"); return Array.isArray(list) ? list : []; }
   catch(e){ return []; }
 }
 
-// "v2db" or "sheet". Reads the GLOBAL Script Properties (never the per-person ones).
+// "v2db" or "sheet". Reads the GLOBAL switches (never the per-person settings).
 function v2EngineFor_(email){
   var e = String(email || "").trim().toLowerCase();
   if(!e) return "sheet";
-  if(e === String(PWA_ALLOWED_EMAIL).toLowerCase()) return PropertiesService.getScriptProperties().getProperty("V2DB_OWNER") === "on" ? "v2db" : "sheet";
+  if(e === String(PWA_ALLOWED_EMAIL).toLowerCase()) return flagGet_("V2DB_OWNER") === "on" ? "v2db" : "sheet";
   return v2dbUsersOn_().indexOf(e) !== -1 ? "v2db" : "sheet";
 }
 
-// Keeps the NEW server (Firebase Cloud Functions, functions/) in step with the on/off switches kept here in Script Properties: it
-// reads them from the Firestore document _system/props. Called whenever a switch changes; best-effort (a failure never blocks the
-// switch itself). Run exportFlagsToFunctions() by hand once to seed it.
-function exportFlagsToFunctions(){
-  try{
-    var p = PropertiesService.getScriptProperties();
-    var fields = { V2DB_USERS: JSON.stringify(v2dbUsersOn_()), updatedAtMs: Date.now() };
-    if(p.getProperty("V2DB_OWNER") === "on") fields.V2DB_OWNER = "on";
-    if(p.getProperty("V2_FN_WRITES") === "on") fields.V2_FN_WRITES = "on";      // the new server may SAVE (sharedLock.js)
-    if(p.getProperty("V2DB_OWNER_DIRECT") === "on") fields.V2DB_OWNER_DIRECT = "on";   // the owner's SMS may land directly (smsIn.js)
-    if(p.getProperty("V2_FN_TIMER") === "on") fields.V2_FN_TIMER = "on";              // the new server runs the alert timer
-    if(p.getProperty("V2_FN_SMS") === "on") fields.V2_FN_SMS = "on";                  // the new server may take bank SMS (the SMS door)
-    fsCommit_([{ set: { path: "_system/props", fields: fields } }]);
-    return true;
-  }catch(err){
-    try{ logAI("FLAGS_EXPORT_ERROR", String(err && err.message).slice(0, 200)); }catch(ignore){}
-    return false;
-  }
-}
-
-// Switching something OFF must never look done when the new server did not hear about it (it keeps the old setting until the copy works).
-function flagsExportOrThrow_(what){
-  if(!exportFlagsToFunctions()) throw new Error(what + " is switched off HERE, but copying that to the new server FAILED, so the new server may still be using it. Run exportFlagsToFunctions() again until it says true (check AILogs for FLAGS_EXPORT_ERROR).");
-}
-
+// The on/off functions. Run from the Apps Script editor (or, for the friend switch, from the Access screen). Every one changes the ONE shared
+// document, so both servers see it (within about 30 seconds) and it throws a plain message, changing nothing, if the change could not be saved.
 function v2dbEnableUser(email){
   var e = String(email || "").trim().toLowerCase();
   if(!/^[^\s@\/]+@[^\s@\/]+\.[^\s@\/]+$/.test(e)) throw new Error("Give a real email address.");
   var list = v2dbUsersOn_();
   if(list.indexOf(e) === -1) list.push(e);
-  PropertiesService.getScriptProperties().setProperty("V2DB_USERS", JSON.stringify(list));
-  exportFlagsToFunctions();
+  flagsSet_({ V2DB_USERS: JSON.stringify(list) });
   return list;
 }
 function v2dbDisableUser(email){
   var e = String(email || "").trim().toLowerCase();
   var list = v2dbUsersOn_().filter(function(x){ return x !== e; });
-  PropertiesService.getScriptProperties().setProperty("V2DB_USERS", JSON.stringify(list));
-  exportFlagsToFunctions();
+  flagsSet_({ V2DB_USERS: JSON.stringify(list) });
   return list;
 }
-function v2dbEnableOwner(){ PropertiesService.getScriptProperties().setProperty("V2DB_OWNER", "on"); exportFlagsToFunctions(); return "owner is now on the Firestore-backed spreadsheet"; }
-function v2dbDisableOwner(){ PropertiesService.getScriptProperties().deleteProperty("V2DB_OWNER"); exportFlagsToFunctions(); return "owner is back on the Google Sheet"; }
+function v2dbEnableOwner(){ flagsSet_({ V2DB_OWNER: "on" }); return "owner is now on the Firestore-backed spreadsheet"; }
+function v2dbDisableOwner(){ flagsSet_({ V2DB_OWNER: null }); return "owner is back on the Google Sheet"; }
 
 // Lets the NEW server (Cloud Functions) save too, and makes Apps Script's saves/SMS/timer also take the shared lease so the two never
-// write at once. Turn ON only after the new server's save support is deployed. Turn off to go back to Apps Script alone (instant).
-// The app still decides per phone (Settings > Speed) whether to send saves to the new server.
-function v2dbEnableFunctionWrites(){ PropertiesService.getScriptProperties().setProperty("V2_FN_WRITES", "on"); exportFlagsToFunctions(); return "the new server may now save"; }
-function v2dbDisableFunctionWrites(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_WRITES"); flagsExportOrThrow_("New-server saving"); return "saving is back on Apps Script only"; }
+// write at once. Turn off to go back to Apps Script alone (instant). The app still decides per phone (Settings > Speed) whether to use it.
+function v2dbEnableFunctionWrites(){ flagsSet_({ V2_FN_WRITES: "on" }); return "the new server may now save"; }
+function v2dbDisableFunctionWrites(){ flagsSet_({ V2_FN_WRITES: null }); return "saving is back on Apps Script only"; }
 
-// The SMS door on the new server (added 2026-10-14): the Android app tries the new server FIRST for each bank SMS (action smsIn, same code and
-// same rules as Apps Script's smsIn). Anything but {ok:true} makes the phone carry on with its old chain (Apps Script smsIn, then the old reader),
-// so no message is lost. Needs saving on the new server switched on too (v2dbEnableFunctionWrites). Off = the new server answers "use the old path".
-function v2dbEnableFunctionSms(){ PropertiesService.getScriptProperties().setProperty("V2_FN_SMS", "on"); exportFlagsToFunctions(); return "the new server now takes bank SMS (phones that know about it)"; }
-// The ALERT TIMER on the new server (added 2026-10-14): a Cloud Scheduler job calls the new server every 5 minutes; it alerts new transactions
-// (push with the quick-confirm buttons), settles the known ones, and rebuilds the Home copy. While this is ON the Apps Script timer only copies rows
-// that the old SMS doors wrote into the Google Sheet (so nothing is announced twice). Needs saving on the new server too, and push proven there
-// (Settings > Speed > "Send a test notification"). Off = Apps Script does everything again, instantly.
+// The SMS door on the new server: the Android app tries the new server FIRST for each bank SMS (action smsIn). Anything but {ok:true} makes the
+// phone carry on with its old chain, so no message is lost. Needs saving on the new server switched on too. Off = "use the old path".
+function v2dbEnableFunctionSms(){ flagsSet_({ V2_FN_SMS: "on" }); return "the new server now takes bank SMS (phones that know about it)"; }
+function v2dbDisableFunctionSms(){ flagsSet_({ V2_FN_SMS: null }); return "bank SMS no longer go to the new server"; }
+
+// The ALERT TIMER on the new server (Cloud Scheduler tick, backend/fnTimer.js). While ON the Apps Script timer only copies rows that the old SMS
+// doors wrote into the Google Sheet. Needs saving on the new server too, and push proven there. Off = Apps Script does everything again.
 function v2dbEnableFunctionTimer(){
-  var p = PropertiesService.getScriptProperties();
-  if(p.getProperty("V2_FN_WRITES") !== "on") throw new Error("Switch on new-server saving first (v2dbEnableFunctionWrites): the new server's timer needs it.");
-  p.setProperty("V2_FN_TIMER", "on");
-  if(!exportFlagsToFunctions()){
-    p.deleteProperty("V2_FN_TIMER");
-    throw new Error("Could not tell the new server about the switch (see AILogs, FLAGS_EXPORT_ERROR), so NOTHING was switched on. Try again.");
-  }
+  if(flagGet_("V2_FN_WRITES") !== "on") throw new Error("Switch on new-server saving first (v2dbEnableFunctionWrites): the new server's timer needs it.");
+  flagsSet_({ V2_FN_TIMER: "on" });
   return "the new server will run the alert timer once its first tick arrives (up to 5 minutes); until then, and whenever it stops ticking, Apps Script keeps alerting";
 }
-function v2dbDisableFunctionTimer(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_TIMER"); flagsExportOrThrow_("The new-server timer"); return "Apps Script runs the whole timer again"; }
+function v2dbDisableFunctionTimer(){ flagsSet_({ V2_FN_TIMER: null }); return "Apps Script runs the whole timer again"; }
 
-function v2dbDisableFunctionSms(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_SMS"); flagsExportOrThrow_("New-server bank SMS"); return "bank SMS no longer go to the new server"; }
+// Emergency brake: Apps Script ignores the shared switches and uses only its own old Script Properties (which every change keeps in step).
+function v2dbFlagsLegacyOn(){ PropertiesService.getScriptProperties().setProperty("FLAGS_LEGACY", "on"); return "Apps Script now reads its own old switches only"; }
+function v2dbFlagsLegacyOff(){ PropertiesService.getScriptProperties().deleteProperty("FLAGS_LEGACY"); return "Apps Script reads the shared switches again"; }
 
 // ---------------------------------------------------------------- new people
 // Creates any template tab the person doesn't have yet (empty, headers only). Cheap when the tabs already exist: one check.

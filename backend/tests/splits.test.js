@@ -25,7 +25,7 @@ const { makeWorld, assert } = require("./_fakeSheetsKit");
 const FILES = [
   "category.js", "noteWordModel.js", "noteMemory.js", "needWantSaving.js", "financialEvents.js",
   "investmentInstruments.js", "savingsGoals.js", "PWA.js", "Recon.js", "Logger.js", "transactions.js",
-  "autoSettle.js", "obligationReminders.js", "appHealth.js", "firestore.js", "viewPublisher.js", "splits.js", "planner.js", "CCAdvisor.js", "v2route.js", "v2db.js"
+  "autoSettle.js", "obligationReminders.js", "appHealth.js", "firestore.js", "viewPublisher.js", "splits.js", "planner.js", "CCAdvisor.js", "v2route.js", "flags.js", "v2db.js"
 ];
 const ME = "ronitnadar9@gmail.com";
 const FRIEND = "vaidehi@example.com";

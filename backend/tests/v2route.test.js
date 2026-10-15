@@ -14,7 +14,7 @@ const FRIEND = "vaidehi@example.com";
 const FILES = [
   "category.js", "noteWordModel.js", "noteMemory.js", "needWantSaving.js", "financialEvents.js", "investmentInstruments.js", "savingsGoals.js",
   "PWA.js", "Recon.js", "Logger.js", "transactions.js", "autoSettle.js", "obligationReminders.js", "appHealth.js", "firestore.js", "viewPublisher.js",
-  "splits.js", "planner.js", "CCAdvisor.js", "DebtAdvisor.js", "SavingsAdvisor.js", "cash.js", "v2db.js", "settings.js", "v2route.js", "sharedLock.js"
+  "splits.js", "planner.js", "CCAdvisor.js", "DebtAdvisor.js", "SavingsAdvisor.js", "cash.js", "v2db.js", "settings.js", "v2route.js", "flags.js", "sharedLock.js"
 ];
 const TXN_HEADER = ["Date", "Time", "Bank", "Type", "Mode", "Amount", "Reference", "Counterparty", "Channel", "Source", "RawSMS", "Sender", "Note", "Category", "TelegramMsgID", "Processed", "NeedWantSaving", "FinancialEvent", "FinancialEventName", "AutoSettled", "FriendShare"];
 
@@ -95,7 +95,7 @@ console.log("\n--- 2. Switching the owner on routes his requests to his virtual 
   });
   const sheetCashBefore = JSON.stringify(w.sheets.Cash.rows);
   const answerSheet = w.act("owner", { action: "getCash" });
-  w.props.V2DB_OWNER = "on";
+  w.sb.flagsSet_({ V2DB_OWNER: "on" });
   assert(sb.v2EngineFor_(OWNER) === "v2db", "the owner flag switches him on");
   const answerVirtual = w.act("owner", { action: "getCash" });
   assert(JSON.stringify(answerSheet) === JSON.stringify(answerVirtual), "his Cash screen gives the identical answer from the virtual spreadsheet");
@@ -108,7 +108,7 @@ console.log("\n--- 2. Switching the owner on routes his requests to his virtual 
   w.act("owner", { action: "getCash" });
   assert(w.lockEvents.length === 0, "a read does not take the lock");
   const balanceWithSave = w.act("owner", { action: "getCash" }).cash.balance;
-  delete w.props.V2DB_OWNER;
+  w.sb.flagsSet_({ V2DB_OWNER: null });
   const balanceOnSheet = w.act("owner", { action: "getCash" }).cash.balance;
   assert(balanceOnSheet === answerSheet.cash.balance && balanceOnSheet !== balanceWithSave, "switching back to the Sheet is instant: it shows the Sheet's own data (without the virtual save)");
 }
@@ -264,5 +264,5 @@ console.log("\n--- 8. The new server's copy of the on/off switches follows every
   sb.fsCommit_ = function(){ throw new Error("firestore down"); };
   let threw = false; try{ sb.v2dbEnableUser(FRIEND); }catch(e){ threw = true; }
   sb.fsCommit_ = real;
-  assert(threw === false && sb.v2EngineFor_(FRIEND) === "v2db", "if the copy fails, the switch itself still works");
+  assert(threw === true && sb.v2EngineFor_(FRIEND) === "sheet", "if the shared switch cannot be saved, it says so and changes NOTHING (the switch IS the shared document now)");
 }

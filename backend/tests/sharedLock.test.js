@@ -26,6 +26,8 @@ function makeWorld(){
   const sb = { console: console };
   vm.createContext(sb);
   sb.Utilities = { getUuid: (function(){ let n = 0; return function(){ return "token-" + (++n); }; })(), sleep: function(ms){ w.sleeps++; w.now += ms; if(w.onSleep) w.onSleep(); } };
+  sb.flagOn_ = function(n){ return w.props[n] === "on"; };      // the switch store (flags.js) is not loaded in this tiny world: read the same values
+  sb.flagGet_ = function(n){ return Object.prototype.hasOwnProperty.call(w.props, n) ? w.props[n] : null; };
   sb.PropertiesService = { getScriptProperties: function(){ return { getProperty: function(k){ return Object.prototype.hasOwnProperty.call(w.props, k) ? w.props[k] : null; } }; } };
   sb.logAI = function(t, m){ w.logs.push(t + ": " + m); };
   sb.LockService = { getScriptLock: function(){ return {
