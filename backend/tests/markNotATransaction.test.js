@@ -493,6 +493,16 @@ function realPaymentRow(){
   const pat = env.sheetsByName["LearnedSpamPatterns"].rows[1];
   assert(pat.every(function(c){ return c === ""; }), "the learned pattern row is blanked (readers ignore a blank pattern)");
 
+  // D2. a learned-junk tab with NO header row (the private copy has none): the very first row must be forgotten too
+  ({ sandbox, env } = loadBackendSandbox());
+  env.seedSheet("Transactions", [TXN_HEADER, pendingSpamRow()]);
+  const spamTemplate = sandbox.normalizeForFingerprint(pendingSpamRow()[10]);
+  env.seedSheet("LearnedSpamPatterns", [[new Date(), "HDFCBK", spamTemplate, "x"]]);
+  const mh = sandbox.markNotATransaction(2);
+  const rh = sandbox.restoreIgnoredTransaction(mh.archiveRow, mh.fp);
+  assert(env.sheetsByName["LearnedSpamPatterns"].rows.every(function(r){ return r.every(function(c){ return c === ""; }); }) && rh.patternsForgotten === 2,
+    "with no header row, every matching pattern (including the very first row) is forgotten");
+
   // E. a resync already saved the same payment again: restoring does not make a second copy
   ({ sandbox, env } = loadBackendSandbox());
   env.seedSheet("Transactions", [TXN_HEADER, realPaymentRow()]);

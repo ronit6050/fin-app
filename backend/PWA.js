@@ -2943,7 +2943,7 @@ function forgetLearnedSpam_(sender, rawSms){
     if(!sh || sh.getLastRow() < 2) return 0;
     const vals = sh.getDataRange().getValues();
     let n = 0;
-    for(let i = 1; i < vals.length; i++){
+    for(let i = 0; i < vals.length; i++){
       if(String(vals[i][1]) === String(sender) && String(vals[i][2]) === template){
         sh.getRange(i + 1, 1, 1, vals[i].length).setValues([new Array(vals[i].length).fill("")]);
         n++;
