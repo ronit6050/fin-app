@@ -286,35 +286,77 @@ function fsCommit_(ops){
 }
 
 // ---- Usage meter ----------------------------------------------------------
+// SHARED between the servers (changed 2026-10-15): today's totals are ONE database document, _system/usage_<yyyyMMdd> (India date), that every
+// server ADDS to (safe even when two add at the same instant). Before, each server kept its own count in Script Properties, so the new
+// server's use was never counted and the daily safety limit below only protected Apps Script. A server's own counts are added when it
+// flushes (end of an Apps Script run; the new server at most every 20 seconds). Reading the totals is remembered for 60 seconds.
+// The meter can NEVER block anything by failing: if the totals cannot be read the guard simply lets the call through (it is a cost
+// safety, not a data safety), and if a flush fails those counts are lost.
+function fsUsageDay_(){
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd");
+}
 function fsTodayKey_(){
-  return "FS_USAGE_" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd");
+  return "FS_USAGE_" + fsUsageDay_();                 // the OLD Script Property name (no longer written); kept for tests and tools
+}
+function fsUsagePath_(){
+  return "_system/usage_" + fsUsageDay_();
 }
 
-// Adds this run's counts to today's running total, and forgets old days.
+var FS_USAGE_MEMO_ = null;                            // { at, day, t }: the shared totals as last read, remembered 60 s inside this process
+
+// Reads today's shared totals straight from Firestore. Deliberately NOT through fsFetch_/fsGuard_ (the guard itself asks for these totals,
+// so going through it would loop). Its own read is counted like any other (it is added at the next flush).
+function fsReadUsageTotals_(){
+  var resp = UrlFetchApp.fetch(fsPathUrl_(fsUsagePath_()), { method: "get", headers: { Authorization: "Bearer " + fsAccessToken_() }, muteHttpExceptions: true });
+  FS_USAGE_.calls++; FS_USAGE_.reads++;
+  var code = resp.getResponseCode();
+  if(code === 404) return { reads: 0, writes: 0, calls: 0 };
+  if(code !== 200) throw new Error("usage totals HTTP " + code);
+  var f = fsDecodeFields_(JSON.parse(resp.getContentText()).fields || {});
+  return { reads: Number(f.reads) || 0, writes: Number(f.writes) || 0, calls: Number(f.calls) || 0 };
+}
+
+function fsSharedTotals_(){
+  var now = Date.now(), day = fsUsageDay_();
+  if(FS_USAGE_MEMO_ && FS_USAGE_MEMO_.day === day && now - FS_USAGE_MEMO_.at < 60000) return FS_USAGE_MEMO_.t;
+  var cache = null, cacheKey = "FS_USAGE_SEEN_" + day, t = null;
+  try{ cache = CacheService.getScriptCache(); }catch(e){}
+  try{ var hit = cache ? cache.get(cacheKey) : null; if(hit) t = JSON.parse(hit); }catch(e){ t = null; }
+  if(!t){
+    try{
+      t = fsReadUsageTotals_();
+      try{ if(cache) cache.put(cacheKey, JSON.stringify(t), 60); }catch(e){}
+    }catch(readErr){
+      t = (FS_USAGE_MEMO_ && FS_USAGE_MEMO_.day === day) ? FS_USAGE_MEMO_.t : { reads: 0, writes: 0, calls: 0 };      // fail open
+    }
+  }
+  FS_USAGE_MEMO_ = { at: now, day: day, t: t };
+  return t;
+}
+
+// Adds this process's counts to today's shared total, and resets them. Never throws (a meter problem must never affect real work).
 function fsFlushUsage_(){
   if(FS_USAGE_.calls === 0 && FS_USAGE_.reads === 0 && FS_USAGE_.writes === 0) return;
-  var props = PropertiesService.getScriptProperties();
-  var key = fsTodayKey_();
-  var total = { reads: 0, writes: 0, calls: 0 };
-  try{ total = JSON.parse(props.getProperty(key) || "") || total; }catch(err){}
-  total.reads  = (total.reads  || 0) + FS_USAGE_.reads;
-  total.writes = (total.writes || 0) + FS_USAGE_.writes;
-  total.calls  = (total.calls  || 0) + FS_USAGE_.calls;
-  props.setProperty(key, JSON.stringify(total));
+  var d = FS_USAGE_;
   FS_USAGE_ = { reads: 0, writes: 0, calls: 0 };
   FS_PERSISTED_ = null;
-
-  var all = props.getProperties();
-  Object.keys(all).forEach(function(k){
-    if(k.indexOf("FS_USAGE_") === 0 && k !== key) props.deleteProperty(k);
-  });
+  // The flush's own database write is counted HERE, up front, and whatever the flush itself spends is then thrown away (below). Otherwise each flush
+  // would leave its own cost behind to be flushed next time, and a run that did nothing would still write to the database, for ever.
+  d.writes += 1; d.calls += 1;
+  try{
+    fsCommit_([{ merge: { path: fsUsagePath_(), fields: {}, adds: [
+      { field: "reads", amountInt: d.reads }, { field: "writes", amountInt: d.writes }, { field: "calls", amountInt: d.calls }
+    ] } }]);
+  }catch(err){ /* these counts are lost; the meter never blocks anything */ }
+  FS_USAGE_ = { reads: 0, writes: 0, calls: 0 };
+  FS_PERSISTED_ = null;
+  FS_USAGE_MEMO_ = null;
+  try{ CacheService.getScriptCache().remove("FS_USAGE_SEEN_" + fsUsageDay_()); }catch(e){}
 }
 
-// For the health check: today's totals and how much of the free allowance.
+// For the Access screen, the health check and the safety guard: today's totals (all servers) and how much of the free allowance.
 function fsUsageToday_(){
-  var raw = PropertiesService.getScriptProperties().getProperty(fsTodayKey_());
-  var t = { reads: 0, writes: 0, calls: 0 };
-  try{ t = JSON.parse(raw || "") || t; }catch(err){}
+  var t = fsSharedTotals_();
   return {
     reads: t.reads || 0, writes: t.writes || 0, calls: t.calls || 0,
     readsPct: Math.round(100 * (t.reads || 0) / FS_FREE_READS_PER_DAY_),

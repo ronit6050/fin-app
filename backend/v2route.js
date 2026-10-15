@@ -89,16 +89,26 @@ function v2EngineFor_(email){
 function v2dbEnableUser(email){
   var e = String(email || "").trim().toLowerCase();
   if(!/^[^\s@\/]+@[^\s@\/]+\.[^\s@\/]+$/.test(e)) throw new Error("Give a real email address.");
-  var list = v2dbUsersOn_();
-  if(list.indexOf(e) === -1) list.push(e);
-  flagsSet_({ V2DB_USERS: JSON.stringify(list) });
-  return list;
+  var result = [];
+  flagsSet_({ V2DB_USERS: function(current){                              // the freshest list at the moment of writing (another server may have just added someone)
+    var list = []; try{ list = JSON.parse(current || "[]"); }catch(err){ list = []; }
+    if(!Array.isArray(list)) list = [];
+    if(list.indexOf(e) === -1) list.push(e);
+    result = list;
+    return JSON.stringify(list);
+  } });
+  return result;
 }
 function v2dbDisableUser(email){
   var e = String(email || "").trim().toLowerCase();
-  var list = v2dbUsersOn_().filter(function(x){ return x !== e; });
-  flagsSet_({ V2DB_USERS: JSON.stringify(list) });
-  return list;
+  var result = [];
+  flagsSet_({ V2DB_USERS: function(current){
+    var list = []; try{ list = JSON.parse(current || "[]"); }catch(err){ list = []; }
+    if(!Array.isArray(list)) list = [];
+    result = list.filter(function(x){ return x !== e; });
+    return JSON.stringify(result);
+  } });
+  return result;
 }
 function v2dbEnableOwner(){ flagsSet_({ V2DB_OWNER: "on" }); return "owner is now on the Firestore-backed spreadsheet"; }
 function v2dbDisableOwner(){ flagsSet_({ V2DB_OWNER: null }); return "owner is back on the Google Sheet"; }

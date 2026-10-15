@@ -20,7 +20,11 @@ const rt = createRuntime({
   sharedProps: function(){ return { V2DB_OWNER: "on", V2_FN_WRITES: "on" }; }
 });
 rt.sandbox.LEASE_PATH_ = LOCK_PATH;
+rt.sandbox.FLAGS_DOC_ = "_system/props_qa_sweep";             // the Access actions change switches: keep them in a TEST document
+vm_runInContext_(rt);
 const call = function(data){ return rt.call(Object.assign({ idToken: "local" }, data)); };
+
+function vm_runInContext_(rt){ require("node:vm").runInContext('fsUsagePath_ = function(){ return "_system/usage_qa_sweep"; };', rt.sandbox); }
 
 function api(method, url, body){
   return syncFetch({ url: url, method: method, headers: { Authorization: "Bearer " + getFirestoreToken(), "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -37,7 +41,7 @@ function deleteTree(docPath){
   });
   api("DELETE", BASE + "/" + docPath);
 }
-function cleanup(){ try{ deleteTree("users/" + SCRATCH); }catch(e){ console.log("cleanup: " + e.message); } try{ api("DELETE", BASE + "/" + LOCK_PATH); }catch(e){} }
+function cleanup(){ try{ deleteTree("users/" + SCRATCH); }catch(e){ console.log("cleanup: " + e.message); } try{ api("DELETE", BASE + "/" + LOCK_PATH); }catch(e){} try{ api("DELETE", BASE + "/_system/props_qa_sweep"); }catch(e){} try{ api("DELETE", BASE + "/_system/usage_qa_sweep"); }catch(e){} }
 
 // An answer that points at the NEW SERVER being unable to run the code (as opposed to a normal "no, that input is not valid").
 const ENV_PROBLEM = /no Google Sheet|is not defined|is not a function|Cannot read prop|Cannot set prop|undefined \(reading|not available on the new server|Drive|MailApp|UrlFetch/i;
@@ -111,6 +115,19 @@ try{
   const inv = call({ action: "getInvestments" });
   const irow = inv.ok && inv.investments && (inv.investments.recent || inv.investments.entries || [])[0];
   run("updateInvestment", { action: "updateInvestment", row: irow && irow.row, instrumentName: "QA Fund", amount: 120 });
+
+  // the Access screen (switches go to a TEST document, never the real _system/props; bank teaching is skipped: it writes a global document)
+  run("addFriend", { action: "addFriend", name: "QA Pal Two", mobile: "9000000002", email: "qa-friend2@example.com" });
+  const ov = run("getAdminOverview", { action: "getAdminOverview" });
+  run("setFriendScreen", { action: "setFriendScreen", email: "qa-friend2@example.com", screen: "cc", visible: false });
+  const on = run("setFriendFullApp (on)", { action: "setFriendFullApp", email: "qa-friend2@example.com", on: true });
+  const qaFlags = rt.sandbox.fsGetPathMeta_("_system/props_qa_sweep");
+  results.push({ label: "friend switch landed in the shared document", ok: !!(qaFlags && /qa-friend2@example.com/.test(String(qaFlags.fields.V2DB_USERS))), env: false });
+  console.log((qaFlags && /qa-friend2@example.com/.test(String(qaFlags.fields.V2DB_USERS)) ? "ok           " : "no (see)     ") + "the friend's full-app switch is in the shared (test) document");
+  run("setFriendFullApp (off)", { action: "setFriendFullApp", email: "qa-friend2@example.com", on: false });
+  run("getSmsFormats", { action: "getSmsFormats" });
+  run("getMyIngestKey (owner without the direct switch: a plain refusal)", { action: "getMyIngestKey" });
+  console.log("             overview people/usage: " + JSON.stringify({ people: ov.people && ov.people.length, usageReads: ov.usage && ov.usage.reads, usageWrites: ov.usage && ov.usage.writes }));
 
   // settings / budgets / push token
   run("updateSettings", { action: "updateSettings", settings: { ccLimit: 55000 } });

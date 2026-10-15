@@ -24,10 +24,12 @@ const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "addDebt", "settleDebt
   "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
   "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
   "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "refreshViews",
-  "insertReconciledTransactions", "fixCreditCardTransactionMode"];                 // Reconcile's saves (owner only, enforced by the backend)
+  "insertReconciledTransactions", "fixCreditCardTransactionMode",                  // Reconcile's saves (owner only, enforced by the backend)
+  "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey"];   // the Access screen's changes (owner only; the switches live in the shared database)
 // Answers that never change anything but were not on the read list at first.
 const EXTRA_READ_ACTIONS = ["previewSavingsSplit", "pushTest",    // pushTest: owner-only, sends ONE test notification to his own phone
-  "reconcileStatement", "reconcileCreditCardStatement"];         // Reconcile previews: only when the phone sent the statement's rows/text (no Google Drive here); saves nothing
+  "reconcileStatement", "reconcileCreditCardStatement",          // Reconcile previews: only when the phone sent the statement's rows/text (no Google Drive here); saves nothing
+  "getAdminOverview", "getSmsFormats"];                          // the Access screen's reads (owner only, enforced by the backend; the usage numbers are the shared counter)
 const MAX_BODY_BYTES = 1000000;            // a year of statement rows is the biggest legitimate request
 
 let runtime = null;     // built once per server instance (the backend code is loaded then, not on every request)
@@ -82,7 +84,9 @@ exports.api = onRequest({
     try{
       const rt = getRuntime();
       if(!rt.smsEnabled() || !rt.writesEnabled()){ res.status(200).json({ ok: false, fallback: true, error: "Use the old path." }); return; }
-      res.status(200).json(rt.call(data));
+      const smsOut = rt.call(data);
+      rt.flushUsage();                       // count this server's database use in the shared daily total (before replying: the server may pause after)
+      res.status(200).json(smsOut);
     }catch(err){
       console.error(JSON.stringify({ severity: "ERROR", type: "FUNCTION_ERROR", action: action, message: String(err && err.message).slice(0, 300) }));
       res.status(200).json({ ok: false, error: "Try again." });
@@ -109,7 +113,9 @@ exports.api = onRequest({
       res.status(200).json({ ok: false, fallback: true, error: "Saving is not switched on for the new server." });
       return;
     }
-    res.status(200).json(rt.call(data));
+    const out = rt.call(data);
+    rt.flushUsage();                         // count this server's database use in the shared daily total (before replying)
+    res.status(200).json(out);
   }catch(err){
     console.error(JSON.stringify({ severity: "ERROR", type: "FUNCTION_ERROR", action: action, message: String(err && err.message).slice(0, 300) }));
     // For a SAVE we cannot be sure nothing was written, so never tell the app to repeat it elsewhere (that could save it twice).
@@ -132,7 +138,9 @@ exports.tick = onSchedule({
   retryCount: 0
 }, function(){
   try{
-    const result = getRuntime().runTimer();
+    const rtTick = getRuntime();
+    const result = rtTick.runTimer();
+    rtTick.flushUsage(true);                 // every tick adds its database use to the shared daily total
     console.log(JSON.stringify({ type: "TICK", ran: !!result.ran, reason: result.reason || result.why || "" }));
   }catch(err){
     console.error(JSON.stringify({ severity: "ERROR", type: "TICK_ERROR", message: String(err && err.message).slice(0, 300) }));

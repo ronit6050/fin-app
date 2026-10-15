@@ -192,3 +192,23 @@ actions (setFriendFullApp, setFriendScreen, teachBank, forgetBank, getAdminOverv
 **Tests:** `backend/tests/flags.test.js` (reads, 30 s memory, outage fallbacks, emergency brake, create/keep/remove, two writers at once, failed save changes nothing, new-server mode, seeding; the race check is proven to fail without
 the protection), the existing owner/route/timer/lock tests now set switches through `flagsSet_`, and the real-database `functions/tests/live_flags.js` (own test document `_system/props_qa`: change seen by another server, three servers
 changing three different switches at the same instant over 4 rounds, all landed).
+
+## Step 8: ONE shared usage counter, and the Access screen on the new server (built 2026-10-15)
+
+**Shared counter** (`backend/firestore.js`, "Usage meter"): today's Firestore use (reads / writes / calls) is ONE database document per India day, `_system/usage_<yyyymmdd>`, that every server ADDS to with
+increments (safe when several add at the same instant: proven on the real database, 5 servers at once = exact total). Before, each server kept its own count in Script Properties (`FS_USAGE_*`), so the new
+server's use was never counted and the daily safety limit (45,000 reads / 18,000 writes) protected only Apps Script. Now the guard reads the SHARED total, so it covers all servers.
+- `fsFlushUsage_()` adds this process's counts plus its own one write and one call (and then leaves NOTHING behind, so a run that did nothing makes no database call). Apps Script flushes where it always did (end of
+  runs); the new server flushes before answering a request (at most every 20 s) and at every tick (`shim.flushUsage`, `functions/index.js`).
+- `fsUsageToday_()` (used by the guard, the Access screen and the health check) reads the document straight from Firestore (NOT through the guard: it would loop), remembered 60 s.
+- **The meter can never block real work:** if the totals cannot be read they count as zero (the guard lets the call through; it is a cost safety, not a data safety); if a flush fails those counts are lost. A reached read
+  limit pauses ALL Firestore use for the rest of the day (reads and writes), exactly as before; a reached write limit pauses writes only.
+- The old Script Properties `FS_USAGE_*` are no longer written (harmless leftovers). Today's totals started from zero when this went live (a few thousand reads/writes of earlier use are not in it).
+- Security rules: `_system/*` is closed to phones (only the servers, which use admin access, can read or write it).
+**Access screen on the new server:** `getAdminOverview`, `getSmsFormats` (reads) and `setFriendFullApp`, `setFriendScreen`, `teachBank`, `forgetBank`, `getMyIngestKey` (changes; owner-only is enforced by the backend as
+before) are now in the new server's lists (`functions/index.js`) and the app's (`index.html` NEW_SERVER_ACTIONS / NEW_SERVER_WRITE_ACTIONS, app `2026-10-15-03`). Friend add/remove now works out the new list from the FRESHEST stored list at
+the moment of writing (`flagsSet_` accepts a function), so two adds from different servers cannot lose one. Known small limits: `teachBank` clears a remembered list only in the server that handled it (the other
+learns within 10 minutes); the Access screen's "last backup" line (an Apps Script setting) is blank when it is served by the new server (point-in-time recovery is the real backup now).
+**Tests:** `backend/tests/firestoreClient.test.js` sections 4 and 13 (shared totals, 60 s memory, add-not-overwrite, a failing flush/read never throws or blocks, another day never mixed in, the limit on the shared total),
+`backend/tests/flags.test.js` 6b (two friends added at once), `functions/tests/writes.test.js` / `backend/tests/newServerClient.test.js` (routing), and on the REAL database `functions/tests/live_meter.js` (own test counter:
+5 servers adding at once = exact 500 / 55 / 555, 60-second memory, the limit trips on the shared total) and `functions/tests/live_sweep.js` (the Access actions, switches to a test document).

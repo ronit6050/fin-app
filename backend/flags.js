@@ -96,14 +96,16 @@ function flagGet_(name){
 }
 function flagOn_(name){ return flagGet_(name) === "on"; }
 
-// Changes one or more switches: changes = { NAME: "on" | "text" | null } (null switches it off). Throws a plain Error if the change could not be
-// saved, so nobody is ever told a switch moved when it did not.
+// Changes one or more switches: changes = { NAME: "on" | "text" | null | function(current){ return newValue } } (null switches it off; a function is
+// handed the FRESHEST stored value at the moment of writing, so two changes to the same list, e.g. two friends added at nearly the same time from
+// different servers, never lose one). Throws a plain Error if the change could not be saved, so nobody is ever told a switch moved when it did not.
 function flagsSet_(changes){
   var names = Object.keys(changes || {});
   names.forEach(function(n){ if(FLAGS_NAMES_.indexOf(n) === -1) throw new Error("Unknown switch: " + n); });
   var apply = function(fields){
     names.forEach(function(n){
       var v = changes[n];
+      if(typeof v === "function") v = v(typeof fields[n] === "string" ? fields[n] : null);
       if(v === null || v === undefined || v === "") delete fields[n]; else fields[n] = String(v);
     });
     return fields;
@@ -133,7 +135,7 @@ function flagsSet_(changes){
   try{
     var p = PropertiesService.getScriptProperties();
     names.forEach(function(n){
-      var v = changes[n];
+      var v = finalFlags ? finalFlags[n] : undefined;                    // what was really saved (a function above may have decided it)
       if(v === null || v === undefined || v === "") p.deleteProperty(n); else p.setProperty(n, String(v));
     });
   }catch(ignore){}

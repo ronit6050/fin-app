@@ -277,9 +277,11 @@ console.log("\n--- 6. A failed save changes nothing ---");
   const snapshot = JSON.stringify(w.docs);
   // The marker clashes -> the whole batch must be rejected, including the entry that would have been fine.
   w.docs["users/" + ME + "/splitMarkers/fp-clash"] = { fields: { entryId: { stringValue: "old" } }, updateTime: "x" };
-  const snap2 = JSON.stringify(w.docs);
+  // (the shared usage meter's own counter document is not part of the person's data: it is left out of the comparison)
+  const dataOnly = function(){ const o = {}; Object.keys(w.docs).forEach(function(k){ if(k.indexOf("_system/usage_") !== 0) o[k] = w.docs[k]; }); return JSON.stringify(o); };
+  const snap2 = dataOnly();
   const r = run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 500, txFp: "fp-clash", requestId: "wont-land" });
-  assert(!r.ok && JSON.stringify(w.docs) === snap2, "one bad part (marker already there) rejects the WHOLE split; the database is byte-for-byte unchanged");
+  assert(!r.ok && dataOnly() === snap2, "one bad part (marker already there) rejects the WHOLE split; the database is byte-for-byte unchanged");
   assert(snapshot.length > 0, "(sanity)");
 
   w.mode = "down";
@@ -355,7 +357,7 @@ console.log("\n--- 8. Privacy: nobody's data lands in anybody else's folder ---"
   run(w, "addFriend", { name: "Raj", mobile: "9000000001", email: "raj@example.com" });
   run(w, "createSplit", { friendEmail: FRIEND, totalAmount: 840, txFp: "fp-p", requestId: "z1" });
   run(w, "recordSplitPayment", { friendEmail: "raj@example.com", amount: 40, requestId: "z2" });
-  const paths = Object.keys(w.docs);
+  const paths = Object.keys(w.docs).filter(function(p){ return p.indexOf("_system/usage_") !== 0; });       // (the shared usage counter is not person data)
   assert(paths.every(function(p){ return /^users\/(ronitnadar9@gmail\.com|vaidehi@example\.com|raj@example\.com)\//.test(p); }), "every document lives under someone's own email folder");
   assert(paths.filter(function(p){ return p.indexOf("users/raj@example.com/") === 0; }).every(function(p){ return /friends\/ronitnadar9@gmail\.com/.test(p); }), "Raj's folder only holds his side of his dealings with you");
   assert(!paths.some(function(p){ return p.indexOf("users/vaidehi@example.com/") === 0 && /raj/.test(p); }), "Vaidehi's folder says nothing about Raj");

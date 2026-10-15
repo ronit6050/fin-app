@@ -289,6 +289,16 @@ function createRuntime(opts){
     return sandbox.timerTick_();
   }
 
+  // Adds this instance's Firestore usage counts to the shared daily total (backend/firestore.js fsFlushUsage_). Called before each answer is sent
+  // (the server may be paused right after replying). At most every 20 seconds unless forced, so a busy minute costs a handful of writes, not one per request.
+  let lastUsageFlush = 0;
+  function flushUsage(force){
+    const now = Date.now();
+    if(!force && now - lastUsageFlush < 20000) return;
+    lastUsageFlush = now;
+    try{ sandbox.fsFlushUsage_(); }catch(e){ /* the meter never matters more than the request */ }
+  }
+
   // Runs one request through the REAL backend code and returns the parsed answer.
   function call(data){
     refreshProps();
@@ -296,7 +306,7 @@ function createRuntime(opts){
     return JSON.parse(out.getContent());
   }
 
-  return { sandbox: sandbox, call: call, props: props, refreshProps: refreshProps, writesEnabled: writesEnabled, smsEnabled: smsEnabled, runTimer: runTimer, filesLoaded: files };
+  return { sandbox: sandbox, call: call, props: props, refreshProps: refreshProps, writesEnabled: writesEnabled, smsEnabled: smsEnabled, runTimer: runTimer, flushUsage: flushUsage, filesLoaded: files };
 }
 
 module.exports = { createRuntime, formatDate, parseDate, tzOffsetMinutes };

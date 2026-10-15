@@ -143,6 +143,20 @@ console.log("\n--- 6. Two people change different switches at the same instant -
   assert(w.doc().V2_FN_TIMER === "on" && w.doc().V2_FN_SMS === "on" && w.doc().V2DB_OWNER === "on", "both changes survive: our write was refused once, looked again, and kept theirs");
 }
 
+console.log("\n--- 6b. Two friends added at nearly the same time from different servers: neither is lost ---");
+{
+  const w = makeWorld();
+  w.sb.flagsSet_({ V2DB_USERS: JSON.stringify(["a@x.com"]) });
+  const add = function(email){ return function(cur){ const l = JSON.parse(cur || "[]"); if(l.indexOf(email) === -1) l.push(email); return JSON.stringify(l); }; };
+  // this server decides to add b@x.com, but just before it writes, the OTHER server adds c@x.com
+  w.beforeCommit = function(){ const cur = w.docs["_system/props"]; w.docs["_system/props"] = { fields: Object.assign({}, cur.fields, { V2DB_USERS: JSON.stringify(["a@x.com", "c@x.com"]) }), updateTime: "t-other" }; };
+  w.sb.flagsSet_({ V2DB_USERS: add("b@x.com") });
+  assert(JSON.stringify(JSON.parse(w.doc().V2DB_USERS).sort()) === JSON.stringify(["a@x.com", "b@x.com", "c@x.com"]), "the list ends with all three: the change was worked out again from the freshest list, not from a stale copy");
+  assert(w.props.V2DB_USERS === w.doc().V2DB_USERS && w.sb.flagGet_("V2DB_USERS") === w.doc().V2DB_USERS, "and the old settings and the memory hold what was really saved");
+  w.sb.flagsSet_({ V2DB_USERS: function(){ return null; } });
+  assert(!("V2DB_USERS" in w.doc()), "a function returning nothing switches the setting off");
+}
+
 console.log("\n--- 7. A failed save changes NOTHING ---");
 {
   const w = makeWorld({ props: { V2DB_OWNER: "on" } });

@@ -74,6 +74,19 @@ function world(rows, mode){
       w.tokens++; return reply(200, { access_token: "token-" + w.tokens });
     }
     if(w.mode === "fail500") return reply(500, { error: { message: "backend exploded" } });
+    // an "add to a counter" batch (the shared usage meter): apply each increment to the stored document
+    if(/:commit$/.test(url) && options.method === "post"){
+      JSON.parse(options.payload).writes.forEach(function(wr){
+        const key = String(wr.update.name).split("/documents/")[1];
+        const cur = w.docs[key] || {};
+        (wr.updateTransforms || []).forEach(function(tr){
+          cur[tr.fieldPath] = { integerValue: String((Number(cur[tr.fieldPath] && cur[tr.fieldPath].integerValue) || 0) + Number(tr.increment.integerValue)) };
+        });
+        w.docs[key] = cur;
+      });
+      w.commitsSeen = (w.commitsSeen || 0) + 1;
+      return reply(200, { writeResults: [{}] });
+    }
     const m = /documents\/([^/]+)\/([^/?]+)/.exec(url);
     const key = m ? m[1] + "/" + m[2] : "";
     if(options.method === "patch"){
@@ -138,7 +151,7 @@ console.log("\n--- 3. Writing and reading one document ---");
   const back = w.sb.fsGetDocument_("views", "dashboard");
   assert(back.json === "{}" && back.bytes === 2, "reads it back as plain values");
   assert(w.sb.fsGetDocument_("views", "nope") === null, "a missing document gives null, not an error");
-  assert(w.sb.FS_USAGE_.writes === 1 && w.sb.FS_USAGE_.reads === 2, "every call is counted (writes 1, reads 2)");
+  assert(w.sb.FS_USAGE_.writes === 1 && w.sb.FS_USAGE_.reads === 3, "every call is counted (writes 1, reads 3: two gets plus the meter's own look at the shared totals)");
 
   const bad = world([], "fail500");
   let msg = "";
@@ -146,21 +159,52 @@ console.log("\n--- 3. Writing and reading one document ---");
   assert(/HTTP 500/.test(msg) && /backend exploded/.test(msg), "a failed write throws with the HTTP code and Google's reason (got: " + msg + ")");
 }
 
-console.log("\n--- 4. The free-allowance meter ---");
+const usageDocKey = function(w, day){ return "_system/usage_" + (day || w.sb.fsUsageDay_()); };
+const seedUsage = function(w, t, day){ w.docs[usageDocKey(w, day)] = w.sb.fsEncodeFields_(t); };
+
+console.log("\n--- 4. The free-allowance meter (shared between the servers: one database document) ---");
 {
   const w = world();
-  w.props["FS_USAGE_20200101"] = JSON.stringify({ reads: 9, writes: 9, calls: 9 });
   w.sb.fsSetDocument_("views", "a", { x: 1 });
   w.sb.fsGetDocument_("views", "a");
   w.sb.fsFlushUsage_();
+  const stored = w.sb.fsDecodeFields_(w.docs[usageDocKey(w)]);
+  assert(w.commitsSeen === 1 && stored.writes === 2 && stored.reads >= 1 && stored.calls >= 3, "the flush ADDS this run's counts (plus its own one write) to today's shared document (reads " + stored.reads + ", writes " + stored.writes + ", calls " + stored.calls + ")");
+  assert(/^_system\/usage_\d{8}$/.test(usageDocKey(w)) && w.docs[usageDocKey(w)] !== undefined, "it is one document per India day, _system/usage_<yyyymmdd>");
+  assert(w.sb.FS_USAGE_.reads === 0 && w.sb.FS_USAGE_.writes === 0 && w.sb.FS_USAGE_.calls === 0, "this run's counter is reset after flushing, with nothing left over (a flush leaves no cost behind to flush next time)");
+  w.sb.fsFlushUsage_();
+  assert(w.commitsSeen === 1, "a second flush with nothing new to add makes NO database call at all");
   const u = w.sb.fsUsageToday_();
-  assert(u.reads === 1 && u.writes === 1 && u.calls >= 3, "today's totals added up (reads 1, writes 1, calls " + u.calls + ")");
-  assert(w.props["FS_USAGE_20200101"] === undefined, "old days are forgotten");
-  assert(w.sb.FS_USAGE_.reads === 0 && w.sb.FS_USAGE_.writes === 0, "this run's counter is reset after flushing");
-  assert(u.readsPct === 0 && u.writesPct === 0, "percent of the free allowance is reported (tiny here)");
-  w.props[w.sb.fsTodayKey_()] = JSON.stringify({ reads: 40000, writes: 18000, calls: 1 });
-  const hi = w.sb.fsUsageToday_();
-  assert(hi.readsPct === 80 && hi.writesPct === 90, "80% of reads / 90% of writes shows as such (got " + hi.readsPct + "/" + hi.writesPct + ")");
+  assert(u.reads === stored.reads && u.writes === 2 && u.readsPct === 0 && u.writesPct === 0, "today's totals are read back from it, and the percent of the free allowance is reported (tiny here)");
+
+  const hi = world();
+  seedUsage(hi, { reads: 40000, writes: 18000, calls: 1 });
+  const hu = hi.sb.fsUsageToday_();
+  assert(hu.readsPct === 80 && hu.writesPct === 90, "80% of reads / 90% of writes shows as such (got " + hu.readsPct + "/" + hu.writesPct + ")");
+
+  const memo = world();
+  seedUsage(memo, { reads: 10, writes: 1, calls: 1 });
+  const urlOf = function(f){ return f.url; };
+  memo.sb.fsUsageToday_(); memo.sb.fsUsageToday_(); memo.sb.fsUsageToday_();
+  assert(memo.fetches.filter(function(f){ return urlOf(f).indexOf("_system/usage_") !== -1; }).length === 1, "asking for the totals three times costs ONE database read (remembered for 60 seconds)");
+
+  const two = world();                                        // two "servers" adding to the same day, one after the other
+  two.sb.fsSetDocument_("views", "a", { x: 1 }); two.sb.fsFlushUsage_();
+  const first = two.sb.fsDecodeFields_(two.docs[usageDocKey(two)]);
+  two.sb.FS_USAGE_ = { reads: 5, writes: 7, calls: 9 };
+  two.sb.fsFlushUsage_();
+  const sum = two.sb.fsDecodeFields_(two.docs[usageDocKey(two)]);
+  assert(sum.reads === first.reads + 5 && sum.writes === first.writes + 8 && sum.calls === first.calls + 10, "counts from another server are ADDED (plus the flush's own one write and call), never overwritten");
+
+  const down = world([], "fail500");
+  let threw = false; try{ down.sb.FS_USAGE_ = { reads: 3, writes: 3, calls: 3 }; down.sb.fsFlushUsage_(); }catch(e){ threw = true; }
+  assert(!threw && down.sb.FS_USAGE_.reads === 0 && down.sb.FS_USAGE_.writes === 0, "a flush that fails never throws (the meter must never break real work); those counts are simply lost");
+  const dt = world([], "fail500").sb.fsUsageToday_();
+  assert(dt.reads === 0 && dt.writes === 0, "if the totals cannot be read they count as zero (the guard lets work through: it is a cost safety, not a data safety)");
+
+  const yesterday = world();
+  seedUsage(yesterday, { reads: 99999, writes: 99999, calls: 1 }, "20200101");
+  assert(yesterday.sb.fsUsageToday_().reads === 0, "another day's totals are never mixed into today's");
 }
 
 console.log("\n--- 5. Publishing the Home screen ---");
@@ -342,7 +386,7 @@ console.log("\n--- 13. The daily safety limit keeps the app inside the free allo
   assert(w.sb.fsGetDocument_("views", "a") !== null, "normal use is untouched");
 
   const nearReads = world();
-  nearReads.props[nearReads.sb.fsTodayKey_()] = JSON.stringify({ reads: 44999, writes: 0, calls: 0 });
+  seedUsage(nearReads, { reads: 44998, writes: 0, calls: 0 });      // (the meter's own look at the totals counts as one read, so 44,998 + 1 + this read = 45,000)
   nearReads.sb.fsGetDocument_("views", "x");           // read number 45,000: allowed
   const fetchesBefore = nearReads.fetches.length;
   let err = null;
@@ -351,18 +395,18 @@ console.log("\n--- 13. The daily safety limit keeps the app inside the free allo
   assert(nearReads.fetches.length === fetchesBefore, "...and no request is even sent to Google");
 
   const nearWrites = world();
-  nearWrites.props[nearWrites.sb.fsTodayKey_()] = JSON.stringify({ reads: 0, writes: 18000, calls: 0 });
+  seedUsage(nearWrites, { reads: 0, writes: 18000, calls: 0 });
   let werr = null;
   try{ nearWrites.sb.fsSetDocument_("views", "x", { a: 1 }); }catch(e){ werr = e; }
   assert(werr && werr.safetyLimit === true, "at 18,000 writes a day, writes are refused");
   assert(nearWrites.sb.fsGetDocument_("views", "nope") === null, "...but reads still work while only the write limit is hit");
 
   const old = world();
-  old.props["FS_USAGE_20200101"] = JSON.stringify({ reads: 99999, writes: 99999, calls: 1 });
+  seedUsage(old, { reads: 99999, writes: 99999, calls: 1 }, "20200101");
   assert(old.sb.fsGetDocument_("views", "a") === null, "yesterday's (or older) heavy use does not block today");
 
   const full = world();
-  full.props[full.sb.fsTodayKey_()] = JSON.stringify({ reads: 50000, writes: 0, calls: 0 });
+  seedUsage(full, { reads: 50000, writes: 0, calls: 0 });
   assert(full.sb.publishViewsBestEffort_("test", true) === false && full.errors().length >= 0, "the Home-copy publisher fails quietly (no crash) when the limit is reached");
   const sign = full.sb.fsAccessToken_();
   assert(sign === "token-1", "signing in is never blocked by the limit");

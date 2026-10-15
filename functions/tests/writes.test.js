@@ -23,6 +23,7 @@ const state = { writesOn: false, smsOn: false, calls: [], throwOn: null, timer: 
 const fakeRuntime = {
   writesEnabled: function(){ return state.writesOn; },
   smsEnabled: function(){ return state.smsOn; },
+  flushUsage: function(){ state.flushes = (state.flushes || 0) + 1; },
   runTimer: function(){ if(state.timerThrows) throw new Error("tick boom"); state.timer = (state.timer || 0) + 1; return { ran: true, why: "test" }; },
   call: function(data){ state.calls.push(data.action); if(state.throwOn === data.action) throw new Error("boom"); return { ok: true, echoed: data.action }; }
 };
@@ -75,8 +76,8 @@ console.log("\n--- 2. Saving switched ON ---");
 console.log("\n--- 3. Always stays on Apps Script ---");
 {
   state.writesOn = true; state.calls = [];
-  ["setFriendScreen", "getMyIngestKey", "ingestSms", "smsIn",
-   "moveDebtToFriend", "teachBank", "removeFriendAccess", "somethingMadeUp"].forEach(function(a){
+  ["ingestSms", "smsIn",
+   "moveDebtToFriend", "removeFriendAccess", "somethingMadeUp"].forEach(function(a){
     const r = post({ action: a, idToken: "x" });
     assert(r.json.ok === false && r.json.fallback === true, a + " -> fallback even with saving on");
   });

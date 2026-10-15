@@ -120,7 +120,13 @@ console.log("\n--- 6. Things that stay on Apps Script, reads that fall back, Dem
 {
   const a = makeApp("all", { apps: OK, new: OK });
   await a.call({ action: "setFriendFullApp", idToken: "x" });
-  assert(a.log.fetches.join() === "apps:setFriendFullApp", "the Access admin actions stay on Apps Script (their switches live there)");
+  assert(a.log.fetches.join() === "new:setFriendFullApp", "the Access screen's changes now go to the new server (the switches live in the shared database)");
+  const ad = makeApp("on", { apps: OK, new: OK });
+  await ad.call({ action: "getAdminOverview", idToken: "x" });
+  assert(ad.log.fetches.join() === "new:getAdminOverview", "the Access screen's reads go to the new server when it is on");
+  const stay = makeApp("all", { apps: OK, new: OK });
+  await stay.call({ action: "somethingNotMovedYet", idToken: "x" });
+  assert(stay.log.fetches.join() === "apps:somethingNotMovedYet", "anything not on the new server's list still goes to Apps Script only");
   const rc = makeApp("all", { apps: OK, new: OK });
   await rc.call({ action: "insertReconciledTransactions", idToken: "x" });
   assert(rc.log.fetches.join() === "new:insertReconciledTransactions", "Reconcile's save now goes to the new server (with 'Reads and saves')");

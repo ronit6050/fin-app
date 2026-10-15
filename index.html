@@ -3676,7 +3676,7 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-15-02";
+    const APP_VERSION = "2026-10-15-03";
     const APP_CHANGELOG = "Settings > Speed has a new choice, \"Reads and saves\" (beta): saving can also go through the new fast server. History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, the app remembers when you say it is regular spend, and a lent-to note now shows up in Debts straight away (and only once).";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
@@ -4909,13 +4909,14 @@
     const NEW_SERVER_URL = "https://asia-south1-fin-app-76c40.cloudfunctions.net/api";
     const NEW_SERVER_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
       "getDebts", "getCash", "getInvestments", "getInvestmentInstruments", "getSavingsGoals", "getTransactionHistory", "getPlannerData", "getSettings",
-      "getPeople", "getPerson", "previewSavingsSplit", "reconcileStatement", "reconcileCreditCardStatement"];
+      "getPeople", "getPerson", "previewSavingsSplit", "reconcileStatement", "reconcileCreditCardStatement", "getAdminOverview", "getSmsFormats"];
     // The saving actions the new server accepts (must match WRITE_ACTIONS in functions/index.js; one it does not know just answers "fallback").
     const NEW_SERVER_WRITE_ACTIONS = ["saveNote", "markNotATransaction", "addDebt", "settleDebt", "recordDebtPayment",
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
       "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
       "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
-      "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "insertReconciledTransactions", "fixCreditCardTransactionMode"];
+      "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "insertReconciledTransactions", "fixCreditCardTransactionMode",
+      "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey"];
     let newServerStatus = "";     // shown in Settings: what the last request used and how long it took
     // localStorage "newServer": "on" = read screens from the new server; "all" = reads AND saves (2026-10-14).
     function newServerEnabled() {
