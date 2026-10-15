@@ -153,6 +153,8 @@ function timerTick_(){
       try{ logAI("DAILY_JOB_FAILED", j.key + ": " + String(e && e.message).slice(0, 200)); }catch(ignore){}
     }
     fields["daily_" + j.key] = clock.date;
+    // Written NOW, not only at the end: if this tick is killed before it finishes, a job that already ran (and sent its notification) is not repeated.
+    var marker = {}; marker["daily_" + j.key] = clock.date; timerWrite_(marker);
   });
   timerWrite_(fields);
   if(workError) throw workError;
