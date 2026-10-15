@@ -16,11 +16,12 @@
 // send otherwise.
 function sendPushNotification(title, body, extraData){
   try{
-    sendPushToToken_(dbProps_().getProperty("PWA_PUSH_TOKEN"), title, body, extraData);   // per person (v2db.js)
+    return sendPushToToken_(dbProps_().getProperty("PWA_PUSH_TOKEN"), title, body, extraData);   // per person (v2db.js); returns { sent, code, detail }
   }catch(err){
     // Reading the saved token used to sit inside the same safety net as the sending (it can fail when a person is on the
     // Firestore copy and Firestore hiccups): keep it that way, so a caller never sees an error from a notification.
     logAI("PUSH_ERROR", err.toString());
+    return { sent: false, code: -1, detail: String(err).slice(0, 150) };
   }
 }
 
@@ -29,10 +30,10 @@ function sendPushNotification(title, body, extraData){
 function sendPushToToken_(deviceToken, title, body, extraData){
   try{
     const props = PropertiesService.getScriptProperties();            // global secrets
-    if(!deviceToken) return;
+    if(!deviceToken) return { sent: false, code: 0, detail: "no device registered" };
 
     const accessToken = getFirebaseAccessToken();
-    if(!accessToken) return;
+    if(!accessToken) return { sent: false, code: 0, detail: "no access token" };
 
     const serviceAccount = JSON.parse(props.getProperty("FIREBASE_SERVICE_ACCOUNT"));
     const url = "https://fcm.googleapis.com/v1/projects/" + serviceAccount.project_id + "/messages:send";
@@ -62,9 +63,11 @@ function sendPushToToken_(deviceToken, title, body, extraData){
     });
 
     logAI("PUSH_SENT", response.getContentText());
+    return { sent: response.getResponseCode() === 200, code: response.getResponseCode(), detail: String(response.getContentText()).slice(0, 150) };
 
   }catch(err){
     logAI("PUSH_ERROR", err.toString());
+    return { sent: false, code: -1, detail: String(err).slice(0, 150) };
   }
 }
 

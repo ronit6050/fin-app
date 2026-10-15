@@ -205,15 +205,25 @@ function createRuntime(opts){
   // Logs go to Cloud Logging (searchable in the Firebase console) instead of the AILogs tab.
   sandbox.__log = function(type, message){ log(JSON.stringify({ severity: /ERROR/i.test(type) ? "ERROR" : "INFO", type: type, message: String(message).slice(0, 1500) })); };
   vm.runInContext("logAI = function(type, message){ __log(type, message); };", sandbox);
+  // The retired Telegram bot file is not loaded here, but a few shared functions still read its helpers. Same behaviour as the originals
+  // with Telegram off: nothing is sent to Telegram; a message becomes a push notification (first line = title).
+  vm.runInContext(`
+    var TELEGRAM_ENABLED = false;
+    function getConfig(){ return { BOT_TOKEN: "", CHAT_ID: "", GEMINI_KEY: PropertiesService.getScriptProperties().getProperty("GEMINI_KEY") }; }
+    function sendMessage(text){
+      var lines = String(text).split("\\n").filter(function(l){ return l.trim() !== ""; });
+      sendPushNotification(lines[0] || "Fin App", lines.slice(1).join(" ").trim() || "Open the app for details.");
+    }
+  `, sandbox);
   // Push notifications (e.g. "Vaidehi split a payment with you"): Apps Script signs in with a key kept in Script Properties; this server
   // uses its own identity instead (same message, same Firebase project). Never throws, like the original.
   sandbox.__fcmToken = getMessagingToken;
   vm.runInContext(`
     sendPushToToken_ = function(deviceToken, title, body, extraData){
       try{
-        if(!deviceToken) return;
+        if(!deviceToken) return { sent: false, code: 0, detail: "no device registered" };
         var accessToken = __fcmToken();
-        if(!accessToken) return;
+        if(!accessToken) return { sent: false, code: 0, detail: "no access token" };
         var dataPayload = { title: title, body: body };
         if(extraData){
           Object.keys(extraData).forEach(function(key){
@@ -225,8 +235,10 @@ function createRuntime(opts){
           payload: JSON.stringify({ message: { token: deviceToken, data: dataPayload } }), muteHttpExceptions: true
         });
         logAI("PUSH_SENT", response.getContentText());
+        return { sent: response.getResponseCode() === 200, code: response.getResponseCode(), detail: String(response.getContentText()).slice(0, 150) };
       }catch(err){
         logAI("PUSH_ERROR", err.toString());
+        return { sent: false, code: -1, detail: String(err).slice(0, 150) };
       }
     };
   `, sandbox);
@@ -253,7 +265,7 @@ function createRuntime(opts){
     const shared = opts.sharedProps ? opts.sharedProps() : loadSharedProps();
     Object.keys(shared).forEach(function(k){ props[k] = shared[k]; });
     // a switch that was removed in Apps Script must disappear here too
-    ["V2DB_OWNER", "V2_FN_WRITES", "V2DB_OWNER_DIRECT", "V2_FN_SMS"].forEach(function(k){ if(!(k in shared)) delete props[k]; });
+    ["V2DB_OWNER", "V2_FN_WRITES", "V2DB_OWNER_DIRECT", "V2_FN_SMS", "V2_FN_TIMER"].forEach(function(k){ if(!(k in shared)) delete props[k]; });
     propsLoadedAt = Date.now();
   }
 
@@ -269,6 +281,14 @@ function createRuntime(opts){
     return props.V2_FN_WRITES === "on";
   }
 
+  // The alert timer (added 2026-10-14): called by the scheduled function "tick" every 5 minutes. Does nothing unless the owner has switched the
+  // new-server timer on (Apps Script: v2dbEnableFunctionTimer()) AND saving on the new server is on. See backend/fnTimer.js.
+  function runTimer(){
+    refreshProps();
+    if(props.V2_FN_TIMER !== "on" || props.V2_FN_WRITES !== "on") return { ran: false, reason: "switch off" };
+    return sandbox.timerTick_();
+  }
+
   // Runs one request through the REAL backend code and returns the parsed answer.
   function call(data){
     refreshProps();
@@ -276,7 +296,7 @@ function createRuntime(opts){
     return JSON.parse(out.getContent());
   }
 
-  return { sandbox: sandbox, call: call, props: props, refreshProps: refreshProps, writesEnabled: writesEnabled, smsEnabled: smsEnabled, filesLoaded: files };
+  return { sandbox: sandbox, call: call, props: props, refreshProps: refreshProps, writesEnabled: writesEnabled, smsEnabled: smsEnabled, runTimer: runTimer, filesLoaded: files };
 }
 
 module.exports = { createRuntime, formatDate, parseDate, tzOffsetMinutes };

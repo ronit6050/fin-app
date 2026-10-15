@@ -85,6 +85,15 @@ function pwaDispatch_(data, verified){
     return jsonResponse({ ok:true, message:"Hello " + verified.name + ", you're verified!" });
   }
 
+  // Owner-only (added 2026-10-14): sends ONE test notification to the owner's own phone from whichever server answers, and says what
+  // Google's push service replied. Used to prove push works from the new server before its timer is switched on.
+  if(data.action === "pushTest"){
+    if(String(verified.email).toLowerCase() !== String(PWA_ALLOWED_EMAIL).toLowerCase()) return jsonResponse({ ok:false, error:"Not allowed." });
+    const onNew = (typeof V2_ON_NEW_SERVER_ !== "undefined") && !!V2_ON_NEW_SERVER_;
+    const r = sendPushNotification("Test notification", "Sent by the " + (onNew ? "new" : "Apps Script") + " server. If you can read this, notifications work from there.");
+    return jsonResponse({ ok:true, server: onNew ? "new" : "apps", sent: !!(r && r.sent), code: r ? r.code : 0, detail: r ? r.detail : "" });
+  }
+
   if(data.action === "refreshViews"){
     return jsonResponse(refreshViewsFromApp_());
   }

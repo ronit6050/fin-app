@@ -76,6 +76,11 @@ function fsLeaseLock_(){
   };
 }
 
+// Script Property V2_FN_TIMER = "on": the NEW server runs the alert timer (see transactions.js / functions/index.js tick).
+function fnTimerOn_(){
+  try{ return PropertiesService.getScriptProperties().getProperty("V2_FN_TIMER") === "on"; }catch(e){ return false; }
+}
+
 function fnWritesOn_(){
   try{ return PropertiesService.getScriptProperties().getProperty("V2_FN_WRITES") === "on"; }catch(e){ return false; }
 }

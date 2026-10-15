@@ -88,3 +88,40 @@ the V2_DIRTY flag kept in Apps Script's memory are separate (the app asks for th
 minutes); Firestore usage counters are per server (a save now costs about 1 read + 2 writes more for the lock while the switch is on).
 
 **Next steps:** the SMS door (Android app / Tasker posting straight to the function), then the timers (Cloud Scheduler), then retire the Apps Script parts.
+
+## Step 4: the ALERT TIMER on the new server (built 2026-10-14/15; NOT deployed, switch OFF)
+
+**What moves:** the 5-minute Apps Script timer (`processNewTransactions`: alert new transactions with the quick-confirm buttons, auto-settle the known
+ones, rebuild the Home copy). A Cloud Scheduler job (created by `exports.tick`, `functions/index.js`, "every 5 minutes", India time, 1 instance, no retries)
+calls the new server. **One job = inside Cloud Scheduler's free allowance.** The other Apps Script timers (daily cash check-in, debt due dates, upcoming
+Rent/EMI reminders, app health, the backup export) are NOT moved yet (next sub-steps).
+
+**Why a tick is cheap:** reading the owner's whole database every 5 minutes would use the free Firestore reads (45,000 a day safe limit). A tick first reads ONE tiny
+document (`_system/timer`: `dirtyAtMs`, `doneAtMs`, `fullAtMs`) and only runs the real work when (a) something marked "changed" since the last real run, or (b) 30 minutes
+passed since the last full look (safety net, also keeps the Home copy fresh). Measured on the real database: a quiet tick = **1 read**. Who marks "changed": the owner's SMS
+door (`smsIn.js`, after it saves his row) and the Apps Script inbox step (after it copies rows the OLD door wrote into the Sheet). `backend/fnTimer.js`: `timerMarkDirty_`, `timerTick_`.
+
+**Switch (instant, reversible):** Script Property `V2_FN_TIMER` (`v2dbEnableFunctionTimer` / `v2dbDisableFunctionTimer`; the disable one throws if it could not tell the new
+server). It also needs saving on the new server on. While it is ON: the new server's tick does the alerts; the Apps Script `processNewTransactions` STEPS ASIDE (only
+`v2OwnerInboxOnly_`: copies old-door rows from the Sheet into his private copy when the Sheet's row count changed; zero Firestore reads otherwise) so nothing is ever announced
+twice. If the owner is not on the private copy, Apps Script keeps doing everything. OFF (default): nothing changes.
+
+**Still on Apps Script on purpose:** the inbox copy (the OLD SMS doors, door 2 / Tasker-era, still write the Google Sheet; the new server has no Sheet). It goes away when door 2 is retired.
+
+**Push must work from the new server first:** new owner-only action `pushTest` + Settings > Speed > "Send a test notification (new server)" (app `2026-10-15-01`). It sends ONE
+notification to your phone from the new server and shows what Google's push service answered. If it says it could not send (permission), grant the function's service account
+(`921605499750-compute@developer.gserviceaccount.com`) the role "Firebase Cloud Messaging API Admin" and retry. Do NOT switch the timer on before this passes.
+`sendPushToToken_` now returns `{sent, code, detail}` (callers that ignore it are unaffected).
+
+**Also fixed for the new server:** the retired Telegram file is not loaded there, so `TELEGRAM_ENABLED`, `getConfig` and `sendMessage` (a message becomes a push, first line = title)
+are provided by the shim; `v2OwnerTakeOver_` skips the Sheet-only inbox/stamp/heal steps there.
+
+**Tests:** `backend/tests/fnTimer.test.js` (28 checks, proven to fail when the step-aside is broken), `functions/tests/writes.test.js` 4c (schedule options, crash safety, pushTest),
+`functions/tests/live_scratch.js` 1c on the REAL database (first tick alerts the waiting rows, quiet tick = 1 read, a new SMS is alerted exactly once, then quiet again).
+
+**Turn on (each step reversible):** (1) deploy function (creates the scheduler job; it does nothing while the switch is off) + `clasp push`/`clasp deploy` + `git push`; (2) in the app press
+"Send a test notification (new server)" and confirm it arrives; (3) run `v2dbEnableFunctionTimer` in the Apps Script editor; (4) send a test SMS: the notification should arrive within ~5 minutes
+(function logs show `TICK ran:true`), exactly once; (5) watch Today's Firestore use on the Access screen for a day. **Roll back:** `v2dbDisableFunctionTimer` (Apps Script alerts again at once).
+
+**Known limits:** an alert can be up to 5 minutes late (same as the Apps Script timer); the Home copy is rebuilt by the new server only when a run happens (marked change or every 30 min); the
+in-memory "Home copy due" flags are per instance, so a cold instance may rebuild it one extra time.

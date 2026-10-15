@@ -6,6 +6,7 @@
 // problem with a read, gets a "fallback" answer and the app asks Apps Script instead, so nothing can break. See docs/features/cloud-functions.md.
 
 const { onRequest } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const path = require("node:path");
 const fs = require("node:fs");
 const { createRuntime } = require("./runtime/shim");
@@ -24,7 +25,7 @@ const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "addDebt", "settleDebt
   "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
   "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "refreshViews"];
 // Answers that never change anything but were not on the read list at first.
-const EXTRA_READ_ACTIONS = ["previewSavingsSplit"];
+const EXTRA_READ_ACTIONS = ["previewSavingsSplit", "pushTest"];   // pushTest: owner-only, sends ONE test notification to his own phone
 const MAX_BODY_BYTES = 200000;
 
 let runtime = null;     // built once per server instance (the backend code is loaded then, not on every request)
@@ -105,5 +106,26 @@ exports.api = onRequest({
     // For a SAVE we cannot be sure nothing was written, so never tell the app to repeat it elsewhere (that could save it twice).
     if(isWrite) res.status(200).json({ ok: false, error: "Couldn't complete that. Check it before trying again." });
     else res.status(200).json({ ok: false, fallback: true, error: "The new server hit a problem." });
+  }
+});
+
+// THE ALERT TIMER (added 2026-10-14). Cloud Scheduler calls this every 5 minutes. It does NOTHING unless the owner switched the new-server
+// timer on (Apps Script: v2dbEnableFunctionTimer) - then a quiet tick costs one tiny Firestore read and the real work (alerts, auto-settle,
+// Home copy) only runs when something changed or every 30 minutes. See backend/fnTimer.js. One instance at a time (two overlapping ticks could
+// announce a transaction twice; the shared save lock would also serialise them, this just avoids the wait).
+exports.tick = onSchedule({
+  schedule: "every 5 minutes",
+  timeZone: "Asia/Kolkata",
+  region: "asia-south1",
+  memory: "512MiB",
+  timeoutSeconds: 120,
+  maxInstances: 1,
+  retryCount: 0
+}, function(){
+  try{
+    const result = getRuntime().runTimer();
+    console.log(JSON.stringify({ type: "TICK", ran: !!result.ran, reason: result.reason || result.why || "" }));
+  }catch(err){
+    console.error(JSON.stringify({ severity: "ERROR", type: "TICK_ERROR", message: String(err && err.message).slice(0, 300) }));
   }
 });

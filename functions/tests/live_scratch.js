@@ -23,7 +23,7 @@ const BASE = "https://firestore.googleapis.com/v1/projects/" + PROJECT + "/datab
 function makeRt(){
   const rt = createRuntime({
     localEmail: SCRATCH, ownerEmail: SCRATCH, log: function(){},
-    sharedProps: function(){ return { V2DB_OWNER: "on", V2_FN_WRITES: "on", V2DB_OWNER_DIRECT: "on", V2_FN_SMS: "on" }; }
+    sharedProps: function(){ return { V2DB_OWNER: "on", V2_FN_WRITES: "on", V2DB_OWNER_DIRECT: "on", V2_FN_SMS: "on", V2_FN_TIMER: "on" }; }
   });
   rt.sandbox.LEASE_PATH_ = LOCK_PATH;                 // a test-only lock document: never blocks the real app
   return rt;
@@ -138,6 +138,29 @@ function assert(cond, msg){ if(!cond){ console.error("FAIL: " + msg); failures++
     const flat = outs[0].concat(outs[1]);
     assert(flat.filter(function(o){ return o === "SAVED"; }).length === 1 && flat.filter(function(o){ return o === "DUPLICATE"; }).length === 5, "exactly ONE saved, the other five are duplicates");
     assert(rowsOf().filter(function(r){ return /QA Burger/i.test(String(r[7])); }).length === 1, "and the Transactions tab holds that message exactly once");
+
+    console.log("\n--- 1c. The alert timer (tick) on the real database ---");
+    const usage = function(){ return rt.sandbox.FS_USAGE_ ? rt.sandbox.FS_USAGE_.reads : 0; };
+    rt.sandbox.sendPushNotification = function(t, b){ pushedTitles.push(t); return { sent: true, code: 200, detail: "fake" }; };
+    const pushedTitles = [];
+    const tk1 = rt.runTimer();
+    assert(tk1.ran === true, "the first tick runs (never looked yet): " + JSON.stringify(tk1));
+    assert(pushedTitles.filter(function(x){ return /New Transaction/.test(x); }).length >= 1, "it alerted the waiting SMS rows (" + pushedTitles.length + " notification(s))");
+    const stillWaiting = rowsOf().filter(function(r){ return String(r[15]) === ""; }).length;
+    assert(stillWaiting === 0, "no row is left waiting for its alert");
+    const before = usage(), pushesBefore = pushedTitles.length;
+    const tk2 = rt.runTimer();
+    const quietReads = usage() - before;
+    assert(tk2.ran === false && pushedTitles.length === pushesBefore, "the next tick is quiet: it does nothing");
+    assert(quietReads <= 2, "a quiet tick costs " + quietReads + " Firestore read(s) (budget: 2)");
+    rt.sandbox.CacheService.getScriptCache().remove("ING_BAD");        // the wrong-key test above filled the throttle for a minute
+    const sms3 = "Sent Rs.444.00 From HDFC Bank A/C x1234 To QA Noodles On 14/10/26 Ref 710000000003 Not You? Call 18002586161";
+    const s5 = call(rt, { action: "smsIn", key: key, sms: sms3, sender: "HDFCBK", timestamp: Math.floor(Date.now() / 1000) });
+    assert(s5.ok === true && s5.outcome === "SAVED", "a new SMS arrives (and marks 'something changed')");
+    const until = Date.now() + 5; while(Date.now() < until){}
+    const tk3 = rt.runTimer();
+    assert(tk3.ran === true && pushedTitles.length === pushesBefore + 1, "the next tick alerts it exactly once");
+    assert(rt.runTimer().ran === false, "and goes quiet again");
 
     // refreshViews rebuilds the Home copy: capture it instead of writing (the real one belongs to the real owner)
     const captured = [];

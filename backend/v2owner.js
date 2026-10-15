@@ -32,6 +32,7 @@ function v2OwnerTakeOver_(jobFn){
   var started = Date.now();
   lock.waitLock(25000);                                          // one saving job at a time, same lock as the app's saves
   var gotLockAt = Date.now();
+  var onNew = (typeof V2_ON_NEW_SERVER_ !== "undefined") && !!V2_ON_NEW_SERVER_;      // the new server has no Google Sheet: no inbox to copy
   try{
     var marks = { rows: [] };
     var attempt = function(){
@@ -39,15 +40,18 @@ function v2OwnerTakeOver_(jobFn){
       V2_AFTER_SAVE_ = [];
       return v2dbRun_(v2OwnerEmail_(), function(db){
         v2dbEnsureTemplate_(db);
-        marks.rows = v2InboxSync_(db);
+        marks.rows = onNew ? [] : v2InboxSync_(db);
         return jobFn();
       }, { prefetch: V2_PREFETCH_ALL_ });
     };
     var value;
     try{ value = attempt(); }
     catch(e){ if(e && e.v2dbConflict) value = attempt(); else throw e; }
-    v2InboxStampSheet_(marks.rows);                              // only AFTER the private copy was saved
-    v2InboxHeal_(V2_INBOX_MARK_);
+    if(!onNew){
+      if(marks.rows.length && typeof timerMarkDirty_ === "function") timerMarkDirty_();   // rows came in from the old door: the new-server timer must alert them
+      v2InboxStampSheet_(marks.rows);                            // only AFTER the private copy was saved
+      v2InboxHeal_(V2_INBOX_MARK_);
+    }
     v2FinishSave_(value);
     // A job that holds the shared lock for long makes every other request wait: say so in the log (only when slow), with where the time went.
     var held = Date.now() - gotLockAt;
@@ -59,6 +63,19 @@ function v2OwnerTakeOver_(jobFn){
     V2_AFTER_SAVE_ = [];
     try{ lock.releaseLock(); }catch(ignore){}
   }
+}
+
+// "Inbox only" (added 2026-10-14): once the NEW server runs the alert timer (V2_FN_TIMER), the Apps Script timer only keeps doing the one
+// thing the new server cannot: copying rows the OLD SMS doors wrote into the Google Sheet across into his private copy. The new server then
+// alerts them on its next tick. Cheap when nothing changed: it only looks at the Sheet's row count (no Firestore at all).
+function v2OwnerInboxOnly_(){
+  if(V2DB_REQ_ || !v2OwnerOn_()) return;
+  var props = PropertiesService.getScriptProperties();
+  var real = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Transactions");
+  var last = real ? real.getLastRow() : 0;
+  if(String(last) === props.getProperty("V2_INBOX_CHECKED_ROWS")) return;            // nothing new in the Sheet since the last look
+  v2OwnerTakeOver_(function(){ return true; });                                       // the inbox copy + stamping happen inside; no alerts here
+  props.setProperty("V2_INBOX_CHECKED_ROWS", String(last));
 }
 
 // Runs fn on the owner's private copy WITHOUT the shared lock, for work that only READS (rebuilding the Home screen copy). Reads cannot

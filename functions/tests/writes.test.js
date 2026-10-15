@@ -19,19 +19,23 @@ function assert(cond, msg){
 }
 
 // ---- load index.js with the Firebase wrapper and the runtime replaced by fakes ----
-const state = { writesOn: false, smsOn: false, calls: [], throwOn: null };
+const state = { writesOn: false, smsOn: false, calls: [], throwOn: null, timer: null, timerThrows: false, schedulerOpts: null };
 const fakeRuntime = {
   writesEnabled: function(){ return state.writesOn; },
   smsEnabled: function(){ return state.smsOn; },
+  runTimer: function(){ if(state.timerThrows) throw new Error("tick boom"); state.timer = (state.timer || 0) + 1; return { ran: true, why: "test" }; },
   call: function(data){ state.calls.push(data.action); if(state.throwOn === data.action) throw new Error("boom"); return { ok: true, echoed: data.action }; }
 };
 const realLoad = Module._load;
 Module._load = function(request, parent, isMain){
   if(request === "firebase-functions/v2/https") return { onRequest: function(opts, handler){ return handler; } };
+  if(request === "firebase-functions/v2/scheduler") return { onSchedule: function(opts, handler){ state.schedulerOpts = opts; return handler; } };
   if(request === "./runtime/shim") return { createRuntime: function(){ return fakeRuntime; } };
   return realLoad.apply(this, arguments);
 };
-const api = require(path.join(__dirname, "..", "index.js")).api;
+const exportsOfIndex = require(path.join(__dirname, "..", "index.js"));
+const api = exportsOfIndex.api;
+const tick = exportsOfIndex.tick;
 Module._load = realLoad;
 
 function post(body, extra){
@@ -110,6 +114,27 @@ console.log("\n--- 4b. The SMS door (action smsIn, no Google sign-in: the key is
   const ing = post({ action: "ingestSms", key: "k" });
   assert(ing.json.ok === false && ing.json.fallback === true, "the old reader's hand-off action (ingestSms) is NOT served here");
   state.smsOn = false; state.writesOn = true;
+}
+
+console.log("\n--- 4c. The scheduled alert timer (tick) and the test notification ---");
+{
+  assert(state.schedulerOpts && state.schedulerOpts.schedule === "every 5 minutes" && state.schedulerOpts.region === "asia-south1" && state.schedulerOpts.maxInstances === 1,
+    "tick is scheduled every 5 minutes, in Mumbai, one instance at a time");
+  assert(state.schedulerOpts.retryCount === 0 && state.schedulerOpts.timeZone === "Asia/Kolkata", "no automatic retries (the next tick is the retry), India time");
+  tick();
+  assert(state.timer === 1, "a tick asks the runtime to run the timer (the runtime itself checks the switch)");
+  state.timerThrows = true;
+  const origError = console.error; const errors = []; console.error = function(m){ errors.push(m); };
+  let threw = false; try{ tick(); }catch(e){ threw = true; }
+  console.error = origError; state.timerThrows = false;
+  assert(!threw && errors.length === 1 && /TICK_ERROR/.test(errors[0]), "a crash inside a tick is logged as TICK_ERROR and never escapes (the next tick tries again)");
+  state.writesOn = true; state.calls = [];
+  const t = post({ action: "pushTest", idToken: "x" });
+  assert(t.json.ok === true && state.calls.join() === "pushTest", "pushTest (owner-only inside the backend) is answered through the backend code even with saving off or on");
+  state.writesOn = false; state.calls = [];
+  const t2 = post({ action: "pushTest", idToken: "x" });
+  assert(t2.json.ok === true && state.calls.join() === "pushTest", "pushTest also works while saving is off (it only sends one notification)");
+  state.writesOn = true;
 }
 
 console.log("\n--- 5. Housekeeping ---");

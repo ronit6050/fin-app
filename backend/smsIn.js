@@ -173,6 +173,7 @@ function smsInHandle_(data){
     catch(e){ if(e && e.v2dbConflict) out = attempt(); else throw e; }
     if(out && (out.outcome === "SAVED" || out.outcome === "UNCERTAIN_SAVED")){
       try{ if(cache) cache.put(perDay, String(Number(cache.get(perDay) || 0) + 1), 21600); }catch(ignoreBump){}
+      if(isOwner && typeof timerMarkDirty_ === "function") timerMarkDirty_();     // the owner's row still needs its alert: tell the timer (fnTimer.js)
       var tx2 = out._tx || {};
       if(typeof smsFormatRecord_ === "function"){
         smsFormatRecord_({ sender: sender, sms: sms, bank: tx2.bank, type: tx2.type, mode: tx2.mode, amount: tx2.amount, reference: tx2.reference, counterparty: tx2.counterparty });

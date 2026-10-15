@@ -93,6 +93,7 @@ function exportFlagsToFunctions(){
     if(p.getProperty("V2DB_OWNER") === "on") fields.V2DB_OWNER = "on";
     if(p.getProperty("V2_FN_WRITES") === "on") fields.V2_FN_WRITES = "on";      // the new server may SAVE (sharedLock.js)
     if(p.getProperty("V2DB_OWNER_DIRECT") === "on") fields.V2DB_OWNER_DIRECT = "on";   // the owner's SMS may land directly (smsIn.js)
+    if(p.getProperty("V2_FN_TIMER") === "on") fields.V2_FN_TIMER = "on";              // the new server runs the alert timer
     if(p.getProperty("V2_FN_SMS") === "on") fields.V2_FN_SMS = "on";                  // the new server may take bank SMS (the SMS door)
     fsCommit_([{ set: { path: "_system/props", fields: fields } }]);
     return true;
@@ -136,6 +137,13 @@ function v2dbDisableFunctionWrites(){ PropertiesService.getScriptProperties().de
 // same rules as Apps Script's smsIn). Anything but {ok:true} makes the phone carry on with its old chain (Apps Script smsIn, then the old reader),
 // so no message is lost. Needs saving on the new server switched on too (v2dbEnableFunctionWrites). Off = the new server answers "use the old path".
 function v2dbEnableFunctionSms(){ PropertiesService.getScriptProperties().setProperty("V2_FN_SMS", "on"); exportFlagsToFunctions(); return "the new server now takes bank SMS (phones that know about it)"; }
+// The ALERT TIMER on the new server (added 2026-10-14): a Cloud Scheduler job calls the new server every 5 minutes; it alerts new transactions
+// (push with the quick-confirm buttons), settles the known ones, and rebuilds the Home copy. While this is ON the Apps Script timer only copies rows
+// that the old SMS doors wrote into the Google Sheet (so nothing is announced twice). Needs saving on the new server too, and push proven there
+// (Settings > Speed > "Send a test notification"). Off = Apps Script does everything again, instantly.
+function v2dbEnableFunctionTimer(){ PropertiesService.getScriptProperties().setProperty("V2_FN_TIMER", "on"); exportFlagsToFunctions(); return "the new server now runs the alert timer; Apps Script only copies old-door rows"; }
+function v2dbDisableFunctionTimer(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_TIMER"); flagsExportOrThrow_("The new-server timer"); return "Apps Script runs the whole timer again"; }
+
 function v2dbDisableFunctionSms(){ PropertiesService.getScriptProperties().deleteProperty("V2_FN_SMS"); flagsExportOrThrow_("New-server bank SMS"); return "bank SMS no longer go to the new server"; }
 
 // ---------------------------------------------------------------- new people

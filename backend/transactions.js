@@ -13,6 +13,12 @@ var TXN_PUBLISH_NOW_ = false;   // set by the real work when it handled new tran
 
 function processNewTransactions() {
   TXN_PUBLISH_NOW_ = false;
+  // The new server (Cloud Functions) runs the alerts now (switch V2_FN_TIMER, v2dbEnableFunctionTimer): Apps Script only keeps copying
+  // old-door rows from the Sheet into the owner's private copy, so the same transaction is never announced twice.
+  if(typeof fnTimerOn_ === "function" && fnTimerOn_() && typeof v2OwnerOn_ === "function" && v2OwnerOn_() && !((typeof V2_ON_NEW_SERVER_ !== "undefined") && V2_ON_NEW_SERVER_)){
+    v2OwnerInboxOnly_();
+    return;
+  }
   try{
     // When the owner is switched on, the REAL WORK runs on his private copy under the shared lock (v2owner.js); otherwise it just runs.
     // Only that part needs the lock. Rebuilding the Home copy below only READS, so it runs AFTER the lock is released: it used to run

@@ -3500,6 +3500,10 @@
             Saves (only works once the owner has switched it on): if the new server says it did nothing, the old server does it; if
             there is no answer at all the app does NOT try again by itself, so nothing is ever saved twice.
           </p>
+          <div style="margin-top:10px;">
+            <button type="button" id="settingsPushTestBtn">Send a test notification (new server)</button>
+            <p class="pending-status" id="settingsPushTestResult" style="margin-top:6px;"></p>
+          </div>
           <p class="pending-status" style="margin-top:8px;">
             On: the app reads a ready-made copy of your screens, so fresh numbers
             appear in about a second. Off: the old way (slower, but identical
@@ -3672,7 +3676,7 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-14-09";
+    const APP_VERSION = "2026-10-15-01";
     const APP_CHANGELOG = "Settings > Speed has a new choice, \"Reads and saves\" (beta): saving can also go through the new fast server. History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, the app remembers when you say it is regular spend, and a lent-to note now shows up in Debts straight away (and only once).";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
@@ -12680,6 +12684,28 @@
         else localStorage.removeItem("newServer");
       } catch (e) { /* ignore */ }
     });
+    // "Send a test notification (new server)": asks the NEW server (no fallback, on purpose: the point is to prove IT can send) to send one
+    // notification to this phone, and says what Google's push service answered. Owner only on the server side.
+    (function () {
+      const btn = document.getElementById("settingsPushTestBtn");
+      const out = document.getElementById("settingsPushTestResult");
+      if (!btn || !out) return;
+      btn.addEventListener("click", function () {
+        if (!currentUser || demoMode) { out.textContent = "Sign in first (not available in Demo Mode)."; return; }
+        out.textContent = "Sending...";
+        callNewServer({ action: "pushTest", idToken: currentUser.idToken }).then(function (r) {
+          if (r && r.ok) {
+            out.textContent = r.sent
+              ? "Sent by the " + r.server + " server and Google said OK. A notification should arrive in a few seconds."
+              : "The " + r.server + " server could NOT send it: " + (r.detail || "no reason given") + " (code " + r.code + ").";
+          } else {
+            out.textContent = "The new server said: " + ((r && r.error) || "no answer") + ".";
+          }
+        }, function () {
+          out.textContent = "The new server did not answer. Try again in a moment.";
+        });
+      });
+    })();
     setInterval(function () {
       const el = document.getElementById("settingsNewServerStatus");
       if (el && newServerStatus && newServerEnabled()) el.textContent = "Last request: " + newServerStatus + ".";
