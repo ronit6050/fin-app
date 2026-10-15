@@ -53,10 +53,17 @@ console.log("\n--- 2. A message with her key lands in her own space, once ---");
   assert(again.ok === true && again.saved === false && again.duplicate === true, "the same message again is not saved twice");
   const sameRef = send(key, { sms: "a different wording, same bank reference" });
   assert(sameRef.duplicate === true, "the same bank reference is not saved twice either");
+  // A message that repeats word for word every month (a SIP debit, no reference): a new one a month later is a NEW transaction, a retry is not
+  const sip = { tx: tx({ reference: "", amount: 2000, counterparty: "Mandate Co" }), sms: "INR 2000.00 deducted from A/C towards Mandate Co UMRN: X1" };
+  const m1 = send(key, Object.assign({ timestamp: 1791863517 }, sip));
+  const m1Retry = send(key, Object.assign({ timestamp: 1791863517 }, sip));
+  const m2 = send(key, Object.assign({ timestamp: 1791863517 + 30 * 86400 }, sip));
+  assert(m1.saved === true && m1Retry.duplicate === true, "a monthly identical message: the first is saved, a same-day retry is not");
+  assert(m2.saved === true, "the same text a month later is saved as a new transaction");
   const second = send(key, { tx: tx({ reference: "555000222", amount: 40 }), sms: "Rs.40 debited to Shop W" });
-  assert(second.saved === true && w.virtualTab(FRIEND, "Transactions").length === mine.length + 1, "a different transaction is saved");
+  assert(second.saved === true && w.virtualTab(FRIEND, "Transactions").length === mine.length + 3, "a different transaction is saved (plus the two monthly messages above)");
   const pend = w.act("friend", { action: "getPending" });
-  assert(pend.ok === true && pend.transactions.length === 2, "both show up in HER Pending list (" + pend.transactions.length + ")");
+  assert(pend.ok === true && pend.transactions.length === 4, "all show up in HER Pending list (" + pend.transactions.length + ")");
   assert(JSON.stringify(w.sheets.Transactions.rows) === ownerSheetBefore, "the owner's Sheet was not touched");
   assert(w.virtualTab(OWNER, "Transactions") === null || w.virtualTab(OWNER, "Transactions").length <= 1, "the owner's private space was not touched");
 }

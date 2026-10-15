@@ -110,7 +110,7 @@ function ingestSmsHandle_(data){
       // Same message twice (the app retries, or a resync): exact reference (only a real one) or exact SMS text
       var dup = rows.some(function(r){
         if(reference && String(r[6]) !== "" && String(r[6]).indexOf("NOREF_") !== 0 && String(r[6]) === reference) return true;
-        return sms !== "" && String(r[10]) === sms;
+        return sms !== "" && String(r[10]) === sms && SmsPipeline.sameMessageDay(r[0], ts);     // the same text on the SAME DAY only (a monthly SIP SMS repeats word for word)
       });
       if(dup) return { ok: true, saved: false, duplicate: true };
       ingestBump_(cache, personKey, 21600);

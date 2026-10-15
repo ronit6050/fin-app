@@ -84,6 +84,24 @@ console.log("\n--- 4. If saving the private copy fails, nothing is half-done ---
   assert(w.virtualTab(OWNER, "Transactions").length === 4 && w.sheets.Transactions.rows[3][15] === "YES", "the next run copies it once and stamps it");
 }
 
+console.log("\n--- 4b. A message that repeats word for word every month is new each month, a same-day copy is not ---");
+{
+  const w = build(); seedReal(w); const sb = w.sb;
+  const TEXT = "INR 2000.00 deducted from A/C 0000 towards Mandate Co UMRN: X1";
+  const monthAgo = w.row(2000, "", "Mandate Co", "YES"); monthAgo[0] = new w.D(Date.now() - 30 * 86400000); monthAgo[10] = TEXT;
+  w.sheets.Transactions.appendRow(monthAgo);
+  sb.v2dbImportOwner(); sb.v2dbEnableOwner();
+  const before = w.virtualTab(OWNER, "Transactions").length;
+  const thisMonth = w.row(2000, "", "Mandate Co", ""); thisMonth[10] = TEXT;
+  w.sheets.Transactions.appendRow(thisMonth);
+  sb.processNewTransactions();
+  assert(w.virtualTab(OWNER, "Transactions").length === before + 1, "this month's identical text is copied (last month's row does not block it)");
+  const sameDay = w.row(2000, "", "Mandate Co", ""); sameDay[10] = TEXT;
+  w.sheets.Transactions.appendRow(sameDay);
+  sb.processNewTransactions();
+  assert(w.virtualTab(OWNER, "Transactions").length === before + 1, "an identical text from the SAME day is still skipped as a copy");
+}
+
 console.log("\n--- 5. Other jobs also run on the private copy; an IGNORED stamp is never overwritten ---");
 {
   const w = build(); seedReal(w); const sb = w.sb;

@@ -718,6 +718,23 @@ function cleanCounterparty(name){
 // narrow, only ever comparing against a statement-reconciliation
 // placeholder row (identified by its "NOREF_" reference prefix), never
 // against an ordinary blank-reference SMS row.
+// Is the message's own time on the SAME India calendar day as an earlier row's date? (added 2026-10-15)
+// WHY: "the exact same text was already saved" (tier 2 below) only means "the same message arriving twice" when the earlier row is from the
+// same day. A phone retry or a resync always carries the ORIGINAL message time, so it still lands on the same day. But a recurring message
+// with no date, time or balance in it (e.g. a monthly SIP / e-mandate debit: "INR 2000.00 deducted from ... towards NSE Clearing Limited
+// UMRN: ...") is word for word identical every month, and the old rule threw every month after the first one away as a "duplicate"
+// (found live 2026-10-15: the 15 Oct SIP debit was dropped because the 15 Mar one had identical text).
+// rowDateRaw: the earlier row's Date cell (a Date, or text like "2026-03-15"). timestamp: the new message's time in whole seconds (0 = now).
+// If the earlier row's date cannot be read, answer true (the old, cautious behaviour: treat it as the same message).
+function sameMessageDay(rowDateRaw, timestamp){
+  let rowDay = "";
+  if((rowDateRaw && typeof rowDateRaw === "object" && typeof rowDateRaw.getTime === "function")) rowDay = Utilities.formatDate(rowDateRaw, "Asia/Kolkata", "yyyy-MM-dd");
+  else if(/^\d{4}-\d{2}-\d{2}/.test(String(rowDateRaw))) rowDay = String(rowDateRaw).slice(0, 10);
+  if(!rowDay) return true;
+  const msgDate = timestamp ? new Date(Number(timestamp) * 1000) : new Date();
+  return Utilities.formatDate(msgDate, "Asia/Kolkata", "yyyy-MM-dd") === rowDay;
+}
+
 function isDuplicate(tx, sms, timestamp){
 
   const sheet = getSheet(TRANSACTION_SHEET);
@@ -752,11 +769,12 @@ function isDuplicate(tx, sms, timestamp){
     }
   }
 
-  // Tier 2 -- the exact same raw SMS text was already saved.
+  // Tier 2 -- the exact same raw SMS text was already saved, ON THE SAME DAY (see sameMessageDay: a message that repeats word for word every
+  // month, like a SIP debit, is a new transaction each time, not a duplicate).
   if(sms){
     for(let i=0;i<rows.length;i++){
       const existingSms = String(rows[i][10] || "");
-      if(existingSms && existingSms !== "-" && existingSms === sms){
+      if(existingSms && existingSms !== "-" && existingSms === sms && sameMessageDay(rows[i][0], timestamp)){
         return {duplicate:true, reason:"exact SMS text match"};
       }
     }
@@ -970,6 +988,7 @@ function isCardEchoDuplicate(tx, sms, timestamp, row){
     hasMoneyMovementSignal: hasMoneyMovementSignal,
     setExtraSenders: setExtraSenders,
     bankFromSender: bankFromSender,
-    findTransactionAmount: findTransactionAmount
+    findTransactionAmount: findTransactionAmount,
+    sameMessageDay: sameMessageDay
   };
 })(function(name){ return dbSs_().getSheetByName(name); }, "Transactions");
