@@ -304,7 +304,7 @@ function insertConfirmed(){
 // "the card"), so flagging those would be wrong.
 // options.correctCardMode is the Mode value to suggest as the fix
 // (e.g. "card 8132", from the real statement's own printed card
-// number — see extractCardLast4).
+// number — see reconExtractCardLast4_).
 function previewReconciliation(bankTxns, options){
 
   options = options || {};
@@ -398,7 +398,7 @@ function previewReconciliation(bankTxns, options){
 // card's other real rows — instead of a bare generic "card". Returns
 // null if the statement text doesn't contain a recognizable masked
 // card number (the fix then falls back to a plain "card").
-function extractCardLast4(text){
+function reconExtractCardLast4_(text){
   const m = /X{2,}(\d{4})\b/.exec(text || "");
   return m ? m[1] : null;
 }
@@ -900,11 +900,11 @@ function reconcileCreditCardStatementPreview(fileBase64, fileName, statementText
       ccTxns = parseCreditCardSheet(reconSheetFromRows_(rows));          // already read on the phone: no Google Drive needed
     } else if(statementText){
       ccTxns = parseCreditCardStatementText(statementText);
-      cardLast4 = extractCardLast4(statementText);
+      cardLast4 = reconExtractCardLast4_(statementText);
     } else if(isPdf){
       const text = extractTextFromStatementPdf(fileBase64, fileName);
       ccTxns = parseCreditCardStatementText(text);
-      cardLast4 = extractCardLast4(text);
+      cardLast4 = reconExtractCardLast4_(text);
       logAI("CC_PDF_OCR_FALLBACK", "Client-side text extraction wasn't sent — fell back to Drive OCR. Extracted " +
         text.length + " chars, parsed " + ccTxns.length + " transaction(s).");
     } else {

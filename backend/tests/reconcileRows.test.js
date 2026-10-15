@@ -76,6 +76,19 @@ console.log("\n--- 3. A credit-card statement as rows ---");
   assert(r.missing.find(function(m){ return m.amount === 40; }).type === "credit", "the 'Cr' line is a credit");
 }
 
+console.log("\n--- 3b. The card's last 4 digits come from the statement's own masked number (name clash fixed 2026-10-15) ---");
+{
+  const w = build(); seed(w);
+  assert(w.sb.reconExtractCardLast4_("Credit Card No. 653029XXXXXX8132") === "8132", "the statement's masked card number gives 8132");
+  assert(w.sb.extractCardLast4 !== w.sb.reconExtractCardLast4_, "it is a different function from the SMS reader's own extractCardLast4 (they used to share one name, so one silently replaced the other)");
+  // a card statement whose text prints the masked number: a UPI-mode row for the same amount/date is flagged with the exact 'card 8132' mode
+  const w2 = build(); seed(w2);
+  const d = ddmmyy(w2.today).split("/"); const dd = d[0] + "/" + d[1] + "/" + w2.today.getFullYear();
+  const text = "Credit Card No. 653029XXXXXX8132" + String.fromCharCode(10) + dd + "| 21:25 UPI-CAFE A  120.00";
+  const r = w2.act("owner", { action: "reconcileCreditCardStatement", statementText: text });
+  assert(r.ok === true && r.wrongMode && r.wrongMode.length === 1 && r.wrongMode[0].correctMode === "card 8132", "the wrong-mode fix suggests exactly 'card 8132'" + (r.ok ? " (got " + JSON.stringify(r.wrongMode) + ")" : " (" + r.error + ")"));
+}
+
 console.log("\n--- 4. Unreadable input is refused plainly ---");
 {
   const w = build(); seed(w);

@@ -30,7 +30,7 @@
 //   4. When checkCardMode is omitted (the bank statement path), the
 //      result has no wrongMode surprises — proves this is fully opt-in
 //      and doesn't change existing bank-reconciliation behavior.
-//   5. extractCardLast4() correctly pulls "8132" out of the real
+//   5. reconExtractCardLast4_() correctly pulls "8132" out of the real
 //      statement's own printed masked card number.
 //   6. fixTransactionMode() writes the corrected Mode to the right row
 //      (column E) and nothing else.
@@ -162,12 +162,12 @@ const TXN_HEADER = ["Date","Time","Bank","Type","Mode","Amount","Reference","Cou
 })();
 
 // ---------------------------------------------------------------------
-// 5. extractCardLast4 against the real statement's own text.
+// 5. reconExtractCardLast4_ against the real statement's own text.
 // ---------------------------------------------------------------------
 (function(){
   const sandbox = loadSandbox();
-  assertEqual(sandbox.extractCardLast4("Credit Card No. 653029XXXXXX8132"), "8132", "extracts the real card's last 4 digits");
-  assertEqual(sandbox.extractCardLast4("no masked number here"), null, "returns null when there's nothing to extract, rather than guessing");
+  assertEqual(sandbox.reconExtractCardLast4_("Credit Card No. 653029XXXXXX8132"), "8132", "extracts the real card's last 4 digits");
+  assertEqual(sandbox.reconExtractCardLast4_("no masked number here"), null, "returns null when there's nothing to extract, rather than guessing");
 })();
 
 // ---------------------------------------------------------------------
