@@ -62,6 +62,8 @@ console.log("\n--- 1. New server, timer switch on: the alert goes out from the S
   assert(w.pushes.length === 1 && /40/.test(w.pushes[0].body) && /aarogyumm/i.test(w.pushes[0].body), "ONE rich notification with the amount and merchant went out already: " + JSON.stringify(w.pushes[0]));
   assert(w.pushes[0].extra && w.pushes[0].extra.row === w.rows().length && w.pushes[0].extra.fp, "it carries the same row number and safety fingerprint the timer's notifications carry");
   assert(logged(w, "SMSIN_ALERT").length === 1, "the time it took is logged");
+  const td = w.store["_system/timer"].fields;
+  assert(td.lastInstantResult === "ok" && Number(td.lastInstantAtMs) > 0 && Number(td.lastInstantTotalMs) >= Number(td.lastInstantAlertMs) && td.dirtyAtMs, "the result and times are also saved in the database (readable later), next to the tick's own fields");
   const tick = sb.timerTick_();
   assert(w.pushes.length === 1, "the timer's tick afterwards sends NOTHING more: announced exactly once (tick: " + JSON.stringify(tick) + ")");
 }
@@ -82,6 +84,7 @@ console.log("\n--- 3. Switch off / Apps Script: unchanged, the row is left for t
   const w = make({ timerOn: false });
   const r = w.send(CAFE);
   assert(r.ok === true && r.outcome === "SAVED" && w.pushes.length === 0, "new-server timer switch OFF: saved, no instant alert");
+  assert(!(w.store["_system/timer"].fields || {}).lastInstantResult, "nothing about an instant alert is recorded when it never ran");
   assert(w.rows()[w.rows().length - 1][15] === "", "row left un-alerted for the timer");
   const w2 = make({ newServer: false });
   w2.send(CAFE);
@@ -97,6 +100,7 @@ console.log("\n--- 4. The instant step fails: SMS still saved and answered ok; t
   assert(r.ok === true && r.outcome === "SAVED", "the phone is still told ok/SAVED (it must not retry or fall back)");
   assert(w.pushes.length === 0 && w.rows()[w.rows().length - 1][15] === "", "no alert, row still un-alerted");
   assert(logged(w, "SMSIN_ALERT_ERROR").length === 1 && /timer will alert/.test(logged(w, "SMSIN_ALERT_ERROR")[0].message), "the failure is logged in plain words");
+  assert(w.store["_system/timer"].fields.lastInstantResult === "error", "and recorded in the database as an error");
   sb.processNewTransactionsCore_ = real;
   sb.timerTick_();
   assert(w.pushes.length === 1 && w.rows()[w.rows().length - 1][15] === "YES", "the next tick (the safety net) alerts it exactly once");
@@ -111,6 +115,7 @@ console.log("\n--- 5. Short of time: the instant step is skipped, the timer cove
   const r = w.send(CAFE);
   assert(r.ok === true && r.outcome === "SAVED" && w.pushes.length === 0, "saved, no instant alert");
   assert(logged(w, "SMSIN_ALERT_SKIPPED").length === 1, "the skip is logged");
+  assert(w.store["_system/timer"].fields.lastInstantResult === "skipped", "and recorded in the database as skipped");
   sb.timerTick_();
   assert(w.pushes.length === 1, "the timer alerts it once");
 }

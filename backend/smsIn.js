@@ -126,16 +126,26 @@ var SMSIN_ALERT_LOCK_WAIT_MS_ = 8000;   // wait at most this long for the save l
 // timer switch is on (the same switch: turning it off turns this off too). Never throws and never delays the answer past the budget.
 // Safe to run together with the timer: both go through the same save lock and the same "Processed" mark, so a row is announced once.
 function smsInAlertNow_(startedAt){
+  var result = "", alertMs = 0;
   try{
     if(typeof V2_ON_NEW_SERVER_ === "undefined" || !V2_ON_NEW_SERVER_) return;
     if(typeof fnTimerOn_ !== "function" || !fnTimerOn_()) return;
-    if(Date.now() - startedAt > SMSIN_ALERT_BUDGET_MS_){ logAI("SMSIN_ALERT_SKIPPED", "save took " + (Date.now() - startedAt) + " ms; the timer will alert it"); return; }
+    if(Date.now() - startedAt > SMSIN_ALERT_BUDGET_MS_){ result = "skipped"; logAI("SMSIN_ALERT_SKIPPED", "save took " + (Date.now() - startedAt) + " ms; the timer will alert it"); return; }
     var t0 = Date.now();
     v2OwnerTakeOver_(processNewTransactionsCore_, SMSIN_ALERT_LOCK_WAIT_MS_);
     TXN_PUBLISH_NOW_ = false;                                   // the Home copy is rebuilt by the timer's next tick (it was marked changed), not here
-    logAI("SMSIN_ALERT", "alerted in " + (Date.now() - t0) + " ms (total " + (Date.now() - startedAt) + " ms)");
+    alertMs = Date.now() - t0;
+    result = "ok";
+    logAI("SMSIN_ALERT", "alerted in " + alertMs + " ms (total " + (Date.now() - startedAt) + " ms)");
   }catch(err){
+    result = "error";
     try{ logAI("SMSIN_ALERT_ERROR", String(err && err.message).slice(0, 200) + " - the timer will alert it"); }catch(ignore){}
+  }finally{
+    // Leave the timing where it can be READ later (the log viewer is not always reachable): the last instant alert's result and times,
+    // in the timer's own document (merged, so the tick's fields are untouched). One small write; best-effort.
+    if(result && typeof timerWrite_ === "function"){
+      timerWrite_({ lastInstantResult: result, lastInstantAtMs: Date.now(), lastInstantAlertMs: alertMs, lastInstantTotalMs: Date.now() - startedAt });
+    }
   }
 }
 
