@@ -4,8 +4,7 @@ Started 2026-10-16. Owner's ask: a proper admin view (a web page, not just the p
 what problems they hit, errors, when each person last used the app, and **how well the app is getting at understanding transactions,
 with no flattering numbers and proper reasoning**.
 
-**Status: phase 1 (recording + scoring + the owner-only data action) is BUILT and TESTED, NOT deployed. Phase 2 (the web page, `/admin/`) is
-not built yet; a mockup was approved in chat.** Nothing here is live until the owner says "ship it".
+**Status 2026-10-16: phase 1 (recording + scoring + owner-only data action) is LIVE (Apps Script `@366`, new server updated, app `2026-10-16-01`, commit `a1c750b`). Phase 2, the page `admin/index.html` (will be at https://ronit6050.github.io/fin-app/admin/), is BUILT and checked with invented data in light/dark and for HTML-injection safety, committed locally but NOT pushed (needs the owner's go-ahead).** Numbers start from the first SMS / app open after the deploy.
 
 ## Privacy rule (the owner's rule, enforced in code and tests)
 The owner sees **usage and errors only**. No amount, note, payee, SMS text, reference or account digits is ever written to the new
@@ -56,7 +55,7 @@ Checks and message counts must be about the same payments, so a payment counts f
 - The Android app does not yet report whether SMS permission is on (its bridge has no such method); for now "last SMS received" is the evidence. Reporting the permission needs a small native-app change.
 - Statement-check misses can only be attributed to everyone together, not to a bank (the import writes a fixed bank).
 - Numbers start when recording goes live; no history is backfilled.
-- Phase 2 (the page at `/admin/` on GitHub Pages, Google sign-in, owner only) is not built.
+- The page signs in with the same Google client as the app; it works only for the owner's account (the server refuses anyone else). It calls the new server and falls back to Apps Script.
 
 ## Files and tests
 `backend/adminStats.js`, `backend/adminScores.js`, hooks listed above, `backend/tests/adminStats.test.js` (counters, score arithmetic by hand, privacy, caps, dashboard, phone-side reporter).

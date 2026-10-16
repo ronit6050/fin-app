@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<title>Admin</title>
+<!--
+  Owner's admin page (added 2026-10-16). Plain HTML/CSS/JS, no libraries except Google's own sign-in.
+  It shows USAGE and ERRORS only - never amounts, notes, payees or messages (the server never sends them).
+  Only the owner's Google account gets an answer: the server checks the sign-in on every request.
+  Data: one call, action "getAdminDashboard", answered by backend/adminScores.js (adminDashboard_).
+  Every piece of text from the server is put on the page with textContent (never as HTML).
+-->
+<style>
+:root{
+  --bg:#F7F3EA; --card:#FFFFFF; --ink:#1B1B1F; --muted:#5F6068; --faint:#8A8B93; --line:#E4DFD2; --track:#F1ECE1;
+  --accent:#2563EB; --good:#18794E; --good-bg:#E3F4EA; --warn:#8A5A00; --warn-bg:#FBF0D5; --bad:#B42318; --bad-bg:#FDE7E4;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#101116; --card:#1A1B22; --ink:#F2F2F5; --muted:#B4B5BE; --faint:#8D8E99; --line:#2C2E38; --track:#2E303B;
+    --accent:#4C8DFF; --good:#5FD39A; --good-bg:#16372A; --warn:#F3C463; --warn-bg:#3B2F12; --bad:#FF8A7D; --bad-bg:#40201C; }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0}
+h2{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:26px 0 8px}
+.sub{color:var(--muted);font-size:13px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+button{font:inherit;font-size:14px;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.small{font-size:12px;padding:4px 10px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;margin-top:14px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.tile small{display:block;color:var(--muted);font-size:12px}
+.tile b{font-size:24px;font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 14px}
+.row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.row:last-child{border-bottom:0}
+.grow{flex:1;min-width:140px}
+.grow small{display:block;color:var(--muted);font-size:12px}
+.pill{font-size:12px;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.good{background:var(--good-bg);color:var(--good)} .warn{background:var(--warn-bg);color:var(--warn)} .bad{background:var(--bad-bg);color:var(--bad)} .none{background:var(--track);color:var(--muted)}
+.bar{height:10px;border-radius:5px;background:var(--track);overflow:hidden;flex:1;min-width:80px}
+.bar i{display:block;height:100%;border-radius:5px;background:var(--accent)}
+.bar i.good{background:var(--good)} .bar i.warn{background:var(--warn)} .bar i.bad{background:var(--bad)}
+.lbl{width:118px;color:var(--muted);font-size:14px}
+.val{width:52px;text-align:right;font-size:14px}
+.big{font-size:30px;font-weight:600}
+.why{font-size:13px;color:var(--muted);margin:2px 0 8px}
+.score{padding:14px;margin-bottom:10px}
+.score .head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.trend{display:flex;align-items:flex-end;gap:6px;height:56px;margin:8px 0 2px}
+.trend div{flex:1;background:var(--track);border-radius:3px;position:relative;min-height:4px}
+.trend div i{position:absolute;left:0;right:0;bottom:0;background:var(--accent);border-radius:3px}
+.trend span{position:absolute;top:-16px;left:0;right:0;text-align:center;font-size:10px;color:var(--faint)}
+ul.blind{margin:6px 0 4px;padding-left:20px;color:var(--muted);font-size:13px}
+details{margin-top:8px} summary{cursor:pointer;color:var(--accent);font-size:14px}
+.empty{padding:18px 0;color:var(--muted);text-align:center;font-size:14px}
+#gate{max-width:420px;margin:12vh auto;text-align:center}
+#err{background:var(--bad-bg);color:var(--bad);border-radius:10px;padding:10px 12px;margin:12px 0;font-size:14px;display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="gate">
+    <h1>Admin</h1>
+    <p class="sub">Only the owner's Google account can open this page.</p>
+    <div id="signin" style="display:flex;justify-content:center;margin:18px 0"></div>
+    <div id="gateMsg" class="sub"></div>
+  </div>
+  <div id="app" style="display:none">
+    <div class="top">
+      <div><h1>Admin</h1><div class="sub" id="updated">Usage and errors only. Never amounts, notes or payees.</div></div>
+      <button id="refresh">Refresh</button>
+    </div>
+    <div id="err"></div>
+    <div id="tiles" class="tiles"></div>
+    <h2>How well the app understands transactions</h2>
+    <div id="understanding"></div>
+    <h2>People</h2><div id="people" class="card"></div>
+    <h2>Screens used (last 2 weeks)</h2><div id="features" class="card"></div>
+    <h2>Problems (last 7 days)</h2><div id="problems" class="card"></div>
+    <p class="sub" style="margin-top:22px">Scores start from the day recording began and only count what people have actually seen and checked. See "How this is calculated" for the exact rules.</p>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var GOOGLE_CLIENT_ID = "1090460874478-0mnc81l34b10hi7n0u6bl9bkv9a45862.apps.googleusercontent.com";
+  var NEW_SERVER_URL = "https://asia-south1-fin-app-76c40.cloudfunctions.net/api";
+  var APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v/exec";
+  var idToken = "";
+
+  function $(id) { return document.getElementById(id); }
+  // Builds an element; text always goes in as TEXT (never HTML).
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function pct(x) { return Math.round(x * 100) + "%"; }
+  function ago(ms) {
+    if (!ms) return "never";
+    var s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 90) return "just now";
+    if (s < 3600) return Math.round(s / 60) + " min ago";
+    if (s < 86400) return Math.round(s / 3600) + " h ago";
+    var d = Math.round(s / 86400); return d + (d === 1 ? " day ago" : " days ago");
+  }
+  function tone(score) { return score >= 0.9 ? "good" : score >= 0.75 ? "warn" : "bad"; }
+
+  // ---- talking to the server: new server first, Apps Script as the fallback ----
+  function post(url, body) {
+    return fetch(url, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+  }
+  function call(action, extra) {
+    var body = Object.assign({ action: action, idToken: idToken }, extra || {});
+    return post(NEW_SERVER_URL, body).then(function (d) {
+      if (d && d.fallback === true) throw new Error("fallback");
+      return d;
+    }).catch(function () { return post(APPS_SCRIPT_URL, body); });
+  }
+
+  // ---- sign in ----
+  function onCredential(resp) {
+    idToken = resp.credential;
+    $("gateMsg").textContent = "Checking...";
+    load();
+  }
+  function startSignIn() {
+    if (!(window.google && google.accounts && google.accounts.id)) { setTimeout(startSignIn, 300); return; }
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onCredential, auto_select: true });
+    google.accounts.id.renderButton($("signin"), { theme: "outline", size: "large", text: "signin_with" });
+  }
+
+  // ---- loading ----
+  function showError(msg) { var e = $("err"); e.textContent = msg; e.style.display = msg ? "block" : "none"; }
+  function load() {
+    showError("");
+    call("getAdminDashboard").then(function (d) {
+      if (!d || d.ok !== true) {
+        var denied = d && /not allowed|not signed/i.test(String(d.error || ""));
+        $("gateMsg").textContent = denied ? "This Google account is not allowed here." : (d && d.error ? d.error : "Couldn't load. Try again.");
+        if ($("app").style.display === "block") showError($("gateMsg").textContent);
+        return;
+      }
+      $("gate").style.display = "none";
+      $("app").style.display = "block";
+      render(d);
+    }).catch(function () {
+      $("gateMsg").textContent = "Couldn't reach the server. Try again.";
+      showError("Couldn't reach the server. Try again.");
+    });
+  }
+
+  // ---- drawing ----
+  function render(d) {
+    $("updated").textContent = "Updated " + new Date(d.generatedMs).toLocaleTimeString() + ". Usage and errors only. Never amounts, notes or payees.";
+    renderTiles(d.tiles);
+    renderUnderstanding(d.understanding);
+    renderPeople(d.people);
+    renderFeatures(d.features);
+    renderProblems(d.problems, d.problemsTruncated);
+  }
+
+  function renderTiles(t) {
+    var box = $("tiles"); clear(box);
+    function tile(label, value, sub, cls) {
+      var x = el("div", "tile"); x.appendChild(el("small", "", label));
+      var b = el("b", "", value); if (cls) b.className = cls + "-text"; x.appendChild(b);
+      if (sub) x.appendChild(el("small", "", sub)); box.appendChild(x);
+    }
+    tile("People", t.people);
+    tile("Active today", t.activeToday);
+    tile("Errors today", t.errorsToday);
+    tile("SMS saved this week", t.smsThisWeek);
+    tile("Database use today", Math.max(t.dbReadsPct, t.dbWritesPct) + "%", "of the free daily limit");
+    tile("Alert timer", t.timerOk ? "OK" : "Check", t.timerAgeMs === null ? "no tick seen" : "last tick " + ago(Date.now() - t.timerAgeMs));
+  }
+
+  // One score block: a bar when there is a score, otherwise the honest reason it is not scored.
+  function scoreBlock(title, s, extraLine) {
+    var c = el("div", "card score");
+    var head = el("div", "head");
+    head.appendChild(el("b", "", title));
+    if (s.score !== null && s.score !== undefined) {
+      var v = el("span", "big", pct(s.score)); head.appendChild(v);
+    } else {
+      head.appendChild(el("span", "pill none", s.status === "unverified" ? "Not verified yet" : "Collecting data"));
+    }
+    c.appendChild(head);
+    var bar = el("div", "bar"); var fill = el("i", s.score !== null && s.score !== undefined ? tone(s.score) : "");
+    var w = s.score !== null && s.score !== undefined ? s.score : (s.readRate || 0);
+    fill.style.width = Math.round(w * 100) + "%"; if (s.score === null || s.score === undefined) fill.style.opacity = "0.35";
+    bar.appendChild(fill); c.appendChild(bar);
+    if (s.verdict) c.appendChild(el("div", "why", "Verdict: " + s.verdict));
+    c.appendChild(el("div", "why", s.why));
+    if (extraLine) c.appendChild(el("div", "why", extraLine));
+    return c;
+  }
+
+  function renderUnderstanding(u) {
+    var box = $("understanding"); clear(box);
+    box.appendChild(scoreBlock("Reading", u.reading,
+      u.reading.missedFound ? u.reading.missedFound + " payment(s) found missing by statement checks are counted against it." : ""));
+    box.appendChild(scoreBlock("Guessing", u.guessing));
+    box.appendChild(scoreBlock("Done for you", u.handled));
+
+    // trend: only weeks that have a score of their own
+    var tr = el("div", "card score");
+    tr.appendChild(el("b", "", "Reading score, week by week"));
+    var any = u.trend.some(function (t) { return t.reading !== null; });
+    if (!any) { tr.appendChild(el("div", "why", "No week has enough checked messages to be scored yet.")); }
+    else {
+      var chart = el("div", "trend");
+      u.trend.forEach(function (t) {
+        var col = el("div"); if (t.reading !== null) {
+          var f = el("i"); f.style.height = Math.round(t.reading * 100) + "%"; col.appendChild(f); col.appendChild(el("span", "", Math.round(t.reading * 100)));
+        }
+        col.title = "Week of " + new Date(t.weekStartMs).toLocaleDateString() + (t.reading === null ? ": not enough data" : "");
+        chart.appendChild(col);
+      });
+      tr.appendChild(chart);
+      tr.appendChild(el("div", "why", "Empty bars are weeks without enough data. The last bar is this week."));
+    }
+    box.appendChild(tr);
+
+    // per bank
+    var bk = el("div", "card score");
+    bk.appendChild(el("b", "", "Reading, bank by bank"));
+    if (!u.banks.length) bk.appendChild(el("div", "why", "No bank messages recorded yet."));
+    u.banks.forEach(function (b) {
+      var r = el("div", "row");
+      var nm = el("div", "grow"); nm.appendChild(document.createTextNode(b.unknownBank ? b.bank.replace(/^UNK_?/, "") || "Unknown sender" : b.bank));
+      nm.appendChild(el("small", "", b.messages + " messages, " + b.checked + " checked"));
+      r.appendChild(nm);
+      var bar = el("div", "bar"); var f = el("i", b.score !== null ? tone(b.score) : ""); f.style.width = Math.round((b.score !== null ? b.score : (b.readRate || 0)) * 100) + "%";
+      if (b.score === null) f.style.opacity = "0.35"; bar.appendChild(f); r.appendChild(bar);
+      r.appendChild(el("div", "val", b.score !== null ? pct(b.score) : "n/a"));
+      if (b.unknownBank) r.appendChild(el("span", "pill warn", "Bank not named"));
+      bk.appendChild(r);
+      if (b.status !== "verified") bk.appendChild(el("div", "why", b.why));
+    });
+    if (u.banks.length && u.banks[0].note) bk.appendChild(el("div", "why", u.banks[0].note));
+    box.appendChild(bk);
+
+    // how it is calculated + blind spots
+    var det = el("details");
+    det.appendChild(el("summary", "", "How this is calculated, and what it cannot see"));
+    var ul = el("ul", "blind");
+    u.blindSpots.forEach(function (t) { ul.appendChild(el("li", "", t)); });
+    det.appendChild(ul);
+    det.appendChild(el("div", "why", "Reading = (messages understood fully / real messages) x (checked readings that needed no correction / checked readings). A score appears only with at least " +
+      u.thresholds.minMessages + " messages, " + u.thresholds.minChecked + " checks and a quarter of the messages checked. Guessing and Done for you need at least " + u.thresholds.minDecisions + " cases. There is no combined overall number on purpose."));
+    box.appendChild(det);
+  }
+
+  function renderPeople(people) {
+    var box = $("people"); clear(box);
+    people.forEach(function (p) {
+      var r = el("div", "row");
+      var nm = el("div", "grow"); nm.appendChild(document.createTextNode(p.name));
+      var sub = (p.platform ? (p.platform === "android" ? "Android app" : "Web") + ", " : "") + (p.version ? "v" + p.version : "no version yet");
+      nm.appendChild(el("small", "", sub));
+      r.appendChild(nm);
+      var cls = p.status === "ok" ? "good" : p.status === "warn" ? "warn" : "none";
+      r.appendChild(el("span", "pill " + cls, p.note || (p.fullApp ? "SMS " + ago(p.lastSmsMs) : "Splits only")));
+      var det = el("div", "sub", "seen " + ago(p.lastSeenMs) + (p.errors2w ? ", " + p.errors2w + " error(s) in 2 weeks" : ""));
+      r.appendChild(det);
+      box.appendChild(r);
+      if (p.fullApp) {
+        var s = p.sms; var line = "SMS in the last 2 weeks: " + s.saved + " saved, " + s.uncertain + " need review, " + s.ignored + " ignored";
+        box.appendChild(el("div", "why", p.name + ". " + line));
+      }
+    });
+  }
+
+  function renderFeatures(list) {
+    var box = $("features"); clear(box);
+    if (!list.length) { box.appendChild(el("div", "empty", "Nothing recorded yet. Counts start when people open the updated app.")); return; }
+    var max = list[0].count || 1;
+    var names = { home: "Home", pending: "Pending", analysis: "Analysis", more: "More menu", today: "Today", cash: "Cash", history: "History", investments: "Investments",
+      cc: "CC Advisor", debts: "Debts and splits", savings: "Savings", planner: "Planner", reconcile: "Reconcile", settings: "Settings", access: "Access" };
+    list.forEach(function (f) {
+      var r = el("div", "row");
+      r.appendChild(el("div", "lbl", names[f.screen] || f.screen));
+      var bar = el("div", "bar"); var i = el("i"); i.style.width = Math.max(2, Math.round(f.count / max * 100)) + "%"; bar.appendChild(i);
+      r.appendChild(bar); r.appendChild(el("div", "val", f.count));
+      box.appendChild(r);
+    });
+  }
+
+  function renderProblems(list, truncated) {
+    var box = $("problems"); clear(box);
+    if (!list.length) { box.appendChild(el("div", "empty", "No problems reported in the last 7 days.")); return; }
+    list.forEach(function (p) {
+      var r = el("div", "row");
+      var t = el("div", "grow"); t.appendChild(document.createTextNode(p.msg));
+      t.appendChild(el("small", "", (p.screen || p.kind) + ", " + p.people + " " + (p.people === 1 ? "person" : "people") + ", last " + ago(p.lastMs)));
+      r.appendChild(t);
+      r.appendChild(el("span", "pill " + (p.last7 >= 5 ? "bad" : "warn"), p.last7 + (p.last7 === 1 ? " time" : " times")));
+      var b = el("button", "small", "Resolve");
+      b.addEventListener("click", function () {
+        b.disabled = true;
+        call("resolveAdminProblem", { id: p.id }).then(function (d) { if (d && d.ok) load(); else { b.disabled = false; showError((d && d.error) || "Couldn't mark it resolved."); } })
+          .catch(function () { b.disabled = false; showError("Couldn't reach the server."); });
+      });
+      r.appendChild(b);
+      box.appendChild(r);
+    });
+    if (truncated) box.appendChild(el("div", "why", "More than 300 problem types are stored; only some are shown."));
+  }
+
+  $("refresh").addEventListener("click", load);
+  window.addEventListener("load", startSignIn);
+})();
+</script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</body>
+</html>
