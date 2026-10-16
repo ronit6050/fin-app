@@ -7,8 +7,11 @@
 //     2. runs the SMS reader's OWN decisions on it (backend/smsPipelineCore.js is a word-for-word copy, proven identical on 2,185 real
 //        messages): is it a transaction at all, what are its details, is it junk the person already taught the app to ignore, is it a
 //        duplicate of a message already saved (same reference, same text, a statement placeholder, the double card text);
-//     3. saves it in THAT person's own Transactions tab. For the owner the row is left "not yet alerted", so the existing timer sends the
-//        usual rich notification (guesses, quick-confirm buttons); a friend gets a plain notification straight away.
+//     3. saves it in THAT person's own Transactions tab. A friend gets a plain notification straight away. The owner gets the usual RICH
+//        notification (guesses, quick-confirm buttons) straight away too (added 2026-10-16, "instant alert"): right after the row is saved
+//        and the save lock is released, the very same alert step the 5-minute timer runs (processNewTransactionsCore_) runs once, here. If it
+//        cannot (not on the new server, switch off, short of time, lock busy, any error) the row is simply left "not yet alerted" and the
+//        timer alerts it on its next tick, exactly as before: the timer is now only the safety net.
 //
 // If anything is not ready the answer says so and the PHONE falls back to the old way (the old SMS reader writing the Sheet), so no
 // message can be lost. The owner's direct switch (v2dbEnableOwnerDirect) can be turned off at any time.
@@ -105,8 +108,39 @@ function smsInTeachBank_(sender, bank, forget){
   return { ok: true, token: token, taught: map };
 }
 
-// The phone's call. No sign-in: the KEY is the credential and only ever unlocks its own person's space.
+// The phone's call. Saves the message (smsInSave_), and for the OWNER then sends the alert at once (smsInAlertNow_).
 function smsInHandle_(data){
+  var startedAt = Date.now();
+  var out = smsInSave_(data);
+  if(out && out.alertOwner){
+    delete out.alertOwner;                                      // internal note, never sent to the phone
+    smsInAlertNow_(startedAt);                                  // after the save lock is released; can never change the answer to the phone
+  }
+  return out;
+}
+
+var SMSIN_ALERT_BUDGET_MS_ = 10000;     // only start the instant alert if the save took less than this (the phone waits 30 s in all)
+var SMSIN_ALERT_LOCK_WAIT_MS_ = 8000;   // wait at most this long for the save lock; the timer will do it if the lock is busy
+
+// INSTANT ALERT (2026-10-16). Runs the timer's own alert step for the owner's new row(s). NEW SERVER ONLY, and only while the new-server
+// timer switch is on (the same switch: turning it off turns this off too). Never throws and never delays the answer past the budget.
+// Safe to run together with the timer: both go through the same save lock and the same "Processed" mark, so a row is announced once.
+function smsInAlertNow_(startedAt){
+  try{
+    if(typeof V2_ON_NEW_SERVER_ === "undefined" || !V2_ON_NEW_SERVER_) return;
+    if(typeof fnTimerOn_ !== "function" || !fnTimerOn_()) return;
+    if(Date.now() - startedAt > SMSIN_ALERT_BUDGET_MS_){ logAI("SMSIN_ALERT_SKIPPED", "save took " + (Date.now() - startedAt) + " ms; the timer will alert it"); return; }
+    var t0 = Date.now();
+    v2OwnerTakeOver_(processNewTransactionsCore_, SMSIN_ALERT_LOCK_WAIT_MS_);
+    TXN_PUBLISH_NOW_ = false;                                   // the Home copy is rebuilt by the timer's next tick (it was marked changed), not here
+    logAI("SMSIN_ALERT", "alerted in " + (Date.now() - t0) + " ms (total " + (Date.now() - startedAt) + " ms)");
+  }catch(err){
+    try{ logAI("SMSIN_ALERT_ERROR", String(err && err.message).slice(0, 200) + " - the timer will alert it"); }catch(ignore){}
+  }
+}
+
+// The save itself. No sign-in: the KEY is the credential and only ever unlocks its own person's space.
+function smsInSave_(data){
   var cacheBad = ingestCache_();
   // Wrong keys cost the caller nothing (the address is public), so refuse after a burst WITHOUT reading the database.
   if(ingestCount_(cacheBad, "ING_BAD") >= INGEST_MAX_BAD_PER_MIN_) return { ok: false, error: "Unknown key. Too many tries." };
@@ -177,7 +211,10 @@ function smsInHandle_(data){
         smsFormatRecord_({ sender: sender, sms: sms, bank: tx2.bank, type: tx2.type, mode: tx2.mode, amount: tx2.amount, reference: tx2.reference, counterparty: tx2.counterparty });
       }
     }
-    return { ok: true, outcome: out.outcome, reason: out.reason || "" };
+    var saved = out.outcome === "SAVED" || out.outcome === "UNCERTAIN_SAVED";
+    var answer = { ok: true, outcome: out.outcome, reason: out.reason || "" };
+    if(saved && isOwner) answer.alertOwner = true;               // internal: smsInHandle_ removes it before replying
+    return answer;
   }catch(err){
     try{ logAI("SMSIN_ERROR", "save: " + String(err && err.message).slice(0, 200)); }catch(ignore){}
     return { ok: false, error: "Couldn't save. Try again." };

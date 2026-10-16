@@ -26,11 +26,11 @@ function v2OwnerOn_(){ return v2EngineFor_(v2OwnerEmail_()) === "v2db"; }
 // ---------------------------------------------------------------- 2. running a background job on the owner's private copy
 // Returns { ran: false } when the caller should just carry on as before (owner not switched on, or already inside a private run),
 // or { ran: true, value } when the job was run here on his private copy.
-function v2OwnerTakeOver_(jobFn){
+function v2OwnerTakeOver_(jobFn, lockWaitMs){
   if(V2DB_REQ_ || !v2OwnerOn_()) return { ran: false };
   var lock = sharedLock_({ failOpen: true });                    // the background timer: never skipped because of the lock (sharedLock.js)
   var started = Date.now();
-  lock.waitLock(25000);                                          // one saving job at a time, same lock as the app's saves
+  lock.waitLock(lockWaitMs || 25000);                            // one saving job at a time, same lock as the app's saves (the SMS door's instant alert waits less: smsIn.js)
   var gotLockAt = Date.now();
   var onNew = (typeof V2_ON_NEW_SERVER_ !== "undefined") && !!V2_ON_NEW_SERVER_;      // the new server has no Google Sheet: no inbox to copy
   try{
