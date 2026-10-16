@@ -3719,8 +3719,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-15-04";
-    const APP_CHANGELOG = "\"Not a transaction\" can now be undone: after tapping it there is an Undo, and a \"Removed items\" list at the bottom of Pending lets you bring any removed payment back (a real payment now also gets an extra warning first). Settings > Speed has a new choice, \"Reads and saves\" (beta): saving can also go through the new fast server. History is easier to use: search, filters (Needs attention, Rent, EMI, Investment...), a month jump, short rows that open when tapped, the app remembers when you say it is regular spend, and a lent-to note now shows up in Debts straight away (and only once).";
+    const APP_VERSION = "2026-10-16-01";
+    const APP_CHANGELOG = "Behind the scenes: the app now sends simple usage counts (which screens are opened) and error reports to the owner's private admin page, so problems can be found and fixed faster. It never sends amounts, notes, payees or message text.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -4923,7 +4923,71 @@
     // every tab and every write action with nothing extra to wire up per
     // screen — including the 15-second "check for new transactions"
     // polling loop, which will just keep re-serving the same pretend data.
+    // ===========================================================
+    // ADMIN REPORT (added 2026-10-16) - what the owner's admin page learns from this phone.
+    // ===========================================================
+    // COUNTS ONLY: which screens were opened, how many times a few actions ran, and the plain text of errors (the server removes
+    // numbers, links and e-mail addresses before keeping it). Never an amount, a note, a payee or a message. Sent in one small batch
+    // every few minutes and when the app is put away; nothing is sent in Demo Mode. A failure to send is ignored: this can never
+    // slow down or break the app, and its own failures are never reported as errors (no loops).
+    const adminSeen = { screens: {}, actions: {}, errors: [] };
+    const ADMIN_ACTION_NAMES = { saveNote: "saveNote", addManualTransaction: "addManual", createSplit: "split", recordSplitPayment: "split",
+      undoSplitEntry: "undo", insertReconciledTransactions: "reconcile", markNotATransaction: "markNotATransaction", teachBank: "teachBank" };
+    function adminHasNews() {
+      return Object.keys(adminSeen.screens).length > 0 || Object.keys(adminSeen.actions).length > 0 || adminSeen.errors.length > 0;
+    }
+    function adminTrackScreen(name) {
+      try {
+        if (demoMode || !name) return;
+        adminSeen.screens[name] = (adminSeen.screens[name] || 0) + 1;
+      } catch (e) { /* never matters to the app */ }
+    }
+    function adminTrackError(kind, screen, message) {
+      try {
+        if (demoMode) return;
+        const msg = String(message || "").slice(0, 300);
+        // Browser noise that is not a real problem (a harmless layout notice; a cross-origin "Script error." with no details)
+        if (!msg || /ResizeObserver|^script error\.?$/i.test(msg) || adminSeen.errors.length >= 5) return;
+        if (adminSeen.errors.some(function (e) { return e.kind === kind && e.screen === screen && e.msg === msg; })) return;
+        adminSeen.errors.push({ kind: kind, screen: screen, msg: msg });
+      } catch (e) { /* never matters to the app */ }
+    }
+    function adminFlush() {
+      try {
+        if (demoMode || !currentUser || !currentUser.idToken || !adminHasNews()) return;
+        const body = { action: "adminLog", idToken: currentUser.idToken, screens: adminSeen.screens, actions: adminSeen.actions, errors: adminSeen.errors,
+          version: APP_VERSION, platform: navigator.userAgent.indexOf("FinAppNativeAndroid") !== -1 ? "android" : "web" };
+        adminSeen.screens = {}; adminSeen.actions = {}; adminSeen.errors = [];
+        callAppsScript(body).catch(function () { /* the report is optional */ });
+      } catch (e) { /* never matters to the app */ }
+    }
+    // Watches one request WITHOUT changing it: records a failed answer or a network failure as an error, and counts a few actions.
+    function adminWatch(payload, promise) {
+      try {
+        if (!payload || payload.action === "adminLog" || demoMode) return;
+        const a = ADMIN_ACTION_NAMES[payload.action];
+        if (a) adminSeen.actions[a] = (adminSeen.actions[a] || 0) + 1;
+        const screenOf = String(payload.action || "");
+        promise.then(function (d) {
+          if (d && d.ok === false && !d.stale && d.error) adminTrackError("server", screenOf, d.error);
+        }, function (err) {
+          adminTrackError("network", screenOf, err && err.message ? err.message : "request failed");
+        });
+      } catch (e) { /* never matters to the app */ }
+    }
+    window.addEventListener("error", function (ev) { adminTrackError("app", "page", ev && ev.message ? ev.message : "script error"); });
+    window.addEventListener("unhandledrejection", function (ev) { adminTrackError("app", "page", ev && ev.reason && ev.reason.message ? ev.reason.message : "unhandled rejection"); });
+    document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") adminFlush(); });
+    setInterval(adminFlush, 5 * 60 * 1000);
+    setTimeout(adminFlush, 30 * 1000);
+
     function callAppsScript(payload) {
+      const promise = callAppsScriptInner(payload);
+      adminWatch(payload, promise);
+      return promise;
+    }
+
+    function callAppsScriptInner(payload) {
       if (demoMode) {
         return demoHandleRequest(payload);
       }
@@ -4965,7 +5029,7 @@
       "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
       "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
       "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "insertReconciledTransactions", "fixCreditCardTransactionMode",
-      "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey"];
+      "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey", "adminLog", "resolveAdminProblem"];
     let newServerStatus = "";     // shown in Settings: what the last request used and how long it took
     // localStorage "newServer": "on" = read screens from the new server; "all" = reads AND saves (2026-10-14).
     function newServerEnabled() {
@@ -8026,7 +8090,9 @@
             debtPerson:           savedDebtPerson,
             investmentInstrument: savedInvestmentInstrument,
             direction:            savedDirection || undefined,
-            amount:               savedAmountHelp === null ? undefined : savedAmountHelp
+            amount:               savedAmountHelp === null ? undefined : savedAmountHelp,
+            // What the card suggested (admin counters only, see adminStats.js): "Other" is the app's fallback, not a real guess, so it is not counted.
+            guess:                { c: (txn.suggestedCategory && txn.suggestedCategory !== "Other") ? txn.suggestedCategory : "", t: txn.suggestedType || "" }
           });
         }
 
@@ -8433,6 +8499,7 @@
     let isApplyingHistoryState = false;
 
     function saveActiveTab(tabName, subViewName) {
+      adminTrackScreen(subViewName || tabName);          // admin report: which screen was opened (counts only)
       const state = { tab: tabName, subView: subViewName || null };
       localStorage.setItem(TAB_STORAGE_KEY, JSON.stringify(state));
 
@@ -12623,7 +12690,8 @@
           note:         card.querySelector(".recon-note").value,
           category:     card.querySelector(".recon-category").value,
           counterparty: card._reconName,
-          type:         card._getSelectedType()
+          type:         card._getSelectedType(),
+          noCount:      true        // admin counters: a bulk tick-box save is not a person checking each reading
         });
       });
 

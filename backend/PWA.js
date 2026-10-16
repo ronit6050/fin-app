@@ -133,6 +133,10 @@ function pwaDispatch_(data, verified){
     // must not teach the shop's category memory or add a Need/Want vote. The typed note
     // itself is still remembered (you really did type it).
     const replyOpts = data.autoType ? { learnCategory: false, learnTypeVote: false } : {};
+    if(data.noCount === true) replyOpts.noCount = true;            // admin counters: a bulk save nobody inspected (Reconcile) is not a "checked" reading
+    if(data.autoType) replyOpts.autoType = true;                   // admin counters: a notification reply is not a Pending-card decision
+    // The guess the card showed (admin counters only: was it kept?). Just two short words, never anything about the payment.
+    if(data.guess && typeof data.guess === "object") replyOpts.guess = { c: String(data.guess.c || "").slice(0, 40), t: String(data.guess.t || "").slice(0, 12) };
     if(data.direction) replyOpts.direction = data.direction;       // "debit" / "credit": the person's answer when the SMS did not say
     if(data.eventDeclined === true) replyOpts.eventDeclined = true; // the person tapped "No, regular spend" on a Rent/EMI/Investment suggestion
     return jsonResponse(saveTransactionNote(data.row, data.note, data.category, data.counterparty, noteType, data.amount, data.financialEvent, data.financialEventName, data.debtPerson, data.investmentInstrument, data.fp, replyOpts));
@@ -335,6 +339,7 @@ function pwaDispatch_(data, verified){
 
   }catch(err){
     logAI("PWA_REQUEST_ERROR", (data.action || "unknown") + ": " + err.toString());
+    try{ if(typeof adminRecordServerError_ === "function") adminRecordServerError_(data.action, verified && verified.email, err); }catch(ignoreAdmin){}   // admin counters (adminStats.js); cleaned text only
     return jsonResponse({ ok:false, error: "Something went wrong loading this — try again in a moment. (" + err.toString() + ")" });
   }
 }
@@ -2481,6 +2486,11 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       prevCategory === (category || "").toString().trim() &&
       prevType === (type || "").toString().trim();
 
+    // What the row held BEFORE this save, for the admin counters only (adminStats.js: was the reading checked and right, was the guess
+    // kept). Read now because the amount is overwritten below. Never affects the save.
+    let adminMeta = null;
+    try{ const mr = sheet.getRange(row, 1, 1, 12).getValues()[0]; adminMeta = { bank: mr[2], channel: mr[8], source: mr[9], dateValue: mr[0], sender: mr[11], prevAmount: mr[5] }; }catch(ignoreMeta){}
+
     sheet.getRange(row, 13).setValue(note);     // column M
     sheet.getRange(row, 14).setValue(category); // column N
 
@@ -2679,6 +2689,15 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     if(counterparty && note && !isRepeatSave){
       const noteAmount = Number(sheet.getRange(row, 6).getValue()) || 0; // column F, reflects the edit above if any
       recordNoteUsage(counterparty, noteAmount, note);
+    }
+
+    // Admin counters (adminStats.js). Counts only, after everything above succeeded; a problem here can never change the answer.
+    if(adminMeta && typeof adminRecordNoteSaved_ === "function"){
+      try{
+        adminRecordNoteSaved_({ channel: adminMeta.channel, source: adminMeta.source, dateValue: adminMeta.dateValue, bank: adminMeta.bank, sender: adminMeta.sender, prevAmount: adminMeta.prevAmount, noCount: opts.noCount === true,
+          prevNote: prevNote, prevCategory: prevCategory, prevType: prevType, category: category, type: type, amount: amount,
+          isRepeatSave: isRepeatSave, autoType: opts.autoType === true, guess: opts.guess || null });
+      }catch(ignoreAdmin){}
     }
 
     return { ok:true, typeRequested: !!type, typeSaved: typeSaved, savedType: typeSaved ? type : "", investmentLogged: investmentLogged,
@@ -2891,6 +2910,9 @@ function markNotATransaction(row, expectFp){
     // next time, rather than always claiming so. Same "don't let two
     // different outcomes look identical" rule this app already applies
     // elsewhere (e.g. saveTransactionNote's typeSaved/investmentLogged).
+    // Admin counters (adminStats.js): a message the reader had flagged itself ("NEEDS REVIEW") that turned out to be junk is the system
+    // working; a confidently-read payment that was removed counts against the Reading score (unless it is put back with Undo).
+    try{ if(typeof adminRecordRemoval_ === "function") adminRecordRemoval_({ channel: rowValues[8], source: rowValues[9], dateValue: rowValues[0], bank: rowValues[2], sender: sender, needsReview: looksLikeJunk, restored: false }); }catch(ignoreAdmin){}
     // archiveRow + fp let the app offer "Undo" right away (restoreIgnoredTransaction below).
     return { ok:true, patternLearned: patternLearned, archiveRow: ignoredSheet.getLastRow(), fp: rowFingerprint_(rowValues) };
   }catch(err){
@@ -2994,6 +3016,7 @@ function restoreIgnoredTransaction(archiveRow, expectFp){
     }
     const forgotten = forgetLearnedSpam_(String(r[11] || ""), String(r[10] || ""));
     arch.getRange(archiveRow, 16).setValue("RESTORED");
+    try{ if(typeof adminRecordRemoval_ === "function") adminRecordRemoval_({ channel: r[8], source: r[9], dateValue: r[0], bank: r[2], sender: String(r[11] || ""), needsReview: /^NEEDS REVIEW/i.test(String(r[7] || "")), restored: true }); }catch(ignoreAdmin){}
     return { ok:true, restored: !alreadyBack, alreadyBack: alreadyBack, patternsForgotten: forgotten };
   }catch(err){
     return { ok:false, error: err.toString() };

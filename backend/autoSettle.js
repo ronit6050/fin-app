@@ -289,6 +289,7 @@ function tryAutoSettleNewRow_(sheet, rowIndex, rowValues, ctxHolder){
     if(!decision) return false;
 
     applyAutoSettle_(sheet, rowIndex, decision, (info.counterparty || "").toString());
+    try{ if(typeof adminRecordAutoSettled_ === "function") adminRecordAutoSettled_(1); }catch(ignoreAdmin){}   // admin counters (adminStats.js)
     return true;
   }catch(err){
     logAI("AUTO_SETTLE_ERROR", "Row " + rowIndex + ": " + err.toString());

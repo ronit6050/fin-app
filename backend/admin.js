@@ -27,8 +27,11 @@ function adminIsOwner_(verified){
 // Returns a response object for the three actions above, or null if the action is not one of them.
 function adminHandle_(data, verified){
   var action = data && data.action;
-  if(action !== "getMyAccess" && action !== "getAdminOverview" && action !== "setFriendFullApp" && action !== "setFriendScreen" && action !== "getMyIngestKey" && action !== "getSmsFormats" && action !== "teachBank" && action !== "forgetBank") return null;
+  if(action !== "getMyAccess" && action !== "getAdminOverview" && action !== "setFriendFullApp" && action !== "setFriendScreen" && action !== "getMyIngestKey" && action !== "getSmsFormats" && action !== "teachBank" && action !== "forgetBank" &&
+     action !== "adminLog" && action !== "getAdminDashboard" && action !== "resolveAdminProblem") return null;
   var isOwner = adminIsOwner_(verified);
+  // adminLog (2026-10-16): the app's own usage / error report, from any allowed person (adminStats.js). Counts only, never data.
+  if(action === "adminLog") return adminLogHandle_(data, verified);
   try{
     if(action === "getMyAccess"){
       var fullApp = isOwner ? true : v2EngineFor_(verified.email) === "v2db";
@@ -50,6 +53,8 @@ function adminHandle_(data, verified){
     }
     if(!isOwner) return { ok: false, error: "This account is not allowed." };
     if(action === "getSmsFormats") return smsFormatsSummary_();
+    if(action === "getAdminDashboard") return adminDashboard_();            // adminScores.js: the admin web page's one answer
+    if(action === "resolveAdminProblem") return adminResolveProblem_(data.id);
     if(action === "teachBank") return smsInTeachBank_(data.sender, data.bank, false);
     if(action === "forgetBank") return smsInTeachBank_(data.sender, "", true);
     if(action === "setFriendFullApp"){

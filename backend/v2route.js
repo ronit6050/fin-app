@@ -21,7 +21,7 @@
 // Actions a switched-on FRIEND may use: Splits plus the personal-tracker screens. Deliberately NOT here: refreshViews and
 // moveDebtToFriend (owner's Sheet), the statement-upload actions (the owner's Google Drive), anything not listed.
 var V2_FRIEND_FULL_ACTIONS_ = [
-  "ping", "getMyAccess", "getMyIngestKey", "getPeople", "getPerson", "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry",
+  "ping", "getMyAccess", "adminLog", "getMyIngestKey", "getPeople", "getPerson", "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry",
   "getPending", "saveNote", "markNotATransaction", "getIgnoredTransactions", "restoreIgnoredTransaction", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
   "getDebts", "addDebt", "settleDebt", "recordDebtPayment",
   "getSavingsGoals", "previewSavingsSplit", "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",

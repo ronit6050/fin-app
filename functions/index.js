@@ -25,11 +25,12 @@ const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransac
   "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
   "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "refreshViews",
   "insertReconciledTransactions", "fixCreditCardTransactionMode",                  // Reconcile's saves (owner only, enforced by the backend)
-  "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey"];   // the Access screen's changes (owner only; the switches live in the shared database)
+  "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey",   // the Access screen's changes (owner only; the switches live in the shared database)
+  "adminLog", "resolveAdminProblem"];   // admin counters (2026-10-16): the app's own usage/error report (counts only) and the owner's "resolved" tap; never repeated if unanswered
 // Answers that never change anything but were not on the read list at first.
 const EXTRA_READ_ACTIONS = ["previewSavingsSplit", "pushTest",    // pushTest: owner-only, sends ONE test notification to his own phone
   "reconcileStatement", "reconcileCreditCardStatement",          // Reconcile previews: only when the phone sent the statement's rows/text (no Google Drive here); saves nothing
-  "getAdminOverview", "getSmsFormats"];                          // the Access screen's reads (owner only, enforced by the backend; the usage numbers are the shared counter)
+  "getAdminOverview", "getSmsFormats", "getAdminDashboard"];     // the Access screen's reads + the admin page's one answer (owner only, enforced by the backend; the usage numbers are the shared counter)
 const MAX_BODY_BYTES = 1000000;            // a year of statement rows is the biggest legitimate request
 
 let runtime = null;     // built once per server instance (the backend code is loaded then, not on every request)

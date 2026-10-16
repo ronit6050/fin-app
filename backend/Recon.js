@@ -578,6 +578,9 @@ function insertReconciledTransactions(txns, source){
     // be alerted. Pull the bookmark back to just above the first such row.
     try{ resetBookmarkAfterSort_(sheet); }catch(ignore){}
 
+    // Admin counters (adminStats.js): payments the SMS never delivered, found by a statement check. These count against the Reading score.
+    try{ if(typeof adminRecordReconAdded_ === "function") adminRecordReconAdded_(added); }catch(ignoreAdmin){}
+
     return { ok: true, added: added };
 
   }catch(err){

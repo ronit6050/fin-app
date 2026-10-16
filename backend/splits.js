@@ -429,7 +429,7 @@ function splitsHandle_(action, data, verified){
 // The actions a friend (anyone the owner has added) is allowed to use. Every
 // other action stays owner-only, because it reads or writes the owner's Sheet
 // (or, for push tokens, would take over the owner's notifications).
-var SPLITS_FRIEND_ACTIONS_ = ["ping", "getMyAccess", "getPeople", "getPerson", "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry"];
+var SPLITS_FRIEND_ACTIONS_ = ["ping", "getMyAccess", "adminLog", "getPeople", "getPerson", "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry"];
 
 function splitsFriendActionAllowed_(action){
   return SPLITS_FRIEND_ACTIONS_.indexOf(action) !== -1;

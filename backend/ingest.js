@@ -128,6 +128,12 @@ function ingestSmsHandle_(data){
     if(outcome && outcome.saved && typeof smsFormatRecord_ === "function"){
       smsFormatRecord_({ sender: sender, sms: sms, bank: tx.bank, type: type, mode: tx.mode, amount: amount, reference: reference, counterparty: counterparty });
     }
+    // Admin counters (adminStats.js): how this message was understood. Counts only; best-effort. The phone's own reading is used here.
+    if(outcome && typeof adminRecordSms_ === "function"){
+      var uncertainLegacy = /^needs review:/i.test(counterparty);
+      adminRecordSms_(email, outcome.saved ? (uncertainLegacy ? "UNCERTAIN_SAVED" : "SAVED") : (outcome.duplicate ? "DUPLICATE" : ""),
+        { bank: tx.bank, type: type, amount: amount, counterparty: counterparty }, sender);
+    }
     return outcome;
   }catch(err){
     try{ logAI("INGEST_ERROR", "save: " + String(err && err.message).slice(0, 200)); }catch(ignore){}

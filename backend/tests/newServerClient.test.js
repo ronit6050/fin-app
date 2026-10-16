@@ -33,6 +33,7 @@ function makeApp(setting, behaviour, opts){
   const sandbox = {
     console: console, JSON: JSON, Error: Error, Promise: Promise, Date: Date,
     demoMode: !!opts.demo,
+    adminWatch: function(){},       // the admin report's passive watcher (tested separately in adminStats.test.js); it never changes a request
     demoHandleRequest: function(){ log.demo++; return Promise.resolve({ ok: true, demo: true }); },
     localStorage: { getItem: function(k){ return k === "newServer" ? setting : null; } },
     APPS_SCRIPT_URL: "https://script.example/exec",

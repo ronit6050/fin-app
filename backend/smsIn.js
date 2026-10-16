@@ -112,10 +112,15 @@ function smsInTeachBank_(sender, bank, forget){
 function smsInHandle_(data){
   var startedAt = Date.now();
   var out = smsInSave_(data);
+  var adm = out && out.admin;
+  if(out) delete out.admin;                                     // internal note for the admin counters, never sent to the phone
   if(out && out.alertOwner){
     delete out.alertOwner;                                      // internal note, never sent to the phone
     smsInAlertNow_(startedAt);                                  // after the save lock is released; can never change the answer to the phone
   }
+  // Admin counters (adminStats.js): how this message was understood. Counts only. After the save lock is released and after the alert,
+  // best-effort: it can never change the answer or delay the notification.
+  if(adm && typeof adminRecordSms_ === "function"){ try{ adminRecordSms_(adm.email, adm.outcome, adm.tx, adm.sender); }catch(ignoreAdmin){} }
   return out;
 }
 
@@ -224,6 +229,7 @@ function smsInSave_(data){
     var saved = out.outcome === "SAVED" || out.outcome === "UNCERTAIN_SAVED";
     var answer = { ok: true, outcome: out.outcome, reason: out.reason || "" };
     if(saved && isOwner) answer.alertOwner = true;               // internal: smsInHandle_ removes it before replying
+    answer.admin = { email: email, outcome: out.outcome, tx: out._tx || {}, sender: sender };   // internal: removed by smsInHandle_ (adminStats.js)
     return answer;
   }catch(err){
     try{ logAI("SMSIN_ERROR", "save: " + String(err && err.message).slice(0, 200)); }catch(ignore){}
