@@ -10766,6 +10766,17 @@
     }
 
     window.addEventListener("popstate", function (event) {
+      // New look: Back first puts away an open sheet or the welcome tour (like
+      // Cancel / Skip) instead of leaving the screen. Put the entry we just
+      // left back, so the next Back still works as normal.
+      if (finSheetOpen || finOnbOpen) {
+        try {
+          const cur = JSON.parse(localStorage.getItem(TAB_STORAGE_KEY) || "null");
+          if (cur) history.pushState(cur, "");
+        } catch (e) { /* ignore */ }
+        if (finOnbOpen) finOnbClose(); else finCloseSheet(false);
+        return;
+      }
       isApplyingHistoryState = true;
 
       if (event.state) {
