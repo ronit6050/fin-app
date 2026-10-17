@@ -31,9 +31,13 @@ ok(/if \(finLookOn\(\) && inv\.overview\) \{[\s\S]{0,200}renderInvestmentsNew\(i
 ok(/investmentsContentEl\.classList\.remove\("iv-newon"\)/.test(html), "without them the older screen is used");
 ok(/ivLeave\(\);/.test(html) && /ivLookChanged\(\);/.test(html), "leaving the screen and flipping the switch are handled");
 ok(/ivOpenName && subViews\.investments\.style\.display !== "none"/.test(html), "the phone's Back button closes a holding page first");
-ok(/APP_VERSION = "2026-10-17-10"/.test(html) && /Investments screen is redesigned/.test(html), "version bumped and the changelog mentions the Investments screen");
+ok(/APP_VERSION = "2026-10-17-11"/.test(html) && /Investments screen is redesigned/.test(html), "version bumped and the changelog mentions the Investments screen");
 ok(/INVESTMENT_CATEGORIES/.test(read("backend/investmentInstruments.js")) && /"InvestmentInstruments": \["Name", "Category", "SipAmount", "SipDay", "SipActive"\]/.test(read("backend/v2route.js")), "a new person's empty tabs have the new columns");
 ok(/"Investments": \["Date", "Name", "Amount", "Note", "Kind"\]/.test(read("backend/v2route.js")), "...and the Kind column");
 
+ok(/<button type="button" class="type-btn" data-type="Investment">Investment<\/button>\s*<\/div>\s*<div class="type-hint-row">/.test(html), "the Pending card has an Investment button");
+ok(/btn\.dataset\.type === "Investment"[\s\S]{0,500}sipOpt\.click\(\)/.test(html), "that button opens the holding picker (the person must choose a holding)");
+ok(/data\.eventInvestmentLogged === false/.test(html), "a marked investment that was not added says so");
+ok(/function undoAutoLogInvestment/.test(read("backend/financialEvents.js")) && /eventInvestmentLogged/.test(read("backend/PWA.js")), "the backend can take the entry back and reports whether it logged");
 console.log("\n" + passed + " passed, " + failed + " failed");
 process.exit(failed ? 1 : 0);

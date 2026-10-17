@@ -270,12 +270,16 @@ function isNearbyDate(a, b, windowDays){
 
 // Investments sheet: [Date, Type, Amount, Note] — see PWA.js's
 // logInvestmentFromApp for the manual-entry version this mirrors.
-function hasLikelyDuplicateInvestment(dateStr, amount){
+// name (added 2026-10-17): when the holding is known, only entries for THAT holding count. Two separate 5,000 purchases of
+// different funds in the same week are not duplicates of each other.
+function hasLikelyDuplicateInvestment(dateStr, amount, name){
   var investSheet = dbSs_().getSheetByName("Investments");
   if(!investSheet) return false;
   var data = investSheet.getDataRange().getValues();
   var txnDate = new Date(dateStr);
+  var wantName = (name || "").toString().trim().toLowerCase();
   for(var i = 1; i < data.length; i++){
+    if(wantName && (data[i][1] || "").toString().trim().toLowerCase() !== wantName) continue;
     var rowDate = data[i][0] ? new Date(data[i][0]) : null;
     var rowAmount = Number(data[i][2]) || 0;
     if(!rowDate || !rowAmount) continue;
@@ -307,12 +311,49 @@ function hasLikelyDuplicateInvestment(dateStr, amount){
 // The Financial Event/SIP call site below is UNCHANGED — still always
 // checks for a duplicate.
 function autoLogInvestment(dateStr, name, amount, note, skipDuplicateCheck){
-  if(!skipDuplicateCheck && hasLikelyDuplicateInvestment(dateStr, amount)) return { logged: false, reason: "duplicate" };
+  if(!skipDuplicateCheck && hasLikelyDuplicateInvestment(dateStr, amount, name)) return { logged: false, reason: "duplicate" };
   var investSheet = dbSs_().getSheetByName("Investments");
   if(!investSheet) return { logged: false, reason: "no sheet" };
   // 5th column "Kind" (added 2026-10-17): money the app saw leave the bank is a "payment" (see investmentsOverview.js).
   investSheet.appendRow([dateStr, name || "Investment", Number(amount) || 0, note || "", "payment"]);
   return { logged: true };
+}
+
+// Takes back the automatic Investments entry of ONE payment (the person said "no, regular spend" on a payment that had been
+// marked as an Investment). Safe by design: it removes a row only when exactly ONE entry matches (same holding, same day,
+// same amount, money from the bank, not a starting amount or a hand-added one) AND no other payment is also marked as that
+// Investment with the same holding, day and amount. Anything else is left alone and reported.
+// Returns { removed:true } | { removed:false, reason:"none"|"shared"|"ambiguous" }.
+function undoAutoLogInvestment(txnSheet, txnRow, dateStr, name, amount){
+  var investSheet = dbSs_().getSheetByName("Investments");
+  if(!investSheet || !name) return { removed: false, reason: "none" };
+  var data = investSheet.getDataRange().getValues();
+  var day = Utilities.formatDate(new Date(dateStr), "Asia/Kolkata", "yyyy-MM-dd");
+  var hits = [];
+  for(var i = 1; i < data.length; i++){
+    if((data[i][1] || "").toString().trim() !== name) continue;
+    if(Math.abs((Number(data[i][2]) || 0) - Number(amount)) > 0.005) continue;
+    var d = data[i][0] ? new Date(data[i][0]) : null;
+    if(!d || isNaN(d.getTime()) || Utilities.formatDate(d, "Asia/Kolkata", "yyyy-MM-dd") !== day) continue;
+    var kind = (data[i][4] || "").toString().trim().toLowerCase();
+    if(kind === "opening" || kind === "manual" || kind === "sale") continue;
+    if((data[i][3] || "").toString().trim().toLowerCase() === "starting balance") continue;
+    hits.push(i + 1);
+  }
+  if(hits.length === 0) return { removed: false, reason: "none" };
+  if(hits.length > 1) return { removed: false, reason: "ambiguous" };
+  // another payment marked as this same Investment on this day for this amount?
+  var tx = txnSheet.getDataRange().getValues();
+  for(var t = 1; t < tx.length; t++){
+    if(t + 1 === txnRow) continue;
+    if((tx[t][17] || "").toString().trim() !== "Investment") continue;
+    if((tx[t][18] || "").toString().trim() !== name) continue;
+    if(Math.abs((Number(tx[t][5]) || 0) - Number(amount)) > 0.005) continue;
+    var td = tx[t][0] ? new Date(tx[t][0]) : null;
+    if(td && !isNaN(td.getTime()) && Utilities.formatDate(td, "Asia/Kolkata", "yyyy-MM-dd") === day) return { removed: false, reason: "shared" };
+  }
+  investSheet.deleteRow(hits[0]);
+  return { removed: true };
 }
 
 // Savings sheet: one LOG SAVING action writes up to 3 rows (Emergency/

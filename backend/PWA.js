@@ -2445,7 +2445,7 @@ function runFinancialEventSideEffects_(sheet, row, financialEvent, financialEven
   const txnDateStr = Utilities.formatDate(new Date(txnDateRaw), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
   if(financialEvent === "Investment"){
-    autoLogInvestment(txnDateStr, financialEventName, feAmount, note);
+    return { investment: autoLogInvestment(txnDateStr, financialEventName, feAmount, note) };   // { logged, reason }: the caller can tell whether it really landed
   } else if(financialEvent === "Saving"){
     return { saving: autoLogSaving(txnDateStr, feAmount, note) };   // { logged, reason }: the caller can tell whether it really landed
   }
@@ -2643,6 +2643,8 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     let savingUndo = null;
     let savingRelogSkipped = false;
     let savingLogResult = null;
+    let investmentEventResult = null;      // what logging an "Investment" event on the Investments screen did, when it was tried
+    let investmentUndo = null;
     if(wasSaving){
       try{
         const undoDateRaw = sheet.getRange(row, 1).getValue();
@@ -2665,12 +2667,40 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
         writeFinancialEventCells_(sheet, row, "Saving", null);
         savingRelogSkipped = true;
       }else{
-        // Moved into a shared helper 2026-10-10 so the automatic "settle
-        // known transactions" path (autoSettle.js) runs exactly the same
-        // steps as a human tapping "Yes" on the chip — the two can never
-        // drift apart. Behavior here is unchanged.
-        const feResult = applyFinancialEventToRow_(sheet, row, effectiveFinancialEvent, effectiveFinancialEventName, counterparty, note);
-        if(feResult && feResult.saving) savingLogResult = feResult.saving;
+        // An Investment that was ALREADY logged for this payment (it is marked Investment on the row): saving it again must
+        // not log a second entry. Unchanged holding and amount = nothing to do. A different holding or amount = take the old
+        // entry out first, then log the new one; if the old one cannot be taken out safely it is left alone, nothing new is
+        // logged on top of it (that would count the money twice) and the answer says so.
+        let investmentAlreadyLogged = false;
+        if(prevFinancialEvent === "Investment" && effectiveFinancialEvent === "Investment"){
+          const oldInvName = (sheet.getRange(row, 19).getValue() || "").toString().trim();   // column S, still the old value
+          const newInvAmount = Number(sheet.getRange(row, 6).getValue()) || 0;
+          if(oldInvName === (effectiveFinancialEventName || "").toString().trim() && Math.abs(newInvAmount - prevAmountRaw) <= 0.005){
+            investmentAlreadyLogged = true;
+          }else{
+            try{
+              const oldRaw = sheet.getRange(row, 1).getValue();
+              const oldStr = Utilities.formatDate(new Date(oldRaw), Session.getScriptTimeZone(), "yyyy-MM-dd");
+              investmentUndo = undoAutoLogInvestment(sheet, row, oldStr, oldInvName, prevAmountRaw);
+              if(!investmentUndo.removed && investmentUndo.reason !== "none") investmentAlreadyLogged = true;   // left alone: do not add another on top
+            }catch(undoErr){
+              logAI("INVESTMENT_UNDO_ERROR", undoErr.toString());
+              investmentUndo = { removed: false, reason: "error" };
+              investmentAlreadyLogged = true;
+            }
+          }
+        }
+        if(investmentAlreadyLogged){
+          writeFinancialEventCells_(sheet, row, "Investment", effectiveFinancialEventName);
+        }else{
+          // Moved into a shared helper 2026-10-10 so the automatic "settle
+          // known transactions" path (autoSettle.js) runs exactly the same
+          // steps as a human tapping "Yes" on the chip — the two can never
+          // drift apart. Behavior here is unchanged.
+          const feResult = applyFinancialEventToRow_(sheet, row, effectiveFinancialEvent, effectiveFinancialEventName, counterparty, note);
+          if(feResult && feResult.saving) savingLogResult = feResult.saving;
+          if(feResult && feResult.investment) investmentEventResult = feResult.investment;
+        }
       }
     }
 
@@ -2678,6 +2708,21 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     // suggestion for THIS payment and said no, so History stops listing it under "Needs attention" and
     // stops re-asking. Own column (V, "EventDeclined") so column R keeps meaning only Rent/EMI/Investment.
     // Confirming an event later clears it.
+    // "No, regular spend" on a payment that WAS an Investment: take its automatic Investments entry back out (only an exact,
+    // single match that belongs to no other payment, see undoAutoLogInvestment) and clear the marker, like un-saving a Saving.
+    if(opts.eventDeclined === true && !effectiveFinancialEvent && prevFinancialEvent === "Investment"){
+      try{
+        const prevName = (sheet.getRange(row, 19).getValue() || "").toString().trim();   // column S, still the old value
+        const undoRaw = sheet.getRange(row, 1).getValue();
+        const undoStr = Utilities.formatDate(new Date(undoRaw), Session.getScriptTimeZone(), "yyyy-MM-dd");
+        investmentUndo = undoAutoLogInvestment(sheet, row, undoStr, prevName, prevAmountRaw);
+        sheet.getRange(row, 18).setValue("");   // column R: the payment is regular spend again, as the person said
+        sheet.getRange(row, 19).setValue("");   // column S
+      }catch(undoErr){
+        logAI("INVESTMENT_UNDO_ERROR", undoErr.toString());
+        investmentUndo = { removed: false, reason: "error" };
+      }
+    }
     if(opts.eventDeclined === true && !effectiveFinancialEvent){
       setEventDeclinedMarker_(sheet, row, true);
     }else if(effectiveFinancialEvent){
@@ -2852,6 +2897,9 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
              // false = counted as a saving but NOT added to the Savings screen (an entry for the same amount was already there)
              savingLogged: savingLogResult ? savingLogResult.logged === true : null,
              savingUndone: !!(savingUndo && savingUndo.removed), savingUndoKept: !!(savingUndo && !savingUndo.removed) || savingRelogSkipped,
+             // false = marked as an Investment but NOT added to the Investments screen (the same holding already had that amount within 3 days)
+             eventInvestmentLogged: investmentEventResult ? investmentEventResult.logged === true : null,
+             investmentUndone: !!(investmentUndo && investmentUndo.removed), investmentUndoKept: !!(investmentUndo && !investmentUndo.removed && investmentUndo.reason !== "none"),
              debtLinked: !!(debtResult && (debtResult.logged === true || debtResult.ok === true)),
              debtAlreadyLinked: !!(debtResult && debtResult.reason === "already linked") };
   }catch(err){

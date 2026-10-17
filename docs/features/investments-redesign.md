@@ -59,3 +59,17 @@ auto-settle (`findSilentFinancialEventMatch_`); (3) a paused SIP gets no "due so
 (4) a SIP due on the 29th-31st is due on the month's last day in a shorter month, and pausing a SIP with no due day asks for
 the day instead of guessing 1. Not verified by anyone: behaviour on the real Google Sheet (only the fake and virtual sheets), and the
 screen on a real phone.
+
+## Logging a SIP / investment from Pending (2026-10-17, later)
+How an investment payment reaches the Investments screen:
+1. **Known SIP, silent:** amount + payee match a remembered SIP (active, not paused) -> auto-settled and logged (autoSettle.js).
+2. **Chip / note:** the "Investment: <holding>?" chip, or a holding's name in the note.
+3. **New: the Investment button** on a Pending card (next to Need / Want / Saving). It is not a tag: it opens the same holding picker as
+   "Mark as > SIP" and the person MUST pick a holding (no "decide later" bucket, owner chose option A). Saving then marks the payment
+   Investment in that holding (column R/S), logs it on the Investments screen (kind `payment`), leaves it out of Spent and skips Need/Want.
+- The repeat check is now per holding: same holding + about the same amount within 3 days is not added again (two different funds with
+  the same amount in one week are fine). When it is skipped the answer says so (`eventInvestmentLogged:false`) and the card shows a notice.
+- **Undo:** "No, regular spend" in History on a payment that was an Investment removes its Investments entry (`undoAutoLogInvestment`):
+  only when exactly one entry matches (holding, India day, amount, from the bank) and no other payment is marked the same way; then
+  clears R/S. Anything uncertain is left alone and reported.
+- Tests: `backend/tests/investmentPending.test.js`, wiring in `finInvestmentsNew.test.js`. `APP_VERSION` `2026-10-17-11`.

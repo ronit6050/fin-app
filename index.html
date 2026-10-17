@@ -6156,8 +6156,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-17-10";
-    const APP_CHANGELOG = "New look preview: in Investments you can remove a holding you do not have (when nothing is put into it), and the last-6-months chart now includes payments from before you started over. New look preview: the Investments screen is redesigned, with what you have put in so far, this month against your goal, a tracker for each monthly SIP (paid, coming up or overdue), where your money sits, each holding with its share, the last 6 months, and one Add money sheet. In Investments you can set up each holding with its SIP day and amount, pause a SIP, record a sale, or start over from scratch. New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
+    const APP_VERSION = "2026-10-17-11";
+    const APP_CHANGELOG = "A payment card in Pending now has an Investment button: tap it, choose which holding the money went into, and it is added to that holding on the Investments screen and left out of your spending. Marking a payment as an investment now tells you if it was not added because that holding already had the same amount within 3 days, and \"No, regular spend\" in History takes the entry back out. New look preview: in Investments you can remove a holding you do not have (when nothing is put into it), and the last-6-months chart now includes payments from before you started over. New look preview: the Investments screen is redesigned, with what you have put in so far, this month against your goal, a tracker for each monthly SIP (paid, coming up or overdue), where your money sits, each holding with its share, the last 6 months, and one Add money sheet. In Investments you can set up each holding with its SIP day and amount, pause a SIP, record a sale, or start over from scratch. New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -8836,12 +8836,26 @@
       t.note = note || "";
       t.category = category || "";
       // History can confirm (or clear) a Rent / EMI / Investment, so Demo Mode remembers it too.
+      const hadInvestment = t.financialEvent === "Investment" ? t.financialEventName : null;
+      let eventInvestmentLogged = null;
       if (financialEvent !== undefined) { t.financialEvent = financialEvent || ""; t.financialEventName = financialEvent ? (financialEventName || "") : ""; }
+      if (hadInvestment && eventDeclined === true && !financialEvent) {
+        const k = demoState.investments.findIndex(function (e) { return e.type === hadInvestment && e.amount === t.amount && e.kind === "payment" && demoFmtISODate(e.date) === demoFmtISODate(t.date); });
+        if (k >= 0) demoState.investments.splice(k, 1);
+      }
+      if (financialEvent === "Investment" && financialEventName && !hadInvestment) {
+        const inst = demoState.investmentInstruments.find(function (i) { return i.name === financialEventName; });
+        if (inst) {
+          const dup = demoState.investments.some(function (e) { return e.type === inst.name && Math.abs(e.amount - t.amount) <= Math.max(50, t.amount * 0.05) && Math.abs(e.date - t.date) <= 3 * 86400000; });
+          if (!dup) demoState.investments.push({ date: t.date, type: inst.name, amount: t.amount, note: note || "", kind: "payment" });
+          eventInvestmentLogged = !dup;
+        }
+      }
       if (eventDeclined === true && !financialEvent) t.eventDeclined = true; else if (financialEvent) t.eventDeclined = false;
       if (amount !== undefined && amount !== null && amount !== "") t.amount = Number(amount);
       let typeSaved = false;
       if (type && !t.financialEvent) { t.needWantSaving = type; typeSaved = true; }
-      return { ok: true, typeRequested: !!type, typeSaved: typeSaved, investmentLogged: false };
+      return { ok: true, typeRequested: !!type, typeSaved: typeSaved, investmentLogged: false, eventInvestmentLogged: eventInvestmentLogged };
     }
 
     function demoAddManualTransaction(d) {
@@ -10355,6 +10369,7 @@
             <button type="button" class="type-btn" data-type="Need">Need</button>
             <button type="button" class="type-btn" data-type="Want">Want</button>
             <button type="button" class="type-btn" data-type="Saving">Saving</button>
+            <button type="button" class="type-btn" data-type="Investment">Investment</button>
           </div>
           <div class="type-hint-row">
             <div class="type-hint"></div>
@@ -10485,12 +10500,26 @@
       if (showTypeToggle) {
         const typeButtons = card.querySelectorAll(".type-btn");
         typeButtons.forEach(function (btn) {
-          if (txn.suggestedType && btn.dataset.type === txn.suggestedType) {
+          if (txn.suggestedType && txn.suggestedType !== "Investment" && btn.dataset.type === txn.suggestedType) {
             btn.classList.add("active");
             selectedType = txn.suggestedType;
             typeSource = "auto";
           }
           btn.addEventListener("click", function () {
+            // Investment (2026-10-17): money that went into a fund is not a Need/Want tag. The card asks WHICH holding
+            // (the same picker as "Mark as > SIP", the person must pick one), then it is logged on the Investments screen
+            // and left out of Spent, exactly as marking it as a SIP does.
+            if (btn.dataset.type === "Investment") {
+              const sipOpt = card.querySelector('.mark-opt[data-mark="SIP"]');
+              const panel = card.querySelector(".mark-panel");
+              if (sipOpt && panel) {
+                panel.style.display = "block";
+                sipOpt.click();
+                try { panel.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) { /* fine */ }
+                showTypeHint("Choose which holding this went into below, then tap its button.");
+              }
+              return;
+            }
             typeButtons.forEach(function (b) { b.classList.remove("active"); });
             btn.classList.add("active");
             selectedType = btn.dataset.type;
@@ -10570,8 +10599,9 @@
           showTypeHint("Filled in <b>" + p.answer + "</b> because you've tagged &ldquo;" + word + "&rdquo; that way " + p.count + " of " + p.total + " times. Tap another to change it.");
           return;
         }
-        // Nothing clear from the words: fall back to the older per-shop guess (if any).
-        if (txn.suggestedType) {
+        // Nothing clear from the words: fall back to the older per-shop guess (if any). An "Investment" guess is not a tag on
+        // this card (the Investment button asks for the holding instead), so it is not used here.
+        if (txn.suggestedType && txn.suggestedType !== "Investment") {
           setTypeSelection(txn.suggestedType, "auto");
         } else {
           setTypeSelection(null, null);
@@ -10580,7 +10610,7 @@
           const c = p.counts || {};
           const parts = ["Need", "Want", "Saving"].filter(function (k) { return c[k]; }).map(function (k) { return k + " " + c[k]; });
           showTypeHint("Mixed: &ldquo;" + word + "&rdquo; has been <b>" + parts.join(", ") + "</b>. Your call, or tap Not sure.");
-        } else if (txn.suggestedType) {
+        } else if (txn.suggestedType && txn.suggestedType !== "Investment") {
           showTypeHint("Guessed <b>" + txn.suggestedType + "</b> from this shop's past payments. Tap another to change it.");
         } else {
           showTypeHint("");
@@ -10626,7 +10656,10 @@
           markNameEl.style.display = "none";
           markNameEl.innerHTML = "";
           markStateEl.style.display = "";
-          markStateEl.innerHTML = 'Marked as <b>' + escapeHtml(label) + '</b>. It skips Need/Want and counts under Fixed obligations or Savings. <button type="button" class="link-btn mark-undo">Undo</button>';
+          const sipLabel = label.indexOf("SIP") === 0;
+          markStateEl.innerHTML = 'Marked as <b>' + escapeHtml(sipLabel ? "an investment" + label.slice(3) : label) + '</b>. ' +
+            (sipLabel ? 'It skips Need/Want, leaves your spending, and is added to Investments when you save.' : 'It skips Need/Want and counts under Fixed obligations or Savings.') +
+            ' <button type="button" class="link-btn mark-undo">Undo</button>';
           markStateEl.querySelector(".mark-undo").addEventListener("click", function () {
             financialEvent.type = null;
             financialEvent.name = null;
@@ -10894,6 +10927,12 @@
               showPendingNotice(
                 "₹" + txn.amount.toLocaleString("en-IN") + " confirmed as " + savedInvestmentInstrument +
                 ", but wasn't logged to Investments (looks like a duplicate of something already there) — check the Investments tab."
+              );
+            }
+            if (savedFinancialEvent === "Investment" && data.eventInvestmentLogged === false) {
+              showPendingNotice(
+                "₹" + txn.amount.toLocaleString("en-IN") + " is marked as an investment" + (savedFinancialEventName ? " in " + savedFinancialEventName : "") +
+                ", but wasn't added to Investments: that holding already has the same amount within 3 days. Check the Investments tab."
               );
             }
             if (splitArm) {
@@ -18532,6 +18571,16 @@
               resultEl.textContent = "Saved. Counted as a saving, not spending.";
             } else if (data.savingUndone) {
               resultEl.textContent = "Saved. Also taken off your Savings screen.";
+            } else if (data.investmentUndoKept) {
+              // Said "regular spend" on a payment that had been marked as an investment, but its entry on the Investments
+              // screen could not be matched safely (another entry looks the same, or it was changed by hand): left alone.
+              resultEl.style.color = "var(--color-danger)";
+              resultEl.textContent = "Saved as regular spend. Its entry on the Investments screen could not be matched safely, so it was left as it is. Check the Investments tab.";
+            } else if (data.investmentUndone) {
+              resultEl.textContent = "Saved. Also taken off your Investments screen.";
+            } else if (data.eventInvestmentLogged === false) {
+              resultEl.style.color = "var(--color-danger)";
+              resultEl.textContent = "Saved, but this wasn't added to Investments (that holding already has the same amount within 3 days). Check the Investments tab.";
             }
             // otherwise: fully saved, "Saved." is already showing
             if (data.ok && txn.onSaved) txn.onSaved();   // refresh the chip counts ("Needs attention" just shrank)
