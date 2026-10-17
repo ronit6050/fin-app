@@ -107,6 +107,14 @@ function timerDailySkip_(key){
   }
 }
 
+var TIMER_REMIND_EVERY_MS_ = 14 * 60 * 1000;      // look at the pending-payment reminders about every 15 minutes (the tick is every 5)
+
+// Never throws: a reminder problem must not affect the timer's real work.
+function timerRemind_(nowMs){
+  try{ if(typeof pendingReminderRun_ === "function") pendingReminderRun_(nowMs); }
+  catch(e){ try{ logAI("REMINDER_ERROR", "tick: " + String(e && e.message).slice(0, 150)); }catch(ignore){} }
+}
+
 // Runs on the NEW server only (called by functions/index.js "tick"). Returns what it did.
 function timerTick_(){
   var startedAt = Date.now();
@@ -119,8 +127,12 @@ function timerTick_(){
   var dueDaily = TIMER_DAILY_JOBS_.filter(function(j){ return clock.minutes >= j.hour * 60 + j.minute && f["daily_" + j.key] !== clock.date; });
   var dirty = dirtyAt > doneAt;
   var fullDue = (startedAt - fullAt) >= TIMER_FULL_EVERY_MS_;
+  // The pending-payment reminder (pendingReminder.js) is looked at about every 15 minutes (a tick is 5 minutes), in the quiet-tick path too.
+  var remindDue = (startedAt - Number(f.remindAtMs || 0)) >= TIMER_REMIND_EVERY_MS_;
   if(!dirty && !fullDue && !dueDaily.length){
-    timerWrite_({ tickAtMs: startedAt });                        // heartbeat: "the new server is alive"
+    var quiet = { tickAtMs: startedAt };                         // heartbeat: "the new server is alive"
+    if(remindDue){ timerRemind_(startedAt); quiet.remindAtMs = startedAt; }
+    timerWrite_(quiet);
     return { ran: false, reason: "nothing to do" };
   }
   var wantWork = dirty || fullDue;
@@ -156,6 +168,7 @@ function timerTick_(){
     // Written NOW, not only at the end: if this tick is killed before it finishes, a job that already ran (and sent its notification) is not repeated.
     var marker = {}; marker["daily_" + j.key] = clock.date; timerWrite_(marker);
   });
+  if(remindDue){ timerRemind_(startedAt); fields.remindAtMs = startedAt; }
   timerWrite_(fields);
   if(workError) throw workError;
   return workRan ? { ran: true, why: dirty ? "marked changed" : "full look", daily: ranDaily }

@@ -3597,6 +3597,16 @@
               <option value="off">Off</option>
             </select>
           </div>
+          <div class="field" style="margin-top:12px;margin-bottom:0;">
+            <label>Reminder when payments are waiting for a note</label>
+            <select id="settingsPendingReminder">
+              <option value="30">Every 30 minutes</option>
+              <option value="60">Every hour</option>
+              <option value="twice">Twice a day</option>
+              <option value="off">Off</option>
+            </select>
+            <p class="pending-status" style="margin:4px 0 0;">Only between 8am and 10pm, at most 8 a day, and not while the app is open.</p>
+          </div>
         </div>
 
         <button type="button" id="saveSettingsButton">Save</button>
@@ -3730,8 +3740,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-17-01";
-    const APP_CHANGELOG = "New: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
+    const APP_VERSION = "2026-10-17-02";
+    const APP_CHANGELOG = "New: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -12896,6 +12906,7 @@
     const settingsMonthlySaveGoalEl = document.getElementById("settingsMonthlySaveGoal");
     const settingsMonthlyInvestmentGoalEl = document.getElementById("settingsMonthlyInvestmentGoal");
     const settingsDailySummaryEl = document.getElementById("settingsDailySummary");
+    const settingsPendingReminderEl = document.getElementById("settingsPendingReminder");
     const saveSettingsButtonEl      = document.getElementById("saveSettingsButton");
     const settingsResultEl          = document.getElementById("settingsResult");
 
@@ -12989,6 +13000,7 @@
       settingsMonthlySaveGoalEl.value = s.monthlySaveGoal;
       settingsMonthlyInvestmentGoalEl.value = s.monthlyInvestmentGoal;
       settingsDailySummaryEl.value = s.dailySummary === false ? "off" : "on";     // on unless switched off (an older server does not send it)
+      settingsPendingReminderEl.value = ["30", "60", "twice", "off"].indexOf(s.pendingReminder) !== -1 ? s.pendingReminder : "60";   // hourly unless chosen
     }
 
     saveSettingsButtonEl.addEventListener("click", function () {
@@ -13004,7 +13016,8 @@
           monthlyExpenses: parseFloat(settingsMonthlyExpensesEl.value) || 0,
           monthlySaveGoal: parseFloat(settingsMonthlySaveGoalEl.value) || 0,
           monthlyInvestmentGoal: parseFloat(settingsMonthlyInvestmentGoalEl.value) || 0,
-          dailySummary: settingsDailySummaryEl.value === "on"
+          dailySummary: settingsDailySummaryEl.value === "on",
+          pendingReminder: settingsPendingReminderEl.value
         }
       })
         .then(function (data) {

@@ -45,6 +45,8 @@ messaging.onBackgroundMessage(function (payload) {
   const title = (payload.data && payload.data.title) || "Fin App";
   const body  = (payload.data && payload.data.body) || "";
   const options = { body: body, data: payload.data || {} };
+  // A notification that carries a "tag" (the pending-payment reminder) REPLACES the earlier one with the same tag instead of piling up, and still buzzes.
+  if (payload.data && payload.data.tag) { options.tag = payload.data.tag; options.renotify = true; }
 
   if (payload.data && payload.data.quickConfirm === "1") {
     // "Top two guesses" (added 2026-10-11): one button per remembered note, e.g.

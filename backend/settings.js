@@ -34,7 +34,9 @@ function getSettings(){
     // for anyone who hasn't set it.
     monthlyInvestmentGoal: Number(props.getProperty("SETTING_MONTHLY_INVESTMENT_GOAL")) || 0,
     // Added 2026-10-17 - the 9pm "how much you spent today" notification (dailySummary.js). On unless switched off here.
-    dailySummary: String(props.getProperty("SETTING_DAILY_SUMMARY_OFF") || "") !== "1"
+    dailySummary: String(props.getProperty("SETTING_DAILY_SUMMARY_OFF") || "") !== "1",
+    // Added 2026-10-17 - how often to be reminded about payments waiting for a note (pendingReminder.js): off / 30 / 60 (default) / twice
+    pendingReminder: (typeof reminderChoice_ === "function") ? reminderChoice_(props.getProperty("SETTING_PENDING_REMINDER")) : "60"
   };
 }
 
@@ -53,6 +55,8 @@ function updateSettings(newSettings){
       props.setProperty("SETTING_MONTHLY_INVESTMENT_GOAL", String(newSettings.monthlyInvestmentGoal));
     if(newSettings.dailySummary === true || newSettings.dailySummary === false)
       props.setProperty("SETTING_DAILY_SUMMARY_OFF", newSettings.dailySummary ? "" : "1");
+    if(["off", "30", "60", "twice"].indexOf(String(newSettings.pendingReminder)) !== -1)
+      props.setProperty("SETTING_PENDING_REMINDER", String(newSettings.pendingReminder));
 
     return { ok: true };
   }catch(err){
