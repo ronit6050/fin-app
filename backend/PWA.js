@@ -175,15 +175,24 @@ function pwaDispatch_(data, verified){
   }
 
   if(data.action === "addDebt"){
-    return jsonResponse(addDebtEntryFromApp(data.person, data.type, data.amount, data.note, data.dueDate));
+    const addOut = addDebtEntryFromApp(data.person, data.type, data.amount, data.note, data.dueDate);
+    // Tell the person named on the debt if they are one of your friends who uses the app (splitNotify.js). Never changes the answer.
+    try{ if(addOut && addOut.ok === true && typeof debtNotifyFriend_ === "function") debtNotifyFriend_(verified, data.person, "added", { type: data.type, amount: data.amount, note: data.note }); }catch(ignoreNotify){}
+    return jsonResponse(addOut);
   }
 
   if(data.action === "settleDebt"){
-    return jsonResponse(settleDebtRow(data.row));
+    const settleWho = debtPersonOfRow_(data.row);                    // read BEFORE it is settled
+    const settleOut = settleDebtRow(data.row);
+    try{ if(settleOut && settleOut.ok === true && settleWho && typeof debtNotifyFriend_ === "function") debtNotifyFriend_(verified, settleWho, "settled", {}); }catch(ignoreNotify){}
+    return jsonResponse(settleOut);
   }
 
   if(data.action === "recordDebtPayment"){
-    return jsonResponse(applyDebtPayment(data.row, data.amount));
+    const payWho = debtPersonOfRow_(data.row);
+    const payOut = applyDebtPayment(data.row, data.amount);
+    try{ if(payOut && payOut.ok === true && payWho && typeof debtNotifyFriend_ === "function") debtNotifyFriend_(verified, payWho, "payment", { amount: data.amount, settled: payOut.settled === true }); }catch(ignoreNotify){}
+    return jsonResponse(payOut);
   }
 
   // ── Savings v2 (Goals-based engine, backend/savingsGoals.js) ──
@@ -823,6 +832,15 @@ function getDebtsData(){
 }
 
 // Adds a new debt entry from the PWA's form (no AI parsing — plain fields)
+// The person named on one Debts row (for the notification above), or "" if it cannot be read. Never throws.
+function debtPersonOfRow_(row){
+  try{
+    const sh = dbSs_().getSheetByName("Debts");
+    if(!Number.isInteger(row) || row < 2 || row > sh.getLastRow()) return "";
+    return (sh.getRange(row, 2).getValue() || "").toString().trim();
+  }catch(err){ return ""; }
+}
+
 function addDebtEntryFromApp(person, type, amount, note, dueDate){
   try{
     const debtSheet = dbSs_().getSheetByName("Debts");

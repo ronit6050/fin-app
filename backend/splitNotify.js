@@ -60,3 +60,55 @@ function splitNotify_(myName, friendEmail, kind, d, myEmail){
     return false;
   }
 }
+
+// ---- DEBT notifications (added 2026-10-17) -----------------------------------------------------------------------------------
+// When someone adds a debt (Debts > "+ Add Debt"), records a payment on one, or settles one, and the person named on that debt is
+// ALSO a person they split with who uses the app, that person gets a push, the same way a split does. How the person is found: the
+// debt's name must match EXACTLY ONE person in the sender's own friends list (case and spaces ignored). No match, or more than one,
+// means nobody is told (a wrong person must never be notified). A friend with no phone token (Splits-only) simply gets no push.
+// Best-effort like every notification here: never changes or blocks the debt itself.
+// kind: "added" | "payment" | "settled".  d: { type: "LENT"|"BORROWED", amount, note, settled }.
+function debtNotifyFriend_(verified, personName, kind, d){
+  try{
+    var me = splitsKey_(verified && verified.email);
+    var who = String((verified && verified.name) || me).trim().slice(0, 40) || "Your friend";
+    var wanted = String(personName || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if(!me || !wanted) return false;
+    var docs = fsListPath_("users/" + me + "/friends", 500);
+    var matches = docs.filter(function(f){
+      return f.id !== me && String((f.fields && f.fields.name) || "").trim().toLowerCase().replace(/\s+/g, " ") === wanted;
+    });
+    if(matches.length !== 1) return false;
+    var friendEmail = matches[0].id;
+    var title, body;
+    if(kind === "added"){
+      var amount = splitNotifyMoney_(d.amount);
+      var reason = d.note ? " (\"" + String(d.note).slice(0, 40) + "\")" : "";
+      title = "New debt recorded";
+      body = String(d.type).toUpperCase() === "BORROWED"
+        ? who + " recorded a debt with you: " + who + " owes you " + amount + reason + "."
+        : who + " recorded a debt with you: you owe " + who + " " + amount + reason + ".";
+    }else if(kind === "payment"){
+      title = d.settled ? "Debt settled" : "Debt payment recorded";
+      body = d.settled ? who + " marked a debt with you as settled." : who + " recorded a payment of " + splitNotifyMoney_(d.amount) + " on a debt with you.";
+    }else if(kind === "settled"){
+      title = "Debt settled";
+      body = who + " marked a debt with you as settled.";
+    }else{
+      return false;
+    }
+    var cache = null, limitKey = "sn:" + me + ":" + friendEmail;                       // the same spam limit as the split notifications
+    try{ cache = CacheService.getScriptCache(); }catch(ignoreCache){}
+    var recent = 0;
+    try{ recent = cache ? Number(cache.get(limitKey) || 0) : 0; }catch(ignoreGet){}
+    if(recent >= 10) return false;
+    var token = splitNotifyToken_(friendEmail);
+    if(!token) return false;
+    try{ if(cache) cache.put(limitKey, String(recent + 1), 600); }catch(ignorePut){}
+    sendPushToToken_(token, title, body, { kind: "debt" });
+    return true;
+  }catch(err){
+    try{ logAI("SPLIT_NOTIFY_ERROR", "debt: " + String(err && err.message).slice(0, 150)); }catch(ignore){}
+    return false;
+  }
+}

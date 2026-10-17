@@ -31,6 +31,10 @@ Vaidehi has the **full app** (since 2026-10-13 10:41) on her own private data.
 
 ## 3. What has been DONE (newest first, one line each)
 
+**2026-10-17 (built and tested, NOT deployed)**
+- **Debt notifications** (`debtNotifyFriend_` in `backend/splitNotify.js`, hooked in `PWA.js` for `addDebt`, `recordDebtPayment`, `settleDebt`): when a debt names a person who matches EXACTLY ONE of your friends (case/spaces ignored) and that friend has a phone token, they get a push like a split does ("Ronit recorded a debt with you: you owe Ronit Rs 300 ('tickets')."). No match, two matches, no token, failed action = nobody told; a push problem never changes the answer; same 10-per-10-minutes limit. Debts created automatically from a payment note ("Lent X for ...") do NOT notify yet. Test: `backend/tests/debtNotify.test.js`.
+- Idea agreed in principle, not built: a 9pm "how much you spent today" push for every full-app person (replacing the owner-only 8pm cash check-in); waiting on two answers from the owner.
+
 **2026-10-16 (built and tested, NOT deployed, waiting for the owner's "ship it")**
 - **Admin panel, phase 1: the quiet recording and the honest "how well does the app understand transactions" score** (`backend/adminStats.js`, `backend/adminScores.js`, hooks in the SMS doors / note save / auto-settle / Reconcile, a small reporter in `index.html`, owner-only actions `getAdminDashboard` and `resolveAdminProblem`, anyone's `adminLog`). Counts only, never amounts, notes, payees or message text. The score has three separate parts (Reading per bank, Guessing, Done for you), shows "collecting" or "unverified" instead of a number when evidence is thin, never trusts messages nobody checked, and lists its blind spots. No blended "overall" number. Phase 2 (the web page at `/admin/`, mockup approved) is not built. Doc: `docs/features/admin-panel.md`; test: `backend/tests/adminStats.test.js`. When shipping: bump `APP_VERSION`, deploy backend + new server, then `git push`; the Android SMS-permission signal needs a small native-app change (not done).
 
