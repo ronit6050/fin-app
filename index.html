@@ -1031,6 +1031,48 @@
       color: var(--text-primary);
     }
 
+
+    /* ---------- Home makeover (2026-10-17) ---------- */
+    .home-card {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      margin: 10px 0;
+    }
+    .home-row {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      padding: 9px 0; font-size: 0.9rem; color: var(--text-primary);
+    }
+    .home-row + .home-row { border-top: 0.5px solid var(--border-hairline); }
+    .home-row.tappable { cursor: pointer; }
+    .home-row .amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .home-row .amt.in { color: var(--color-success, var(--text-primary)); }
+    .home-warn {
+      background: var(--bg-warning); color: var(--text-primary);
+      border-radius: var(--radius-md); padding: 10px 14px; margin: -6px 0 10px; font-size: 0.85rem;
+    }
+    .runway-title { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.5px; margin: 4px 0 2px; line-height: 1.2; }
+    .runway-bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--text-on-hero) 28%, transparent); margin: 12px 0 5px; }
+    .runway-bar > i { display: block; height: 6px; border-radius: 3px; background: var(--text-on-hero); }
+    .runway-ends { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-on-hero-muted); }
+    .runway-facts { margin-top: 12px; padding-top: 10px; border-top: 0.5px solid color-mix(in srgb, var(--text-on-hero) 30%, transparent);
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 0.8rem; }
+    .runway-facts span:nth-child(even) { text-align: right; }
+    .runway-foot { font-size: 0.72rem; color: var(--text-on-hero-muted); margin-top: 10px; }
+    .runway-foot a, .runway-link { color: inherit; text-decoration: underline; cursor: pointer; }
+    .runway-ask { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .runway-btn {
+      flex: 1; min-width: 120px; border-radius: 999px; padding: 10px 12px; font-size: 0.88rem; font-weight: 600;
+      border: 1px solid var(--text-on-hero); background: transparent; color: var(--text-on-hero); cursor: pointer;
+    }
+    .runway-btn.solid { background: var(--text-on-hero); color: var(--surface-hero); }
+    .runway-input {
+      flex: 1; min-width: 120px; border-radius: 999px; padding: 10px 14px; font-size: 1rem;
+      border: 1px solid var(--text-on-hero); background: transparent; color: var(--text-on-hero);
+    }
+    .runway-input::placeholder { color: var(--text-on-hero-muted); }
+
     /* ---------- Loading spinner ---------- */
     .spinner {
       display: inline-block;
@@ -4158,31 +4200,25 @@
         </div>
         <div id="homeContent" style="display:none">
 
-          <div class="hero-card tactile" data-widget="today">
-            <div class="hero-label">Spent today</div>
-            <div class="hero-amount" id="homeTodaySpend">₹0</div>
-            <div class="hero-sub" id="homeMonthSpend"></div>
-          </div>
+          <!-- Run-out card (2026-10-17): filled in by renderRunway(). Falls back to "Spent today" if the backend sent nothing. -->
+          <div class="hero-card tactile" id="homeRunway"></div>
+          <div class="home-warn" id="homeRunwayWarn" style="display:none"></div>
+
+          <div class="home-card" id="homeNeeds"></div>
 
           <div class="stat-grid">
-            <div class="stat-card" data-widget="pending">
-              <div class="stat-label">Pending</div>
-              <div class="stat-value" id="homePendingCount">0</div>
-            </div>
-            <div class="stat-card" data-widget="cash">
-              <div class="stat-label">Cash balance</div>
-              <div class="stat-value" id="homeCashBalance">₹0</div>
-            </div>
-            <div class="stat-card" data-widget="cc">
-              <div class="stat-label">CC usage</div>
+            <div class="stat-card" data-widget="cc" data-goto-tab="cc">
+              <div class="stat-label">Card this cycle</div>
               <div class="stat-value" id="homeCCUsage">0%</div>
               <div style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;" id="homeCCUsageAmount"></div>
             </div>
-            <div class="stat-card" data-widget="debts">
-              <div class="stat-label">Debts, net</div>
+            <div class="stat-card" data-widget="debts" data-goto-tab="debts">
+              <div class="stat-label">Friends and debts</div>
               <div class="stat-value" id="homeDebtsNet">₹0</div>
             </div>
           </div>
+          <!-- Kept (hidden) so the older code that fills these never hits a missing element -->
+          <span id="homeCashBalance" hidden></span><span id="homePendingCount" hidden></span>
 
           <div class="chart-card">
             <div class="chart-head"><span>Where it's going — this month</span><span class="chart-link" data-goto-tab="analysis">Analysis &#8594;</span></div>
@@ -4190,15 +4226,12 @@
             <div class="chip-row" id="homeCategoryChips"></div>
           </div>
 
-          <div class="chart-card">
-            <div class="chart-head"><span>Need / want / saving snapshot</span><span class="chart-link" data-goto-tab="analysis">Analysis &#8594;</span></div>
-            <div class="stack-bar" id="homeNwsStack"></div>
-            <p class="chart-note" id="homeNwsNote"></p>
+          <div class="home-card">
+            <div class="stat-label">Latest</div>
+            <div id="homeLatest"></div>
           </div>
-
-          <h3 style="font-size:0.95rem; margin:16px 0 8px 0;" id="homeRecentLabel">Recent Pending</h3>
-          <div id="homeRecent"></div>
-          <p style="font-size:0.78rem; color:var(--text-muted); margin-top:6px;">Tap a card above to see its recent activity here.</p>
+          <!-- Old list element kept hidden; its code still runs harmlessly -->
+          <div id="homeRecent" hidden></div><span id="homeRecentLabel" hidden></span>
         </div>
       </section>
 
@@ -4971,6 +5004,10 @@
           <div class="field" style="margin-bottom:0;">
             <label>Monthly investment amount (₹)</label>
             <input type="number" id="settingsMonthlyInvestmentGoal" min="0" step="1" placeholder="0 = not set">
+          </div>
+          <div class="field" style="margin-bottom:0; margin-top:12px;">
+            <label>Salary day of the month</label>
+            <input type="number" id="settingsSalaryDay" min="0" max="31" step="1" placeholder="Leave empty to work it out from your past salary">
           </div>
         </div>
 
@@ -6156,8 +6193,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-17-11";
-    const APP_CHANGELOG = "A payment card in Pending now has an Investment button: tap it, choose which holding the money went into, and it is added to that holding on the Investments screen and left out of your spending. Marking a payment as an investment now tells you if it was not added because that holding already had the same amount within 3 days, and \"No, regular spend\" in History takes the entry back out. New look preview: in Investments you can remove a holding you do not have (when nothing is put into it), and the last-6-months chart now includes payments from before you started over. New look preview: the Investments screen is redesigned, with what you have put in so far, this month against your goal, a tracker for each monthly SIP (paid, coming up or overdue), where your money sits, each holding with its share, the last 6 months, and one Add money sheet. In Investments you can set up each holding with its SIP day and amount, pause a SIP, record a sale, or start over from scratch. New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
+    const APP_VERSION = "2026-10-17-12";
+    const APP_CHANGELOG = "Home is redesigned: a card tells you the date your money will run out at your current pace (you confirm your bank balance once and the app keeps count; set your salary day in Settings or let it work it out), a Needs you list shows notes waiting and bills coming up, and Latest shows your newest transactions. A payment card in Pending now has an Investment button: tap it, choose which holding the money went into, and it is added to that holding on the Investments screen and left out of your spending. Marking a payment as an investment now tells you if it was not added because that holding already had the same amount within 3 days, and \"No, regular spend\" in History takes the entry back out. New look preview: in Investments you can remove a holding you do not have (when nothing is put into it), and the last-6-months chart now includes payments from before you started over. New look preview: the Investments screen is redesigned, with what you have put in so far, this month against your goal, a tracker for each monthly SIP (paid, coming up or overdue), where your money sits, each holding with its share, the last 6 months, and one Add money sheet. In Investments you can set up each holding with its SIP day and amount, pause a SIP, record a sale, or start over from scratch. New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -8803,6 +8840,28 @@
       };
     }
 
+    // Pretend run-out numbers for Demo Mode (2026-10-17)
+    function demoComputeRunway(month) {
+      const now = new Date();
+      const pace = Math.max(1, Math.round(month.totalDebit / Math.max(1, now.getDate())));
+      const bills = [{ label: "Rent", amount: 15000, daysUntil: 3 }, { label: "Card bill", amount: 6200, daysUntil: 9 }];
+      const balance = demoState.runwayBalance !== undefined ? demoState.runwayBalance : 52000;
+      const available = balance - 21200;
+      const days = available <= 0 ? 0 : Math.floor(available / pace);
+      const out = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
+      const sal = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const toSal = Math.round((sal - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+      const iso = function (d) { return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); };
+      return { hasCheckpoint: true, askBalance: false, estimatedBalance: balance, checkpointAgeDays: 2, dailyPace: pace, billsAhead: 21200, bills: bills,
+        runOutDate: iso(out), daysLeft: days, salaryDay: 1, salaryDate: iso(sal), daysToSalary: toSal,
+        shortByDays: days < toSal ? toSal - days : null, maxPerDay: Math.max(0, Math.floor(available / toSal)) };
+    }
+    function demoComputeLatest() {
+      return demoState.transactions.slice(-5).reverse().map(function (t) {
+        return { label: t.note || t.counterparty || t.bank, category: t.category || "", amount: t.amount, type: t.type === "credit" ? "credit" : "debit" };
+      });
+    }
+
     function demoComputeDashboard() {
       const now = new Date();
       const today = demoComputeTodaySummary();
@@ -8818,6 +8877,7 @@
       return {
         todaySpend: today.total, monthSpend: month.totalDebit, pendingCount: pending.length, cashBalance: cash.balance,
         ccUsagePct: cc.usagePct, debtsNet: debts.netPosition, recent: recent,
+        runway: demoComputeRunway(month), latest: demoComputeLatest(),
         full: { today: today, month: month, cash: cash, cc: cc, debts: debts, savingsGoals: savingsGoalsData, investments: investments, pending: pending }
       };
     }
@@ -9195,6 +9255,7 @@
           case "updateCashEntry": return demoUpdateCashEntry(data.row, data.type, data.amount, data.note, data.category, data.needWantSaving);
           case "registerPushToken": return { ok: true }; // no-op — never worth registering a real push token while pretending
           case "getDashboard": return { ok: true, dashboard: demoComputeDashboard() };
+          case "saveRunwayBalance": demoState.runwayBalance = Number(data.amount) || 0; return { ok: true };
           case "reconcileStatement": return { ok: false, error: "Bank statement upload isn't available in Demo Mode." };
           case "reconcileCreditCardStatement": return { ok: false, error: "Credit card statement upload isn't available in Demo Mode." };
           case "fixCreditCardTransactionMode": return { ok: false, error: "Not available in Demo Mode." };
@@ -9456,8 +9517,6 @@
     // ---------------------------------------------------------
     const homeStatusEl        = document.getElementById("homeStatus");
     const homeContentEl       = document.getElementById("homeContent");
-    const homeTodaySpendEl    = document.getElementById("homeTodaySpend");
-    const homeMonthSpendEl    = document.getElementById("homeMonthSpend");
     const homePendingCountEl  = document.getElementById("homePendingCount");
     const homeCashBalanceEl   = document.getElementById("homeCashBalance");
     const homeCCUsageEl       = document.getElementById("homeCCUsage");
@@ -9575,7 +9634,7 @@
       "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
       "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
       "addCashEntry", "addManualTransaction", "updateCashEntry", "insertReconciledTransactions",
-      "fixCreditCardTransactionMode", "updateSettings", "saveBudgets"
+      "fixCreditCardTransactionMode", "updateSettings", "saveBudgets", "saveRunwayBalance"
     ];
     const FAST_STALE_MS = 40 * 60 * 1000;   // the backend refreshes at least every 30 minutes
     const FAST_WAIT_MS = 4000;              // how long to wait for the copy before asking Apps Script
@@ -9906,8 +9965,6 @@
       homeStatusEl.textContent = "";
       homeContentEl.style.display = "block";
 
-      homeTodaySpendEl.textContent = "₹" + d.todaySpend.toLocaleString("en-IN");
-      homeMonthSpendEl.textContent = "₹" + d.monthSpend.toLocaleString("en-IN") + " this month";
       homePendingCountEl.textContent = d.pendingCount;
       homeCashBalanceEl.textContent = "₹" + d.cashBalance.toLocaleString("en-IN");
       homeCCUsageEl.textContent = d.ccUsagePct + "%";
@@ -9929,18 +9986,170 @@
       dashboardFull = d.full || null;
       renderHomeRecentList(homeRecentMode);
       renderHomeCharts(dashboardFull);
+      renderRunway(d);
+      renderHomeNeeds(d);
+      renderHomeLatest(d);
 
       if (finLookOn()) {
         // New look: the summary numbers are written as count-up numbers. finPutNum
         // leaves a number alone if it did not change, so a quiet refresh never restarts a count.
-        finPutNum(homeTodaySpendEl, d.todaySpend, "₹");
-        finPutNum(homeMonthSpendEl, d.monthSpend, "₹", " this month");
         finPutNum(homePendingCountEl, d.pendingCount, "");
         finPutNum(homeCashBalanceEl, d.cashBalance, "₹");
         finPutNum(homeCCUsageEl, d.ccUsagePct, "", "%");
         FinPlay.arm("home");      // the first time Home shows after sign-in
         FinPlay.play("home");
       }
+    }
+
+    // ---------------------------------------------------------
+    // HOME MAKEOVER (2026-10-17): run-out card, "Needs you", "Latest".
+    // The run-out date comes from the backend (runway.js) as d.runway. The app
+    // cannot see the bank balance, so the person confirms it; that is a
+    // "checkpoint" the backend then rolls forward by itself.
+    // ---------------------------------------------------------
+    let runwayEditing = false;
+    let runwayLastDashboard = null;
+    function inr(n) { return "₹" + Math.round(n).toLocaleString("en-IN"); }
+    function runwayShortDate(iso) {
+      const p = String(iso).split("-").map(Number);
+      return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    }
+    function runwayDueText(days) {
+      if (days === null || days === undefined) return "";
+      if (days < 0) return " · overdue";
+      if (days === 0) return " · due today";
+      return " · in " + days + (days === 1 ? " day" : " days");
+    }
+
+    function saveRunwayBalanceFromHome(amount) {
+      if (!isFinite(amount) || amount < 0) return;
+      const d = runwayLastDashboard;
+      // Show it at once; the quiet reload below replaces it with the server's own numbers.
+      if (d && d.runway) {
+        d.runway.hasCheckpoint = true; d.runway.askBalance = false; d.runway.estimatedBalance = Math.round(amount); d.runway.checkpointAgeDays = 0;
+      }
+      runwayEditing = false;
+      if (d) renderRunway(d);
+      callAppsScript({ action: "saveRunwayBalance", idToken: currentUser.idToken, amount: amount })
+        .then(function (res) {
+          if (!res || !res.ok) { alert((res && res.error) || "Couldn't save that balance."); }
+          loadDashboard({ forceNetwork: true });
+        })
+        .catch(function () { alert("Couldn't save that balance. Check your connection and try again."); });
+    }
+
+    function renderRunway(d) {
+      runwayLastDashboard = d;
+      const el = document.getElementById("homeRunway");
+      const warn = document.getElementById("homeRunwayWarn");
+      const r = d.runway;
+      warn.style.display = "none";
+
+      if (!r) {   // backend sent nothing: the old, simple card
+        el.innerHTML = '<div class="hero-label">Spent today</div><div class="hero-amount">' + inr(d.todaySpend) + '</div><div class="hero-sub">' + inr(d.monthSpend) + ' this month</div>';
+        return;
+      }
+
+      const askForm = function (title, sub, cancelable) {
+        el.innerHTML = '<div class="hero-label">Quick check</div><div class="runway-title">' + title + '</div><div class="hero-sub">' + sub + '</div>' +
+          '<div class="runway-ask"><input class="runway-input" id="runwayAmount" type="number" inputmode="decimal" min="0" placeholder="e.g. 21400">' +
+          '<button type="button" class="runway-btn solid" id="runwaySave">Save</button></div>' +
+          (cancelable ? '<div class="runway-foot"><a id="runwayCancel">Cancel</a></div>' : '');
+        el.querySelector("#runwaySave").addEventListener("click", function () {
+          const v = el.querySelector("#runwayAmount").value;
+          if (v === "") return;
+          saveRunwayBalanceFromHome(Number(v));
+        });
+        const c = el.querySelector("#runwayCancel");
+        if (c) c.addEventListener("click", function () { runwayEditing = false; renderRunway(d); });
+      };
+
+      if (!r.hasCheckpoint) {
+        askForm("What's in your bank right now?", "Enter your total bank balance once. The app keeps count after that, and works out how long it will last.", false);
+        return;
+      }
+      if (runwayEditing) {
+        askForm("Update your bank balance", "Enter what your bank shows right now.", true);
+        return;
+      }
+      if (r.askBalance) {
+        el.innerHTML = '<div class="hero-label">Quick check</div><div class="hero-sub" style="margin-top:6px;">I think you have about</div>' +
+          '<div class="hero-amount">' + inr(r.estimatedBalance) + '</div><div class="hero-sub">in your bank right now. Is that right?</div>' +
+          '<div class="runway-ask"><button type="button" class="runway-btn solid" id="runwayYes">Yes, that\'s right</button>' +
+          '<button type="button" class="runway-btn" id="runwayEdit">Enter real amount</button></div>';
+        el.querySelector("#runwayYes").addEventListener("click", function () { saveRunwayBalanceFromHome(r.estimatedBalance); });
+        el.querySelector("#runwayEdit").addEventListener("click", function () { runwayEditing = true; renderRunway(d); });
+        return;
+      }
+
+      // Everyday card
+      let title, sub = "";
+      if (r.runOutDate === null) {
+        title = "Not enough spending yet to guess a date";
+      } else if (r.daysLeft === 0) {
+        title = "Money runs out today";
+      } else {
+        title = "Money lasts until " + runwayShortDate(r.runOutDate);
+      }
+      if (r.salaryDate && r.runOutDate !== null) {
+        sub = r.shortByDays
+          ? r.shortByDays + (r.shortByDays === 1 ? " day" : " days") + " before salary (" + runwayShortDate(r.salaryDate) + ")"
+          : "Enough to reach your salary on " + runwayShortDate(r.salaryDate);
+      } else if (!r.salaryDate) {
+        sub = '<a class="runway-link" id="runwaySalaryLink">Set your salary day</a> to compare';
+      }
+      let bar = "";
+      if (r.salaryDate && r.runOutDate !== null && r.daysToSalary > 0) {
+        const pct = Math.max(0, Math.min(100, Math.round((r.daysLeft / r.daysToSalary) * 100)));
+        bar = '<div class="runway-bar"><i style="width:' + pct + '%"></i></div>' +
+          '<div class="runway-ends"><span>Today</span><span>Salary ' + runwayShortDate(r.salaryDate) + '</span></div>';
+      }
+      const age = r.checkpointAgeDays;
+      el.innerHTML = '<div class="hero-label">At your current pace</div><div class="runway-title">' + title + '</div><div class="hero-sub">' + sub + '</div>' + bar +
+        '<div class="runway-facts">' +
+          '<span>Balance ' + inr(r.estimatedBalance) + '</span><span>Bills ahead -' + inr(r.billsAhead) + '</span>' +
+          '<span>Spending ' + inr(r.dailyPace) + '/day</span><span>Spent today ' + inr(d.todaySpend) + '</span>' +
+        '</div>' +
+        '<div class="runway-foot">Balance confirmed ' + (age <= 0 ? "today" : age + (age === 1 ? " day ago" : " days ago")) + ' · <a id="runwayUpdate">Update</a></div>';
+      el.querySelector("#runwayUpdate").addEventListener("click", function () { runwayEditing = true; renderRunway(d); });
+      const sl = el.querySelector("#runwaySalaryLink");
+      if (sl) sl.addEventListener("click", function () { switchTab("settings"); });
+
+      if (r.shortByDays && r.maxPerDay !== null) {
+        warn.textContent = "To reach salary, spend at most " + inr(r.maxPerDay) + " a day (now " + inr(r.dailyPace) + ").";
+        warn.style.display = "block";
+      }
+    }
+
+    function renderHomeNeeds(d) {
+      const el = document.getElementById("homeNeeds");
+      const rows = [];
+      if (d.pendingCount > 0) rows.push({ text: d.pendingCount + (d.pendingCount === 1 ? " transaction" : " transactions") + " to note", go: "pending" });
+      const bills = (d.runway && d.runway.bills ? d.runway.bills : []).slice().sort(function (a, b) {
+        return (a.daysUntil === null ? 999 : a.daysUntil) - (b.daysUntil === null ? 999 : b.daysUntil);
+      });
+      bills.forEach(function (b) { rows.push({ text: escapeHtml(b.label) + runwayDueText(b.daysUntil), amt: inr(b.amount), go: b.label === "Card bill" ? "cc" : null }); });
+      if (rows.length === 0) {
+        el.innerHTML = '<div class="stat-label">Needs you</div><div class="home-row"><span>Nothing waiting. You\'re all caught up.</span></div>';
+        return;
+      }
+      el.innerHTML = '<div class="stat-label">Needs you</div>' + rows.map(function (r, i) {
+        return '<div class="home-row' + (r.go ? ' tappable' : '') + '" data-i="' + i + '"><span>' + r.text + '</span><span class="amt">' + (r.amt || "") + '</span></div>';
+      }).join("");
+      el.querySelectorAll(".home-row.tappable").forEach(function (row) {
+        row.addEventListener("click", function () { switchTab(rows[Number(row.dataset.i)].go); });
+      });
+    }
+
+    function renderHomeLatest(d) {
+      const el = document.getElementById("homeLatest");
+      const list = d.latest || [];
+      if (list.length === 0) { el.innerHTML = '<div class="home-row"><span>No transactions yet.</span></div>'; return; }
+      el.innerHTML = list.map(function (t) {
+        const sub = t.category ? ' <span style="color:var(--text-muted); font-size:0.78rem;">· ' + escapeHtml(t.category) + '</span>' : "";
+        return '<div class="home-row"><span>' + escapeHtml(t.label || "Transaction") + sub + '</span><span class="amt' + (t.type === "credit" ? " in" : "") + '">' +
+          (t.type === "credit" ? "+" : "-") + inr(t.amount) + '</span></div>';
+      }).join("");
     }
 
     // ---------------------------------------------------------
@@ -9954,7 +10163,7 @@
     // new backend call.
     const homeCategoryStackEl = document.getElementById("homeCategoryStack");
     const homeCategoryChipsEl = document.getElementById("homeCategoryChips");
-    const homeNwsStackEl      = document.getElementById("homeNwsStack");
+    const homeNwsStackEl      = document.getElementById("homeNwsStack");   // null now (card removed); renderHomeCharts checks
     const homeNwsNoteEl       = document.getElementById("homeNwsNote");
 
     function renderHomeCharts(full) {
@@ -9993,6 +10202,7 @@
         homeCategoryChipsEl.innerHTML = chipsHtml;
       }
 
+      if (!homeNwsStackEl) return;   // the snapshot card was removed from Home in the 2026-10-17 makeover
       // --- Chart 2: Need / Want / Saving / Investment snapshot ---
       // fixedObligations (Rent+EMI) folded into Need, and the guideline %
       // checked against income (totalCredit) not tagged spend — same fix
@@ -17324,6 +17534,7 @@
     const settingsMonthlyExpensesEl = document.getElementById("settingsMonthlyExpenses");
     const settingsMonthlySaveGoalEl = document.getElementById("settingsMonthlySaveGoal");
     const settingsMonthlyInvestmentGoalEl = document.getElementById("settingsMonthlyInvestmentGoal");
+    const settingsSalaryDayEl = document.getElementById("settingsSalaryDay");
     const settingsDailySummaryEl = document.getElementById("settingsDailySummary");
     const settingsPendingReminderEl = document.getElementById("settingsPendingReminder");
     const saveSettingsButtonEl      = document.getElementById("saveSettingsButton");
@@ -17441,6 +17652,7 @@
       settingsMonthlyExpensesEl.value = s.monthlyExpenses;
       settingsMonthlySaveGoalEl.value = s.monthlySaveGoal;
       settingsMonthlyInvestmentGoalEl.value = s.monthlyInvestmentGoal;
+      settingsSalaryDayEl.value = s.salaryDay ? s.salaryDay : "";
       settingsDailySummaryEl.value = s.dailySummary === false ? "off" : "on";     // on unless switched off (an older server does not send it)
       settingsPendingReminderEl.value = ["30", "60", "twice", "off"].indexOf(s.pendingReminder) !== -1 ? s.pendingReminder : "60";   // hourly unless chosen
       finSyncSwitches();   // New look: the switches follow the dropdowns
@@ -17459,6 +17671,7 @@
           monthlyExpenses: parseFloat(settingsMonthlyExpensesEl.value) || 0,
           monthlySaveGoal: parseFloat(settingsMonthlySaveGoalEl.value) || 0,
           monthlyInvestmentGoal: parseFloat(settingsMonthlyInvestmentGoalEl.value) || 0,
+          salaryDay: parseInt(settingsSalaryDayEl.value, 10) || 0,
           dailySummary: settingsDailySummaryEl.value === "on",
           pendingReminder: settingsPendingReminderEl.value
         }

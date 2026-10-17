@@ -357,6 +357,10 @@ function pwaDispatch_(data, verified){
     return jsonResponse(updateSettings(data.settings));
   }
 
+  if(data.action === "saveRunwayBalance"){
+    return jsonResponse(saveRunwayBalance(data.amount));
+  }
+
   if(data.action === "getTransactionHistory"){
     return jsonResponse({ ok:true, ...getTransactionHistory(data.offset, data.limit, { filter: data.filter, query: data.query, month: data.month }), knownDebtPeople: getKnownDebtPeople() });
   }
@@ -432,6 +436,10 @@ function getDashboardData(){
     ccUsagePct:   cc.usagePct,
     debtsNet:     debts.netPosition,
     recent:       recent,
+    // Home's "money lasts until..." card (runway.js); null if it could not be worked out
+    runway:       (typeof buildRunwayForDashboard_ === "function") ? buildRunwayForDashboard_(txnData, month, cc) : null,
+    // The 5 newest real transactions for Home's "Latest" list (newest first)
+    latest:       (typeof buildLatestForDashboard_ === "function") ? buildLatestForDashboard_(txnData) : [],
 
     // Full data for every tab, so the PWA can seed each tab's own cache
     // from this one call — opening any of them afterward is then instant,

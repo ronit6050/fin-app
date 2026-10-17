@@ -28,7 +28,7 @@ var V2_FRIEND_FULL_ACTIONS_ = [
   "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal",
   "getInvestments", "getInvestmentInstruments", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
   "getCash", "addCashEntry", "addManualTransaction", "updateCashEntry", "registerPushToken", "getDashboard", "getSettings", "updateSettings",
-  "getTransactionHistory", "getPlannerData", "saveBudgets"
+  "getTransactionHistory", "getPlannerData", "saveBudgets", "saveRunwayBalance"
 ];
 
 // The empty tabs a new person starts with (names and headers exactly as docs/SHEET_SCHEMA.md). InvestmentInstruments is created EMPTY on
@@ -58,7 +58,7 @@ var V2_PREFETCH_ALL_ = ["Transactions", "Cash", "Debts", "Savings", "Goals", "In
                         "SmartMemory", "NoteMemory", "TypeVotes", "LearnedSpamPatterns", "_Props"];
 var V2_PREFETCH_BY_ACTION_ = {
   "ping": [], "getPeople": [], "getPerson": [], "addFriend": [], "createSplit": ["Transactions"], "recordSplitPayment": [], "undoSplitEntry": ["Transactions"],
-  "registerPushToken": ["_Props"], "getSettings": ["_Props"], "updateSettings": ["_Props"],
+  "registerPushToken": ["_Props"], "getSettings": ["_Props"], "updateSettings": ["_Props"], "saveRunwayBalance": ["_Props"],
   "getDebts": ["Debts", "DebtPayments"], "getCash": ["Cash"], "getInvestments": ["Investments", "InvestmentInstruments"],
   "getInvestmentInstruments": ["InvestmentInstruments", "Investments"]
 };

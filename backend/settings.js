@@ -33,6 +33,8 @@ function getSettings(){
     // installments across the month). 0 default = feature is a no-op
     // for anyone who hasn't set it.
     monthlyInvestmentGoal: Number(props.getProperty("SETTING_MONTHLY_INVESTMENT_GOAL")) || 0,
+    // Added 2026-10-17 - day of month the salary arrives (0 = work it out from past Income credits), used by Home's run-out date.
+    salaryDay: Number(props.getProperty("SETTING_SALARY_DAY")) || 0,
     // Added 2026-10-17 - the 9pm "how much you spent today" notification (dailySummary.js). On unless switched off here.
     dailySummary: String(props.getProperty("SETTING_DAILY_SUMMARY_OFF") || "") !== "1",
     // Added 2026-10-17 - how often to be reminded about payments waiting for a note (pendingReminder.js): off / 30 / 60 (default) / twice
@@ -53,6 +55,10 @@ function updateSettings(newSettings){
     if(newSettings.monthlySaveGoal) props.setProperty("SETTING_MONTHLY_SAVE_GOAL", String(newSettings.monthlySaveGoal));
     if(newSettings.monthlyInvestmentGoal !== undefined && newSettings.monthlyInvestmentGoal !== null && newSettings.monthlyInvestmentGoal !== "")
       props.setProperty("SETTING_MONTHLY_INVESTMENT_GOAL", String(newSettings.monthlyInvestmentGoal));
+    if(newSettings.salaryDay !== undefined && newSettings.salaryDay !== null && newSettings.salaryDay !== ""){
+      const sd = Math.floor(Number(newSettings.salaryDay));
+      if(sd >= 0 && sd <= 31) props.setProperty("SETTING_SALARY_DAY", String(sd));
+    }
     if(newSettings.dailySummary === true || newSettings.dailySummary === false)
       props.setProperty("SETTING_DAILY_SUMMARY_OFF", newSettings.dailySummary ? "" : "1");
     if(["off", "30", "60", "twice"].indexOf(String(newSettings.pendingReminder)) !== -1)

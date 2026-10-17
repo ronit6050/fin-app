@@ -43,7 +43,7 @@ var V2_WRITE_ACTIONS_ = [
   "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
   "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
   "addCashEntry", "addManualTransaction", "updateCashEntry", "insertReconciledTransactions",
-  "fixCreditCardTransactionMode", "updateSettings", "saveBudgets"
+  "fixCreditCardTransactionMode", "updateSettings", "saveBudgets", "saveRunwayBalance"
 ];
 
 // Builds the Home screen exactly as the app's own "getDashboard" action would
