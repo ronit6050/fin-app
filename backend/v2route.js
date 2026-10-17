@@ -25,7 +25,7 @@ var V2_FRIEND_FULL_ACTIONS_ = [
   "getPending", "saveNote", "markNotATransaction", "getIgnoredTransactions", "restoreIgnoredTransaction", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
   "getDebts", "addDebt", "settleDebt", "recordDebtPayment",
   "getSavingsGoals", "previewSavingsSplit", "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
-  "deleteSavingsEntry", "addSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal",
+  "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal",
   "getInvestments", "getInvestmentInstruments", "addInvestmentInstrument", "logInvestment", "updateInvestment",
   "getCash", "addCashEntry", "addManualTransaction", "updateCashEntry", "registerPushToken", "getDashboard", "getSettings", "updateSettings",
   "getTransactionHistory", "getPlannerData", "saveBudgets"
@@ -41,7 +41,7 @@ var V2_TEMPLATE_TABS_ = {
   "Cash": ["ID", "Date", "Time", "Type", "Amount", "Note", "Category", "Source", "TelegramMsgID", "CreatedAt", "NeedWantSaving"],
   "Debts": ["Date", "Person", "Type", "Amount", "Note", "DueDate", "Status", "SettledDate"],
   "Savings": ["Date", "Amount", "Type", "Note", "Destination"],
-  "Goals": ["Name", "Type", "Target", "Status", "Priority", "DateAdded"],
+  "Goals": ["Name", "Type", "Target", "Status", "Priority", "DateAdded", "TargetDate"],
   "Investments": ["Date", "Name", "Amount", "Note"],
   "InvestmentInstruments": ["Name", "Category", "SipAmount"],
   "FinancialEvents": ["Type", "Amount", "Counterparty", "Confirmed", "Name"],

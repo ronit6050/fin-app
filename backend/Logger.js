@@ -367,7 +367,7 @@ function checkDataHealth(){
     { sheet: "Debts",        col: 7,  label: "Status",         expected: ["Pending","Settled"] },
     { sheet: "Goals",        col: 2,  label: "Type",           expected: ["OneTime","Recurring"] },
     { sheet: "Goals",        col: 4,  label: "Status",         expected: ["Active","Done"] },
-    { sheet: "Savings",      col: 3,  label: "Type",           expected: ["auto","manual","withdraw"] },
+    { sheet: "Savings",      col: 3,  label: "Type",           expected: ["auto","manual","withdraw","payment"] },
     { sheet: "InvestmentInstruments", col: 2, label: "Category", expected: ["SIP","One-time Fund","Stock","Gold"] },
     { sheet: "Budgets",      col: 3,  label: "Type",           expected: ["","Need","Want"] }
   ];

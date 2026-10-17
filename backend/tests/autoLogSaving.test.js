@@ -157,7 +157,7 @@ function loadBackendSandbox(){
   assert(destination !== "WishList" && destination !== "FreeSavings",
     "new row does NOT use either of the old, now-unrecognized pot names");
   assert(newRow[1] === 900, "the full amount (₹900) was written, not split across buckets");
-  assert(newRow[2] === "auto", 'Type column is "auto", matching the pattern saveAutoSplit/saveManualSplit already use');
+  assert(newRow[2] === "payment", 'Type column is "payment" (since 2026-10-17, so the Savings tab can show it as needing a home)');
   assert(newRow[3] === "put aside some saving this month", "the original transaction note was preserved");
 })();
 

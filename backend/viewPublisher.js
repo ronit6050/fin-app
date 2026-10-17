@@ -40,7 +40,7 @@ var V2_HEARTBEAT_SECONDS_ = 1800;
 var V2_WRITE_ACTIONS_ = [
   "saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
   "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
-  "deleteSavingsEntry", "addSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
+  "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
   "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
   "addCashEntry", "addManualTransaction", "updateCashEntry", "insertReconciledTransactions",
   "fixCreditCardTransactionMode", "updateSettings", "saveBudgets"

@@ -236,7 +236,11 @@ function pwaDispatch_(data, verified){
   }
 
   if(data.action === "addSavingsGoal"){
-    return jsonResponse(addGoal(data.name, data.type, data.target));
+    return jsonResponse(addGoal(data.name, data.type, data.target, data.targetDate));
+  }
+
+  if(data.action === "updateSavingsGoal"){
+    return jsonResponse(updateGoal(data.row, data.target, data.targetDate));
   }
 
   if(data.action === "setPrioritySavingsGoal"){
@@ -1587,14 +1591,8 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   try{
     const savSheet = ss.getSheetByName("Savings");
     if(savSheet){
-      const savData = savSheet.getDataRange().getValues();
-      for(let i = 1; i < savData.length; i++){
-        if(!savData[i][0]) continue;
-        const sd = new Date(savData[i][0]);
-        if(sd.getFullYear() === year && (sd.getMonth() + 1) === month){
-          saved += Number(savData[i][1]) || 0;
-        }
-      }
+      // One shared rule (savingsGoals.js) so the Savings tab's "this month" can never disagree with this.
+      saved = savingsMonthNet_(savSheet.getDataRange().getValues().slice(1), year, month);
     }
   }catch(savedErr){ saved = 0; }
   // The monthly saving goal from Settings, shown next to it ("Saved X of Y").

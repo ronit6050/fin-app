@@ -20,7 +20,7 @@ const READ_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getT
 // and only for people on the Firestore copy. Deliberately NOT here: Reconcile/statement actions (they use the owner's Google Drive),
 // Access/admin actions, the SMS doors and the timers - those stay on Apps Script.
 const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
-  "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
+  "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal",
   "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
   "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
   "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "refreshViews",

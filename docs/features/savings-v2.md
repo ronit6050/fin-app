@@ -302,6 +302,88 @@ lands on `"Free"`, never the old pot names, and that
 `getSavingsBreakdown()` — the real Savings screen's data source — then
 actually counts it; also re-checks duplicate-avoidance still works).
 
+## Savings tab redesign - backend additions (2026-10-17)
+
+All additive: nothing that existed was renamed or removed.
+
+**`getSavingsGoals` (`getSavingsBreakdown()`) now also returns:**
+| Field | Meaning |
+|---|---|
+| `totalSaved` | Emergency + Free + every Active goal's saved (CC Buffer included) |
+| `monthlyGoal`, `monthlyExpenses` | from Settings |
+| `thisMonthSaved` | net of Savings entries dated this calendar month (adds minus withdrawals). Same helper, `savingsMonthNet_`, as Analysis's `saved` so they can't disagree |
+| `monthlySaved` | `[{year, month, saved}]` last 6 calendar months, oldest first, last = current month; empty months are present with 0 |
+| `goalMet` | `{met, of}` over the last 3 COMPLETED months; months before the first Savings entry ever aren't counted (so `of` is 0 to 3); goal 0 -> 0 of 0 |
+| `paceMonthly` | average saved over those same counted months (rounded to a rupee); if 0/negative/no history -> `monthlyGoal` |
+| `needsHome` | `{amount, count, entries:[{row, amount, fullAmount, date, note}]}` - positive entries with Type `payment` AND Destination `Free`, newest first, entries capped at 20. **Capped at the current Free balance** (withdrawals from Free are not matched to payments): newest payments are kept while the running total fits; a partly covered entry is listed with `amount` = the covered part and `fullAmount` = its real size (`row` unchanged); Free balance 0 or negative = nothing waiting. `amount`/`count` cover all kept entries even beyond the 20 listed. Disappears once the entry is moved to another bucket |
+
+`recentEntries[]` items gain `source`: `"payment"` (Type payment), `"withdraw"` (Type withdraw or a negative amount), else `"you"`.
+
+**New entry Type `payment`.** `autoLogSaving` now writes Type `payment` (it wrote `auto` before). `undoAutoLogSaving` removes a `payment` row or a legacy `auto` one. Legacy `auto` rows are never in `needsHome`. Anything in the backend that lists the Type values (`Logger.js` data-health check) knows `payment` too.
+
+**Goals sheet column G `TargetDate`** (optional `yyyy-MM-dd`). New Goals sheets get the header; an older sheet gets it added the first time a date is saved (`ensureGoalsTargetDateHeader_`). Reads never write. Each goal in `goals[]` gains `targetDate` ("" if none), `monthsLeft` (whole months from today, minimum 1; `null` with no date or for Recurring/Done goals) and `monthlyNeeded` (`ceil(remaining / monthsLeft)`; `null` with no date or nothing left to save).
+
+**Months-left rule (reference - the phone must copy it exactly).** Both dates are calendar dates in India time:
+
+```
+months = (targetYear - todayYear) * 12 + (targetMonth - todayMonth)
+if targetDay < todayDay then months = months - 1
+monthsLeft = max(months, 1)
+```
+
+Worked examples, today = 2026-10-17: 2027-03-15 -> 5-1 = **4**; 2027-03-17 -> **5**; 2027-03-20 -> **5**; 2026-10-30 -> 0 -> **1**; 2026-11-10 -> 1-1 = 0 -> **1**; 2027-10-17 -> **12**. (The old phone formula that ignores the day gives 5 for the first one - that is the mismatch to fix.) Tested in `backend/tests/savingsTimezone.test.js`.
+
+**Time zone rule.** All savings month/day maths (`thisMonthSaved`, `monthlySaved`, `goalMet`, `paceMonthly`, `getMonthlyAnalysis().saved`, `monthsLeft`) uses **India time** (`SAVINGS_TZ`, helpers `savingsIstParts_`/`savingsMonthIndex_`), never the server's own zone, because the Cloud Functions server runs in UTC while the Firestore sheet stores "1 Oct" as midnight India time. The same checks run under UTC, India and New York process zones.
+
+**Editing a goal:** `updateGoal` accepts the goal's current saved `targetDate` unchanged even when it is in the past (so only the amount can be edited); a NEW changed date in the past is still refused.
+
+**Actions**
+- `addSavingsGoal` accepts optional `targetDate` (valid date, not in the past, blank = none; ignored for Recurring).
+- NEW `updateSavingsGoal` `{row, target?, targetDate?}` -> `{ok}`. One-time goals only; row must be a real Goals row; `target` must be > 0 when given; `targetDate: ""` clears it; leaving a field out leaves it alone. Allow-listed in `functions/index.js` (WRITE_ACTIONS), friends' list in `v2route.js`, and `viewPublisher.js`.
+- `updateSavingsEntry` (used to move a bit of money between buckets) keeps the entry's Type. **Fix found 2026-10-17:** it used to accept ANY destination text, so a typo would silently hide money from every total. It now requires Emergency, Free or an existing goal's exact name (a legacy entry may keep its old destination so its note can still be edited).
+
+Tests: `backend/tests/savingsOverview.test.js`.
+
+## Savings screen, New look (frontend, 2026-10-17)
+
+Only drawn when Settings > Appearance > New look is on (`finLookOn()`); with it
+off the older carousel / list / forms are used exactly as before. All in
+`index.html` (search `SAVINGS, NEW LOOK`).
+
+- **Overview**: Total saved hero with "This month X of Y goal", Add savings
+  button, a "needs a home" card, Safety (Emergency with "X of 3 months of
+  expenses covered", CC Buffer), Goals (each with a pace line), Free savings,
+  a last-6-months bar chart against the monthly goal, and Activity grouped by
+  month. Tapping Emergency / CC Buffer / a goal / Free opens that bucket's own
+  page (Add money, Withdraw, and for one-time goals Mark as bought, Make
+  priority, Edit goal, plus a date picker that previews "you would need X a
+  month").
+- **Same actions, same optimistic pattern** as the older screen: Add savings
+  uses `previewSavingsSplit` + `saveSavingsAuto` / `saveSavingsManual`; New goal
+  uses `addSavingsGoal` (+ `targetDate`); Edit goal uses `updateSavingsGoal`;
+  "needs a home" uses `updateSavingsEntry` to change ONLY the destination;
+  Add money / Withdraw reuse the older quick-action panel inside a sheet; edit /
+  delete of a past entry reuses `buildSavingsEntryItem` inside a sheet. Every
+  one changes the screen at once and puts it back (with a message) if the save
+  fails. `applySavingsBucketDelta` also keeps `totalSaved` / `thisMonthSaved` /
+  the current `monthlySaved` bar in step.
+- **Older server or stale cached copy**: every new field is optional. A missing
+  field hides only its own piece (no "This month" block without `monthlyGoal` /
+  `thisMonthSaved`, no chart without `monthlySaved`, no "needs a home" without
+  `needsHome`); totals and the pace estimate fall back to what can be worked out
+  locally.
+- **`payment` entries** count as money put in ("From a payment"); no other code
+  branches on an entry's type.
+- Pure logic (pace, finish-date maths, grouping, chart, manual-split check) is
+  between `SV-LOGIC-START` / `SV-LOGIC-END` and tested by
+  `backend/tests/finSavingsNew.test.js`.
+- Demo Mode produces every new field (including a `payment` entry waiting in
+  Free savings, a goal with a date and one without) and implements
+  `updateSavingsGoal`.
+- Fixed on the way (also affects the older look): "Mark Purchased" sent the
+  withdrawal as 0 because the goal's saved amount was read after the optimistic
+  reset; it now reads it first.
+
 ## Open items / not yet built
 
 - ~~`autoLogSaving` still writes old pot names.~~ **Fixed 2026-08-11 —

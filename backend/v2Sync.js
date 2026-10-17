@@ -239,10 +239,11 @@ function v2MapSaving_(row){
 }
 
 function v2MapGoal_(row){
-  var r = v2Pad_(row, 6);
+  var r = v2Pad_(row, 7);
   if(!v2Text_(r[0])) return null;
   var doc = { name: v2Text_(r[0]), type: v2Text_(r[1]), targetPaise: v2Paise_(r[2]), status: v2Text_(r[3]),
               priority: typeof r[4] === "boolean" ? r[4] : v2Text_(r[4]).toLowerCase() === "true", dateAdded: v2DateStr_(r[5]) || "" };
+  if(v2Text_(r[6])) doc.targetDate = v2DateStr_(r[6]) || v2Text_(r[6]);   // optional deadline (added 2026-10-17)
   return { id: v2Sha_([doc.name]), doc: doc };
 }
 

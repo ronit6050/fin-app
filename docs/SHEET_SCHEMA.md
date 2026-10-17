@@ -100,6 +100,7 @@ One row per savings goal (replaced the old `WishList` sheet, 2026-08-11).
 | D | Status | `Active` or `Done` |
 | E | Priority | Boolean-ish — the one active one-time goal that gets priority in Auto Split |
 | F | DateAdded | |
+| G | TargetDate | Optional deadline `yyyy-MM-dd`, one-time goals only (added 2026-10-17; the header is added automatically to an older sheet the first time a date is saved; old rows are simply blank) |
 
 ---
 
@@ -111,7 +112,7 @@ action (Auto Split can write multiple rows for one action).
 |---|---|---|
 | A | Date | |
 | B | Amount | Negative for a withdrawal |
-| C | Type | `auto`, `manual`, or `withdraw` |
+| C | Type | `auto`, `manual`, `withdraw`, or `payment` (money from a payment you tagged Saving or noted "saving"; written since 2026-10-17, older such rows say `auto`) |
 | D | Note | |
 | E | Destination | `Emergency`, `Free`, `CC Buffer`, or the exact name of a row in `Goals` — **column header was stale ("Pot," a leftover from the old pre-2026-08-11 system) until this cleanup pass relabeled it** |
 

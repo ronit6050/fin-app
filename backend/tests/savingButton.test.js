@@ -56,7 +56,7 @@ console.log("\n--- 1. Tapping Saving on a debit ---");
   assert(r.ok && r.savingEvent === true, "the save reports a saving event");
   assert(r.typeSaved === true && cell(w, 2, 17) === "Saving", "the Saving tag itself is kept on the row (column Q)");
   assert(cell(w, 2, 18) === "Saving", "the row is marked as a Saving event (column R)");
-  assert(savRows(w).length === 1 && Number(savRows(w)[0][1]) === 5000 && savRows(w)[0][4] === "Free" && savRows(w)[0][2] === "auto",
+  assert(savRows(w).length === 1 && Number(savRows(w)[0][1]) === 5000 && savRows(w)[0][4] === "Free" && savRows(w)[0][2] === "payment",
     "exactly one 5000 entry lands on the Savings screen, in Free Savings");
   const again = save(w, 2, "moved to piggy bank", "Saving");
   assert(again.ok && savRows(w).length === 1, "saving the same payment again does not log a second entry (got " + savRows(w).length + ")");

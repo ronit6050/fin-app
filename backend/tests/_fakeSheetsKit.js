@@ -134,6 +134,14 @@ function makeWorld(files){
   sandbox.Utilities = {
     formatDate: function(d, tz, fmt){
       d = new Date(d);
+      // A named zone (e.g. Asia/Kolkata) is honoured for real, whatever zone this computer is in.
+      if(tz && tz.indexOf("/") >= 0 && !isNaN(d.getTime())){
+        const o = {};
+        new Intl.DateTimeFormat("en-GB", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+          .formatToParts(d).forEach(function(p){ o[p.type] = p.value; });
+        return fmt.replace("yyyy", o.year).replace("MMM", MONTHS[+o.month - 1]).replace("MM", o.month)
+          .replace("dd", o.day).replace("HH", o.hour).replace("mm", o.minute).replace("ss", o.second);
+      }
       return fmt.replace("yyyy", d.getFullYear()).replace("MMM", MONTHS[d.getMonth()])
         .replace("MM", pad(d.getMonth() + 1)).replace("dd", pad(d.getDate()))
         .replace("HH", pad(d.getHours())).replace("mm", pad(d.getMinutes())).replace("ss", pad(d.getSeconds()));

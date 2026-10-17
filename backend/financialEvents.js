@@ -369,7 +369,8 @@ function autoLogSaving(dateStr, amount, note){
   // [Date, Amount, Type, Note, Destination] — exact shape saveAutoSplit/
   // saveManualSplit (savingsGoals.js) already use, so this row reads
   // identically to a hand-entered one everywhere in the app.
-  savSheet.appendRow([dateStr, cleanAmount, "auto", note || "saving", "Free"]);
+  // Type "payment" (was "auto" before 2026-10-17) marks money that came from a payment tagged Saving, so the Savings tab can show it as "needs a home".
+  savSheet.appendRow([dateStr, cleanAmount, "payment", note || "saving", "Free"]);
 
   return { logged: true };
 }
@@ -378,7 +379,7 @@ function autoLogSaving(dateStr, amount, note){
 // Saving (the button, or the word "saving" in its note) is later changed to something else, so
 // the Savings screen does not keep money that is no longer a saving.
 // Deliberately cautious: it only removes a row that looks EXACTLY like the one autoLogSaving
-// wrote (same day, same amount, type "auto", destination "Free", same note) and only when there
+// wrote (same day, same amount, type "payment" - or the older "auto" - destination "Free", same note) and only when there
 // is exactly one such row. Anything else is left alone and reported, never guessed at.
 function undoAutoLogSaving(dateStr, amount, note){
   var savSheet = getSavingsSheet_();
@@ -395,7 +396,8 @@ function undoAutoLogSaving(dateStr, amount, note){
     var rowDay = Utilities.formatDate(new Date(r[0]), Session.getScriptTimeZone(), "yyyy-MM-dd");
     if(rowDay !== dateStr) continue;
     if(Math.abs((Number(r[1]) || 0) - cleanAmount) > 0.009) continue;
-    if((r[2] || "").toString() !== "auto") continue;
+    var rowType = (r[2] || "").toString();
+    if(rowType !== "payment" && rowType !== "auto") continue;   // "auto" = rows written before 2026-10-17
     if((r[4] || "").toString() !== "Free") continue;
     if((r[3] || "").toString() !== wantNote) continue;
     matches.push(i + 1); // sheet row number

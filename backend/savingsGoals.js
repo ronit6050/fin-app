@@ -32,7 +32,7 @@ function getGoalsSheet_(){
   let sheet = ss.getSheetByName("Goals");
   if(!sheet){
     sheet = ss.insertSheet("Goals");
-    sheet.appendRow(["Name","Type","Target","Status","Priority","DateAdded"]);
+    sheet.appendRow(["Name","Type","Target","Status","Priority","DateAdded","TargetDate"]);
   }
   return sheet;
 }
@@ -40,6 +40,194 @@ function getGoalsSheet_(){
 /* ============================================
    PURE HELPERS — no sheet access, Node-testable
 ============================================ */
+
+// Safe Date check across realms (Apps Script / test sandboxes).
+function savingsIsDate_(v){ return Object.prototype.toString.call(v) === "[object Date]"; }
+
+// A Savings-sheet date cell -> a real Date, or null when blank/unreadable.
+function savingsEntryDate_(v){
+  if(v === "" || v === null || v === undefined) return null;
+  const d = savingsIsDate_(v) ? v : new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// All savings month/day maths is done in INDIA time, never the server's own
+// zone. Why: the Cloud Functions server runs in UTC, while the Firestore-backed
+// sheet stores the date "2026-10-01" as midnight India time (= 30 Sep 18:30
+// UTC). Reading that with getMonth() on a UTC server puts the 1st of the month
+// into the PREVIOUS month. Reading it in Asia/Kolkata is right everywhere.
+const SAVINGS_TZ = "Asia/Kolkata";
+
+// A moment -> {y, m (1-12), d} as seen on the calendar in India.
+function savingsIstParts_(date){
+  const p = Utilities.formatDate(date, SAVINGS_TZ, "yyyy-MM-dd").split("-");
+  return { y: Number(p[0]), m: Number(p[1]), d: Number(p[2]) };
+}
+
+// A moment -> a whole-number month index (year*12 + month0) in India time.
+function savingsMonthIndex_(date){
+  const p = savingsIstParts_(date);
+  return p.y * 12 + (p.m - 1);
+}
+
+// Net of Savings entries (adds minus withdrawals) dated in one calendar
+// month (India time). month is 1-12. THE one rule behind both Analysis's
+// "Saved" and the Savings screen's thisMonthSaved, so the two can never disagree.
+function savingsMonthNet_(savingsRows, year, month){
+  const want = year * 12 + (month - 1);
+  let net = 0;
+  for(let i = 0; i < savingsRows.length; i++){
+    const d = savingsEntryDate_(savingsRows[i][0]);
+    if(!d) continue;
+    if(savingsMonthIndex_(d) === want){
+      net += Number(savingsRows[i][1]) || 0;
+    }
+  }
+  return net;
+}
+
+// Everything the redesigned Savings overview needs that comes from the
+// Savings rows alone (2026-10-17). Pure: pass "now" so tests can fix the date.
+//   thisMonthSaved, monthlySaved (last 6 months, oldest first, last = this
+//   month), goalMet {met, of} (last 3 COMPLETED months, never counting months
+//   before the first entry ever), paceMonthly (their average, or the goal when
+//   that is 0 / no history), needsHome (payments parked in Free, newest first,
+//   never more than what is really still in Free).
+// Months are India-time months (see SAVINGS_TZ above); "now" can be injected.
+function computeSavingsOverview_(savingsRows, monthlyGoal, now){
+  monthlyGoal = Number(monthlyGoal) || 0;
+  now = now || new Date();
+  const nowIdx = savingsMonthIndex_(now);
+
+  const nets = {};
+  let firstIdx = null;
+  savingsRows.forEach(function(r){
+    const d = savingsEntryDate_(r[0]);
+    if(!d) return;
+    const idx = savingsMonthIndex_(d);
+    nets[idx] = (nets[idx] || 0) + (Number(r[1]) || 0);
+    if(firstIdx === null || idx < firstIdx) firstIdx = idx;
+  });
+
+  const monthlySaved = [];
+  for(let k = 5; k >= 0; k--){
+    const idx = nowIdx - k;
+    monthlySaved.push({ year: Math.floor(idx / 12), month: (idx % 12) + 1, saved: nets[idx] || 0 });
+  }
+
+  // Last 3 completed months, skipping any month before the first entry ever.
+  const counted = [];
+  for(let k = 3; k >= 1; k--){
+    const idx = nowIdx - k;
+    if(firstIdx !== null && idx >= firstIdx) counted.push(nets[idx] || 0);
+  }
+  let goalMet = { met: 0, of: 0 };
+  if(monthlyGoal > 0){
+    goalMet = {
+      met: counted.filter(function(v){ return v >= monthlyGoal; }).length,
+      of: counted.length
+    };
+  }
+  let paceMonthly = counted.length
+    ? Math.round(counted.reduce(function(a, b){ return a + b; }, 0) / counted.length)
+    : 0;
+  if(paceMonthly <= 0) paceMonthly = monthlyGoal;
+
+  // Payments tagged Saving that landed in Free and have not been given a home yet.
+  // Withdrawals from Free are not matched to specific payments, so the total is
+  // capped at what is really still in Free (newest payments kept first): moving
+  // "needs a home" money can then never push Free below zero. An entry only
+  // partly covered is listed with the covered amount; fullAmount is its real size.
+  let freeLeft = Math.max(sumSavingsByPot_(savingsRows, "Free"), 0);
+  const needsHome = { amount: 0, count: 0, entries: [] };
+  for(let i = savingsRows.length - 1; i >= 0 && freeLeft > 0; i--){
+    const r = savingsRows[i];
+    const type = (r[2] || "").toString().trim().toLowerCase();
+    const dest = (r[4] || "").toString().trim();
+    const amt  = Number(r[1]) || 0;
+    if(type !== "payment" || dest !== "Free" || amt <= 0) continue;
+    const covered = Math.min(amt, freeLeft);
+    freeLeft -= covered;
+    needsHome.amount += covered;
+    needsHome.count++;
+    if(needsHome.entries.length < 20){
+      needsHome.entries.push({
+        row: i + 2, // savingsRows starts after the header, so index 0 is sheet row 2
+        amount: covered,
+        fullAmount: amt,
+        date: savingsIsDate_(r[0]) ? Utilities.formatDate(r[0], Session.getScriptTimeZone(), "yyyy-MM-dd") : r[0],
+        note: r[3] || ""
+      });
+    }
+  }
+
+  return {
+    thisMonthSaved: nets[nowIdx] || 0,
+    monthlySaved: monthlySaved,
+    goalMet: goalMet,
+    paceMonthly: paceMonthly,
+    needsHome: needsHome
+  };
+}
+
+// "yyyy-MM-dd" -> {y, m, d}, or null if not a real calendar date.
+function parseIsoDate_(s){
+  if(typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const p = s.split("-").map(Number);
+  const dt = new Date(p[0], p[1] - 1, p[2]);
+  if(dt.getFullYear() !== p[0] || dt.getMonth() !== p[1] - 1 || dt.getDate() !== p[2]) return null;
+  return { y: p[0], m: p[1], d: p[2] };
+}
+
+// Whole months from "now" to the target date, minimum 1. THE reference rule
+// (the phone must copy it exactly), using today's date in India time:
+//   months = (targetYear - nowYear) * 12 + (targetMonth - nowMonth)
+//   if targetDay < nowDay then months = months - 1
+//   result = max(months, 1)
+// Worked examples with today = 2026-10-17:
+//   2027-03-15 -> 5 - 1 = 4     2027-03-17 -> 5     2027-03-20 -> 5
+//   2026-10-30 -> 0 -> 1        2026-11-10 -> 1 - 1 = 0 -> 1     2027-10-17 -> 12
+function goalMonthsLeft_(targetIso, now){
+  const t = parseIsoDate_(targetIso);
+  if(!t) return null;
+  const n = savingsIstParts_(now);
+  let months = (t.y - n.y) * 12 + (t.m - n.m);
+  if(t.d < n.d) months -= 1;
+  return Math.max(months, 1);
+}
+
+// Checks an optional target date typed by the user. "" = none (fine).
+// Returns { ok:true, value } or { ok:false, error }.
+function validateGoalTargetDate_(raw){
+  const v = (raw === null || raw === undefined) ? "" : raw.toString().trim();
+  if(v === "") return { ok:true, value:"" };
+  if(!parseIsoDate_(v)) return { ok:false, error:"Pick a valid date." };
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  if(v < today) return { ok:false, error:"The target date can't be in the past." };
+  return { ok:true, value:v };
+}
+
+// A Goals sheet's TargetDate cell (Sheets may turn "2026-12-01" into a real
+// date) -> "yyyy-MM-dd" or "".
+function normalizeTargetDateCell_(v){
+  if(v === "" || v === null || v === undefined) return "";
+  if(savingsIsDate_(v)){
+    if(isNaN(v.getTime())) return "";
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+  const s = v.toString().trim();
+  return parseIsoDate_(s) ? s : "";
+}
+
+// Adds the "TargetDate" header in column G of an older Goals sheet. Safe to
+// run any number of times; returns false (and writes nothing) if G1 already
+// holds some other label.
+function ensureGoalsTargetDateHeader_(sheet){
+  const cell = sheet.getRange(1, 7);
+  const current = (cell.getValue() || "").toString().trim();
+  if(current === ""){ cell.setValue("TargetDate"); return true; }
+  return current === "TargetDate";
+}
 
 // Sums Savings-sheet rows for a given "pot" value (Emergency / Free /
 // a goal's exact name). Positive rows = added, negative = withdrawn.
@@ -188,7 +376,8 @@ function computeCCBufferTarget_(cyclesToAverage){
   return computeCCBufferTargetFromCycles_(cycles.map(function(c){ return c.total; }), CC_BUFFER_FALLBACK_TARGET);
 }
 
-function getGoalsList_(goalsSheet, savingsRows){
+function getGoalsList_(goalsSheet, savingsRows, now){
+  now = now || new Date();
   const data = goalsSheet.getDataRange().getValues();
   const goals = [];
 
@@ -205,6 +394,13 @@ function getGoalsList_(goalsSheet, savingsRows){
 
     const saved = sumSavingsByPot_(savingsRows, name);
     const target = type === GOAL_TYPE_RECURRING ? computeCCBufferTarget_() : rawTarget;
+    const remaining = Math.max(target - saved, 0);
+
+    // Optional deadline (column G, added 2026-10-17). Old rows have no column G -> "".
+    const targetDate = normalizeTargetDateCell_(data[i][6]);
+    const hasPlan = targetDate !== "" && type === GOAL_TYPE_ONE_TIME && status !== "Done";
+    const monthsLeft = hasPlan ? goalMonthsLeft_(targetDate, now) : null;
+    const monthlyNeeded = (monthsLeft !== null && remaining > 0) ? Math.ceil(remaining / monthsLeft) : null;
 
     goals.push({
       row: i + 1,
@@ -212,11 +408,14 @@ function getGoalsList_(goalsSheet, savingsRows){
       type: type,
       target: target,
       saved: saved,
-      remaining: Math.max(target - saved, 0),
+      remaining: remaining,
       canAfford: target > 0 && saved >= target,
       status: status,
       priority: priority,
-      dateAdded: dateAdded
+      dateAdded: dateAdded,
+      targetDate: targetDate,
+      monthsLeft: monthsLeft,
+      monthlyNeeded: monthlyNeeded
     });
   }
 
@@ -233,13 +432,20 @@ function getRecentSavingsEntries_(savSheet, limit){
   for(let i = data.length - 1; i >= 1; i--){
     const row = data[i];
     if(!row[0] && !row[1]) continue;
+    const entryType = (row[2] || "").toString().trim().toLowerCase();
+    const entryAmount = Number(row[1]) || 0;
+    // source (added 2026-10-17): where the entry came from - a payment tagged Saving,
+    // a withdrawal, or something you added yourself.
+    const source = entryType === "payment" ? "payment"
+      : (entryType === "withdraw" || entryAmount < 0) ? "withdraw" : "you";
     entries.push({
       row: i + 1,
-      date: row[0] instanceof Date ? Utilities.formatDate(row[0], Session.getScriptTimeZone(), "yyyy-MM-dd") : row[0],
-      amount: Number(row[1]) || 0,
+      date: savingsIsDate_(row[0]) ? Utilities.formatDate(row[0], Session.getScriptTimeZone(), "yyyy-MM-dd") : row[0],
+      amount: entryAmount,
       type: row[2] || "",
       note: row[3] || "",
-      destination: row[4] || ""
+      destination: row[4] || "",
+      source: source
     });
     if(entries.length >= limit) break;
   }
@@ -258,7 +464,8 @@ function getSavingsBreakdown(){
   const emergencyTarget = settings.monthlyExpenses * 3;
   const free             = sumSavingsByPot_(savingsRows, "Free");
 
-  const goals = getGoalsList_(goalsSheet, savingsRows);
+  const now = new Date();
+  const goals = getGoalsList_(goalsSheet, savingsRows, now);
   const ccBufferGoal = goals.find(function(g){ return g.type === GOAL_TYPE_RECURRING; }) || null;
   const priorityGoal =
     goals.find(function(g){ return g.type === GOAL_TYPE_ONE_TIME && g.status === "Active" && g.priority; }) ||
@@ -271,8 +478,22 @@ function getSavingsBreakdown(){
     goals.filter(function(g){ return g.status === "Active"; }).map(function(g){ return g.name; })
   ).concat(["Free"]);
 
+  // Overview numbers for the redesigned Savings tab (added 2026-10-17).
+  const totalSaved = emergency + free + goals
+    .filter(function(g){ return g.status === "Active"; })
+    .reduce(function(sum, g){ return sum + g.saved; }, 0);
+  const overview = computeSavingsOverview_(savingsRows, settings.monthlySaveGoal, now);
+
   return {
     recentEntries: getRecentSavingsEntries_(savSheet, 15),
+    totalSaved: totalSaved,
+    monthlyGoal: settings.monthlySaveGoal,
+    monthlyExpenses: settings.monthlyExpenses,
+    thisMonthSaved: overview.thisMonthSaved,
+    monthlySaved: overview.monthlySaved,
+    goalMet: overview.goalMet,
+    paceMonthly: overview.paceMonthly,
+    needsHome: overview.needsHome,
     destinations: destinations,
     emergency: emergency,
     emergencyTarget: emergencyTarget,
@@ -468,6 +689,20 @@ function updateSavingsEntry(row, amount, note, destination){
   }
   if(!destination) return { ok:false, error:"Pick a destination." };
 
+  // The destination must be a real bucket (Emergency, Free or a goal's exact
+  // name) - a typo would otherwise hide the money from every total. Leaving a
+  // legacy entry on its old destination is still allowed so its note can be edited.
+  destination = destination.toString().trim();
+  const currentDest = (savSheet.getRange(row, 5).getValue() || "").toString().trim();
+  if(destination !== currentDest){
+    const valid = ["Emergency", "Free"];
+    getGoalsSheet_().getDataRange().getValues().slice(1).forEach(function(g){
+      const n = (g[0] || "").toString().trim();
+      if(n) valid.push(n);
+    });
+    if(valid.indexOf(destination) === -1) return { ok:false, error:"Pick a valid destination." };
+  }
+
   savSheet.getRange(row, 2).setValue(Number(amount));
   savSheet.getRange(row, 4).setValue(note || "");
   savSheet.getRange(row, 5).setValue(destination);
@@ -488,7 +723,7 @@ function deleteSavingsEntry(row){
    GOAL MANAGEMENT
 ============================================ */
 
-function addGoal(name, type, target){
+function addGoal(name, type, target, targetDate){
   name = (name || "").toString().trim();
   type = type === GOAL_TYPE_RECURRING ? GOAL_TYPE_RECURRING : GOAL_TYPE_ONE_TIME;
 
@@ -497,7 +732,15 @@ function addGoal(name, type, target){
     return { ok:false, error:"Enter a target amount." };
   }
 
+  // Optional deadline (only meaningful for a one-time goal).
+  const dateCheck = validateGoalTargetDate_(targetDate);
+  if(!dateCheck.ok) return dateCheck;
+  const cleanTargetDate = type === GOAL_TYPE_ONE_TIME ? dateCheck.value : "";
+
   const goalsSheet = getGoalsSheet_();
+  if(cleanTargetDate !== "" && !ensureGoalsTargetDateHeader_(goalsSheet)){
+    return { ok:false, error:"Column G of the Goals sheet is used for something else." };
+  }
   const data = goalsSheet.getDataRange().getValues();
 
   const hasActiveOneTime = data.slice(1).some(function(r){
@@ -512,9 +755,54 @@ function addGoal(name, type, target){
     type === GOAL_TYPE_ONE_TIME ? Number(target) : "",
     "Active",
     (type === GOAL_TYPE_ONE_TIME && !hasActiveOneTime), // first active one-time goal defaults to priority
-    today
+    today,
+    cleanTargetDate
   ]);
 
+  return { ok:true };
+}
+
+// Change a one-time goal's target amount and/or deadline (added 2026-10-17).
+// Either field may be left out (undefined = leave alone); targetDate "" clears it.
+function updateGoal(row, target, targetDate){
+  const goalsSheet = getGoalsSheet_();
+  if(!Number.isInteger(row) || row < 2 || row > goalsSheet.getLastRow()){
+    return { ok:false, error:"Invalid row." };
+  }
+  const name = (goalsSheet.getRange(row, 1).getValue() || "").toString().trim();
+  const type = (goalsSheet.getRange(row, 2).getValue() || "").toString().trim();
+  if(!name) return { ok:false, error:"Invalid row." };
+  if(type !== GOAL_TYPE_ONE_TIME) return { ok:false, error:"Only a one-time goal can be changed." };
+
+  const changeTarget = target !== undefined && target !== null;
+  const changeDate   = targetDate !== undefined && targetDate !== null;
+  if(!changeTarget && !changeDate) return { ok:false, error:"Nothing to change." };
+
+  let newTarget = null;
+  if(changeTarget){
+    newTarget = Number(target);
+    if(!isFinite(newTarget) || newTarget <= 0) return { ok:false, error:"Enter a target amount." };
+  }
+  let newDate = "";
+  if(changeDate){
+    // Sending back the goal's CURRENT saved date unchanged is always fine, even
+    // once that date has passed (so you can edit just the amount). Only a NEW,
+    // changed date must not be in the past.
+    const currentDate = normalizeTargetDateCell_(goalsSheet.getRange(row, 7).getValue());
+    const sent = targetDate.toString().trim();
+    const dateCheck = (sent !== "" && sent === currentDate && parseIsoDate_(sent))
+      ? { ok:true, value:sent }
+      : validateGoalTargetDate_(targetDate);
+    if(!dateCheck.ok) return dateCheck;
+    newDate = dateCheck.value;
+    if(!ensureGoalsTargetDateHeader_(goalsSheet)){
+      return { ok:false, error:"Column G of the Goals sheet is used for something else." };
+    }
+  }
+
+  // Everything checked - now write.
+  if(changeTarget) goalsSheet.getRange(row, 3).setValue(newTarget);
+  if(changeDate)   goalsSheet.getRange(row, 7).setValue(newDate);
   return { ok:true };
 }
 
