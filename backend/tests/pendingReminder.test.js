@@ -22,6 +22,7 @@ const sent = [];
 sb.sendPushToToken_ = function(token, title, body, extra){ sent.push({ token: token, title: title, body: body, extra: extra }); return { sent: true, code: 200 }; };
 sb.sendPushNotification = function(){};
 const D = w.D;
+const realRun = sb.pendingReminderRun_;   // section 7 swaps this for stand-ins; the last section needs the real one back
 const at = function(h, m, dayOffset){ const n = new D(); return new D(n.getFullYear(), n.getMonth(), n.getDate() + (dayOffset || 0), h, m || 0, 0).getTime(); };
 const row = function(daysAgo, amt, cp, o){
   o = o || {};
@@ -42,6 +43,7 @@ w.act("friend", { action: "registerPushToken", token: "tok-friend" });
 sb.v2dbRun_(FRIEND, function(db){ sb.v2dbEnsureTemplate_(db); db.getSheetByName("Transactions").appendRow(row(0, 61, "Her shop")); });
 
 const ownerPending = 2, ownerTotal = 1240, key = function(e){ return sb.adminPersonKey_(e); };
+const skey = function(e){ return "r_" + key(e); };   // the reminder's own state field names (must start with a letter)
 const state = function(){ return (w.store["_system/reminders"] || { fields: {} }).fields; };
 const mineOnly = function(){ return sent.filter(function(s){ return s.token === "tok-owner-private"; }); };
 const hers = function(){ return sent.filter(function(s){ return s.token === "tok-friend"; }); };
@@ -61,7 +63,7 @@ console.log("\n--- 2. Only when something has been waiting since the last check;
 {
   reset();
   assert(sb.pendingReminderRun_(at(12, 0)) === 0 && sent.length === 0, "first look at 12:00: a payment that may have just arrived is not reminded about (it is remembered)");
-  assert(Number(state()[key(OWNER) + "_prev"]) === ownerPending, "(the count waiting is remembered: " + state()[key(OWNER) + "_prev"] + ")");
+  assert(Number(state()[skey(OWNER) + "_prev"]) === ownerPending, "(the count waiting is remembered: " + state()[skey(OWNER) + "_prev"] + ")");
   const n = sb.pendingReminderRun_(at(12, 15));
   assert(n === 2 && mineOnly().length === 1 && hers().length === 1, "at 12:15 they were still waiting: one reminder each, to their own phones");
   const m = mineOnly()[0];
@@ -152,7 +154,7 @@ console.log("\n--- 5b. Review fixes: stale memory, refused pushes, heartbeat ord
   w.store["adminStats/p_" + key(OWNER)] = { fields: { lastSeenMs: at(11, 0) }, updateTime: "t1" };
   sent.length = 0;
   sb.pendingReminderRun_(at(11, 5));                                                    // in the app: the memory is cleared
-  assert(Number(state()[key(OWNER) + "_prev"]) === 0, "while the person is in the app the 'was waiting' memory is cleared");
+  assert(Number(state()[skey(OWNER) + "_prev"]) === 0, "while the person is in the app the 'was waiting' memory is cleared");
   sb.pendingReminderRun_(at(11, 25));
   assert(mineOnly().length === 0, "after they leave, what is pending counts as 'just arrived' first: no reminder at 11:25");
   // (b) a memory older than 2 hours (last night) is ignored
@@ -168,7 +170,7 @@ console.log("\n--- 5b. Review fixes: stale memory, refused pushes, heartbeat ord
   const realSend = sb.sendPushToToken_;
   sb.sendPushToToken_ = function(){ attempts++; return { sent: false, code: 404, detail: "gone" }; };
   const n1 = sb.pendingReminderRun_(at(12, 15));
-  assert(n1 === 0 && attempts === 1 && Number(state()[key(OWNER) + "_n"] || 0) === 0, "a refused push is not counted as sent (nothing used from the daily 8): attempts " + attempts);
+  assert(n1 === 0 && attempts === 1 && Number(state()[skey(OWNER) + "_n"] || 0) === 0, "a refused push is not counted as sent (nothing used from the daily 8): attempts " + attempts);
   sb.pendingReminderRun_(at(12, 30)); sb.pendingReminderRun_(at(12, 45));
   assert(attempts === 1, "and it is not retried at the next two checks (it waits the normal gap): " + attempts);
   sb.pendingReminderRun_(at(13, 20));
@@ -221,6 +223,25 @@ console.log("\n--- 7. The tick looks about every 15 minutes, and a problem never
   w.store["_system/timer"].fields.remindAtMs = 0;
   const r = sb.timerTick_();
   assert(r && r.ran === false && Number(w.store["_system/timer"].fields.tickAtMs) > 0, "a reminder failure does not break the tick (the heartbeat is still written)");
+}
+
+console.log("\n--- 99. Field names Firestore accepts (a person key that starts with a digit used to be rejected: HTTP 400) ---");
+{
+  reset();
+  sb.pendingReminderRun_ = realRun;
+  const valid =/^[a-zA-Z_][a-zA-Z_0-9]*$/;
+  const realAdmin = sb.adminPersonKey_, realCommit = sb.fsCommit_;
+  const seenNames = [];
+  sb.fsCommit_ = function(ops){ ops.forEach(function(o){ if(o.merge) Object.keys(o.merge.fields || {}).forEach(function(k){ seenNames.push(k); }); }); return realCommit(ops); };
+  sb.adminPersonKey_ = function(e){ return e === OWNER ? "411e42807460cfbd" : realAdmin(e); };   // the exact digit-leading key from the real log
+  sb.pendingReminderRun_(at(12, 0));
+  assert(seenNames.length > 0, "the reminder saved its memory (" + seenNames.length + " fields)");
+  const bad = seenNames.filter(function(k){ return !valid.test(k); });
+  assert(bad.length === 0, "every saved field name is one Firestore accepts, even for a person key starting with a digit; rejected: " + bad.join(","));
+  assert(Number(state()["r_411e42807460cfbd_prev"]) === ownerPending, "the digit-leading person's count waiting is remembered under a letter-first name");
+  const n = sb.pendingReminderRun_(at(12, 15));
+  assert(mineOnly().length === 1 && mineOnly()[0].title === "2 payments need a note", "and the reminder is sent as normal for that person on the next check");
+  sb.adminPersonKey_ = realAdmin; sb.fsCommit_ = realCommit;
 }
 
 console.log("\nAll checks passed.");

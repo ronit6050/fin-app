@@ -77,10 +77,11 @@ function pendingReminderRun_(nowMs){
     people.forEach(function(email){
       try{
         var key = adminPersonKey_(email);
+        var sk = "r_" + key;                                                                      // state field names must START WITH A LETTER (Firestore rejects "411e..._prev"): the person key can begin with a digit
         var choice = v2dbRun_(email, function(){ return reminderChoice_(dbProps_().getProperty("SETTING_PENDING_REMINDER")); }, { prefetch: ["_Props"] });
         if(choice === "off") return;
-        var last = Number(state[key + "_last"] || 0);
-        var sentToday = String(state[key + "_day"] || "") === today ? Number(state[key + "_n"] || 0) : 0;
+        var last = Number(state[sk + "_last"] || 0);
+        var sentToday = String(state[sk + "_day"] || "") === today ? Number(state[sk + "_n"] || 0) : 0;
         if(sentToday >= REMINDER_MAX_PER_DAY_) return;
         if(last > 0 && (nowMs - last) < REMINDER_MINUTES_[choice] * 60000 - 60000) return;       // not due yet (one minute of slack for the tick's timing)
         var token = splitNotifyToken_(email);
@@ -88,20 +89,20 @@ function pendingReminderRun_(nowMs){
         try{                                                                                      // in the app right now: they can see Pending themselves
           var pres = fsGetPathMeta_("adminStats/p_" + key);
           var seen = pres && pres.fields ? Number(pres.fields.lastSeenMs || 0) : 0;
-          if(seen > 0 && (nowMs - seen) < REMINDER_ACTIVE_WINDOW_MS_){ updates[key + "_prev"] = 0; updates[key + "_prevAt"] = nowMs; return; }   // they are in the app: forget what was waiting, so anything arriving after they leave starts fresh
+          if(seen > 0 && (nowMs - seen) < REMINDER_ACTIVE_WINDOW_MS_){ updates[sk + "_prev"] = 0; updates[sk + "_prevAt"] = nowMs; return; }   // they are in the app: forget what was waiting, so anything arriving after they leave starts fresh
         }catch(ignorePresence){}
         var snap = v2dbRun_(email, function(){ return reminderSnapshot_(nowMs); }, { prefetch: ["Transactions"] });
-        var prevAt = Number(state[key + "_prevAt"] || 0);
-        var prev = (prevAt > 0 && (nowMs - prevAt) <= REMINDER_PREV_MAX_AGE_MS_) ? Number(state[key + "_prev"] || 0) : 0;   // a stale memory (older than 2 hours, e.g. from last night) counts as "nothing was waiting"
-        updates[key + "_prev"] = snap.count; updates[key + "_prevAt"] = nowMs;                    // remembered for the next check
+        var prevAt = Number(state[sk + "_prevAt"] || 0);
+        var prev = (prevAt > 0 && (nowMs - prevAt) <= REMINDER_PREV_MAX_AGE_MS_) ? Number(state[sk + "_prev"] || 0) : 0;   // a stale memory (older than 2 hours, e.g. from last night) counts as "nothing was waiting"
+        updates[sk + "_prev"] = snap.count; updates[sk + "_prevAt"] = nowMs;                    // remembered for the next check
         if(snap.count === 0 || prev === 0) return;                                                // nothing waiting, or it only just arrived
         var msg = reminderMessage_(snap);
         var res = sendPushToToken_(token, msg.title, msg.body, { kind: "reminder", tag: "pending-reminder" });
         if(res && res.sent === false){                                                            // not delivered (a refused or dead token, or no access token): not counted as sent,
-          updates[key + "_last"] = nowMs;                                                         // and not retried before the normal gap, so a bad token cannot cost a read every check
+          updates[sk + "_last"] = nowMs;                                                         // and not retried before the normal gap, so a bad token cannot cost a read every check
           return;
         }
-        updates[key + "_last"] = nowMs; updates[key + "_day"] = today; updates[key + "_n"] = sentToday + 1;
+        updates[sk + "_last"] = nowMs; updates[sk + "_day"] = today; updates[sk + "_n"] = sentToday + 1;
         sent++;
       }catch(personErr){
         try{ logAI("REMINDER_ERROR", "one person: " + String(personErr && personErr.message).slice(0, 150)); }catch(ignoreLog){}
