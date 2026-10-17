@@ -191,7 +191,7 @@ eq(f.svPreviewRows({ emergency: 700, ccBuffer: 200, goal: 0, goalName: "New Phon
 eq(f.svPreviewRows(null), [], "no preview -> no rows");
 
 // ---- the markup / wiring the New look relies on ----
-ok(/APP_VERSION = "2026-10-17-09"/.test(html) && /Savings screen is redesigned/.test(html), "version bumped and the changelog mentions the Savings screen");
+ok(/APP_VERSION = "2026-10-17-10"/.test(html) && /Savings screen is redesigned/.test(html), "version bumped and the changelog mentions the Savings screen");
 ok(/id="savingsNew" style="display:none"/.test(html), "the new screen is hidden by default (switch off = never shown)");
 ok(/:root\[data-look="new"\] #savingsContent > \.sv-old \{ display: none !important; \}/.test(html), "old markup is hidden only in the New look");
 ok(["savingsCarouselDots", "savingsDetailList", "addGoalToggleButton", "logSavingToggleButton", "recentActivityHeader", "recentActivityDetail"].every((id) => new RegExp('id="' + id + '"[^>]*class="[^"]*sv-old|class="[^"]*sv-old[^"]*"[^>]*id="' + id + '"').test(html)), "every old Savings control is marked sv-old");

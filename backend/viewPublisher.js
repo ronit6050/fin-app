@@ -41,7 +41,7 @@ var V2_WRITE_ACTIONS_ = [
   "saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
   "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
   "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
-  "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh",
+  "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
   "addCashEntry", "addManualTransaction", "updateCashEntry", "insertReconciledTransactions",
   "fixCreditCardTransactionMode", "updateSettings", "saveBudgets"
 ];

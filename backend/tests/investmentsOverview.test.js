@@ -261,4 +261,44 @@ console.log("\n--- 12. Review fixes: paused SIP, stale edit, day 31 ---");
   assert(dec.status === "upcoming" && dec.day === 31, "...and on the 31st in December");
 }
 
+
+console.log("\n--- 13. Archived payments feed the bars and SIP history, never the totals ---");
+{
+  const w = world([["2026-10-10", "HDFC Mid Cap Fund", 4000, "SIP paid this month", "payment"]], INS);
+  w.addSheet("Investments_Archive", [["Date", "Name", "Amount", "Note", "Kind", "ArchivedOn"],
+    ["2026-08-11", "HDFC Mid Cap Fund", 11000, "Starting Balance", "", "2026-10-17"],
+    ["2026-08-17", "Bandhan Small Cap (Money2Mgt SIP)", 2000, "x", "payment", "2026-10-17"],
+    ["2026-09-10", "HDFC Mid Cap Fund", 4000, "x", "payment", "2026-10-17"],
+    ["2026-09-15", "Bandhan Small Cap (Money2Mgt SIP)", 2000, "x", "payment", "2026-10-17"],
+    ["2026-10-10", "HDFC Mid Cap Fund", 4000, "x", "payment", "2026-10-17"],
+    ["2026-10-15", "Bandhan Small Cap (Money2Mgt SIP)", 2000, "x", "payment", "2026-10-17"],
+    ["2026-09-20", "Tata Steel", -500, "Sale", "sale", "2026-10-17"],
+    ["2026-07-05", "Old Name Not A Holding", 1000, "x", "manual", "2026-10-17"]]);
+  const o = w.sb.getInvestmentsOverview_();
+  const bar = (m) => o.monthly.find((b) => b.month === m).amount;
+  assert(bar(8) === 2000 && bar(9) === 6000, "August and September bars come from the archive (got " + bar(8) + ", " + bar(9) + ")");
+  assert(bar(10) === 6000, "October = live 4000 (the same archived payment is not counted twice) + archived Bandhan 2000 (got " + bar(10) + ")");
+  assert(bar(7) === 1000, "an archived payment to a name that is no longer a holding still shows in its month");
+  assert(o.totalPutIn === 4000, "the total ignores the archive entirely (got " + o.totalPutIn + ")");
+  assert(!o.holdings.some((h) => h.name === "Old Name Not A Holding" || h.name === "Bandhan Small Cap (Money2Mgt SIP)" && h.entries.length), "archived names do not become holdings");
+  const b = o.sips.find((s) => s.name === "Bandhan Small Cap (Money2Mgt SIP)");
+  assert(b.status === "paid" && b.paidOn === "2026-10-15", "a SIP paid before 'start over' shows paid, not overdue");
+  assert(b.trackedMonths === 2 && b.paidMonths === 2, "its paid history comes from the archive too (Aug and Sep)");
+  assert(o.thisMonth === 6000, "this month counts the archived October payment (got " + o.thisMonth + ")");
+  assert(w.sb.computeInvestmentsOverview_([], [], 0, new Date()).monthly.length === 6, "no archive and no rows still works");
+}
+
+console.log("\n--- 14. Remove a holding you do not have ---");
+{
+  const w = world([["2026-10-10", "Tata Steel", 500, "", "manual"]], INS,
+    [["Investment", 3000, "", "2026-08-11", "HDFC Nifty 50 Index Fund"], ["InvestmentPaused", 0, "", "2026-10-12", "HDFC Nifty 50 Index Fund"]]);
+  assert(w.sb.removeInvestmentHolding("Tata Steel").ok === false, "a holding with entries cannot be removed");
+  assert(w.sb.getInvestmentInstrumentsList().instruments.some((i) => i.name === "Tata Steel"), "...and stays in the list");
+  assert(w.sb.removeInvestmentHolding("Nope").ok === false, "an unknown name is refused");
+  const r = w.sb.removeInvestmentHolding("hdfc nifty 50 index fund");
+  assert(r.ok === true && !w.sb.getInvestmentInstrumentsList().instruments.some((i) => i.name === "HDFC Nifty 50 Index Fund"), "an empty holding is removed (name matched ignoring case)");
+  assert(rowsOf(w, "FinancialEvents").length === 1, "its remembered SIP amount and paused marker are forgotten");
+  assert(rowsOf(w, "InvestmentInstruments").length === 5, "the other holdings are untouched");
+}
+
 console.log("\nAll Investments overview checks passed.");

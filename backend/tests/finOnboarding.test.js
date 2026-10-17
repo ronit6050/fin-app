@@ -101,7 +101,7 @@ ok(/if \(finIsScreenHidden\(name\)\) \{ showMoreMenu\(\); return; \}/.test(html)
 ok(/if \(!finLookOn\(\) \|\| finOnbOpen \|\| finSheetOpen \|\| demoMode/.test(html), "tour only starts in the new look, not in demo mode, not over another sheet");
 ok(/localStorage\.setItem\(key, variant\);[\s\S]{0,200}catch \(e\) \{ return; \}/.test(html), "remembered before showing; blocked storage = skip");
 ok(/id="finOnbSkip"/.test(html), "Skip button exists");
-ok(/APP_VERSION = "2026-10-17-09"/.test(html), "APP_VERSION bumped");
+ok(/APP_VERSION = "2026-10-17-10"/.test(html), "APP_VERSION bumped");
 
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

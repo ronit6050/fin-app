@@ -441,7 +441,9 @@ function invIsAddedMoney_(kind, amount){
 
 // Pure. rows = Investments data rows WITHOUT the header (sheet row = index + 2).
 // instruments = [{name, category, sipAmount, sipDay, sipActive}]. now can be injected for tests.
-function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now){
+// archiveRows (optional) = rows moved to Investments_Archive by "start over". Their payments / hand-added money still
+// count in the monthly bars and in each SIP's paid history (they really happened), but never in the totals or holdings.
+function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now, archiveRows){
   monthlyGoal = Number(monthlyGoal) || 0;
   now = now || new Date();
   const nowIdx = invMonthIndex_(now);
@@ -449,6 +451,8 @@ function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now){
 
   const byName = {};                       // name -> {putIn, last, entries:[], paymentMonths:{idx:true}}
   const monthAdded = {};                   // month index -> money added
+  const liveAdded = [];                    // {name, idx, amount} of live added money, to catch a payment typed in again after start over
+  const histMonths = {};                   // name -> {month index: date} from the archive
   let totalPutIn = 0, addedSinceStart = 0;
 
   rows.forEach(function(r, i){
@@ -467,7 +471,20 @@ function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now){
       const idx = invMonthIndex_(d);
       monthAdded[idx] = (monthAdded[idx] || 0) + amount;
       h.paymentMonths[idx] = d;
+      liveAdded.push({ name: name, idx: idx, amount: amount });
     }
+  });
+
+  (archiveRows || []).forEach(function(r){
+    const name = (r[1] || "").toString().trim();
+    const amount = Number(r[2]) || 0;
+    const d = invEntryDate_(r[0]);
+    if(!name || !d || !invIsAddedMoney_(invKind_(r), amount)) return;
+    const idx = invMonthIndex_(d);
+    const again = liveAdded.some(function(a){ return a.name === name && a.idx === idx && a.amount === amount; });
+    if(again) return;                      // "Already paid this month" (or a re-entered payment) is already counted
+    monthAdded[idx] = (monthAdded[idx] || 0) + amount;
+    (histMonths[name] || (histMonths[name] = {}))[idx] = d;
   });
 
   const monthly = [];
@@ -481,13 +498,16 @@ function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now){
   let paidTracked = 0, monthsTracked = 0;
   instruments.forEach(function(inst){
     if(!(Number(inst.sipAmount) > 0)) return;
-    const h = byName[inst.name];
+    const h0 = byName[inst.name];
+    // paid history = this holding's live payments plus its archived ones
+    const pm = Object.assign({}, histMonths[inst.name] || {}, h0 ? h0.paymentMonths : {});
+    const h = { paymentMonths: pm };
     let day = Number(inst.sipDay) >= 1 && Number(inst.sipDay) <= 31 ? Math.floor(Number(inst.sipDay)) : null;
     // a SIP due on the 31st is due on the last day of a shorter month
     if(day !== null) day = Math.min(day, new Date(Date.UTC(today.y, today.m, 0)).getUTCDate());
     const active = inst.sipActive !== false;
-    const months = h ? Object.keys(h.paymentMonths).map(Number).sort(function(a, b){ return a - b; }) : [];
-    const paidNow = h && h.paymentMonths[nowIdx] ? h.paymentMonths[nowIdx] : null;
+    const months = Object.keys(pm).map(Number).sort(function(a, b){ return a - b; });
+    const paidNow = pm[nowIdx] ? pm[nowIdx] : null;
     let status = "upcoming", daysLate = 0, daysUntil = null;
     if(!active) status = "paused";
     else if(paidNow) status = "paid";
@@ -567,7 +587,9 @@ function getInvestmentsOverview_(){
   const rows = data.slice(1).filter(function(r){ return r.some(function(c){ return c !== "" && c !== null && c !== undefined; }); });
   const list = getInvestmentInstrumentsList().instruments;
   const goal = (typeof getSettings === "function") ? (getSettings().monthlyInvestmentGoal || 0) : 0;
-  return computeInvestmentsOverview_(rows, list, goal, new Date());
+  const archSheet = dbSs_().getSheetByName("Investments_Archive");
+  const archive = archSheet ? archSheet.getDataRange().getValues().slice(1) : [];
+  return computeInvestmentsOverview_(rows, list, goal, new Date(), archive);
 }
 
 /* ============================================
@@ -868,6 +890,37 @@ function startInvestmentsFresh(confirm){
       if(Number(inst.sipAmount) > 0) invSyncSipEvents_(inst.name, Number(inst.sipAmount), inst.sipActive !== false);
     });
     return { ok:true, archived: rows.length, relabelled: relabelled };
+  }catch(err){
+    return { ok:false, error:err.toString() };
+  }
+}
+
+// Removes a holding you do not have. Only allowed when nothing has ever been put into it (no entries on the Investments
+// tab), so no money record can be orphaned. Also forgets its remembered SIP amount and any paused marker.
+function removeInvestmentHolding(name){
+  try{
+    const clean = (name || "").toString().trim();
+    if(!clean) return { ok:false, error:"Choose a holding." };
+    const sheet = getInvestmentInstrumentsSheet_();
+    const data = sheet.getDataRange().getValues();
+    let row = 0, stored = "";
+    for(let i = 1; i < data.length; i++){
+      if((data[i][0] || "").toString().trim().toLowerCase() === clean.toLowerCase()){ row = i + 1; stored = (data[i][0] || "").toString().trim(); break; }
+    }
+    if(!row) return { ok:false, error:"Unknown investment." };
+    const inv = dbSs_().getSheetByName("Investments");
+    const rows = inv ? inv.getDataRange().getValues() : [];
+    for(let i = 1; i < rows.length; i++){
+      if((rows[i][1] || "").toString().trim() === stored) return { ok:false, error:"It has entries. Delete or sell those first." };
+    }
+    const fe = getFinancialEventsSheet();
+    const feData = fe.getDataRange().getValues();
+    for(let i = feData.length - 1; i >= 1; i--){
+      const t = feData[i][0];
+      if((t === "Investment" || t === INV_PAUSED_TYPE_) && (feData[i][4] || "").toString() === stored) fe.deleteRow(i + 1);
+    }
+    sheet.deleteRow(row);
+    return { ok:true, name: stored };
   }catch(err){
     return { ok:false, error:err.toString() };
   }

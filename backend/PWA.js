@@ -288,6 +288,10 @@ function pwaDispatch_(data, verified){
     return jsonResponse(deleteInvestmentEntry(data.row, data.name, data.amount));
   }
 
+  if(data.action === "removeInvestmentHolding"){
+    return jsonResponse(removeInvestmentHolding(data.name));
+  }
+
   if(data.action === "startInvestmentsFresh"){
     return jsonResponse(startInvestmentsFresh(data.confirm));
   }

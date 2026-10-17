@@ -21,7 +21,7 @@ const READ_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getT
 // Access/admin actions, the SMS doors and the timers - those stay on Apps Script.
 const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
   "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal",
-  "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh",
+  "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
   "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
   "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "refreshViews",
   "insertReconciledTransactions", "fixCreditCardTransactionMode",                  // Reconcile's saves (owner only, enforced by the backend)

@@ -6156,8 +6156,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-17-09";
-    const APP_CHANGELOG = "New look preview: the Investments screen is redesigned, with what you have put in so far, this month against your goal, a tracker for each monthly SIP (paid, coming up or overdue), where your money sits, each holding with its share, the last 6 months, and one Add money sheet. In Investments you can set up each holding with its SIP day and amount, pause a SIP, record a sale, or start over from scratch. New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
+    const APP_VERSION = "2026-10-17-10";
+    const APP_CHANGELOG = "New look preview: in Investments you can remove a holding you do not have (when nothing is put into it), and the last-6-months chart now includes payments from before you started over. New look preview: the Investments screen is redesigned, with what you have put in so far, this month against your goal, a tracker for each monthly SIP (paid, coming up or overdue), where your money sits, each holding with its share, the last 6 months, and one Add money sheet. In Investments you can set up each holding with its SIP day and amount, pause a SIP, record a sale, or start over from scratch. New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -7501,7 +7501,7 @@
     // The saving actions the new server accepts (must match WRITE_ACTIONS in functions/index.js; one it does not know just answers "fallback").
     const NEW_SERVER_WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
-      "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh",
+      "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
       "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
       "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "insertReconciledTransactions", "fixCreditCardTransactionMode",
       "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey", "adminLog", "resolveAdminProblem"];
@@ -9071,6 +9071,13 @@
       }
       return { ok: true, name: inst.name, category: category };
     }
+    function demoRemoveInvestmentHolding(name) {
+      const i = demoState.investmentInstruments.findIndex(function (x) { return x.name.toLowerCase() === (name || "").toString().trim().toLowerCase(); });
+      if (i < 0) return { ok: false, error: "Unknown investment." };
+      if (demoState.investments.some(function (e) { return e.type === demoState.investmentInstruments[i].name; })) return { ok: false, error: "It has entries. Delete or sell those first." };
+      demoState.investmentInstruments.splice(i, 1);
+      return { ok: true };
+    }
     function demoStartInvestmentsFresh(confirm) {
       if (confirm !== "FRESH") return { ok: false, error: "Not confirmed." };
       const n = demoState.investments.length;
@@ -9167,6 +9174,7 @@
           case "recordInvestmentSale": return demoRecordInvestmentSale(data.name, data.amount, data.date, data.note);
           case "deleteInvestmentEntry": return demoDeleteInvestmentEntry(data.row, data.name, data.amount);
           case "startInvestmentsFresh": return demoStartInvestmentsFresh(data.confirm);
+          case "removeInvestmentHolding": return demoRemoveInvestmentHolding(data.name);
           case "updateInvestment": return demoUpdateInvestment(data.row, data.instrumentName, data.amount);
           case "getCash": return { ok: true, cash: demoComputeCashData() };
           case "addCashEntry": return demoAddCashEntry(data.type, data.amount, data.note, data.category, data.needWantSaving);
@@ -9551,7 +9559,7 @@
       "saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
       "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
-      "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh",
+      "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
       "addCashEntry", "addManualTransaction", "updateCashEntry", "insertReconciledTransactions",
       "fixCreditCardTransactionMode", "updateSettings", "saveBudgets"
     ];
@@ -15817,7 +15825,7 @@
           return '<div class="sv-chart-col"><span class="sv-chart-val" style="--sv-h:' + b.pct + '%">' + (b.amount ? svCompact(b.amount) : "") + '</span><div class="sv-chart-bar' + (b.met ? " met" : "") + '" style="height:' + b.pct + '%"></div></div>';
         }).join("") + '</div><div class="sv-chart-labels">' +
         bars.map(function (b) { return '<span' + (b.current ? ' class="now"' : "") + '>' + b.label + '</span>'; }).join("") + '</div>' +
-        (goal > 0 ? '<p class="sv-line">The dashed line is your monthly goal of ' + svRs(goal) + '. A green bar means you reached it. Starting amounts are not counted here.</p>' : '<p class="sv-line">Starting amounts are not counted here, only money added since.</p>') + '</div>';
+        (goal > 0 ? '<p class="sv-line">The dashed line is your monthly goal of ' + svRs(goal) + '. A green bar means you reached it. Starting amounts are not counted here. Payments from before you started over are included.</p>' : '<p class="sv-line">Starting amounts are not counted here, only money added. Payments from before you started over are included.</p>') + '</div>';
     }
 
     // A holding with nothing put in yet: tap to enter what you have put in (and its SIP plan, if it has one).
@@ -16076,7 +16084,9 @@
           '<div class="field"><label for="ivHSipDay">Day of month</label><input type="number" id="ivHSipDay" inputmode="numeric" min="1" max="31" step="1" placeholder="10"></div></div>' +
           '<label class="iv-check"><input type="checkbox" id="ivHSipOn" checked> This SIP is running</label>' +
           '<label class="iv-check" id="ivHPaidRow"><input type="checkbox" id="ivHPaid"> Already paid this month</label></div>' +
-        '<button type="button" id="ivHSave">Save</button><div class="pending-result" id="ivHResult" aria-live="polite"></div>';
+        '<button type="button" id="ivHSave">Save</button>' +
+        (editing && (!hd || hd.entries.length === 0) ? '<button type="button" class="secondary iv-secondary" id="ivHRemove">Remove this holding</button>' : "") +
+        '<div class="pending-result" id="ivHResult" aria-live="polite"></div>';
       const q = function (id) { return form.querySelector(id); };
       const sipEl = q("#ivHSip"), fieldsEl = q("#ivHSipFields"), kindField = q("#ivHKindField");
       const sipNow = inst ? ivFindSip(inst.name) : null;
@@ -16113,6 +16123,17 @@
           ivAfterSave();
         }, function (d) { ivSetBusy(saveBtn, false, "Save"); resultEl.textContent = "Couldn't save (" + d.error + "). Check your connection and try again."; });
       });
+      const removeBtn = q("#ivHRemove");
+      if (removeBtn) {
+        bindConfirmAction(removeBtn, function () {
+          resultEl.textContent = "";
+          ivCall({ action: "removeInvestmentHolding", name: inst.name }, function () {
+            finCloseSheet(false, true);
+            FinToast.show({ text: "Holding removed", ms: 2200 });
+            ivAfterSave();
+          }, function (d) { resultEl.textContent = "Couldn't remove (" + d.error + ")."; });
+        }, "Tap again to remove");
+      }
       finOpenSheet({ form: form, title: editing ? "Edit holding" : "New holding", sub: editing ? "Change what you have put in, or its SIP plan." : "Add something you invest in.", focus: editing ? "ivHPut" : "ivHName", opener: editing ? null : "ivNewBtn" });
     }
 
