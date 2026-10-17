@@ -58,9 +58,12 @@ const OK = { ok: true, saved: true };
 
 (async function(){
 
-console.log("\n--- 1. Off, or reads only: saves stay on Apps Script ---");
+console.log("\n--- 1. Off, or reads only: saves stay on Apps Script (nothing chosen = reads and saves on the new server, since 2026-10-17) ---");
 {
-  for(const setting of [null, "on"]){
+  const d = makeApp(null, { apps: OK, new: { ok: true, saved: "new" } });
+  const dr = await d.call({ action: "saveNote", idToken: "x" });
+  assert(dr.saved === "new" && d.log.fetches.join() === "new:saveNote", "nothing chosen: the save goes to the new server (the default)");
+  for(const setting of ["off", "on"]){
     const a = makeApp(setting, { apps: OK, new: OK });
     const r = await a.call({ action: "saveNote", idToken: "x" });
     assert(r.ok === true && a.log.fetches.join() === "apps:saveNote", "setting " + setting + ": the save goes to Apps Script only");

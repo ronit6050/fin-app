@@ -44,7 +44,7 @@ var HEALTH_ERROR_WINDOW_HOURS      = 24;
 var HEALTH_ERROR_LOG_TYPES = [
   "PUSH_ERROR", "PUSH_TOKEN_ERROR", "PROCESS_TXN_ERROR", "AUTO_SETTLE_ERROR",
   "UPCOMING_OBLIGATION_ERROR", "DEBT_TRAJECTORY_LOG_ERROR", "V2_PUBLISH_ERROR",
-  "V2SYNC_ERROR", "V2SYNC_MISMATCH"
+  "V2SYNC_ERROR", "V2SYNC_MISMATCH", "REMINDER_ERROR"
 ];
 var HEALTH_PROP_PREFIX = "HEALTH_REPORTED_"; // + problemKey + "_" + yyyy-MM-dd
 
@@ -164,6 +164,17 @@ function computeHealthProblems_(input){
     }
   }
 
+  // 3b. Is the Google sign-in ID the app uses still alive? (added 2026-10-18: it was deleted in Google Cloud
+  // and nobody could sign in). true = Google says it was deleted; false/null = fine or could not tell.
+  if(input.signInClientDeleted === true){
+    problems.push({
+      key: "signin",
+      text: "Google says the app's sign-in ID was DELETED, so nobody can sign in. Create a new Web client in the Firebase " +
+        "project (Google Cloud > APIs & Services > Credentials), then replace the ID in index.html, admin/index.html, " +
+        "backend/PWA.js (PWA_CLIENT_ID) and the Android app (MainActivity.kt)."
+    });
+  }
+
   // 4. Recent errors in AILogs
   var windowStart = now.getTime() - HEALTH_ERROR_WINDOW_HOURS * 60 * 60 * 1000;
   var counts = {};
@@ -186,6 +197,45 @@ function computeHealthProblems_(input){
   }
 
   return problems;
+}
+
+// Asks Google about the app's sign-in ID without signing anyone in. A deleted ID makes Google redirect to an error page
+// whose "authError" value (base64 text) says "deleted_client". Returns true (deleted), false (looks fine) or null (could
+// not tell: a network problem is NEVER reported as a deleted ID).
+function healthDecodeB64Url_(text){
+  var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  var clean = String(text || "").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+  var out = "", bits = 0, acc = 0;
+  for(var i = 0; i < clean.length; i++){
+    var v = chars.indexOf(clean.charAt(i));
+    if(v < 0) return "";
+    acc = (acc << 6) | v; bits += 6;
+    if(bits >= 8){ bits -= 8; out += String.fromCharCode((acc >> bits) & 255); acc &= (1 << bits) - 1; }
+  }
+  return out;
+}
+
+// Pure: given the redirect address Google answered with, is the client deleted?
+function healthLocationSaysDeleted_(location){
+  var m = /[?&]authError=([^&]+)/.exec(String(location || ""));
+  if(!m) return false;
+  var text = healthDecodeB64Url_(decodeURIComponent(m[1]));
+  return text.indexOf("deleted_client") !== -1;
+}
+
+function probeSignInClientDeleted_(){
+  try{
+    if(typeof PWA_CLIENT_ID === "undefined") return null;
+    var url = "https://accounts.google.com/o/oauth2/v2/auth?client_id=" + encodeURIComponent(PWA_CLIENT_ID) +
+      "&redirect_uri=" + encodeURIComponent("https://ronit6050.github.io") + "&response_type=token&scope=email";
+    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: false });
+    var headers = res.getHeaders() || {};
+    var loc = "";
+    Object.keys(headers).forEach(function(k){ if(k.toLowerCase() === "location") loc = String(headers[k]); });
+    return healthLocationSaysDeleted_(loc);
+  }catch(err){
+    return null;
+  }
 }
 
 // Reads the real sheets/timers into the shape computeHealthProblems_ wants.
@@ -218,7 +268,8 @@ function loadHealthInputs_(){
     now: new Date(),
     triggerHandlers: triggerHandlers,
     txnRows: readTail("Transactions", 16, HEALTH_TXN_ROWS_TO_READ),
-    ailogRows: readTail("AILogs", 3, HEALTH_LOG_ROWS_TO_READ)
+    ailogRows: readTail("AILogs", 3, HEALTH_LOG_ROWS_TO_READ),
+    signInClientDeleted: probeSignInClientDeleted_()
   };
 }
 

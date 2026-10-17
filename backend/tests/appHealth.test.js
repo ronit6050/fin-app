@@ -181,4 +181,34 @@ console.log("\n--- 10. Dry run sends and saves nothing, even with problems ---")
   assert(w.messages.length === 0 && Object.keys(w.props).length === 0 && w.sheets.AILogs.rows.length === 2, "nothing sent, nothing stored");
 }
 
+console.log("\n--- 11. Sign-in ID deleted in Google Cloud (2026-10-18): one clear alert, never a false one ---");
+{
+  const vm = require("vm");
+  const w = world([row(HOUR, "YES")], [], undefined);
+  const sb = w.sb;
+  // the exact redirect address Google gave when the real client had been deleted
+  const deletedLoc = "https://accounts.google.com/signin/oauth/error?authError=Cg5kZWxldGVkX2NsaWVudBIdVGhlIE9BdXRoIGNsaWVudCB3YXMgZGVsZXRlZC4gkQM&flowName=GeneralOAuthFlow";
+  const mismatchLoc = "https://accounts.google.com/signin/oauth/error?authError=ChVyZWRpcmVjdF91cmlfbWlzbWF0Y2g&flowName=GeneralOAuthFlow";
+  assert(sb.healthLocationSaysDeleted_(deletedLoc) === true, "Google's real 'deleted client' answer is recognised");
+  assert(sb.healthLocationSaysDeleted_(mismatchLoc) === false, "a healthy client (only the redirect address is wrong) is NOT reported");
+  assert(sb.healthLocationSaysDeleted_("") === false && sb.healthLocationSaysDeleted_("https://example.com/x") === false, "no error text = not deleted");
+  const base = { now: NOW, triggerHandlers: null, txnRows: [row(HOUR, "YES")], ailogRows: [] };
+  const bad = sb.computeHealthProblems_(Object.assign({}, base, { signInClientDeleted: true }));
+  assert(bad.length === 1 && bad[0].key === "signin" && /DELETED/.test(bad[0].text), "a deleted ID gives ONE plain alert with the steps");
+  assert(sb.computeHealthProblems_(Object.assign({}, base, { signInClientDeleted: false })).length === 0, "a healthy ID stays silent");
+  assert(sb.computeHealthProblems_(Object.assign({}, base, { signInClientDeleted: null })).length === 0, "'could not tell' stays silent (a network blip is never an alarm)");
+  // the probe itself
+  assert(sb.probeSignInClientDeleted_() === null, "without a client ID loaded the probe says 'could not tell'");
+  vm.runInContext("var PWA_CLIENT_ID = 'test-client';", sb);
+  sb.UrlFetchApp = { fetch: function(){ throw new Error("network down"); } };
+  assert(sb.probeSignInClientDeleted_() === null, "a failed request is 'could not tell', not 'deleted'");
+  sb.UrlFetchApp = { fetch: function(){ return { getHeaders: function(){ return { Location: deletedLoc }; } }; } };
+  assert(sb.probeSignInClientDeleted_() === true, "the probe reports a deleted ID (header name case does not matter)");
+  sb.UrlFetchApp = { fetch: function(){ return { getHeaders: function(){ return { location: mismatchLoc }; } }; } };
+  assert(sb.probeSignInClientDeleted_() === false, "the probe reports a healthy ID as fine");
+  // the reminder's own errors are watched too (the digit-field bug ran unseen for a day)
+  const r = sb.computeHealthProblems_(Object.assign({}, base, { ailogRows: [[ago(HOUR), "REMINDER_ERROR", "x"]] }));
+  assert(r.length === 1 && r[0].key === "errors" && /REMINDER_ERROR/.test(r[0].text), "REMINDER_ERROR in the log is now reported");
+}
+
 console.log("\nDone.");
