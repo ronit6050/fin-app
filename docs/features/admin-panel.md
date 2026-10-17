@@ -4,7 +4,9 @@ Started 2026-10-16. Owner's ask: a proper admin view (a web page, not just the p
 what problems they hit, errors, when each person last used the app, and **how well the app is getting at understanding transactions,
 with no flattering numbers and proper reasoning**.
 
-**Status 2026-10-16: phase 1 (recording + scoring + owner-only data action) is LIVE (Apps Script `@366`, new server updated, app `2026-10-16-01`, commit `a1c750b`). Phase 2, the page `admin/index.html` (will be at https://ronit6050.github.io/fin-app/admin/), is BUILT and checked with invented data in light/dark and for HTML-injection safety, committed locally but NOT pushed (needs the owner's go-ahead).** Numbers start from the first SMS / app open after the deploy.
+**Status 2026-10-16: phase 1 (recording + scoring + owner-only data action) is LIVE (Apps Script `@366`, new server updated, app `2026-10-16-01`, commit `a1c750b`). Phase 2, the page `admin/index.html`, is LIVE at https://ronit6050.github.io/fin-app/admin/ (pushed 2026-10-17, commit `baa20f3`; checked with invented data in light/dark and for HTML-injection safety).**
+
+**Later upgrades the owner approved in principle but asked to wait for real data (not built):** a History section from stored transactions (monthly share of payments the SMS missed, found by statement checks: about 25-35% in Mar-Apr 2026 down to about 6% in Sep-Oct; labelled as only known for months with an uploaded statement), per-bank maturity labels (Learning / Early / Established) with the headline on established banks and new banks shown beside it, a per-person reading row, and trend markers for "bank taught" / "person joined". Numbers start from the first SMS / app open after the deploy.
 
 ## Privacy rule (the owner's rule, enforced in code and tests)
 The owner sees **usage and errors only**. No amount, note, payee, SMS text, reference or account digits is ever written to the new
