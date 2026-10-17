@@ -115,6 +115,12 @@ Two special ones need `local-data/` (real messages): `smsReplay.test.js`, and th
 
 ## 6. NEXT (in order) and ideas not started
 
+**NEXT (owner asked 2026-10-17): rebuild the Investments tab; the owner says ALL its numbers look wrong.** Do in this order:
+1. **Audit first (read-only, with the robot key / tools/):** list the owner's Investments entries, find duplicates (same purchase logged by the payment note AND by hand), SIP payments that exist in Transactions (Financial Event "Investment") but have NO Investments row, and compare the tab's all-time total with Analysis' "Invested" for the same month. Show the owner what is wrong before fixing; never hand-edit data without a backup and approval.
+2. Likely causes already found in code (backend/PWA.js getInvestmentsData): total is ALL-TIME while Analysis shows THIS MONTH; only logged entries count (unconfirmed SIPs / un-noted stocks are missing); possible double counting; "Recent" is only 5; Settings monthlyInvestmentGoal (9,000) is not shown here.
+3. Redesign (mockup approved in direction, shown 2026-10-17): hero "Put in so far", "This month X of goal" (same figure as Analysis), Monthly SIP tracker (due date, Paid / Expected), Holdings, 6-month bars, Log sheet with duplicate warning. **"Worth now" / gains is deliberately DEFERRED**: the owner has an advanced idea for it and will explain later (rule: no outside price services).
+4. Same process as Savings: backend additions + New-look UI behind the switch, independent review, then ship (backend clasp + firebase, then git push).
+
 1. **See a real transaction alerted by the new timer** (owner: tell me when a real bank SMS notification arrives; I check the logs: exactly once, from the new server).
 2. **Vaidehi** installs the new app (`FinApp-2026-10-14-new-server-sms.apk`); check her messages arrive through the new server.
 3. **After 3 clean days (about 2026-10-18; owner approved)**: check the logs (errors, doubled or missing alerts, SMS all saved), then switch off the old SMS reader and stop the Sheet copy (the Sheet stays a read-only archive), then remove the old fallback code after a final review, then turn Apps Script off. Before that: delete the four Apps Script daily triggers (they are harmless no-ops while the new server is alive).
