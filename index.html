@@ -1508,12 +1508,19 @@
     }
 
     /* Income link + the small "what is in it" panel on Analysis (added 2026-10-17). */
-    .income-link {
-      background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit;
-      text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;
-      cursor: pointer; min-height: 0; border-radius: 0; box-shadow: none;
+    /* The global `button` style makes every button full-width with big padding; this one is a plain
+       inline text link inside the Income / Avg-per-day line, so it must undo all of that. The id keeps it
+       stronger than the global rules, hover state and the New look's button rules. */
+    #analysisSplit .income-link,
+    #analysisSplit .income-link:hover {
+      display: inline; width: auto; min-height: 0; padding: 0; margin: 0;
+      font: inherit; font-weight: inherit; color: inherit; background: none; border: 0; border-radius: 0; box-shadow: none;
+      text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; cursor: pointer;
+      vertical-align: baseline; text-align: left;
     }
-    .income-link:active { opacity: 0.7; transform: none; }
+    #analysisSplit .income-link:active { opacity: 0.7; transform: none; }
+    /* Income and Avg/day stay on one line when they fit, and wrap as whole pieces when they do not. */
+    #analysisSplit .split-line { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; }
     .income-detail {
       margin-top: 10px; padding: 10px 12px; border-radius: 14px;
       background: transparent; color: var(--text-on-hero); font-size: 0.8125rem;
@@ -11369,9 +11376,9 @@
 
       const flow = analysisFlow(a);
       analysisSplitEl.innerHTML =
-        '<button type="button" class="income-link" id="analysisIncomeBtn" aria-expanded="' + (analysisIncomeOpen ? "true" : "false") +
+        '<span class="split-line"><button type="button" class="income-link" id="analysisIncomeBtn" aria-expanded="' + (analysisIncomeOpen ? "true" : "false") +
         '" aria-controls="analysisIncomeDetail">Income: ₹' + analysisRs(a.totalCredit) + ' ›</button>' +
-        "  ·  Avg/day: ₹" + analysisRs(a.avgDaily);
+        '<span aria-hidden="true">·</span><span>Avg/day: ₹' + analysisRs(a.avgDaily) + '</span></span>';
       renderAnalysisIncomeDetail(a, flow);
 
       // Rent + confirmed EMIs, and real Investments — kept out of the
