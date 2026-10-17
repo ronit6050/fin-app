@@ -2861,6 +2861,7 @@
     @keyframes fin-slide-l { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
     @keyframes fin-pop     { 0% { transform: scale(0.7); } 55% { transform: scale(1.2); } 100% { transform: scale(1); } }
     @keyframes fin-grow    { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    @keyframes sv-bar-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
     @keyframes fin-pulse   { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
     @keyframes fin-return  { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
     @keyframes fin-toast-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
@@ -3241,19 +3242,22 @@
       :root[data-look="new"] .tab-view.fin-slide-l,
       :root[data-look="new"] .tab-btn.active .tab-icon svg,
       :root[data-look="new"] .category-bar-fill.fin-grow,
+      :root[data-look="new"] .sv-chart-bar.sv-grow,
       :root[data-look="new"] .pending-item.pl-new.pl-return,
       :root[data-look="new"] .skeleton-block { animation: none; }
       :root[data-look="new"] .stat-card,
       :root[data-look="new"] .chart-card,
       :root[data-look="new"] .more-menu-item,
       :root[data-look="new"] .hero-card.tactile,
+      :root[data-look="new"] .sv-tap,
       :root[data-look="new"] .tab-fab { transition: none; }
       :root[data-look="new"] .stat-card:active,
       :root[data-look="new"] .chart-card:active,
       :root[data-look="new"] .more-menu-item:active,
       :root[data-look="new"] .hero-card.tactile:active,
+      :root[data-look="new"] .sv-tap:active,
       :root[data-look="new"] .tab-fab:active { transform: none; }
-      .fin-toast, .fin-sheet, .fin-sheet-backdrop { transition: none; }
+      .fin-toast, .fin-sheet, .fin-sheet-backdrop, .fin-sheet .sv-home-item { transition: none; }
       .fin-toast .fin-toast-bar { display: none !important; }
     }
 
@@ -3562,6 +3566,146 @@
     /* ---------- Savings ---------- */
     :root[data-look="new"] .goal-card-actions { gap: var(--sp-2); margin-top: var(--sp-3); }
     :root[data-look="new"] .goal-card-actions button { min-height: 44px; font-size: var(--fs-small); }
+
+    /* ---------- Savings, redesigned (New look, 2026-10-17) ----------
+       Everything here is under :root[data-look="new"] except the "hidden unless the New look is on" defaults.
+       Existing colour tokens only. Text colours used: --text-primary / --text-secondary on --surface-card and
+       --surface-inset (both already above 4.5:1 in light and dark), --text-on-hero / --text-on-hero-muted on the
+       blue hero. Success green is only ever a bar FILL here, never text (its text contrast on white is 4.2:1). */
+    /* (#savingsNew and the History chip start hidden by their own inline style, so no always-on rule is needed here.) */
+    :root[data-look="new"] #savingsNew { display: block !important; }
+    :root[data-look="new"] #savingsContent > .sv-old { display: none !important; }
+    :root[data-look="new"] .sv-headrow { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+    :root[data-look="new"] .sv-headrow .section-title { margin: 0; }
+    :root[data-look="new"] .sv-chip {
+      display: inline-flex !important; align-items: center; width: auto; min-height: 44px; padding: 0 var(--sp-4);
+      font-size: var(--fs-small); background: var(--surface-inset); color: var(--text-primary);
+      border: 0.5px solid var(--border-hairline);
+    }
+    :root[data-look="new"] .sv-chip:hover { background: var(--surface-inset); }
+    /* On a goal's own page the screen's Back button, title and History chip step aside (the page has its own Back). */
+    :root[data-look="new"] #view-savings.sv-detail-open > .back-to-more,
+    :root[data-look="new"] #view-savings.sv-detail-open > .sv-headrow { display: none; }
+
+    :root[data-look="new"] .sv-hero { margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .sv-hero .category-bar-track { display: block; background: color-mix(in srgb, var(--text-on-hero) 20%, transparent); margin-top: var(--sp-2); }
+    :root[data-look="new"] .sv-hero .category-bar-fill { display: block; background: var(--text-on-hero); }
+    :root[data-look="new"] .sv-hero-line { margin-top: var(--sp-4); font-size: var(--fs-small); color: var(--text-on-hero-muted); }
+    :root[data-look="new"] .sv-hero-foot {
+      display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-1) var(--sp-3);
+      margin-top: var(--sp-2); font-size: var(--fs-small); color: var(--text-on-hero-muted);
+    }
+    :root[data-look="new"] .sv-add { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); min-height: 48px; margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .sv-add svg { width: 18px; height: 18px; }
+    :root[data-look="new"] .sv-newgoal { min-height: 48px; margin: var(--sp-1) 0 var(--sp-3); }
+
+    :root[data-look="new"] .sv-home {
+      display: flex; align-items: center; gap: var(--sp-3);
+      background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--sp-4); margin-bottom: var(--sp-3);
+    }
+    :root[data-look="new"] .sv-home-text { flex: 1; min-width: 0; }
+    :root[data-look="new"] .sv-home-title { display: block; font-size: var(--fs-body); font-weight: 600; color: var(--text-primary); }
+    :root[data-look="new"] .sv-home-sub { display: block; margin-top: var(--sp-1); font-size: var(--fs-small); color: var(--text-secondary); }
+    :root[data-look="new"] .sv-home > button { flex: none; width: auto; min-height: 44px; padding: 0 var(--sp-5); }
+
+    :root[data-look="new"] .sv-card {
+      background: var(--surface-card); border: 0.5px solid var(--border-hairline); border-radius: var(--radius-md);
+      padding: var(--sp-4); box-shadow: var(--shadow-card); margin-bottom: var(--sp-3);
+    }
+    :root[data-look="new"] .sv-tap {
+      display: block; width: 100%; text-align: left; font: inherit; font-weight: 400; color: var(--text-primary);
+      transition: transform var(--dur-press) var(--ease-out);
+    }
+    :root[data-look="new"] button.sv-card:hover, :root[data-look="new"] button.sv-row:hover { background: var(--surface-card); }
+    :root[data-look="new"] .sv-tap:active { transform: scale(0.98); }
+    :root[data-look="new"] .sv-card > span { display: block; }
+    :root[data-look="new"] .sv-card > .sv-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+    :root[data-look="new"] div.sv-card > .sv-card-top { display: flex; }
+    :root[data-look="new"] .sv-card-name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-size: var(--fs-body); font-weight: 600; }
+    :root[data-look="new"] .sv-card-amt { font-size: var(--fs-number); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    :root[data-look="new"] .sv-card-of { margin-top: var(--sp-1); font-size: var(--fs-small); color: var(--text-secondary); }
+    :root[data-look="new"] .sv-card .category-bar-track { display: block; background: var(--chart-track-bg); margin-top: var(--sp-3); }
+    :root[data-look="new"] .sv-card .category-bar-fill { display: block; background: var(--color-primary); }
+    :root[data-look="new"] .sv-line { margin: var(--sp-3) 0 0; font-size: var(--fs-small); line-height: 1.45; color: var(--text-secondary); }
+    :root[data-look="new"] .sv-card > span.sv-line { margin-top: var(--sp-2); }
+    :root[data-look="new"] .sv-line strong, :root[data-look="new"] .sv-pace strong { color: var(--text-primary); font-weight: 700; font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] .sv-pace { margin: var(--sp-2) 0 0; font-size: var(--fs-body); line-height: 1.45; color: var(--text-secondary); }
+    :root[data-look="new"] .sv-empty { margin: 0 var(--sp-1) var(--sp-3); font-size: var(--fs-body); line-height: 1.45; color: var(--text-secondary); }
+    :root[data-look="new"] .sv-hint { margin: 0; font-size: var(--fs-small); color: var(--text-secondary); }
+    :root[data-look="new"] .sv-plan { margin: var(--sp-4) 0 0; }
+
+    /* 6-month chart */
+    :root[data-look="new"] .sv-chart-area { position: relative; display: flex; gap: var(--sp-2); height: 110px; margin-top: 20px; }
+    :root[data-look="new"] .sv-chart-col { position: relative; flex: 1; min-width: 0; }
+    :root[data-look="new"] .sv-chart-bar {
+      position: absolute; left: 0; right: 0; bottom: 0; min-height: 3px;
+      background: var(--color-primary); border-radius: 6px 6px 2px 2px; transform-origin: bottom center;
+    }
+    :root[data-look="new"] .sv-chart-bar.met { background: var(--color-success); }
+    :root[data-look="new"] .sv-chart-bar.sv-grow { animation: sv-bar-grow 0.6s var(--ease-out) backwards; }
+    :root[data-look="new"] .sv-chart-val {
+      position: absolute; left: -4px; right: -4px; bottom: calc(var(--sv-h, 0%) + 2px);
+      text-align: center; font-size: var(--fs-caption); color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    :root[data-look="new"] .sv-chart-line { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--text-muted); pointer-events: none; }
+    :root[data-look="new"] .sv-chart-labels { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); }
+    :root[data-look="new"] .sv-chart-labels span { flex: 1; text-align: center; font-size: var(--fs-caption); color: var(--text-secondary); }
+    :root[data-look="new"] .sv-chart-labels span.now { color: var(--text-primary); font-weight: 700; }
+
+    /* Activity and entries */
+    :root[data-look="new"] .sv-month {
+      font-size: var(--fs-caption); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--text-secondary); margin: var(--sp-5) var(--sp-1) var(--sp-2);
+    }
+    :root[data-look="new"] .sv-month:first-child { margin-top: 0; }
+    /* Section headings on the Savings screen (Safety, Goals, Activity ...): the same small-caps style as other section headings. */
+    :root[data-look="new"] .sv-sec {
+      font-size: var(--fs-caption); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--text-secondary); margin: var(--sp-6) var(--sp-1) var(--sp-2);
+    }
+    :root[data-look="new"] .sv-row {
+      display: flex; align-items: center; gap: var(--sp-3); min-height: 56px; padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-2);
+      background: var(--surface-card); border: 0.5px solid var(--border-hairline); border-radius: var(--radius-md); box-shadow: var(--shadow-card);
+    }
+    :root[data-look="new"] .sv-row-main { flex: 1; min-width: 0; display: block; }
+    :root[data-look="new"] .sv-row-title { display: block; font-size: var(--fs-body); font-weight: 600; overflow-wrap: anywhere; }
+    :root[data-look="new"] .sv-row-sub { display: block; margin-top: 2px; font-size: var(--fs-small); color: var(--text-secondary); }
+    :root[data-look="new"] .sv-row-amt { flex: none; font-size: var(--fs-body); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+    /* Goal page buttons */
+    :root[data-look="new"] .sv-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .sv-actions > button { flex: 1 1 calc(50% - var(--sp-2)); width: auto; min-height: 48px; }
+    :root[data-look="new"] .sv-back { margin-bottom: var(--sp-3); }
+
+    /* Inside the bottom sheets */
+    .fin-sheet .sv-amount-field { text-align: center; }
+    .fin-sheet .sv-amount-field input {
+      font-size: var(--fs-hero); font-weight: 700; letter-spacing: var(--tracking-hero); text-align: center;
+      font-variant-numeric: tabular-nums; padding: var(--sp-2) 0;
+    }
+    .fin-sheet .sv-mode { margin: var(--sp-2) 0 var(--sp-4); }
+    .fin-sheet .sv-where { margin-bottom: var(--sp-2); font-size: var(--fs-small); font-weight: 600; color: var(--text-secondary); }
+    .fin-sheet .sv-preview { background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-3); }
+    .fin-sheet .sv-hint { margin: 0; font-size: var(--fs-small); color: var(--text-secondary); }
+    .fin-sheet .sv-split-row { display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) 0; font-size: var(--fs-body); color: var(--text-primary); }
+    .fin-sheet .sv-split-row span:last-child { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .fin-sheet .sv-man-row { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+    .fin-sheet .sv-select, .fin-sheet .sv-man-row input {
+      min-height: 48px; padding: 0 var(--sp-3); border: 0; border-radius: var(--radius-md);
+      background: var(--surface-inset); color: var(--text-primary); font-size: var(--fs-body);
+    }
+    .fin-sheet .sv-man-row .sv-select { flex: 1; min-width: 0; }
+    .fin-sheet .sv-man-row input { width: 40%; }
+    .fin-sheet .sv-line { margin: var(--sp-3) 0 0; font-size: var(--fs-small); line-height: 1.45; color: var(--text-secondary); }
+    .fin-sheet .sv-empty { margin: 0 0 var(--sp-3); font-size: var(--fs-body); color: var(--text-secondary); }
+    .fin-sheet .sv-home-item { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; border-top: 0.5px solid var(--border-hairline); transition: opacity 0.2s linear; }
+    .fin-sheet .sv-home-item:first-child { border-top: 0; }
+    .fin-sheet .sv-home-item.sv-leaving { opacity: 0.35; pointer-events: none; }
+    .fin-sheet .sv-row-main { flex: 1; min-width: 0; display: block; }
+    .fin-sheet .sv-row-title { display: block; font-size: var(--fs-body); font-weight: 700; color: var(--text-primary); }
+    .fin-sheet .sv-row-sub { display: block; font-size: var(--fs-small); color: var(--text-secondary); overflow-wrap: anywhere; }
+    .fin-sheet .sv-home-item .sv-select { flex: none; width: 46%; }
+    .fin-sheet #svEntryForm .pending-item { border: 0; box-shadow: none; padding: 0; margin: 0; background: transparent; }
 
     /* ---------- Planner ---------- */
     :root[data-look="new"] .planner-overview-card { padding: var(--sp-5); }
@@ -4365,7 +4509,10 @@
            useful. See docs/features/savings-v2.md. -->
       <div id="view-savings" style="display:none">
         <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
-        <h2 class="section-title">Savings &amp; Goals</h2>
+        <div class="sv-headrow">
+          <h2 class="section-title" id="savingsTitle">Savings &amp; Goals</h2>
+          <button type="button" class="sv-chip" id="svHistoryChip" style="display:none">History</button>
+        </div>
         <div id="savingsStatus">
           <div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div>
           <div class="skeleton-block" style="height:58px; margin-bottom:10px;"></div>
@@ -4373,20 +4520,37 @@
         </div>
         <div id="savingsContent" style="display:none">
 
+          <!-- New look (2026-10-17): the redesigned Savings screen is drawn into
+               #savingsNew by renderSavingsNew(). With the New look switch off
+               it stays hidden and the older markup below is used exactly as
+               before; with it on, the parts marked sv-old are hidden. -->
+          <div id="savingsNew" style="display:none">
+            <div id="svOverview"></div>
+            <div id="svGoalView" style="display:none"></div>
+          </div>
+          <!-- Forms lent to the bottom sheet by the new Savings screen (filled in when opened). -->
+          <div id="svForms" style="display:none">
+            <div id="svAddForm" style="display:none"></div>
+            <div id="svHomeForm" style="display:none"></div>
+            <div id="svGoalForm" style="display:none"></div>
+            <div id="svEditGoalForm" style="display:none"></div>
+            <div id="svEntryForm" style="display:none"></div>
+          </div>
+
           <!-- Overview only — 3 swipeable cards (Emergency / CC Buffer /
                Wish List), no buttons inside them and no visible arrows,
                swipe or tap a dot to move between them. All actions live
                in the detail list below instead, per the user's own call
                2026-08-11: "widget just gives an overview, detailed view
                I get under the widget." -->
-          <div style="position:relative;">
+          <div class="sv-old" style="position:relative;">
             <div id="savingsCarouselTrack" style="overflow:hidden; border-radius:var(--radius-lg); touch-action:pan-y;">
               <div id="savingsCarouselInner" style="display:flex; transition:transform 0.25s ease;"></div>
             </div>
           </div>
-          <div id="savingsCarouselDots" class="carousel-dots"></div>
+          <div id="savingsCarouselDots" class="carousel-dots sv-old"></div>
 
-          <div id="savingsDetailList"></div>
+          <div id="savingsDetailList" class="sv-old"></div>
 
           <!-- Shared quick-action panel — used for both "Add to X" and
                "Withdraw from X", opened from whichever card's button was
@@ -4407,8 +4571,8 @@
             <div id="quickActionResult" class="pending-result"></div>
           </div>
 
-          <button type="button" id="addGoalToggleButton">+ Add to Wish List</button>
-          <div id="addGoalForm" style="display:none; margin-top:12px;">
+          <button type="button" id="addGoalToggleButton" class="sv-old">+ Add to Wish List</button>
+          <div id="addGoalForm" class="sv-old" style="display:none; margin-top:12px;">
             <div class="field">
               <label>Item name</label>
               <input type="text" id="goalNameInput" placeholder="e.g. New phone">
@@ -4421,8 +4585,8 @@
             <div id="addGoalResult" class="pending-result"></div>
           </div>
 
-          <button type="button" id="logSavingToggleButton" style="margin-top:12px;">+ Log a Saving</button>
-          <div id="logSavingSheet" style="display:none; margin-top:12px;">
+          <button type="button" id="logSavingToggleButton" class="sv-old" style="margin-top:12px;">+ Log a Saving</button>
+          <div id="logSavingSheet" class="sv-old" style="display:none; margin-top:12px;">
             <div class="field">
               <label>Amount (₹)</label>
               <input type="number" id="logAmountInput" min="0" step="1" placeholder="0">
@@ -4452,13 +4616,13 @@
             </div>
           </div>
 
-          <div class="category-row" style="margin-top:18px; cursor:pointer;" id="recentActivityHeader">
+          <div class="category-row sv-old" style="margin-top:18px; cursor:pointer;" id="recentActivityHeader">
             <div class="category-top">
               <span>Recent Activity</span>
               <span id="recentActivityChevron">▾</span>
             </div>
           </div>
-          <div id="recentActivityDetail" style="display:none;"></div>
+          <div id="recentActivityDetail" class="sv-old" style="display:none;"></div>
 
         </div>
       </div>
@@ -4979,6 +5143,9 @@
     // (html[data-look="new"]); with it off none of it is ever called.
     // =========================================================
     function finLookOn() { return document.documentElement.dataset.look === "new"; }
+    // Savings screen state (declared this early so menu / look-switch code can reset it safely): the goal or
+    // bucket whose page is open (null = the overview), and a fingerprint of what is drawn.
+    let svOpenBucket = null, svLastSig = "";
 
     // ---- Pure logic (no screen access, so it is unit-tested in plain Node:
     //      backend/tests/finSwipeConfirm.test.js reads this block) ----
@@ -5126,7 +5293,7 @@
         today:       { root: "todayContent",       counts: ["#todayTotalAmount", "#todayCategories .category-top > span:last-child"], lists: ["#todayCategories"], bars: true },
         cc:          { root: "ccContent",          counts: ["#ccOutstandingAmount", "#ccCurrentAmount", "#ccTopCategories .category-top > span:last-child", "#ccCardBreakdown .category-top > span:last-child"], lists: ["#ccTopCategories", "#ccCardBreakdown"], bars: true },
         debts:       { root: "debtsContent",       counts: ["#debtsNetAmount"], lists: ["#peopleList", "#debtsYouOwe", "#debtsTheyOwe"] },
-        savings:     { root: "savingsContent",     counts: ["#savingsCarouselInner .today-total-amount", "#savingsDetailList .category-top > span:last-child"], lists: ["#savingsDetailList"], bars: true },
+        savings:     { root: "svOverview",         lists: ["#svActivityList"], bars: true },   // New look only (FinPlay never plays with the switch off); numbers are already count-up spans
         investments: { root: "investmentsContent", counts: ["#investmentsTotalAmount", "#investmentsBreakdown .category-top > span:last-child"], lists: ["#investmentsBreakdown", "#investmentsRecent"], bars: true },
         cash:        { root: "cashContent",        counts: ["#cashBalanceAmount"], lists: ["#cashRecent"] },
         history:     { root: "view-history",       lists: ["#historyList"], ready: ".hist-row-wrap" },
@@ -5145,7 +5312,7 @@
         if (name === "pending" && !root.querySelector(".pending-item")) return;   // still skeletons: wait for the real cards
         if (sub && sub.ready && !root.querySelector(sub.ready)) return;
         armed[name] = false;
-        if (sub) { finPlayInto(root, sub); return; }
+        if (sub) { finPlayInto(root, sub); if (name === "savings") svGrowChart(root); return; }
         FinMotion.stagger(root);
         if (name === "home" || name === "analysis") FinMotion.countUp(root);
         if (name === "analysis") {
@@ -5521,6 +5688,7 @@
       if (finSheetOpen) finCloseSheet(true);
       const cameBack = finOpenSub !== null;
       finOpenSub = null;
+      svLeave();   // Savings (New look): next time it opens it starts on the overview
       if (!finLookOn()) return;
       if (cameBack) { FinPlay.arm("more"); finSlideIn(moreMenuEl, "l"); }
       FinPlay.play("more");            // armed by a tab change or by coming back from a screen
@@ -5574,6 +5742,8 @@
     function finApplyLabels() {
       const adv = document.getElementById("moreGroupAdvisors");
       if (adv) adv.textContent = finLookOn() ? "Money" : "Advisors";
+      const svTitle = document.getElementById("savingsTitle");
+      if (svTitle) svTitle.textContent = finLookOn() ? "Savings" : "Savings & Goals";
     }
     finApplyLabels();
 
@@ -5912,8 +6082,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-17-06";
-    const APP_CHANGELOG = "New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
+    const APP_VERSION = "2026-10-17-08";
+    const APP_CHANGELOG = "New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -7578,9 +7748,12 @@
 
       // ---- Savings — Emergency + a recurring CC Buffer goal + one
       // Wish List item (partially funded) + a little Free Savings ----
+      // New Phone has a target date (shows "a month to finish by ..."); Weekend trip has none (shows the usual-pace estimate).
+      const phoneDate = new Date(); phoneDate.setMonth(phoneDate.getMonth() + 4);
       const goals = [
-        { name: "CC Buffer", type: "Recurring", target: 0, status: "Active", priority: false, dateAdded: demoDaysAgo(60) },
-        { name: "New Phone", type: "OneTime", target: 40000, status: "Active", priority: true, dateAdded: demoDaysAgo(40) }
+        { name: "CC Buffer", type: "Recurring", target: 0, status: "Active", priority: false, dateAdded: demoDaysAgo(60), targetDate: "" },
+        { name: "New Phone", type: "OneTime", target: 40000, status: "Active", priority: true, dateAdded: demoDaysAgo(40), targetDate: demoFmtISODate(phoneDate) },
+        { name: "Weekend trip", type: "OneTime", target: 15000, status: "Active", priority: false, dateAdded: demoDaysAgo(30), targetDate: "" }
       ];
       const savingsEntries = [
         { date: demoDaysAgo(50), amount: 12000, type: "manual", note: "Starting balance", destination: "Emergency" },
@@ -7590,7 +7763,13 @@
         { date: demoDaysAgo(25), amount: 4000, type: "manual", note: "Wish list", destination: "New Phone" },
         { date: demoDaysAgo(10), amount: 5000, type: "manual", note: "Wish list", destination: "New Phone" },
         { date: demoDaysAgo(5), amount: 5000, type: "manual", note: "Wish list", destination: "New Phone" },
-        { date: demoDaysAgo(15), amount: 6000, type: "manual", note: "Leftover", destination: "Free" }
+        { date: demoDaysAgo(15), amount: 6000, type: "manual", note: "Leftover", destination: "Free" },
+        { date: demoDaysAgo(22), amount: 3000, type: "manual", note: "Trip fund", destination: "Weekend trip" },
+        { date: demoDaysAgo(2), amount: 1500, type: "payment", note: "Tea and snacks saved", destination: "Free" },
+        { date: demoDaysAgo(9), amount: 2500, type: "payment", note: "Cashback saved", destination: "Free" },
+        { date: demoDaysAgo(70), amount: 3500, type: "manual", note: "Monthly saving", destination: "Emergency" },
+        { date: demoDaysAgo(100), amount: 2000, type: "manual", note: "Monthly saving", destination: "Emergency" },
+        { date: demoDaysAgo(33), amount: -1000, type: "withdraw", note: "Gift", destination: "Free" }
       ];
 
       // ---- Investments — matches the 3 confirmed SIPs above, plus a
@@ -7872,7 +8051,13 @@
       return demoState.goals.map(function (g, idx) {
         const saved = demoSumByPot(g.name);
         const target = g.type === "Recurring" ? ccBufferTarget : g.target;
-        return { row: idx + 2, name: g.name, type: g.type, target: target, saved: saved, remaining: Math.max(target - saved, 0), canAfford: target > 0 && saved >= target, status: g.status, priority: g.priority, dateAdded: g.dateAdded };
+        const remaining = Math.max(target - saved, 0);
+        const monthsLeft = g.targetDate ? svMonthsLeft(g.targetDate, svIndiaNow()) : null;   // same rule as the server
+        return {
+          row: idx + 2, name: g.name, type: g.type, target: target, saved: saved, remaining: remaining, canAfford: target > 0 && saved >= target,
+          status: g.status, priority: g.priority, dateAdded: g.dateAdded,
+          targetDate: g.targetDate || "", monthsLeft: monthsLeft, monthlyNeeded: (monthsLeft && remaining > 0) ? Math.ceil(remaining / monthsLeft) : null
+        };
       });
     }
 
@@ -7887,10 +8072,43 @@
         goals.find(function (g) { return g.type === "OneTime" && g.status === "Active" && g.priority; }) ||
         goals.find(function (g) { return g.type === "OneTime" && g.status === "Active"; }) || null;
       const destinations = ["Emergency"].concat(goals.filter(function (g) { return g.status === "Active"; }).map(function (g) { return g.name; })).concat(["Free"]);
+      const entrySource = function (e) { return e.type === "payment" ? "payment" : (e.type === "withdraw" ? "withdraw" : "you"); };
       const recentEntries = demoState.savingsEntries
-        .map(function (e, idx) { return { row: idx + 2, date: demoFmtISODate(e.date), amount: e.amount, type: e.type, note: e.note, destination: e.destination }; })
-        .slice().reverse().slice(0, 15);
-      return { recentEntries: recentEntries, destinations: destinations, emergency: emergency, emergencyTarget: emergencyTarget, emergencyDone: emergency >= emergencyTarget, free: free, goals: goals, ccBufferGoal: ccBufferGoal, priorityGoalName: priorityGoal ? priorityGoal.name : null };
+        .map(function (e, idx) { return { row: idx + 2, date: demoFmtISODate(e.date), amount: e.amount, type: e.type, source: entrySource(e), note: e.note, destination: e.destination }; })
+        .slice().sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : b.row - a.row); }).slice(0, 15);
+
+      // The Savings screen's New look figures, worked out from the pretend entries (net of take-outs, like Analysis does).
+      const now = new Date();
+      const monthlyGoal = Number(settings.monthlySaveGoal) || 0;
+      const monthlySaved = [];
+      for (let i = 5; i >= 0; i--) {
+        const m = svAddMonths(now, -i);
+        let sum = 0;
+        demoState.savingsEntries.forEach(function (e) {
+          const d = new Date(e.date);
+          if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) sum += Number(e.amount) || 0;
+        });
+        monthlySaved.push({ year: m.year, month: m.month, saved: sum });
+      }
+      const firstIdx = monthlySaved.findIndex(function (m) { return m.saved !== 0; });
+      const counted = firstIdx === -1 ? [] : monthlySaved.slice(firstIdx);
+      const goalMet = { met: counted.filter(function (m) { return monthlyGoal > 0 && m.saved >= monthlyGoal; }).length, of: counted.length };
+      // usual pace = the average of the finished months (this month is still growing), or this month if it is all there is
+      const paceBase = counted.length > 1 ? counted.slice(0, -1) : counted;
+      const paceMonthly = paceBase.length ? Math.round(paceBase.reduce(function (t, m) { return t + Math.max(m.saved, 0); }, 0) / paceBase.length) : 0;
+      const needsEntries = recentEntries
+        .filter(function (e) { return e.type === "payment" && e.destination === "Free"; })
+        .map(function (e) { return { row: e.row, amount: e.amount, date: e.date, note: e.note }; });
+      const needsHome = { amount: needsEntries.reduce(function (t, e) { return t + e.amount; }, 0), count: needsEntries.length, entries: needsEntries };
+      let totalSaved = emergency + free;
+      goals.forEach(function (g) { totalSaved += g.saved; });
+
+      return {
+        recentEntries: recentEntries, destinations: destinations, emergency: emergency, emergencyTarget: emergencyTarget, emergencyDone: emergency >= emergencyTarget,
+        free: free, goals: goals, ccBufferGoal: ccBufferGoal, priorityGoalName: priorityGoal ? priorityGoal.name : null,
+        totalSaved: totalSaved, monthlyGoal: monthlyGoal, monthlyExpenses: Number(settings.monthlyExpenses) || 0,
+        thisMonthSaved: monthlySaved[5].saved, monthlySaved: monthlySaved, goalMet: goalMet, paceMonthly: paceMonthly, needsHome: needsHome
+      };
     }
 
     function demoComputeInvestments() {
@@ -8595,13 +8813,22 @@
       demoState.savingsEntries.splice(idx, 1);
       return { ok: true };
     }
-    function demoAddGoal(name, type, target) {
+    function demoAddGoal(name, type, target, targetDate) {
       name = (name || "").toString().trim();
       type = type === "Recurring" ? "Recurring" : "OneTime";
       if (!name) return { ok: false, error: "Enter a goal name." };
       if (type === "OneTime" && (!target || Number(target) <= 0)) return { ok: false, error: "Enter a target amount." };
       const hasActiveOneTime = demoState.goals.some(function (g) { return g.type === "OneTime" && g.status === "Active"; });
-      demoState.goals.push({ name: name, type: type, target: type === "OneTime" ? Number(target) : 0, status: "Active", priority: type === "OneTime" && !hasActiveOneTime, dateAdded: new Date() });
+      demoState.goals.push({ name: name, type: type, target: type === "OneTime" ? Number(target) : 0, status: "Active", priority: type === "OneTime" && !hasActiveOneTime, dateAdded: new Date(), targetDate: targetDate ? String(targetDate) : "" });
+      return { ok: true };
+    }
+    // Change a goal's target and/or target date (the New look "Edit goal").
+    function demoUpdateGoal(row, target, targetDate) {
+      const g = demoState.goals[row - 2];
+      if (!g) return { ok: false, error: "Invalid row." };
+      if (g.type === "OneTime" && (!target || Number(target) <= 0)) return { ok: false, error: "Enter a target amount." };
+      if (g.type === "OneTime") g.target = Number(target);
+      if (targetDate !== undefined && targetDate !== null) g.targetDate = targetDate ? String(targetDate) : "";   // left alone when not sent, like the server
       return { ok: true };
     }
     function demoSetPriorityGoal(row) {
@@ -8713,7 +8940,8 @@
           case "withdrawSavings": return demoWithdrawSaving(data.bucket, data.amount, data.note);
           case "updateSavingsEntry": return demoUpdateSavingsEntry(data.row, data.amount, data.note, data.destination);
           case "deleteSavingsEntry": return demoDeleteSavingsEntry(data.row);
-          case "addSavingsGoal": return demoAddGoal(data.name, data.type, data.target);
+          case "addSavingsGoal": return demoAddGoal(data.name, data.type, data.target, data.targetDate);
+          case "updateSavingsGoal": return demoUpdateGoal(data.row, data.target, data.targetDate);
           case "setPrioritySavingsGoal": return demoSetPriorityGoal(data.row);
           case "markSavingsGoalDone": return demoMarkGoalDone(data.row);
           case "purchaseSavingsGoal": return demoPurchaseGoal(data.row, data.name, data.amount);
@@ -9104,7 +9332,7 @@
     const FAST_WRITE_ACTIONS = [
       "saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
-      "deleteSavingsEntry", "addSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
+      "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
       "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
       "addCashEntry", "addManualTransaction", "updateCashEntry", "insertReconciledTransactions",
       "fixCreditCardTransactionMode", "updateSettings", "saveBudgets"
@@ -10817,6 +11045,15 @@
           if (cur) history.pushState(cur, "");
         } catch (e) { /* ignore */ }
         if (finOnbOpen) finOnbClose(); else finCloseSheet(false);
+        return;
+      }
+      // New look, Savings: Back from a goal's page goes to the Savings overview first.
+      if (finLookOn() && svOpenBucket && subViews.savings.style.display !== "none") {
+        try {
+          const cur = JSON.parse(localStorage.getItem(TAB_STORAGE_KEY) || "null");
+          if (cur) history.pushState(cur, "");
+        } catch (e) { /* ignore */ }
+        svCloseDetail();
         return;
       }
       isApplyingHistoryState = true;
@@ -13013,6 +13250,11 @@
     // anything invented client-side. Returns true if a matching bucket
     // was found and adjusted.
     function applySavingsBucketDelta(s, destination, delta) {
+      const done = applySavingsBucketDeltaCore_(s, destination, delta);
+      if (done) svApplyTotals(s, delta);   // keeps the New look's total / this-month figures in step (does nothing if the server did not send them)
+      return done;
+    }
+    function applySavingsBucketDeltaCore_(s, destination, delta) {
       if (!s || !destination) return false;
       if (destination === "Emergency") { s.emergency += delta; return true; }
       if (destination === "Free") { s.free += delta; return true; }
@@ -13083,6 +13325,7 @@
       savingsData = s;
       savingsStatusEl.textContent = "";
       savingsContentEl.style.display = "block";
+      if (finLookOn()) { renderSavingsNew(s); return; }   // New look: the redesigned screen (see SAVINGS, NEW LOOK below)
       renderCarousel(s);
       renderSavingsDetailList(s);
       renderRecentActivity(s.recentEntries || []);
@@ -13105,6 +13348,7 @@
     }
 
     function renderCarousel(s) {
+      if (finLookOn()) return;   // New look draws everything in renderSavingsNew (renderSavingsDetailList calls it)
       const cards = buildOverviewCards(s);
 
       savingsCarouselInnerEl.innerHTML = "";
@@ -13233,11 +13477,74 @@
     // since both rebuild the whole detail list on success/failure, which
     // destroys whichever row's own message area was showing "Saving...".
     function showSavingsNotice(message) {
+      if (finLookOn()) { FinToast.show({ text: message, ms: 5000 }); return; }   // New look: a small message at the bottom
       const notice = document.createElement("div");
       notice.className = "pending-notice";
       notice.innerHTML = `<span>${escapeHtml(message)}</span><button type="button" class="pending-notice-dismiss" aria-label="Dismiss">×</button>`;
       notice.querySelector(".pending-notice-dismiss").addEventListener("click", function () { notice.remove(); });
       savingsDetailListEl.insertBefore(notice, savingsDetailListEl.firstChild);
+    }
+
+    // Mark a goal as bought (tap-again-to-confirm happens in the button that calls this).
+    // Moved out of buildGoalDetailRow unchanged so the New look screen can share it.
+    function purchaseGoalOptimistic(g) {
+      // Optimistic (2026-08-12): closes out the goal (and its
+      // saved amount) immediately — same "tap-again to confirm,
+      // then trust it" trade-off as Debts' Settle above. On
+      // failure, put everything back and say so via a banner
+      // (this row itself gets rebuilt away by the re-render, so
+      // there's no message area left on it to use).
+      // Read BEFORE the optimistic reset below: g is the very same object as
+      // `match` (both come from savingsData.goals), so after the reset g.saved
+      // is 0 and the withdrawal would have been sent as ₹0 (found 2026-10-17).
+      const amountToWithdraw = g.saved;
+      const savingsSnapshot = savingsData ? cloneSavingsData() : null;
+      if (savingsData) {
+        const match = savingsData.goals.find(function (gg) { return gg.row === g.row; });
+        // Only this one manual reset — NOT also applySavingsBucketDelta,
+        // which would find the same goal by name and re-apply the same
+        // amount on top, double-zeroing it into a negative "saved".
+        if (match) { match.status = "Done"; match.priority = false; match.saved = 0; match.remaining = match.target; match.canAfford = false; }
+        saveCache("savingsGoals", savingsData);
+        clearSavingsRelatedCaches();
+        renderCarousel(savingsData);
+        renderSavingsDetailList(savingsData);
+      }
+      callAppsScript({ action: "purchaseSavingsGoal", idToken: currentUser.idToken, row: g.row, name: g.name, amount: amountToWithdraw })
+        .then(function (data) {
+          if (data.ok) { refreshSavings(); return; }
+          if (savingsSnapshot) { savingsData = savingsSnapshot; saveCache("savingsGoals", savingsData); renderCarousel(savingsData); renderSavingsDetailList(savingsData); }
+          showSavingsNotice("Couldn't mark \"" + g.name + "\" as purchased (" + data.error + ") — check your connection and try again.");
+        })
+        .catch(function (err) {
+          if (savingsSnapshot) { savingsData = savingsSnapshot; saveCache("savingsGoals", savingsData); renderCarousel(savingsData); renderSavingsDetailList(savingsData); }
+          showSavingsNotice("Couldn't mark \"" + g.name + "\" as purchased (" + err.message + ") — check your connection and try again.");
+        });
+    }
+
+    // Make this goal the priority one (the one Auto Split fills first). Moved out of
+    // buildGoalDetailRow unchanged so the New look screen can share it.
+    function setGoalPriorityOptimistic(g) {
+      const savingsSnapshot = savingsData ? cloneSavingsData() : null;
+      if (savingsData) {
+        savingsData.goals.forEach(function (gg) {
+          if (gg.type === "OneTime") gg.priority = (gg.row === g.row);
+        });
+        saveCache("savingsGoals", savingsData);
+        clearSavingsRelatedCaches();
+        renderCarousel(savingsData);
+        renderSavingsDetailList(savingsData);
+      }
+      callAppsScript({ action: "setPrioritySavingsGoal", idToken: currentUser.idToken, row: g.row })
+        .then(function (data) {
+          if (data.ok) { refreshSavings(); return; }
+          if (savingsSnapshot) { savingsData = savingsSnapshot; saveCache("savingsGoals", savingsData); renderCarousel(savingsData); renderSavingsDetailList(savingsData); }
+          showSavingsNotice("Couldn't set \"" + g.name + "\" as priority (" + data.error + ") — check your connection and try again.");
+        })
+        .catch(function (err) {
+          if (savingsSnapshot) { savingsData = savingsSnapshot; saveCache("savingsGoals", savingsData); renderCarousel(savingsData); renderSavingsDetailList(savingsData); }
+          showSavingsNotice("Couldn't set \"" + g.name + "\" as priority (" + err.message + ") — check your connection and try again.");
+        });
     }
 
     function buildGoalDetailRow(g) {
@@ -13253,34 +13560,7 @@
         g.name, badges,
         function (msgEl) {
           if (g.canAfford) {
-            // Optimistic (2026-08-12): closes out the goal (and its
-            // saved amount) immediately — same "tap-again to confirm,
-            // then trust it" trade-off as Debts' Settle above. On
-            // failure, put everything back and say so via a banner
-            // (this row itself gets rebuilt away by the re-render, so
-            // there's no message area left on it to use).
-            const savingsSnapshot = savingsData ? cloneSavingsData() : null;
-            if (savingsData) {
-              const match = savingsData.goals.find(function (gg) { return gg.row === g.row; });
-              // Only this one manual reset — NOT also applySavingsBucketDelta,
-              // which would find the same goal by name and re-apply the same
-              // amount on top, double-zeroing it into a negative "saved".
-              if (match) { match.status = "Done"; match.priority = false; match.saved = 0; match.remaining = match.target; match.canAfford = false; }
-              saveCache("savingsGoals", savingsData);
-              clearSavingsRelatedCaches();
-              renderCarousel(savingsData);
-              renderSavingsDetailList(savingsData);
-            }
-            callAppsScript({ action: "purchaseSavingsGoal", idToken: currentUser.idToken, row: g.row, name: g.name, amount: g.saved })
-              .then(function (data) {
-                if (data.ok) { refreshSavings(); return; }
-                if (savingsSnapshot) { savingsData = savingsSnapshot; saveCache("savingsGoals", savingsData); renderCarousel(savingsData); renderSavingsDetailList(savingsData); }
-                showSavingsNotice("Couldn't mark \"" + g.name + "\" as purchased (" + data.error + ") — check your connection and try again.");
-              })
-              .catch(function (err) {
-                if (savingsSnapshot) { savingsData = savingsSnapshot; saveCache("savingsGoals", savingsData); renderCarousel(savingsData); renderSavingsDetailList(savingsData); }
-                showSavingsNotice("Couldn't mark \"" + g.name + "\" as purchased (" + err.message + ") — check your connection and try again.");
-              });
+            purchaseGoalOptimistic(g);
           } else {
             openQuickAction("add", g.name, g.saved);
           }
@@ -13301,28 +13581,7 @@
         // Optimistic (2026-08-12) — flips which goal is the priority one
         // immediately (a simple, safe flag flip, easy to put back exactly
         // if the save fails).
-        priorityBtn.addEventListener("click", function () {
-          const savingsSnapshot = savingsData ? cloneSavingsData() : null;
-          if (savingsData) {
-            savingsData.goals.forEach(function (gg) {
-              if (gg.type === "OneTime") gg.priority = (gg.row === g.row);
-            });
-            saveCache("savingsGoals", savingsData);
-            clearSavingsRelatedCaches();
-            renderCarousel(savingsData);
-            renderSavingsDetailList(savingsData);
-          }
-          callAppsScript({ action: "setPrioritySavingsGoal", idToken: currentUser.idToken, row: g.row })
-            .then(function (data) {
-              if (data.ok) { refreshSavings(); return; }
-              if (savingsSnapshot) { savingsData = savingsSnapshot; saveCache("savingsGoals", savingsData); renderCarousel(savingsData); renderSavingsDetailList(savingsData); }
-              showSavingsNotice("Couldn't set \"" + g.name + "\" as priority (" + data.error + ") — check your connection and try again.");
-            })
-            .catch(function (err) {
-              if (savingsSnapshot) { savingsData = savingsSnapshot; saveCache("savingsGoals", savingsData); renderCarousel(savingsData); renderSavingsDetailList(savingsData); }
-              showSavingsNotice("Couldn't set \"" + g.name + "\" as priority (" + err.message + ") — check your connection and try again.");
-            });
-        });
+        priorityBtn.addEventListener("click", function () { setGoalPriorityOptimistic(g); });
         actionsEl.appendChild(priorityBtn);
       }
 
@@ -13330,6 +13589,7 @@
     }
 
     function renderSavingsDetailList(s) {
+      if (finLookOn()) { renderSavingsNew(s); return; }   // New look: every optimistic edit redraws the new screen
       savingsDetailListEl.innerHTML = "";
 
       savingsDetailListEl.appendChild(
@@ -13758,8 +14018,14 @@
       card.className = "pending-item";
 
       const destinations = (savingsData && savingsData.destinations) || [entry.destination];
-      const destOptionsHtml = destinations.map(function (d) {
-        return `<option value="${escapeHtml(d)}"${d === entry.destination ? " selected" : ""}>${escapeHtml(d)}</option>`;
+      // The entry's CURRENT destination is always in the list and selected. An old entry may point at a goal that
+      // is bought, renamed or a legacy name (WishList...); without this the box would quietly fall back to the
+      // first option and a note-only edit would move the money.
+      const currentDest = String(entry.destination || "");
+      const destList = destinations.indexOf(currentDest) === -1 && currentDest ? destinations.concat([currentDest]) : destinations;
+      const destOptionsHtml = destList.map(function (d) {
+        const closed = destinations.indexOf(d) === -1;
+        return `<option value="${escapeHtml(d)}"${d === currentDest ? " selected" : ""}>${escapeHtml(d)}${closed ? " (closed goal)" : ""}</option>`;
       }).join("");
 
       const isWithdrawal = entry.amount < 0;
@@ -13859,7 +14125,8 @@
       // worth of history, but same reasoning as Pending's optimistic Save
       // and Debts' Settle above: nothing is actually lost, since a failed
       // background delete puts the card straight back with a clear error.
-      card.querySelector(".entry-delete-btn").addEventListener("click", function () {
+      function deleteEntry() {
+        card.dispatchEvent(new Event("entry-deleted"));   // lets the New look's sheet close only once the delete is confirmed
         const savingsSnapshot = savingsData ? cloneSavingsData() : null;
         const listEl = card.parentElement;
         const nextSibling = card.nextSibling;
@@ -13901,9 +14168,959 @@
             resultEl.style.color = "var(--color-danger)";
             resultEl.textContent = "Couldn't delete (" + err.message + ") — check your connection and try again.";
           });
-      });
+      }
+      // New look: delete needs a second tap (same "tap again to confirm" as Settle / Mark purchased). Older look: unchanged.
+      const deleteBtn = card.querySelector(".entry-delete-btn");
+      if (finLookOn()) bindConfirmAction(deleteBtn, deleteEntry);
+      else deleteBtn.addEventListener("click", deleteEntry);
 
       return card;
+    }
+
+    // =========================================================
+    // SAVINGS, NEW LOOK (2026-10-17). Only drawn when the "New look" switch is
+    // on (renderSavingsGoals sends the data here); with it off the older
+    // carousel / list / forms above are used exactly as before.
+    //   Overview  : Total saved, Add savings, "needs a home", Safety, Goals,
+    //               Free savings, 6-month chart, Activity.
+    //   Goal page : tap a goal / Emergency / CC Buffer / Free.
+    // Every save below uses the SAME server actions and the SAME optimistic
+    // pattern (change the screen at once, put it back if the save fails) as the
+    // older forms. Docs: docs/features/savings-v2.md ("Savings screen, New look").
+    // =========================================================
+
+    // ---- Pure logic (no screen access, so it is unit-tested in plain Node:
+    //      backend/tests/finSavingsNew.test.js reads this block) ----
+    // SV-LOGIC-START
+    const SV_MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const SV_MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+    function svIsNum(x) { return x !== null && x !== undefined && x !== "" && isFinite(Number(x)); }
+    function svRs(n) { return "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN"); }
+    function svPct(part, whole) { return whole > 0 ? Math.max(0, Math.min(100, Math.round(part / whole * 100))) : 0; }
+    function svParseDate(str) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(str || ""));
+      return m ? { y: +m[1], m: +m[2], d: +m[3] } : null;
+    }
+    function svMonthLabel(y, m) { return SV_MON[m - 1] + " " + y; }
+    // The month n months after `now` (n = 0 is this month).
+    function svAddMonths(now, n) {
+      const idx = now.getFullYear() * 12 + now.getMonth() + n;
+      return { year: Math.floor(idx / 12), month: (idx % 12) + 1 };
+    }
+    // yyyy-MM-dd of a Date's own year / month / day.
+    function svISOOf(d) { return d.getFullYear() + "-" + (d.getMonth() < 9 ? "0" : "") + (d.getMonth() + 1) + "-" + (d.getDate() < 10 ? "0" : "") + d.getDate(); }
+    // Today's date in India (the owner's zone), as yyyy-MM-dd, whatever zone the phone is set to.
+    function svIndiaISO() {
+      try {
+        const s = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      } catch (err) { /* fall through to the phone's own date */ }
+      return svISOOf(new Date());
+    }
+    // A Date whose year / month / day are today's India date (so the month rules below use India's "today").
+    function svIndiaNow() { const p = svParseDate(svIndiaISO()); return new Date(p.y, p.m - 1, p.d); }
+    // Whole months from "now" to a date, minimum 1 - the SAME rule as goalMonthsLeft_ in backend/savingsGoals.js
+    // (so a preview on the phone always matches the card the server sends back). null = no usable date.
+    function svMonthsLeft(dateStr, now) {
+      const p = svParseDate(dateStr);
+      if (!p) return null;
+      const real = new Date(p.y, p.m - 1, p.d);
+      if (real.getFullYear() !== p.y || real.getMonth() !== p.m - 1 || real.getDate() !== p.d) return null;   // e.g. 31 Feb
+      let months = (p.y - now.getFullYear()) * 12 + (p.m - (now.getMonth() + 1));
+      if (p.d < now.getDate()) months -= 1;
+      return Math.max(months, 1);
+    }
+    // True when the date is before today (the server refuses a NEW date like this).
+    function svDatePassed(dateStr, now) {
+      const p = svParseDate(dateStr);
+      return !!p && String(dateStr).slice(0, 10) < svISOOf(now);
+    }
+    // "How much a month to finish by that date" (rounded up). null when it cannot be worked out or the date has passed.
+    function svMonthlyNeeded(remaining, dateStr, now) {
+      const months = svMonthsLeft(dateStr, now);
+      if (months === null || svDatePassed(dateStr, now)) return null;
+      if (!(remaining > 0)) return 0;
+      return Math.ceil(remaining / months);
+    }
+    // The pace line of a goal, as pieces (so the screen can make the amount count up):
+    // text = pre + rupees(amount) + post.
+    function svPaceParts(goal, paceMonthly, now) {
+      const target = Number(goal && goal.target) || 0;
+      const saved = Number(goal && goal.saved) || 0;
+      const remaining = Math.max(target - saved, 0);
+      if (target > 0 && remaining === 0) return { kind: "done", pre: "You have enough saved. Mark it as bought when you are ready.", amount: null, post: "" };
+      if (goal && goal.targetDate) {
+        if (svDatePassed(goal.targetDate, now)) return { kind: "past", pre: "The date you set has passed. Edit the goal to pick a new one.", amount: null, post: "" };
+        // Use what the server worked out when it sent it; otherwise work it out here with the server's own rule.
+        const months = svIsNum(goal.monthsLeft) && Number(goal.monthsLeft) >= 1 ? Number(goal.monthsLeft) : svMonthsLeft(goal.targetDate, now);
+        if (months !== null) {
+          const p = svParseDate(goal.targetDate);
+          const need = svIsNum(goal.monthlyNeeded) ? Number(goal.monthlyNeeded) : Math.ceil(remaining / months);
+          return { kind: "date", pre: "", amount: need, post: " a month to finish by " + svMonthLabel(p.y, p.m) };
+        }
+      }
+      const pace = Number(paceMonthly);
+      if (pace > 0 && remaining > 0) {
+        const when = svAddMonths(now, Math.ceil(remaining / pace));
+        return { kind: "pace", pre: "At your usual ", amount: Math.round(pace), post: " a month: " + svMonthLabel(when.year, when.month) };
+      }
+      return { kind: "none", pre: "Add a date to see the pace", amount: null, post: "" };
+    }
+    function svPaceText(p) { return p.pre + (p.amount !== null && p.amount !== undefined ? svRs(p.amount) : "") + p.post; }
+
+    // Compact rupee label for the small chart: 3000 -> "₹3k", 125000 -> "₹1.3L".
+    function svCompact(n) {
+      n = Number(n) || 0;
+      const a = Math.abs(n);
+      const trim = function (x) { return String(Math.round(x * 10) / 10); };
+      let t;
+      if (a >= 100000) t = trim(a / 100000) + "L";
+      else if (a >= 1000) t = trim(a / 1000) + "k";
+      else t = String(Math.round(a));
+      return (n < 0 ? "-" : "") + "₹" + t;
+    }
+
+    // "1.5 of 3 months of expenses covered" (null if monthly expenses are not known).
+    function svCover(saved, monthlyExpenses, emergencyTarget) {
+      const exp = Number(monthlyExpenses);
+      if (!(exp > 0)) return null;
+      const r1 = function (x) { return Math.round(x * 10) / 10; };
+      const tgt = Number(emergencyTarget) > 0 ? r1(Number(emergencyTarget) / exp) : 3;
+      return { covered: r1((Number(saved) || 0) / exp), target: tgt };
+    }
+    function svCoverText(c) { return c ? c.covered + " of " + c.target + " months of expenses covered" : ""; }
+
+    function svGoalMetText(gm) {
+      if (!gm || !(Number(gm.of) > 0)) return "";
+      return "Goal met in " + (Number(gm.met) || 0) + " of the last " + Number(gm.of) + (Number(gm.of) === 1 ? " month" : " months");
+    }
+
+    // Everything on the server that did not send it is worked out from what we have, or left out (null).
+    function svTotalSaved(s) {
+      if (!s) return 0;
+      if (svIsNum(s.totalSaved)) return Number(s.totalSaved);
+      let t = (Number(s.emergency) || 0) + (Number(s.free) || 0);
+      (s.goals || []).forEach(function (g) { t += Number(g.saved) || 0; });
+      return t;
+    }
+    function svThisMonth(s) {
+      if (!s) return null;
+      if (svIsNum(s.thisMonthSaved)) return Number(s.thisMonthSaved);
+      if (Array.isArray(s.monthlySaved) && s.monthlySaved.length) {
+        const last = s.monthlySaved[s.monthlySaved.length - 1];
+        if (last && svIsNum(last.saved)) return Number(last.saved);
+      }
+      return null;
+    }
+    // The "This month: X of Y goal" block; null (hidden) when there is no monthly goal or no this-month figure.
+    function svHero(s) {
+      const goal = Number(s && s.monthlyGoal);
+      if (!(goal > 0)) return null;
+      const tm = svThisMonth(s);
+      if (tm === null) return null;
+      const toGo = Math.max(goal - tm, 0);
+      return { thisMonth: tm, goal: goal, pct: svPct(tm, goal), toGo: toGo, reached: toGo === 0 };
+    }
+    // After an optimistic add / take-out / move, keep the totals the server sent in step.
+    function svApplyTotals(s, delta) {
+      if (!s || !svIsNum(delta)) return;
+      const d = Number(delta);
+      if (svIsNum(s.totalSaved)) s.totalSaved = Number(s.totalSaved) + d;
+      if (svIsNum(s.thisMonthSaved)) s.thisMonthSaved = Number(s.thisMonthSaved) + d;
+      if (Array.isArray(s.monthlySaved) && s.monthlySaved.length) {
+        const last = s.monthlySaved[s.monthlySaved.length - 1];
+        if (last && svIsNum(last.saved)) last.saved = Number(last.saved) + d;
+      }
+    }
+
+    // The 6-month chart: bar heights as a share of the tallest of (goal, biggest month).
+    function svChartModel(s) {
+      const arr = (s && Array.isArray(s.monthlySaved) ? s.monthlySaved : []).filter(function (m) {
+        return m && svIsNum(m.saved) && svIsNum(m.month) && svIsNum(m.year) && m.month >= 1 && m.month <= 12;
+      });
+      if (!arr.length) return null;
+      const goal = svIsNum(s.monthlyGoal) && Number(s.monthlyGoal) > 0 ? Number(s.monthlyGoal) : 0;
+      let max = goal;
+      arr.forEach(function (m) { if (Number(m.saved) > max) max = Number(m.saved); });
+      if (max <= 0) max = 1;
+      const bars = arr.map(function (m, i) {
+        const v = Number(m.saved);
+        return { label: SV_MON[m.month - 1], saved: v, pct: Math.round(Math.max(0, Math.min(100, v / max * 100)) * 10) / 10, met: goal > 0 && v >= goal, current: i === arr.length - 1 };
+      });
+      return { bars: bars, goal: goal, goalPct: goal > 0 ? Math.round(goal / max * 1000) / 10 : null };
+    }
+
+    // Activity: newest first, grouped under their month.
+    function svGroupEntries(entries) {
+      const list = (Array.isArray(entries) ? entries : []).slice().sort(function (a, b) {
+        const da = String(a.date || ""), db = String(b.date || "");
+        if (da !== db) return da < db ? 1 : -1;
+        return (Number(b.row) || 0) - (Number(a.row) || 0);
+      });
+      const groups = [];
+      const at = {};
+      list.forEach(function (e) {
+        const p = svParseDate(e.date);
+        const key = p ? p.y + "-" + (p.m < 10 ? "0" : "") + p.m : "unknown";
+        if (!(key in at)) {
+          at[key] = groups.length;
+          groups.push({ key: key, label: p ? SV_MONTH_FULL[p.m - 1] + " " + p.y : "Earlier", entries: [] });
+        }
+        groups[at[key]].entries.push(e);
+      });
+      return groups;
+    }
+    // "payment" (a payment you tagged Saving) behaves like "auto": it is money put in, never a take-out.
+    function svSource(e) {
+      if (e && (e.source === "payment" || e.source === "withdraw" || e.source === "you")) return e.source;
+      if (e && e.type === "payment") return "payment";
+      if (e && (e.type === "withdraw" || Number(e.amount) < 0)) return "withdraw";
+      return "you";
+    }
+    function svSourceLabel(src) { return src === "payment" ? "From a payment" : (src === "withdraw" ? "Taken out" : "Added by you"); }
+    function svDestLabel(name) { return name === "Free" ? "Free savings" : (name === "Emergency" ? "Emergency fund" : String(name || "")); }
+    function svShortDate(dateStr, now) {
+      const p = svParseDate(dateStr);
+      if (!p) return String(dateStr || "");
+      return p.d + " " + SV_MON[p.m - 1] + (p.y !== now.getFullYear() ? " " + p.y : "");
+    }
+    // The "needs a home" block, or null when nothing is waiting (or the server did not send it).
+    function svNeedsHome(s) {
+      const nh = s && s.needsHome;
+      if (!nh || typeof nh !== "object") return null;
+      const entries = Array.isArray(nh.entries) ? nh.entries : [];
+      const amount = svIsNum(nh.amount) ? Number(nh.amount) : entries.reduce(function (t, e) { return t + (Number(e.amount) || 0); }, 0);
+      if (!(amount > 0)) return null;
+      return { amount: amount, count: svIsNum(nh.count) ? Number(nh.count) : entries.length, entries: entries };
+    }
+    function svGoalEntries(entries, name) {
+      return svGroupEntries((Array.isArray(entries) ? entries : []).filter(function (e) { return e.destination === name; }))
+        .reduce(function (all, g) { return all.concat(g.entries); }, []);
+    }
+    // Where money can go: Emergency, each active goal, CC Buffer, Free.
+    function svDestOptions(s) {
+      const goals = (s && s.goals) || [];
+      const out = ["Emergency"];
+      goals.forEach(function (g) { if (g.status === "Active" && g.type !== "Recurring") out.push(g.name); });
+      goals.forEach(function (g) { if (g.status === "Active" && g.type === "Recurring") out.push(g.name); });
+      out.push("Free");
+      return out;
+    }
+    // What a tapped card opens: Emergency, Free or an active goal.
+    function svBucket(s, name) {
+      if (!s || !name) return null;
+      if (name === "Emergency") return { name: name, kind: "emergency", label: "Emergency fund", saved: Number(s.emergency) || 0, target: Number(s.emergencyTarget) || 0, goal: null };
+      if (name === "Free") return { name: name, kind: "free", label: "Free savings", saved: Number(s.free) || 0, target: 0, goal: null };
+      const g = (s.goals || []).find(function (x) { return x.name === name && x.status === "Active"; });
+      if (!g) return null;
+      return { name: name, kind: g.type === "Recurring" ? "recurring" : "goal", label: g.name, saved: Number(g.saved) || 0, target: Number(g.target) || 0, goal: g };
+    }
+    // "I will choose": rows are [{destination, amount}] with amount as typed ("" = take whatever is left).
+    function svManualCheck(rows, total) {
+      total = Number(total) || 0;
+      if (!(total > 0)) return { ok: false, error: "Enter an amount first." };
+      const out = [];
+      let entered = 0, blank = null;
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (String(r.amount) === "") { if (!blank) blank = r.destination; continue; }
+        const a = parseFloat(r.amount) || 0;
+        if (a <= 0) return { ok: false, error: "Every row needs an amount above zero." };
+        entered += a;
+        out.push({ destination: r.destination, amount: a });
+      }
+      if (blank) {
+        const rest = total - entered;
+        if (rest <= 0) return { ok: false, error: "The other rows already add up to " + svRs(entered) + ". There is nothing left for the empty row." };
+        out.push({ destination: blank, amount: rest });
+      }
+      if (!out.length) return { ok: false, error: "Add at least one row." };
+      const sum = out.reduce(function (t, r) { return t + r.amount; }, 0);
+      if (Math.abs(sum - total) > 0.005) return { ok: false, error: "The rows add up to " + svRs(sum) + ", not " + svRs(total) + "." };
+      return { ok: true, rows: out };
+    }
+    function svManualLeftText(rows, total) {
+      total = Number(total) || 0;
+      let entered = 0, blanks = 0;
+      rows.forEach(function (r) { if (String(r.amount) === "") blanks++; else entered += parseFloat(r.amount) || 0; });
+      if (blanks === 0) return entered === total ? "Adds up to " + svRs(total) + "." : "Adds up to " + svRs(entered) + ", not " + svRs(total) + ".";
+      return svRs(Math.max(total - entered, 0)) + " will go in the empty row.";
+    }
+    // Plain rows for "Where it will go" from a previewSavingsSplit breakdown.
+    function svPreviewRows(b, ccName) {
+      const rows = [];
+      if (!b) return rows;
+      if (b.emergency > 0) rows.push({ label: "Emergency fund", amount: b.emergency, destination: "Emergency" });
+      if (b.ccBuffer > 0) rows.push({ label: ccName || "CC Buffer", amount: b.ccBuffer, destination: ccName || "CC Buffer" });
+      if (b.goal > 0 && b.goalName) rows.push({ label: b.goalName, amount: b.goal, destination: b.goalName });
+      if (b.free > 0) rows.push({ label: "Free savings", amount: b.free, destination: "Free" });
+      return rows;
+    }
+    // SV-LOGIC-END
+
+    // ---- Screen ----
+    const svOverviewEl = document.getElementById("svOverview");
+    const svGoalViewEl = document.getElementById("svGoalView");
+    const svViewEl = document.getElementById("view-savings");
+    const SV_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>';
+    const SV_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+    let svEntriesShown = [];       // the activity entries currently on screen, in order (rows use their position here)
+
+    // "Today" for dates the screen shows or sends: India's date unless a Date is given.
+    function svLocalISO(d) { return d ? svISOOf(d) : svIndiaISO(); }
+    function svFindGoal(name) { return savingsData && (savingsData.goals || []).find(function (g) { return g.name === name; }) || null; }
+
+    function svBarHtml(pct) {
+      return '<span class="category-bar-track"><span class="category-bar-fill" style="width:' + pct + '%"></span></span>';
+    }
+    function svPaceHtml(p) {
+      return escapeHtml(p.pre) + (p.amount !== null && p.amount !== undefined ? "<strong>" + finNum(p.amount, "₹") + "</strong>" : "") + escapeHtml(p.post);
+    }
+    // One tappable summary card (Emergency, CC Buffer, a goal, Free savings).
+    function svCardHtml(o) {
+      const pct = svPct(o.saved, o.target);
+      return '<button type="button" class="sv-card sv-tap" data-open="' + escapeHtml(o.open) + '">' +
+        '<span class="sv-card-top"><span class="sv-card-name">' + escapeHtml(o.name) + (o.badge || "") + '</span><span class="sv-card-amt">' + finNum(o.saved, "₹") + '</span></span>' +
+        (o.target > 0 ? '<span class="sv-card-of">of ' + finNum(o.target, "₹") + " · " + pct + '%</span>' + svBarHtml(pct) : "") +
+        (o.line ? '<span class="sv-line">' + o.line + '</span>' : "") +
+        '</button>';
+    }
+    // One activity row.
+    function svRowHtml(e, idx, now) {
+      const src = svSource(e);
+      const neg = Number(e.amount) < 0;
+      const note = String(e.note || "").trim();
+      const bits = [];
+      if (note) bits.push(svSourceLabel(src));
+      bits.push(svShortDate(e.date, now));
+      bits.push(svDestLabel(e.destination));
+      return '<button type="button" class="sv-row sv-tap" data-entry="' + idx + '">' +
+        '<span class="sv-row-main"><span class="sv-row-title">' + escapeHtml(note || svSourceLabel(src)) + '</span>' +
+        '<span class="sv-row-sub">' + escapeHtml(bits.join(" · ")) + '</span></span>' +
+        '<span class="sv-row-amt">' + (neg ? "-" : "+") + svRs(Math.abs(Number(e.amount) || 0)) + '</span></button>';
+    }
+
+    function svOverviewHtml(s) {
+      const now = svIndiaNow();
+      const hero = svHero(s);
+      const metText = svGoalMetText(s.goalMet);
+      let h = "";
+
+      // Hero: total saved + this month against the monthly goal
+      h += '<div class="today-total-box sv-hero"><div class="today-total-label">Total saved</div>' +
+           '<div class="today-total-amount">' + finNum(svTotalSaved(s), "₹") + '</div>';
+      if (hero) {
+        h += '<div class="sv-hero-line">This month: ' + finNum(hero.thisMonth, "₹") + " of " + finNum(hero.goal, "₹") + ' goal</div>' +
+             svBarHtml(hero.pct) +
+             '<div class="sv-hero-foot"><span>' + (hero.reached ? "Goal reached" : finNum(hero.toGo, "₹") + " to go") + '</span>' +
+             (metText ? "<span>" + escapeHtml(metText) + "</span>" : "") + '</div>';
+      }
+      h += '</div>';
+
+      h += '<button type="button" class="sv-add" id="svAddBtn">' + SV_PLUS + 'Add savings</button>';
+
+      const nh = svNeedsHome(s);
+      if (nh) {
+        h += '<div class="sv-home"><div class="sv-home-text"><span class="sv-home-title">' + finNum(nh.amount, "₹") + ' needs a home</span>' +
+             '<span class="sv-home-sub">From payments you tagged Saving, sitting in Free savings.</span></div>' +
+             '<button type="button" id="svHomeBtn">Choose</button></div>';
+      }
+
+      // Safety
+      h += '<h3 class="sv-sec">Safety</h3>';
+      const cover = svCover(s.emergency, s.monthlyExpenses, s.emergencyTarget);
+      h += svCardHtml({ open: "Emergency", name: "Emergency fund", saved: Number(s.emergency) || 0, target: Number(s.emergencyTarget) || 0, line: cover ? escapeHtml(svCoverText(cover)) : "" });
+      if (s.ccBufferGoal) {
+        const cc = s.ccBufferGoal;
+        const full = Number(cc.target) > 0 && Number(cc.saved) >= Number(cc.target);
+        h += svCardHtml({
+          open: cc.name, name: "CC Buffer", saved: Number(cc.saved) || 0, target: Number(cc.target) || 0,
+          line: Number(cc.target) > 0 ? (full ? "Ready for your next bill" : finNum(Math.max(cc.target - cc.saved, 0), "₹") + " to go") : "It builds up from your average card bill."
+        });
+      }
+
+      // Goals
+      h += '<h3 class="sv-sec">Goals</h3>';
+      const goals = (s.goals || []).filter(function (g) { return g.status === "Active" && g.type === "OneTime"; })
+        .sort(function (a, b) { return (b.priority ? 1 : 0) - (a.priority ? 1 : 0); });
+      goals.forEach(function (g) {
+        h += svCardHtml({
+          open: g.name, name: g.name, saved: Number(g.saved) || 0, target: Number(g.target) || 0,
+          badge: g.priority ? '<span class="status-pill success">Priority</span>' : "",
+          line: svPaceHtml(svPaceParts(g, s.paceMonthly, now))
+        });
+      });
+      if (!goals.length) h += '<p class="sv-empty">No goals yet. Add one and the app will tell you how much to put away each month.</p>';
+      h += '<button type="button" class="secondary sv-newgoal" id="svNewGoalBtn">New goal</button>';
+      h += svCardHtml({ open: "Free", name: "Free savings", saved: Number(s.free) || 0, target: 0, line: "Money that does not belong to a goal yet." });
+
+      // Chart
+      const cm = svChartModel(s);
+      if (cm) {
+        const n = cm.bars.length;
+        h += '<h3 class="sv-sec">Last ' + (n === 6 ? "6" : n) + ' months vs goal</h3>';
+        const label = "Saved each month: " + cm.bars.map(function (b) { return b.label + " " + svRs(b.saved) + (cm.goal ? (b.met ? ", goal met" : ", goal not met") : ""); }).join("; ") + (cm.goal ? ". Monthly goal " + svRs(cm.goal) + "." : ".");
+        h += '<div class="sv-card sv-chart" role="img" aria-label="' + escapeHtml(label) + '"><div class="sv-chart-area">' +
+          (cm.goalPct !== null ? '<div class="sv-chart-line" style="bottom:' + cm.goalPct + '%"></div>' : "") +
+          cm.bars.map(function (b) {
+            return '<div class="sv-chart-col"><span class="sv-chart-val" style="--sv-h:' + b.pct + '%">' + svCompact(b.saved) + '</span><div class="sv-chart-bar' + (b.met ? " met" : "") + '" style="height:' + b.pct + '%"></div></div>';
+          }).join("") + '</div><div class="sv-chart-labels">' +
+          cm.bars.map(function (b) { return '<span' + (b.current ? ' class="now"' : "") + '>' + b.label + '</span>'; }).join("") + '</div>' +
+          (cm.goal ? '<p class="sv-line">The dashed line is your monthly goal of ' + svRs(cm.goal) + '. A green bar means you reached it.</p>' : "") + '</div>';
+      }
+
+      // Activity
+      h += '<h3 class="sv-sec" id="svActivityHead">Activity</h3>';
+      svEntriesShown = [];
+      const groups = svGroupEntries(s.recentEntries);
+      if (!groups.length) {
+        h += '<p class="sv-empty" id="svActivityList">No savings activity yet.</p>';
+      } else {
+        h += '<div class="sv-list" id="svActivityList">';
+        groups.forEach(function (g) {
+          h += '<div class="sv-month">' + escapeHtml(g.label) + '</div>';
+          g.entries.forEach(function (e) { h += svRowHtml(e, svEntriesShown.length, now); svEntriesShown.push(e); });
+        });
+        h += '</div>';
+      }
+      return h;
+    }
+
+    function svDetailHtml(s, b) {
+      const now = svIndiaNow();
+      const pct = svPct(b.saved, b.target);
+      let h = '<button type="button" class="back-to-more sv-back" id="svBack">' + SV_CHEVRON + 'Savings</button>';
+      h += '<div class="today-total-box sv-hero"><div class="today-total-label">' + escapeHtml(b.label) + '</div>' +
+           '<div class="today-total-amount">' + finNum(b.saved, "₹") + '</div>';
+      if (b.target > 0) h += '<div class="today-split">of ' + finNum(b.target, "₹") + " · " + pct + '%</div>' + svBarHtml(pct);
+      else if (b.kind === "free") h += '<div class="today-split">Not assigned to a goal yet</div>';
+      h += '</div>';
+
+      if (b.kind === "goal") {
+        const g = b.goal;
+        const remaining = Math.max(b.target - b.saved, 0);
+        h += '<div class="sv-card"><div class="sv-card-top"><span class="sv-card-name">Pace' + (g.priority ? '<span class="status-pill success">Priority</span>' : "") + '</span></div>' +
+             '<p class="sv-pace">' + svPaceHtml(svPaceParts(g, s.paceMonthly, now)) + '</p>';
+        if (!g.targetDate && remaining > 0) {
+          h += '<div class="field sv-plan"><label for="svPlanDate">To finish by</label><input type="date" id="svPlanDate" min="' + svLocalISO(now) + '"></div>' +
+               '<p class="sv-line" id="svPlanOut" aria-live="polite">Pick a date to see how much you would need each month.</p>' +
+               '<button type="button" class="secondary" id="svPlanSave" style="display:none">Save this date</button>';
+        }
+        h += '</div>';
+      } else if (b.kind === "recurring") {
+        h += '<div class="sv-card"><p class="sv-pace">The target follows your average card bill, so it moves a little as your spending does.</p></div>';
+      } else if (b.kind === "emergency") {
+        const c = svCover(b.saved, s.monthlyExpenses, s.emergencyTarget);
+        if (c) h += '<div class="sv-card"><p class="sv-pace">' + escapeHtml(svCoverText(c)) + '.</p></div>';
+      }
+
+      h += '<div class="sv-actions"><button type="button" data-act="add">Add money</button>';
+      if (b.saved > 0) h += '<button type="button" class="secondary" data-act="withdraw">Withdraw</button>';
+      if (b.kind === "goal") {
+        if (b.goal.canAfford) h += '<button type="button" id="svBought">Mark as bought</button>';
+        if (!b.goal.priority) h += '<button type="button" class="secondary" data-act="priority">Make priority</button>';
+        h += '<button type="button" class="secondary" data-act="edit">Edit goal</button>';
+      }
+      h += '</div>';
+
+      const mine = svGoalEntries(s.recentEntries, b.name);
+      h += '<h3 class="sv-sec">Money in and out</h3>';
+      if (!mine.length) {
+        h += '<p class="sv-empty" id="svDetailList">Nothing here yet.</p>';
+      } else {
+        h += '<div class="sv-list" id="svDetailList">';
+        mine.forEach(function (e) { h += svRowHtml(e, svEntriesShown.length, now); svEntriesShown.push(e); });
+        h += '</div>';
+      }
+      return h;
+    }
+
+    function renderSavingsNew(s) {
+      if (svOpenBucket && !svBucket(s, svOpenBucket)) svOpenBucket = null;   // e.g. the goal was just marked as bought
+      svViewEl.classList.toggle("sv-detail-open", !!svOpenBucket);
+      svGoalViewEl.style.display = svOpenBucket ? "block" : "none";
+      svOverviewEl.style.display = svOpenBucket ? "none" : "block";
+      const shown = svOpenBucket ? svGoalViewEl : svOverviewEl;
+      // Same data as last time and already drawn: leave it alone (a quiet refresh must not restart anything).
+      const sig = JSON.stringify([s, svOpenBucket]);
+      if (sig === svLastSig && shown.children.length) return;
+      svLastSig = sig;
+      svOverviewEl.innerHTML = svOverviewHtml(s);   // also rebuilds svEntriesShown
+      if (svOpenBucket) {
+        svGoalViewEl.innerHTML = svDetailHtml(s, svBucket(s, svOpenBucket));
+        const bought = document.getElementById("svBought");
+        if (bought) bindConfirmAction(bought, function () { const g = svFindGoal(svOpenBucket); if (g) purchaseGoalOptimistic(g); });
+      } else {
+        svGoalViewEl.innerHTML = "";
+      }
+    }
+
+    function svGrowChart(root) {
+      (root || document).querySelectorAll(".sv-chart-bar").forEach(function (b, i) {
+        b.style.animationDelay = (i * 60) + "ms";
+        b.classList.remove("sv-grow"); void b.offsetWidth; b.classList.add("sv-grow");
+      });
+    }
+    function svOpenDetail(name) {
+      if (!savingsData || !svBucket(savingsData, name)) return;
+      svOpenBucket = name;
+      renderSavingsNew(savingsData);
+      finSlideIn(svGoalViewEl, "r");
+      finPlayInto(svGoalViewEl, { lists: ["#svDetailList"], bars: true });
+      window.scrollTo(0, 0);
+    }
+    function svCloseDetail() {
+      svOpenBucket = null;
+      if (savingsData) renderSavingsNew(savingsData);
+      finSlideIn(svOverviewEl, "l");
+      window.scrollTo(0, 0);
+    }
+    // Leaving the Savings screen (More menu shown): start on the overview next time.
+    function svLeave() {
+      svOpenBucket = null; svLastSig = "";
+      const v = document.getElementById("view-savings");
+      if (v) v.classList.remove("sv-detail-open");
+      const o = document.getElementById("svOverview"), g = document.getElementById("svGoalView");
+      if (o) o.style.display = "block";
+      if (g) g.style.display = "none";
+    }
+    // The New look switch was flipped: draw the screen in whichever look is now on.
+    function svLookChanged() {
+      svLeave();
+      if (savingsData) renderSavingsGoals(savingsData);
+    }
+
+    // ---- Taps (one listener; the screen is redrawn often) ----
+    document.getElementById("savingsNew").addEventListener("click", function (ev) {
+      if (!finLookOn()) return;
+      const t = ev.target;
+      let el;
+      if ((el = t.closest("[data-entry]"))) { const e = svEntriesShown[Number(el.dataset.entry)]; if (e) svOpenEntrySheet(e); return; }
+      if ((el = t.closest("[data-open]"))) { svOpenDetail(el.dataset.open); return; }
+      if (t.closest("#svAddBtn")) { svOpenAddSheet(); return; }
+      if (t.closest("#svHomeBtn")) { svOpenHomeSheet(); return; }
+      if (t.closest("#svNewGoalBtn")) { svOpenGoalSheet(); return; }
+      if (t.closest("#svBack")) { svCloseDetail(); return; }
+      if (t.closest("#svPlanSave")) {
+        const g = svFindGoal(svOpenBucket), d = document.getElementById("svPlanDate");
+        if (g && d && d.value && !svDatePassed(d.value, svIndiaNow())) svUpdateGoal(g.name, g.target, d.value);
+        return;
+      }
+      if ((el = t.closest("[data-act]"))) {
+        const b = svBucket(savingsData, svOpenBucket);
+        if (!b) return;
+        const act = el.dataset.act;
+        if (act === "add") openQuickAction("add", b.name, b.saved);
+        else if (act === "withdraw") openQuickAction("withdraw", b.name, b.saved);
+        else if (act === "priority" && b.goal) setGoalPriorityOptimistic(b.goal);
+        else if (act === "edit") svOpenEditGoalSheet(b.name);
+      }
+    });
+    // "To finish by <date>": shows the monthly amount straight away, on the phone, without saving anything.
+    function svPlanPreview() {
+      const g = svFindGoal(svOpenBucket), d = document.getElementById("svPlanDate");
+      const out = document.getElementById("svPlanOut"), save = document.getElementById("svPlanSave");
+      if (!g || !d || !out || !save) return;
+      const remaining = Math.max((Number(g.target) || 0) - (Number(g.saved) || 0), 0);
+      const now = svIndiaNow();
+      const need = svMonthlyNeeded(remaining, d.value, now);
+      save.style.display = "none";
+      if (!d.value) { out.textContent = "Pick a date to see how much you would need each month."; return; }
+      if (need === null) { out.textContent = "Pick a date from today onwards."; return; }
+      const p = svParseDate(d.value);
+      out.innerHTML = "To finish by " + escapeHtml(svMonthLabel(p.y, p.m)) + " you would need <strong>" + finNum(need, "₹") + "</strong> a month.";
+      save.style.display = "";
+    }
+    document.getElementById("savingsNew").addEventListener("input", function (ev) { if (ev.target && ev.target.id === "svPlanDate") svPlanPreview(); });
+    document.getElementById("savingsNew").addEventListener("change", function (ev) { if (ev.target && ev.target.id === "svPlanDate") svPlanPreview(); });
+    document.getElementById("svHistoryChip").addEventListener("click", function () {
+      const head = document.getElementById("svActivityHead");
+      const calm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (head) head.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
+    });
+
+    // ---- Add savings (bottom sheet) ----
+    let svPreviewTimer = null, svPreviewToken = 0, svAddMode = "auto";
+
+    function svDestSelectHtml(s, cls, label) {
+      return '<select class="' + cls + '" aria-label="' + escapeHtml(label) + '">' +
+        svDestOptions(s).map(function (d) { return '<option value="' + escapeHtml(d) + '">' + escapeHtml(svDestLabel(d)) + '</option>'; }).join("") + '</select>';
+    }
+    function svAddRowsRead(form) {
+      return Array.prototype.map.call(form.querySelectorAll(".sv-man-row"), function (r) {
+        return { destination: r.querySelector("select").value, amount: r.querySelector("input").value };
+      });
+    }
+    function svAddManualLeft(form) {
+      const out = form.querySelector("#svManualLeft");
+      if (out) out.textContent = svManualLeftText(svAddRowsRead(form), parseFloat(form.querySelector("#svAddAmount").value) || 0);
+    }
+    function svAddManualRow(form) {
+      const row = document.createElement("div");
+      row.className = "sv-man-row";
+      row.innerHTML = svDestSelectHtml(savingsData, "sv-select", "Where this part goes") +
+        '<input type="number" inputmode="decimal" min="0" step="1" placeholder="Rest of it" aria-label="Amount for this row">';
+      row.querySelector("input").addEventListener("input", function () { svAddManualLeft(form); });
+      form.querySelector("#svManualRows").appendChild(row);
+    }
+    function svAddPreview(form) {
+      const amount = parseFloat(form.querySelector("#svAddAmount").value);
+      const out = form.querySelector("#svAddAuto");
+      clearTimeout(svPreviewTimer);
+      if (!amount || amount <= 0) { svPreviewToken++; out.innerHTML = '<p class="sv-hint">Enter an amount to see where it goes.</p>'; return; }
+      const token = ++svPreviewToken;
+      svPreviewTimer = setTimeout(function () {
+        callAppsScript({ action: "previewSavingsSplit", idToken: currentUser.idToken, amount: amount })
+          .then(function (data) {
+            if (token !== svPreviewToken) return;   // typed again meanwhile
+            if (!data.ok) { out.textContent = data.error; return; }
+            lastAutoSplitPreview = { amount: amount, breakdown: data.breakdown };
+            const rows = svPreviewRows(data.breakdown, savingsData && savingsData.ccBufferGoal ? savingsData.ccBufferGoal.name : "");
+            out.innerHTML = rows.length
+              ? rows.map(function (r) { return '<div class="sv-split-row"><span>' + escapeHtml(r.label) + '</span><span>' + svRs(r.amount) + '</span></div>'; }).join("")
+              : '<p class="sv-hint">Enter an amount to see where it goes.</p>';
+          })
+          .catch(function () { if (token === svPreviewToken) out.textContent = "Couldn't work out the split. You can still choose where it goes."; });
+      }, 250);
+    }
+    function svOpenAddSheet(pre) {
+      if (!finLookOn() || finSheetOpen || !savingsData) return;
+      pre = pre || {};
+      const form = document.getElementById("svAddForm");
+      form.innerHTML =
+        '<div class="field sv-amount-field"><label for="svAddAmount">Amount (₹)</label><input type="number" id="svAddAmount" inputmode="decimal" min="0" step="1" placeholder="0"></div>' +
+        '<div class="field"><label for="svAddNote">Note (optional)</label><input type="text" id="svAddNote" placeholder="e.g. monthly saving"></div>' +
+        '<div class="type-toggle sv-mode" role="group" aria-label="How to split it">' +
+          '<button type="button" class="type-btn" data-mode="auto">Suggested split</button>' +
+          '<button type="button" class="type-btn" data-mode="manual">I will choose</button></div>' +
+        '<div class="sv-where">Where it will go</div>' +
+        '<div id="svAddAuto" class="sv-preview" aria-live="polite"></div>' +
+        '<div id="svAddManual" style="display:none"><div id="svManualRows"></div>' +
+          '<button type="button" class="secondary" id="svManualAdd">Add another row</button><p class="sv-line" id="svManualLeft"></p></div>' +
+        '<button type="button" id="svAddSave">Save</button><div class="pending-result" id="svAddResult"></div>';
+      const amountEl = form.querySelector("#svAddAmount"), noteEl = form.querySelector("#svAddNote");
+      const resultEl = form.querySelector("#svAddResult");
+      amountEl.value = pre.amount || ""; noteEl.value = pre.note || "";
+      function setMode(m) {
+        svAddMode = m;
+        form.querySelectorAll(".sv-mode .type-btn").forEach(function (b) {
+          const on = b.dataset.mode === m;
+          b.classList.toggle("active", on);
+          b.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        form.querySelector("#svAddAuto").style.display = m === "auto" ? "block" : "none";
+        form.querySelector("#svAddManual").style.display = m === "manual" ? "block" : "none";
+        if (m === "manual") {
+          if (!form.querySelector(".sv-man-row")) {
+            svAddManualRow(form); svAddManualRow(form);
+            const second = form.querySelectorAll(".sv-man-row select")[1];
+            if (second) second.value = "Free";   // a sensible second choice: what is left can stay in Free savings
+          }
+          svAddManualLeft(form);
+        } else { svAddPreview(form); }
+        resultEl.textContent = "";
+      }
+      form.querySelectorAll(".sv-mode .type-btn").forEach(function (b) { b.addEventListener("click", function () { setMode(b.dataset.mode); }); });
+      form.querySelector("#svManualAdd").addEventListener("click", function () { svAddManualRow(form); svAddManualLeft(form); });
+      amountEl.addEventListener("input", function () { if (svAddMode === "auto") svAddPreview(form); else svAddManualLeft(form); });
+      form.querySelector("#svAddSave").addEventListener("click", function () {
+        const amount = parseFloat(amountEl.value), note = noteEl.value.trim();
+        if (!amount || amount <= 0) { resultEl.textContent = "Enter an amount first."; return; }
+        if (svAddMode === "auto") svSaveAuto(form, amount, note); else svSaveManual(form, amount, note);
+      });
+      setMode(pre.mode === "manual" ? "manual" : "auto");
+      finOpenSheet({
+        form: form, title: "Add savings", sub: "Choose how the money is split, then save.",
+        focus: "svAddAmount", opener: "svAddBtn", dismiss: function () { clearTimeout(svPreviewTimer); svPreviewToken++; }
+      });
+    }
+    // Show new money in Activity at once (no row yet, so it cannot be edited until the quiet refresh brings the real one).
+    function svAddSyntheticEntries(s, parts, note, type) {
+      if (!s || !Array.isArray(s.recentEntries)) return;
+      parts.slice().reverse().forEach(function (p) {
+        s.recentEntries.unshift({ row: null, date: svLocalISO(), amount: p.amount, type: type, source: "you", note: note, destination: p.destination });
+      });
+    }
+    // Waits (up to 5 minutes) for the other sheet to close and the Savings screen to be showing, then reopens the Add form with what was typed.
+    let svReopenTimer = null;
+    function svQueueReopen(pre, text, tries) {
+      clearTimeout(svReopenTimer);
+      if (tries > 300 || !finLookOn()) return;
+      svReopenTimer = setTimeout(function () {
+        const v = document.getElementById("view-savings");
+        const showing = v && v.offsetParent !== null;
+        if (!finSheetOpen && showing) {
+          svOpenAddSheet(pre);
+          const r = document.getElementById("svAddResult");
+          if (r) r.textContent = text;
+        } else {
+          svQueueReopen(pre, text, tries + 1);
+        }
+      }, 1000);
+    }
+    function svSaveFailed(form, canReopen, pre, msg) {
+      const text = "Couldn't save (" + msg + "). Check your connection and try again.";
+      if (canReopen) {
+        if (!finSheetOpen) {
+          FinToast.show({ text: text, ms: 5000 });
+          svOpenAddSheet(pre);
+          const r = document.getElementById("svAddResult");
+          if (r) r.textContent = text;
+        } else {
+          // Another sheet is open right now: say what was lost (with the typed amount), and bring the form back as soon as it closes.
+          FinToast.show({ text: "Couldn't save " + svRs(pre.amount) + " to savings (" + msg + "). It will come back when you close this.", ms: 6000 });
+          svQueueReopen(pre, text, 0);
+        }
+      } else {
+        form.querySelector("#svAddResult").textContent = text;
+      }
+    }
+    // Same steps as the older Auto Split confirm: use the split the server previewed moments ago, show it at once, undo if the save fails.
+    function svSaveAuto(form, amount, note) {
+      const resultEl = form.querySelector("#svAddResult");
+      const canOpt = savingsData && lastAutoSplitPreview && lastAutoSplitPreview.amount === amount;
+      const snapshot = canOpt ? cloneSavingsData() : null;
+      if (canOpt) {
+        const b = lastAutoSplitPreview.breakdown;
+        const parts = svPreviewRows(b, savingsData.ccBufferGoal ? savingsData.ccBufferGoal.name : "");
+        if (b.emergency > 0) applySavingsBucketDelta(savingsData, "Emergency", b.emergency);
+        if (b.ccBuffer > 0 && savingsData.ccBufferGoal) applySavingsBucketDelta(savingsData, savingsData.ccBufferGoal.name, b.ccBuffer);
+        if (b.goal > 0 && b.goalName) applySavingsBucketDelta(savingsData, b.goalName, b.goal);
+        if (b.free > 0) applySavingsBucketDelta(savingsData, "Free", b.free);
+        svAddSyntheticEntries(savingsData, parts, note, "auto");
+        saveCache("savingsGoals", savingsData);
+        renderSavingsGoals(savingsData);
+        finCloseSheet(false, true);
+        FinToast.show({ text: "Saved", ms: 2200 });
+      } else {
+        resultEl.textContent = "Saving...";
+      }
+      clearSavingsRelatedCaches();
+      function fail(msg) {
+        if (snapshot) { savingsData = snapshot; saveCache("savingsGoals", savingsData); renderSavingsGoals(savingsData); }
+        svSaveFailed(form, !!canOpt, { amount: amount, note: note, mode: "auto" }, msg);
+      }
+      callAppsScript({ action: "saveSavingsAuto", idToken: currentUser.idToken, amount: amount, note: note })
+        .then(function (data) {
+          if (!data.ok) { fail(data.error); return; }
+          if (!canOpt) { finCloseSheet(false, true); FinToast.show({ text: "Saved", ms: 2200 }); }
+          refreshSavings();
+        })
+        .catch(function (err) { fail(err.message); });
+    }
+    // Same steps as the older Manual split save (every row is known exactly, so it always shows at once).
+    function svSaveManual(form, amount, note) {
+      const resultEl = form.querySelector("#svAddResult");
+      const chk = svManualCheck(svAddRowsRead(form), amount);
+      if (!chk.ok) { resultEl.textContent = chk.error; return; }
+      const snapshot = cloneSavingsData();
+      chk.rows.forEach(function (r) { applySavingsBucketDelta(savingsData, r.destination, r.amount); });
+      svAddSyntheticEntries(savingsData, chk.rows, note, "manual");
+      saveCache("savingsGoals", savingsData);
+      renderSavingsGoals(savingsData);
+      finCloseSheet(false, true);
+      FinToast.show({ text: "Saved", ms: 2200 });
+      clearSavingsRelatedCaches();
+      function fail(msg) {
+        savingsData = snapshot; saveCache("savingsGoals", savingsData); renderSavingsGoals(savingsData);
+        svSaveFailed(form, true, { amount: amount, note: note, mode: "manual" }, msg);
+      }
+      callAppsScript({ action: "saveSavingsManual", idToken: currentUser.idToken, amount: amount, rows: chk.rows, note: note })
+        .then(function (data) { if (!data.ok) { fail(data.error); return; } refreshSavings(); })
+        .catch(function (err) { fail(err.message); });
+    }
+
+    // ---- "Needs a home" (bottom sheet): move payments that landed in Free savings ----
+    function svHomeMsg(form, text) { const m = form.querySelector("#svHomeMsg"); if (m) m.textContent = text || ""; }
+    function svRenderHomeList(form) {
+      const nh = svNeedsHome(savingsData);
+      const now = new Date();
+      if (!nh || !nh.entries.length) {
+        form.innerHTML = '<p class="sv-empty">Nothing is waiting. Every saved payment has a home.</p><p class="sv-line" id="svHomeMsg" aria-live="polite"></p><button type="button" id="svHomeDone">Done</button>';
+        form.querySelector("#svHomeDone").addEventListener("click", function () { finCloseSheet(); });
+        return;
+      }
+      form.innerHTML = '<div class="sv-home-list">' + nh.entries.map(function (e, i) {
+        const bits = [svShortDate(e.date, now)];
+        if (String(e.note || "").trim()) bits.push(String(e.note).trim());
+        return '<div class="sv-home-item" data-i="' + i + '"><span class="sv-row-main"><span class="sv-row-title">' + svRs(e.amount) + '</span>' +
+          '<span class="sv-row-sub">' + escapeHtml(bits.join(" · ")) + '</span></span>' +
+          '<select class="sv-select" aria-label="Where ' + svRs(e.amount) + ' should go">' +
+          svDestOptions(savingsData).map(function (d) {
+            return '<option value="' + escapeHtml(d) + '"' + (d === "Free" ? " selected" : "") + '>' + escapeHtml(d === "Free" ? "Keep in Free" : svDestLabel(d)) + '</option>';
+          }).join("") + '</select></div>';
+      }).join("") + '</div>' +
+        (nh.count > nh.entries.length ? '<p class="sv-line">Showing the newest ' + nh.entries.length + ' of ' + nh.count + '. The rest appear here as you finish these.</p>' : "") +
+        '<p class="sv-line" id="svHomeMsg" aria-live="polite"></p>';
+      form.querySelectorAll(".sv-home-item select").forEach(function (sel) {
+        sel.addEventListener("change", function () {
+          if (sel.value === "Free") return;
+          const item = sel.closest(".sv-home-item");
+          const e = nh.entries[Number(item.dataset.i)];
+          item.classList.add("sv-leaving");
+          svMoveEntry(form, e, sel.value, item);
+        });
+      });
+    }
+    function svOpenHomeSheet() {
+      if (!finLookOn() || finSheetOpen || !savingsData || !svNeedsHome(savingsData)) return;
+      const form = document.getElementById("svHomeForm");
+      svRenderHomeList(form);
+      finOpenSheet({ form: form, title: "Give these a home", sub: "Money from payments you tagged Saving. Choose where each one belongs.", focus: null, opener: "svHomeBtn", dismiss: function () {} });
+      FinMotion.stagger(form.querySelector(".sv-home-list"));
+    }
+    // Changes ONLY the entry's destination (amount and note stay as they are), with the same updateSavingsEntry action the edit card uses.
+    function svMoveEntry(form, e, dest, itemEl) {
+      if (e.row === null || e.row === undefined) {
+        svHomeMsg(form, "This one is still saving. Try again in a moment.");
+        itemEl.classList.remove("sv-leaving");
+        const sel = itemEl.querySelector("select"); if (sel) sel.value = "Free";
+        return;
+      }
+      const snapshot = cloneSavingsData();
+      const amount = Number(e.amount) || 0;
+      applySavingsBucketDelta(savingsData, "Free", -amount);
+      applySavingsBucketDelta(savingsData, dest, amount);
+      const nh = savingsData.needsHome;
+      nh.entries = (nh.entries || []).filter(function (x) { return x.row !== e.row; });
+      nh.amount = Math.max((Number(nh.amount) || 0) - amount, 0);
+      nh.count = Math.max((Number(nh.count) || 0) - 1, 0);
+      const mine = (savingsData.recentEntries || []).find(function (x) { return x.row === e.row; });
+      if (mine) mine.destination = dest;
+      saveCache("savingsGoals", savingsData);
+      clearSavingsRelatedCaches();
+      renderSavingsGoals(savingsData);
+      svHomeMsg(form, svRs(amount) + " moved to " + svDestLabel(dest) + ".");
+      setTimeout(function () { if (finSheetOpen && finSheetCur && finSheetCur.form === form) { const msg = form.querySelector("#svHomeMsg"); const keep = msg ? msg.textContent : ""; svRenderHomeList(form); svHomeMsg(form, keep); } }, 220);
+      function fail(msg) {
+        savingsData = snapshot; saveCache("savingsGoals", savingsData); renderSavingsGoals(savingsData);
+        if (finSheetOpen && finSheetCur && finSheetCur.form === form) { svRenderHomeList(form); svHomeMsg(form, "Couldn't move it (" + msg + "). Check your connection and try again."); }
+        else FinToast.show({ text: "Couldn't move " + svRs(amount) + " (" + msg + "). Check your connection and try again.", ms: 5000 });
+      }
+      callAppsScript({ action: "updateSavingsEntry", idToken: currentUser.idToken, row: e.row, amount: amount, note: e.note || "", destination: dest })
+        .then(function (data) { if (data.ok) refreshSavings(); else fail(data.error); })
+        .catch(function (err) { fail(err.message); });
+    }
+
+    // ---- New goal / Edit goal (bottom sheets) ----
+    // px = "svGoal" for the New goal sheet, "svEdit" for the Edit goal sheet (ids must be unique on the page).
+    function svGoalFieldsHtml(px, withName) {
+      return (withName ? '<div class="field"><label for="' + px + 'Name">Goal name</label><input type="text" id="' + px + 'Name" placeholder="e.g. New phone"></div>' : "") +
+        '<div class="field"><label for="' + px + 'Target">Target amount (₹)</label><input type="number" id="' + px + 'Target" inputmode="decimal" min="0" step="1" placeholder="0"></div>' +
+        '<div class="field"><label for="' + px + 'Date">Target date (optional)</label><input type="date" id="' + px + 'Date" min="' + svLocalISO() + '"></div>' +
+        '<p class="sv-line">With a date, the app shows how much to put away each month.</p>';
+    }
+    function svOpenGoalSheet(pre) {
+      if (!finLookOn() || finSheetOpen || !savingsData) return;
+      pre = pre || {};
+      const form = document.getElementById("svGoalForm");
+      form.innerHTML = svGoalFieldsHtml("svGoal", true) + '<button type="button" id="svGoalSave">Save goal</button><div class="pending-result" id="svGoalResult"></div>';
+      form.querySelector("#svGoalName").value = pre.name || "";
+      form.querySelector("#svGoalTarget").value = pre.target || "";
+      form.querySelector("#svGoalDate").value = pre.date || "";
+      form.querySelector("#svGoalSave").addEventListener("click", function () {
+        const name = form.querySelector("#svGoalName").value.trim();
+        const target = parseFloat(form.querySelector("#svGoalTarget").value);
+        const date = form.querySelector("#svGoalDate").value;
+        const res = form.querySelector("#svGoalResult");
+        if (!name || !target || target <= 0) { res.textContent = "Enter a goal name and a target above zero."; return; }
+        if (date && svDatePassed(date, svIndiaNow())) { res.textContent = "Pick a date from today onwards, or leave it empty."; return; }
+        svSaveGoal(name, target, date);
+      });
+      finOpenSheet({ form: form, title: "New goal", sub: "Something you are saving up for.", focus: "svGoalName", opener: "svNewGoalBtn", dismiss: function () {} });
+    }
+    function svSaveGoal(name, target, date) {
+      const snapshot = cloneSavingsData();
+      const hasActiveOneTime = savingsData.goals.some(function (g) { return g.type === "OneTime" && g.status === "Active"; });
+      savingsData.goals.push({
+        row: null, name: name, type: "OneTime", target: target, saved: 0, remaining: target, canAfford: false, status: "Active",
+        priority: !hasActiveOneTime, dateAdded: "", targetDate: date || "", monthsLeft: null, monthlyNeeded: null
+      });
+      savingsData.destinations = (savingsData.destinations || []).concat([name]);
+      saveCache("savingsGoals", savingsData);
+      clearSavingsRelatedCaches();
+      renderSavingsGoals(savingsData);
+      finCloseSheet(false, true);
+      FinToast.show({ text: "Goal added", ms: 2200 });
+      function fail(msg) {
+        savingsData = snapshot; saveCache("savingsGoals", savingsData); renderSavingsGoals(savingsData);
+        FinToast.show({ text: "Couldn't save the goal (" + msg + "). Check your connection and try again.", ms: 5000 });
+        svOpenGoalSheet({ name: name, target: target, date: date });
+      }
+      const req = { action: "addSavingsGoal", idToken: currentUser.idToken, name: name, type: "OneTime", target: target };
+      if (date) req.targetDate = date;
+      callAppsScript(req)
+        .then(function (data) { if (data.ok) refreshSavings(); else fail(data.error); })
+        .catch(function (err) { fail(err.message); });
+    }
+    function svOpenEditGoalSheet(name) {
+      const g = svFindGoal(name);
+      if (!finLookOn() || finSheetOpen || !g) return;
+      const form = document.getElementById("svEditGoalForm");
+      // A date that has already passed is only a hint: changing just the amount is still allowed.
+      const passedHint = g.targetDate && svDatePassed(g.targetDate, svIndiaNow())
+        ? '<p class="sv-line" id="svEditHint">The date you set (' + escapeHtml(svShortDate(g.targetDate, svIndiaNow())) + ') has passed. You can still change the target, or pick a new date.</p>' : "";
+      form.innerHTML = svGoalFieldsHtml("svEdit", false) + passedHint + '<button type="button" id="svEditSave">Save changes</button><div class="pending-result" id="svEditResult"></div>';
+      form.querySelector("#svEditTarget").value = g.target || "";
+      form.querySelector("#svEditDate").value = g.targetDate || "";
+      form.querySelector("#svEditSave").addEventListener("click", function () {
+        const target = parseFloat(form.querySelector("#svEditTarget").value);
+        const date = form.querySelector("#svEditDate").value;
+        const res = form.querySelector("#svEditResult");
+        if (!target || target <= 0) { res.textContent = "Enter a target above zero."; return; }
+        if (date && date !== g.targetDate && svDatePassed(date, svIndiaNow())) { res.textContent = "Pick a date from today onwards, or clear it."; return; }
+        if (svUpdateGoal(name, target, date)) { finCloseSheet(false, true); FinToast.show({ text: "Saved", ms: 2200 }); }
+        else res.textContent = "This goal is still being saved. Try again in a moment.";
+      });
+      finOpenSheet({ form: form, title: "Edit " + g.name, sub: "Change the target or the date. Clear the date to remove it.", focus: "svEditTarget", opener: null, dismiss: function () {} });
+    }
+    // Returns false (nothing done) if the goal has no real row yet.
+    function svUpdateGoal(name, target, date) {
+      const g = svFindGoal(name);
+      if (!g || g.row === null || g.row === undefined) return false;
+      const snapshot = cloneSavingsData();
+      const row = g.row;
+      const dateChanged = (date || "") !== (g.targetDate || "");   // only then does the date go to the server
+      g.target = target; g.targetDate = date || "";
+      g.remaining = Math.max(target - (Number(g.saved) || 0), 0);
+      g.canAfford = target > 0 && (Number(g.saved) || 0) >= target;
+      g.monthsLeft = null; g.monthlyNeeded = null;     // worked out again on the phone until the server sends fresh ones
+      saveCache("savingsGoals", savingsData);
+      clearSavingsRelatedCaches();
+      renderSavingsGoals(savingsData);
+      function fail(msg) {
+        savingsData = snapshot; saveCache("savingsGoals", savingsData); renderSavingsGoals(savingsData);
+        FinToast.show({ text: "Couldn't save the goal (" + msg + "). Check your connection and try again.", ms: 5000 });
+      }
+      const req = { action: "updateSavingsGoal", idToken: currentUser.idToken, row: row, target: target };
+      if (dateChanged) req.targetDate = date || "";
+      callAppsScript(req)
+        .then(function (data) { if (data.ok) refreshSavings(); else fail(data.error); })
+        .catch(function (err) { fail(err.message); });
+      return true;
+    }
+
+    // ---- Edit / delete one past entry: the older edit card, in a sheet ----
+    function svOpenEntrySheet(e) {
+      if (!finLookOn() || finSheetOpen) return;
+      if (e.row === null || e.row === undefined) { FinToast.show({ text: "This was only just added. Give it a moment, then tap it again.", ms: 3000 }); return; }
+      const form = document.getElementById("svEntryForm");
+      form.innerHTML = "";
+      const card = buildSavingsEntryItem(e);
+      form.appendChild(card);
+      const res = card.querySelector(".pending-result");
+      // The card writes its own errors; the sheet is already closed by then, so say it at the bottom of the screen.
+      new MutationObserver(function () {
+        if (/^Couldn't/.test(res.textContent)) FinToast.show({ text: res.textContent, ms: 5000 });
+      }).observe(res, { childList: true, characterData: true, subtree: true });
+      card.querySelector(".entry-save-btn").addEventListener("click", function () {
+        if (res.textContent === "Saved.") { finCloseSheet(false, true); FinToast.show({ text: "Saved", ms: 2200 }); }
+      });
+      card.addEventListener("entry-deleted", function () {
+        finCloseSheet(false, true); FinToast.show({ text: "Deleted", ms: 2200 });
+      });
+      finOpenSheet({ form: form, title: "Edit entry", sub: svSourceLabel(svSource(e)) + " · " + svShortDate(e.date, new Date()), focus: null, opener: null, dismiss: function () {} });
     }
 
     // ---------------------------------------------------------
@@ -15341,6 +16558,7 @@
         }
       } catch (e) { /* ignore */ }
       finApplyLabels();      // "Money" in the new look, "Advisors" in the old
+      svLookChanged();       // Savings: draw whichever look is now on
       finSyncSwitches();
       finOnbClose();
       applyHiddenScreens(hiddenScreens);   // this phone's "what I use" choices only count in the new look
