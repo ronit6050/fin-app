@@ -439,11 +439,17 @@ function invIsAddedMoney_(kind, amount){
   return (kind === INV_KIND_PAYMENT_ || kind === INV_KIND_MANUAL_) && amount > 0;
 }
 
+function invBump_(src, idx, amount){
+  const m = src[idx] || (src[idx] = {});
+  m[amount] = (m[amount] || 0) + 1;
+}
+
 // Pure. rows = Investments data rows WITHOUT the header (sheet row = index + 2).
 // instruments = [{name, category, sipAmount, sipDay, sipActive}]. now can be injected for tests.
 // archiveRows (optional) = rows moved to Investments_Archive by "start over". Their payments / hand-added money still
 // count in the monthly bars and in each SIP's paid history (they really happened), but never in the totals or holdings.
-function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now, archiveRows){
+// bankRows (optional) = [date, name, amount] for each bank payment tagged Investment (getInvestmentsOverview_ builds them).
+function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now, archiveRows, bankRows){
   monthlyGoal = Number(monthlyGoal) || 0;
   now = now || new Date();
   const nowIdx = invMonthIndex_(now);
@@ -451,7 +457,7 @@ function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now, archiv
 
   const byName = {};                       // name -> {putIn, last, entries:[], paymentMonths:{idx:true}}
   const monthAdded = {};                   // month index -> money added
-  const liveAdded = [];                    // {name, idx, amount} of live added money, to catch a payment typed in again after start over
+  const srcLive = {}, srcHist = {}, srcBank = {};   // month index -> {amount: how many}, one per place a payment can come from
   const histMonths = {};                   // name -> {month index: date} from the archive
   let totalPutIn = 0, addedSinceStart = 0;
 
@@ -469,31 +475,56 @@ function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now, archiv
     h.entries.push({ row: i + 2, date: d ? invIsoOf_(d) : "", amount: amount, kind: kind, note: (r[3] || "").toString() });
     if(d && invIsAddedMoney_(kind, amount)){
       const idx = invMonthIndex_(d);
-      monthAdded[idx] = (monthAdded[idx] || 0) + amount;
+      if(kind === INV_KIND_MANUAL_) monthAdded[idx] = (monthAdded[idx] || 0) + amount;
+      else invBump_(srcLive, idx, amount);
       h.paymentMonths[idx] = d;
-      liveAdded.push({ name: name, idx: idx, amount: amount });
     }
   });
 
   const knownNames = {};
   instruments.forEach(function(i){ knownNames[i.name] = true; });
+  // An old free-typed name (e.g. "Mutual Funds SIP") that is not one of the holdings: when exactly ONE SIP holding has this
+  // exact amount, it is that SIP (same rule "start over" uses for the SIP memory).
+  function resolveName(name, amount){
+    if(knownNames[name]) return name;
+    const same = instruments.filter(function(i){ return Number(i.sipAmount) > 0 && Number(i.sipAmount) === amount; });
+    return same.length === 1 ? same[0].name : name;
+  }
+  function remember(name, idx, d){ (histMonths[name] || (histMonths[name] = {}))[idx] = d; }
+
+  // Money added by hand ("manual") always counts on its own. Money the app saw leave the bank can reach us from up to three
+  // places that overlap: the live entries, the archive from "start over", and the bank payments themselves (Financial Event
+  // "Investment"). Each of those is a copy of the same real payment, so per month the copies are merged: for each amount, the
+  // largest number of copies from any ONE place is what really happened. That fills gaps (a payment never logged on the
+  // Investments tab) without ever counting a payment twice, whatever name it was filed under.
   (archiveRows || []).forEach(function(r){
-    let name = (r[1] || "").toString().trim();
     const amount = Number(r[2]) || 0;
     const d = invEntryDate_(r[0]);
-    if(!name || !d || !invIsAddedMoney_(invKind_(r), amount)) return;
-    // An old free-typed name (e.g. "Mutual Funds SIP") that is not one of the holdings: when exactly ONE SIP holding has this
-    // exact amount, it is that SIP (same rule "start over" uses for the SIP memory). Without it the payment could not be
-    // matched to the one typed in again after starting over, and would count twice.
-    if(!knownNames[name]){
-      const same = instruments.filter(function(i){ return Number(i.sipAmount) > 0 && Number(i.sipAmount) === amount; });
-      if(same.length === 1) name = same[0].name;
-    }
+    const rawName = (r[1] || "").toString().trim();
+    if(!rawName || !d || !invIsAddedMoney_(invKind_(r), amount)) return;
     const idx = invMonthIndex_(d);
-    const again = liveAdded.some(function(a){ return a.name === name && a.idx === idx && a.amount === amount; });
-    if(again) return;                      // "Already paid this month" (or a re-entered payment) is already counted
-    monthAdded[idx] = (monthAdded[idx] || 0) + amount;
-    (histMonths[name] || (histMonths[name] = {}))[idx] = d;
+    if(invKind_(r) === INV_KIND_MANUAL_) monthAdded[idx] = (monthAdded[idx] || 0) + amount;
+    else invBump_(srcHist, idx, amount);
+    remember(resolveName(rawName, amount), idx, d);
+  });
+  (bankRows || []).forEach(function(r){
+    const amount = Number(r[2]) || 0;
+    const d = invEntryDate_(r[0]);
+    if(!d || !(amount > 0)) return;
+    const idx = invMonthIndex_(d);
+    invBump_(srcBank, idx, amount);
+    const rawName = (r[1] || "").toString().trim();
+    if(rawName) remember(resolveName(rawName, amount), idx, d);
+  });
+  const months = {};
+  [srcLive, srcHist, srcBank].forEach(function(src){ Object.keys(src).forEach(function(k){ months[k] = true; }); });
+  Object.keys(months).forEach(function(k){
+    const amounts = {};
+    [srcLive, srcHist, srcBank].forEach(function(src){ Object.keys(src[k] || {}).forEach(function(a){ amounts[a] = true; }); });
+    Object.keys(amounts).forEach(function(a){
+      const copies = Math.max((srcLive[k] || {})[a] || 0, (srcHist[k] || {})[a] || 0, (srcBank[k] || {})[a] || 0);
+      monthAdded[k] = (monthAdded[k] || 0) + Number(a) * copies;
+    });
   });
 
   const monthly = [];
@@ -589,6 +620,28 @@ function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now, archiv
   };
 }
 
+// Bank payments the owner confirmed as an Investment (Transactions: a debit with Financial Event "Investment", column R).
+// A bank text that only ANNOUNCES a later payment ("will be deducted on ...", an advance e-mandate notice) is not a payment
+// and is skipped. Returns [date, name, amount]; never throws (no Transactions tab = no bank rows).
+function invBankInvestmentRows_(){
+  try{
+    const sheet = dbSs_().getSheetByName("Transactions");
+    if(!sheet) return [];
+    const data = sheet.getDataRange().getValues();
+    const out = [];
+    for(let i = 1; i < data.length; i++){
+      const r = data[i];
+      if((r[3] || "").toString().trim().toLowerCase() !== "debit") continue;
+      if((r[17] || "").toString().trim() !== "Investment") continue;
+      if(/will be (deducted|debited)/i.test((r[10] || "").toString())) continue;
+      out.push([r[0], (r[18] || "").toString().trim(), Number(r[5]) || 0]);
+    }
+    return out;
+  }catch(err){
+    return [];
+  }
+}
+
 // Reads the two tabs and the monthly goal, then calls the pure function above.
 function getInvestmentsOverview_(){
   const invSheet = dbSs_().getSheetByName("Investments");
@@ -598,7 +651,7 @@ function getInvestmentsOverview_(){
   const goal = (typeof getSettings === "function") ? (getSettings().monthlyInvestmentGoal || 0) : 0;
   const archSheet = dbSs_().getSheetByName("Investments_Archive");
   const archive = archSheet ? archSheet.getDataRange().getValues().slice(1) : [];
-  return computeInvestmentsOverview_(rows, list, goal, new Date(), archive);
+  return computeInvestmentsOverview_(rows, list, goal, new Date(), archive, invBankInvestmentRows_());
 }
 
 /* ============================================

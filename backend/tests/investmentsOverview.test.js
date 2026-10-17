@@ -303,6 +303,37 @@ console.log("\n--- 13b. An old free-typed SIP name in the archive is not counted
   assert(n.trackedMonths === 1 && n.paidMonths === 1, "the old-name September payment counts as the Nifty SIP's history");
 }
 
+
+console.log("\n--- 13c. Bank payments fill gaps in the bars without double counting ---");
+{
+  const TX_HEADER = ["Date", "Time", "Bank", "Type", "Mode", "Amount", "Reference", "Counterparty", "Channel", "Source", "RawSMS", "Sender", "Note", "Category", "TelegramMsgID", "Processed", "NeedWantSaving", "FinancialEvent", "FinancialEventName"];
+  const tx = (date, amount, name, raw, fe, type) => [date, "", "HDFC", type || "debit", "upi", amount, "", "iccl", "", "", raw || "Sent Rs." + amount, "", "", "", "", "YES", "", fe === undefined ? "Investment" : fe, name];
+  const w = world([["2026-10-10", "HDFC Nifty 50 Index Fund", 3000, "SIP paid this month", "payment"]], INS);
+  w.addSheet("Investments_Archive", [["Date", "Name", "Amount", "Note", "Kind", "ArchivedOn"],
+    ["2026-09-10", "HDFC Mid Cap Fund", 4000, "x", "", "2026-10-17"]]);
+  w.addSheet("Transactions", [TX_HEADER,
+    tx("2026-10-10", 3000, "Mutual Funds SIP"),                       // the same payment as the live one (old name)
+    tx("2026-09-10", 4000, "HDFC Mid Cap Fund"),                      // the same payment as the archived one
+    tx("2026-09-10", 3000, "Mutual Funds SIP"),                       // never logged on the Investments tab: fills the gap
+    tx("2026-08-10", 3000, "Mutual Funds SIP"),
+    tx("2026-07-08", 3000, "Mutual Funds SIP", "E-Mandate! Rs.3000.00 will be deducted on 10/07/26"),   // an advance notice, not a payment
+    tx("2026-07-10", 3000, "Mutual Funds SIP"),
+    tx("2026-07-12", 500, "", "x", "Rent"),                           // not an investment
+    tx("2026-07-13", 800, "", "x", "Investment", "credit")]);         // not a debit
+  const o = w.sb.getInvestmentsOverview_();
+  const bar = (m) => o.monthly.find((b) => b.month === m).amount;
+  assert(bar(10) === 3000, "October: live + bank copy of the same payment = 3000, not 6000 (got " + bar(10) + ")");
+  assert(bar(9) === 7000, "September: archived 4000 + the 3000 only the bank knew (got " + bar(9) + ")");
+  assert(bar(8) === 3000, "August: a payment only the bank knew still shows (got " + bar(8) + ")");
+  assert(bar(7) === 3000, "July: the advance 'will be deducted' notice is not counted (got " + bar(7) + ")");
+  assert(o.totalPutIn === 3000, "the total is still only the Investments tab (got " + o.totalPutIn + ")");
+  const n = o.sips.find((s) => s.name === "HDFC Nifty 50 Index Fund");
+  assert(n.trackedMonths === 3 && n.paidMonths === 3, "the Nifty SIP's history now includes Jul, Aug and Sep from the bank (got " + n.paidMonths + "/" + n.trackedMonths + ")");
+  const manual = world([["2026-10-12", "Tata Steel", 3000, "top-up", "manual"], ["2026-10-10", "HDFC Nifty 50 Index Fund", 3000, "SIP", "payment"]], INS);
+  manual.addSheet("Transactions", [TX_HEADER, tx("2026-10-10", 3000, "HDFC Nifty 50 Index Fund")]);
+  assert(manual.sb.getInvestmentsOverview_().thisMonth === 6000, "money you added by hand is never merged with a bank payment of the same amount");
+}
+
 console.log("\n--- 14. Remove a holding you do not have ---");
 {
   const w = world([["2026-10-10", "Tata Steel", 500, "", "manual"]], INS,
