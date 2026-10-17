@@ -6193,8 +6193,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-17-12";
-    const APP_CHANGELOG = "Home is redesigned: a card tells you the date your money will run out at your current pace (you confirm your bank balance once and the app keeps count; set your salary day in Settings or let it work it out), a Needs you list shows notes waiting and bills coming up, and Latest shows your newest transactions. A payment card in Pending now has an Investment button: tap it, choose which holding the money went into, and it is added to that holding on the Investments screen and left out of your spending. Marking a payment as an investment now tells you if it was not added because that holding already had the same amount within 3 days, and \"No, regular spend\" in History takes the entry back out. New look preview: in Investments you can remove a holding you do not have (when nothing is put into it), and the last-6-months chart now includes payments from before you started over. New look preview: the Investments screen is redesigned, with what you have put in so far, this month against your goal, a tracker for each monthly SIP (paid, coming up or overdue), where your money sits, each holding with its share, the last 6 months, and one Add money sheet. In Investments you can set up each holding with its SIP day and amount, pause a SIP, record a sale, or start over from scratch. New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
+    const APP_VERSION = "2026-10-17-13";
+    const APP_CHANGELOG = "Home fixes: the salary-day link and the card/debts tiles now open their screens instead of a blank page, and the balance question appears even if the ready-made Home copy is older. Home is redesigned: a card tells you the date your money will run out at your current pace (you confirm your bank balance once and the app keeps count; set your salary day in Settings or let it work it out), a Needs you list shows notes waiting and bills coming up, and Latest shows your newest transactions. A payment card in Pending now has an Investment button: tap it, choose which holding the money went into, and it is added to that holding on the Investments screen and left out of your spending. Marking a payment as an investment now tells you if it was not added because that holding already had the same amount within 3 days, and \"No, regular spend\" in History takes the entry back out. New look preview: in Investments you can remove a holding you do not have (when nothing is put into it), and the last-6-months chart now includes payments from before you started over. New look preview: the Investments screen is redesigned, with what you have put in so far, this month against your goal, a tracker for each monthly SIP (paid, coming up or overdue), where your money sits, each holding with its share, the last 6 months, and one Add money sheet. In Investments you can set up each holding with its SIP day and amount, pause a SIP, record a sale, or start over from scratch. New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -9547,7 +9547,7 @@
     // safe to reference here even though it's defined later in the file.
     document.querySelectorAll("[data-goto-tab]").forEach(function (el) {
       el.addEventListener("click", function () {
-        switchTab(el.dataset.gotoTab);
+        goToScreen(el.dataset.gotoTab);
       });
     });
 
@@ -9986,6 +9986,7 @@
       dashboardFull = d.full || null;
       renderHomeRecentList(homeRecentMode);
       renderHomeCharts(dashboardFull);
+      healHomeData(d);
       renderRunway(d);
       renderHomeNeeds(d);
       renderHomeLatest(d);
@@ -10007,6 +10008,19 @@
     // cannot see the bank balance, so the person confirms it; that is a
     // "checkpoint" the backend then rolls forward by itself.
     // ---------------------------------------------------------
+    // The ready-made Home copy (fast loading) can be older than the app and miss the new runway/latest fields.
+    // Reuse the last good ones meanwhile, and ask the server directly once so the card appears without waiting.
+    let runwayKeep = { runway: null, latest: null };
+    let runwayRefetched = false;
+    function healHomeData(d) {
+      if (d.runway !== undefined) runwayKeep.runway = d.runway; else if (runwayKeep.runway) d.runway = runwayKeep.runway;
+      if (d.latest !== undefined) runwayKeep.latest = d.latest; else if (runwayKeep.latest) d.latest = runwayKeep.latest;
+      if (d.runway === undefined && !runwayRefetched && !demoMode && currentUser) {
+        runwayRefetched = true;
+        setTimeout(function () { loadDashboard({ forceNetwork: true }); }, 0);
+      }
+    }
+
     let runwayEditing = false;
     let runwayLastDashboard = null;
     function inr(n) { return "₹" + Math.round(n).toLocaleString("en-IN"); }
@@ -10113,7 +10127,7 @@
         '<div class="runway-foot">Balance confirmed ' + (age <= 0 ? "today" : age + (age === 1 ? " day ago" : " days ago")) + ' · <a id="runwayUpdate">Update</a></div>';
       el.querySelector("#runwayUpdate").addEventListener("click", function () { runwayEditing = true; renderRunway(d); });
       const sl = el.querySelector("#runwaySalaryLink");
-      if (sl) sl.addEventListener("click", function () { switchTab("settings"); });
+      if (sl) sl.addEventListener("click", function () { goToScreen("settings"); });
 
       if (r.shortByDays && r.maxPerDay !== null) {
         warn.textContent = "To reach salary, spend at most " + inr(r.maxPerDay) + " a day (now " + inr(r.dailyPace) + ").";
@@ -10137,7 +10151,7 @@
         return '<div class="home-row' + (r.go ? ' tappable' : '') + '" data-i="' + i + '"><span>' + r.text + '</span><span class="amt">' + (r.amt || "") + '</span></div>';
       }).join("");
       el.querySelectorAll(".home-row.tappable").forEach(function (row) {
-        row.addEventListener("click", function () { switchTab(rows[Number(row.dataset.i)].go); });
+        row.addEventListener("click", function () { goToScreen(rows[Number(row.dataset.i)].go); });
       });
     }
 
@@ -11580,6 +11594,13 @@
 
         history.pushState(state, "");
       } catch (e) { /* malformed saved state — ignore, stay on default */ }
+    }
+
+    // Opens any screen by name: a main tab (home/pending/analysis/more) or a screen that lives inside More
+    // (settings, cc, debts...). switchTab alone only knows the four main tabs and would leave a blank page for the others.
+    function goToScreen(name) {
+      if (tabViews[name]) { switchTab(name); return; }
+      if (subViews[name]) { switchTab("more"); showMoreSubView(name); }
     }
 
     function switchTab(tabName) {
