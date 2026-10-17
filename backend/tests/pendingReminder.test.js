@@ -87,10 +87,10 @@ console.log("\n--- 3. Choices: 30 minutes, twice a day, off; never faster than 3
   reset();
   sb.v2dbRun_(OWNER, function(){ sb.dbProps_().setProperty("SETTING_PENDING_REMINDER", "twice"); });
   sb.pendingReminderRun_(at(9, 0)); sb.pendingReminderRun_(at(9, 15)); sent.length = 0;
-  sb.pendingReminderRun_(at(12, 0)); sb.pendingReminderRun_(at(13, 0));
-  assert(mineOnly().length === 0, "twice a day: nothing for 5 hours after one");
-  sb.pendingReminderRun_(at(14, 20));
-  assert(mineOnly().length === 1, "twice a day: the next one after 5 hours");
+  sb.pendingReminderRun_(at(12, 0)); sb.pendingReminderRun_(at(15, 0));
+  assert(mineOnly().length === 0, "twice a day: nothing for 7 hours after one");
+  sb.pendingReminderRun_(at(16, 20)); sb.pendingReminderRun_(at(16, 35));            // (one fresh look first, then the reminder)
+  assert(mineOnly().length === 1, "twice a day: the next one after 7 hours");
   reset();
   sb.v2dbRun_(OWNER, function(){ sb.dbProps_().setProperty("SETTING_PENDING_REMINDER", "off"); });
   sb.pendingReminderRun_(at(12, 0)); sb.pendingReminderRun_(at(12, 15)); sb.pendingReminderRun_(at(14, 0));
@@ -106,7 +106,8 @@ console.log("\n--- 4. The daily cap ---");
   for(let i = 1; i <= 20; i++) sb.pendingReminderRun_(at(8, 0) + i * 31 * 60000);
   assert(mineOnly().length === 8, "at most 8 reminders a day even every 30 minutes: " + mineOnly().length);
   const tomorrow = at(8, 0, 1);
-  sb.pendingReminderRun_(tomorrow);
+  sb.pendingReminderRun_(tomorrow);                                                      // (the memory from yesterday is too old: a fresh look first)
+  sb.pendingReminderRun_(tomorrow + 15 * 60000);
   assert(mineOnly().length === 9, "and the count starts again the next day");
 }
 
@@ -119,8 +120,9 @@ console.log("\n--- 5. In the app, nothing pending, no phone, failures ---");
   sb.pendingReminderRun_(at(12, 15));
   assert(mineOnly().length === 0 && hers().length === 1, "seen in the app 5 minutes ago: no reminder for that person (the other still gets theirs)");
   w.store["adminStats/p_" + key(OWNER)].fields.lastSeenMs = at(12, 15) - 20 * 60000;
-  sb.pendingReminderRun_(at(12, 30));
-  assert(mineOnly().length === 1, "seen 20 minutes ago: a reminder is fine");
+  sb.pendingReminderRun_(at(12, 30));                                                    // they left the app: a fresh look first
+  sb.pendingReminderRun_(at(12, 45));
+  assert(mineOnly().length === 1, "seen 20 minutes ago: a reminder is fine once what is waiting has been waiting a full check");
 
   reset();
   const rows = sb.v2dbRun_(FRIEND, function(){ const s = sb.dbSs_().getSheetByName("Transactions"); const v = s.getDataRange().getValues(); s.getRange(2, 13, 1, 1).setValues([["noted"]]); return v.length; });
@@ -140,6 +142,50 @@ console.log("\n--- 5. In the app, nothing pending, no phone, failures ---");
   sb.pendingReminderRun_(at(12, 0)); sent.length = 0;
   assert(sb.pendingReminderRun_(at(12, 15)) >= 0 && w.errors("REMINDER_ERROR").length >= 1, "one person failing is logged and does not stop the run");
   sb.reminderSnapshot_ = realSnap;
+}
+
+console.log("\n--- 5b. Review fixes: stale memory, refused pushes, heartbeat order ---");
+{
+  // (a) a payment that arrives AFTER the person left the app is not reminded about at once
+  reset();
+  sb.pendingReminderRun_(at(10, 0));                                                    // 2 waiting: remembered
+  w.store["adminStats/p_" + key(OWNER)] = { fields: { lastSeenMs: at(11, 0) }, updateTime: "t1" };
+  sent.length = 0;
+  sb.pendingReminderRun_(at(11, 5));                                                    // in the app: the memory is cleared
+  assert(Number(state()[key(OWNER) + "_prev"]) === 0, "while the person is in the app the 'was waiting' memory is cleared");
+  sb.pendingReminderRun_(at(11, 25));
+  assert(mineOnly().length === 0, "after they leave, what is pending counts as 'just arrived' first: no reminder at 11:25");
+  // (b) a memory older than 2 hours (last night) is ignored
+  reset();
+  sb.pendingReminderRun_(at(21, 45));
+  sent.length = 0;
+  sb.pendingReminderRun_(at(8, 0, 1));
+  assert(mineOnly().length === 0 && hers().length === 0, "a memory from 21:45 does not trigger a reminder at 08:00 the next morning (older than 2 hours)");
+  // (c) a refused push is not counted as sent and not retried at every check
+  reset();
+  sb.pendingReminderRun_(at(12, 0));
+  let attempts = 0;
+  const realSend = sb.sendPushToToken_;
+  sb.sendPushToToken_ = function(){ attempts++; return { sent: false, code: 404, detail: "gone" }; };
+  const n1 = sb.pendingReminderRun_(at(12, 15));
+  assert(n1 === 0 && attempts === 1 && Number(state()[key(OWNER) + "_n"] || 0) === 0, "a refused push is not counted as sent (nothing used from the daily 8): attempts " + attempts);
+  sb.pendingReminderRun_(at(12, 30)); sb.pendingReminderRun_(at(12, 45));
+  assert(attempts === 1, "and it is not retried at the next two checks (it waits the normal gap): " + attempts);
+  sb.pendingReminderRun_(at(13, 20));
+  assert(attempts === 2, "it tries again after the normal gap: " + attempts);
+  sb.sendPushToToken_ = realSend;
+  // (d) the heartbeat is written BEFORE the reminder runs
+  reset();
+  const today = "2026-10-17";
+  sb.timerIstClock_ = function(){ return { date: today, minutes: 12 * 60 }; };
+  const base = Date.now();
+  w.store["_system/timer"] = { fields: { fullAtMs: base, doneAtMs: base, dirtyAtMs: 0, daily_obligations: today, daily_debts: today, daily_health: today, daily_cash: today, remindAtMs: 0 }, updateTime: "t0" };
+  let beatAtReminder = 0, remindAtAtReminder = 0;
+  const realRun = sb.pendingReminderRun_;
+  sb.pendingReminderRun_ = function(){ const f = w.store["_system/timer"].fields; beatAtReminder = Number(f.tickAtMs || 0); remindAtAtReminder = Number(f.remindAtMs || 0); };
+  sb.timerTick_();
+  assert(beatAtReminder > 0 && remindAtAtReminder > 0, "on a quiet tick the heartbeat and the 'looked at reminders' time are saved before the reminder runs (a hung reminder cannot delay the heartbeat)");
+  sb.pendingReminderRun_ = realRun;
 }
 
 console.log("\n--- 6. Settings round trip ---");

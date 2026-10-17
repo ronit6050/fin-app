@@ -131,8 +131,9 @@ function timerTick_(){
   var remindDue = (startedAt - Number(f.remindAtMs || 0)) >= TIMER_REMIND_EVERY_MS_;
   if(!dirty && !fullDue && !dueDaily.length){
     var quiet = { tickAtMs: startedAt };                         // heartbeat: "the new server is alive"
-    if(remindDue){ timerRemind_(startedAt); quiet.remindAtMs = startedAt; }
-    timerWrite_(quiet);
+    if(remindDue) quiet.remindAtMs = startedAt;
+    timerWrite_(quiet);                                          // written BEFORE the reminder runs: a slow reminder can never delay the heartbeat
+    if(remindDue) timerRemind_(startedAt);
     return { ran: false, reason: "nothing to do" };
   }
   var wantWork = dirty || fullDue;
@@ -168,8 +169,9 @@ function timerTick_(){
     // Written NOW, not only at the end: if this tick is killed before it finishes, a job that already ran (and sent its notification) is not repeated.
     var marker = {}; marker["daily_" + j.key] = clock.date; timerWrite_(marker);
   });
-  if(remindDue){ timerRemind_(startedAt); fields.remindAtMs = startedAt; }
+  if(remindDue) fields.remindAtMs = startedAt;
   timerWrite_(fields);
+  if(remindDue) timerRemind_(startedAt);                          // after the real work and the heartbeat are saved
   if(workError) throw workError;
   return workRan ? { ran: true, why: dirty ? "marked changed" : "full look", daily: ranDaily }
                  : { ran: false, reason: blocked ? "backing off after " + fails + " failed runs" : "daily jobs", daily: ranDaily };

@@ -21,7 +21,8 @@ var REMINDER_QUIET_FROM_HOUR_ = 22;                 // from 22:00 ...
 var REMINDER_QUIET_TO_HOUR_ = 8;                    // ... until 08:00 India time: silence, and no reads
 var REMINDER_ACTIVE_WINDOW_MS_ = 10 * 60 * 1000;    // seen in the app this recently = no reminder
 var REMINDER_STATE_DOC_ = "_system/reminders";
-var REMINDER_MINUTES_ = { "30": 30, "60": 60, "twice": 300 };   // minimum gap between two reminders ("twice" = at most about twice a day)
+var REMINDER_MINUTES_ = { "30": 30, "60": 60, "twice": 420 };   // minimum gap between two reminders ("twice" = 7 hours, so two a day between 8am and 10pm)
+var REMINDER_PREV_MAX_AGE_MS_ = 2 * 60 * 60 * 1000;             // "it was already waiting at the last check" only counts if that check was within 2 hours
 
 function reminderChoice_(raw){
   var v = String(raw === undefined || raw === null ? "" : raw).trim().toLowerCase();
@@ -87,15 +88,19 @@ function pendingReminderRun_(nowMs){
         try{                                                                                      // in the app right now: they can see Pending themselves
           var pres = fsGetPathMeta_("adminStats/p_" + key);
           var seen = pres && pres.fields ? Number(pres.fields.lastSeenMs || 0) : 0;
-          if(seen > 0 && (nowMs - seen) < REMINDER_ACTIVE_WINDOW_MS_) return;
+          if(seen > 0 && (nowMs - seen) < REMINDER_ACTIVE_WINDOW_MS_){ updates[key + "_prev"] = 0; updates[key + "_prevAt"] = nowMs; return; }   // they are in the app: forget what was waiting, so anything arriving after they leave starts fresh
         }catch(ignorePresence){}
         var snap = v2dbRun_(email, function(){ return reminderSnapshot_(nowMs); }, { prefetch: ["Transactions"] });
-        var prev = Number(state[key + "_prev"] || 0);
-        updates[key + "_prev"] = snap.count;                                                      // remembered for the next check
+        var prevAt = Number(state[key + "_prevAt"] || 0);
+        var prev = (prevAt > 0 && (nowMs - prevAt) <= REMINDER_PREV_MAX_AGE_MS_) ? Number(state[key + "_prev"] || 0) : 0;   // a stale memory (older than 2 hours, e.g. from last night) counts as "nothing was waiting"
+        updates[key + "_prev"] = snap.count; updates[key + "_prevAt"] = nowMs;                    // remembered for the next check
         if(snap.count === 0 || prev === 0) return;                                                // nothing waiting, or it only just arrived
         var msg = reminderMessage_(snap);
         var res = sendPushToToken_(token, msg.title, msg.body, { kind: "reminder", tag: "pending-reminder" });
-        if(res && res.sent === false && res.code !== 0) return;                                   // the push service refused: try again next time
+        if(res && res.sent === false){                                                            // not delivered (a refused or dead token, or no access token): not counted as sent,
+          updates[key + "_last"] = nowMs;                                                         // and not retried before the normal gap, so a bad token cannot cost a read every check
+          return;
+        }
         updates[key + "_last"] = nowMs; updates[key + "_day"] = today; updates[key + "_n"] = sentToday + 1;
         sent++;
       }catch(personErr){
