@@ -2820,6 +2820,1014 @@
         grid-template-columns: repeat(3, 1fr);
       }
     }
+    /* =====================================================================
+       UI/UX MAKEOVER, PART A (2026-10-17)
+       Everything below only applies with the "New look (preview)" switch on
+       (html[data-look="new"]). With it off, nothing here matches, so the app
+       looks and behaves exactly as before. No new colours: only existing
+       tokens (blue accent, off-white page, category and Need/Want colours).
+       Spacing / type / motion all come from the --sp-*, --fs-*, --dur-* and
+       --ease-* tokens defined near the top.
+       ===================================================================== */
+
+    @keyframes fin-slide-r { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+    @keyframes fin-slide-l { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+    @keyframes fin-pop     { 0% { transform: scale(0.7); } 55% { transform: scale(1.2); } 100% { transform: scale(1); } }
+    @keyframes fin-grow    { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    @keyframes fin-pulse   { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+    @keyframes fin-return  { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+    @keyframes fin-toast-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+    /* Things that only exist in the new look stay hidden otherwise. */
+    .tab-fab-slot, .fin-sheet-backdrop, .fin-sheet, .more-menu-item.fin-only, .pl-head { display: none; }
+
+    /* ---------- Screen change: slides a few px from the side it belongs to ---------- */
+    :root[data-look="new"] .tab-view.fin-slide-r { animation: fin-slide-r var(--dur-base) var(--ease-out) backwards; }
+    :root[data-look="new"] .tab-view.fin-slide-l { animation: fin-slide-l var(--dur-base) var(--ease-out) backwards; }
+
+    /* ---------- Bottom bar: Home, Pending, round "+", Analysis, More ---------- */
+    :root[data-look="new"] .tab-bar {
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding-top: var(--sp-2);
+    }
+    :root[data-look="new"] .tab-btn { font-size: var(--fs-caption); font-weight: 500; }
+    :root[data-look="new"] .tab-btn.active { font-weight: 600; }
+    :root[data-look="new"] .tab-btn.active .tab-icon svg { animation: fin-pop 0.36s var(--ease-spring); }
+    :root[data-look="new"] .tab-fab-slot {
+      display: flex;
+      flex: 1;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    :root[data-look="new"] .tab-fab {
+      width: 52px;
+      height: 52px;
+      padding: 0;
+      margin-top: -26px;
+      border-radius: 50%;
+      background: var(--surface-hero);
+      color: var(--text-on-hero);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* ring in the bar's own colour makes it look cut out of the bar */
+      box-shadow: 0 0 0 5px var(--surface-card), 0 10px 18px -6px color-mix(in srgb, var(--surface-hero) 55%, black 45%);
+      transition: transform var(--dur-press) var(--ease-out);
+    }
+    :root[data-look="new"] .tab-fab:hover { background: var(--surface-hero); }
+    :root[data-look="new"] .tab-fab:active { transform: scale(0.92); }
+    :root[data-look="new"] .tab-fab svg { width: 26px; height: 26px; }
+
+    /* ---------- Page rhythm ---------- */
+    :root[data-look="new"] .section-title {
+      font-size: var(--fs-title);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 var(--sp-4) 0;
+    }
+
+    /* Loading placeholders: pulse (opacity only) instead of a sliding shimmer. */
+    :root[data-look="new"] .skeleton-block {
+      background: var(--surface-inset);
+      animation: fin-pulse 1.4s ease-in-out infinite;
+    }
+
+    /* ---------- Home ---------- */
+    :root[data-look="new"] .hero-card {
+      padding: var(--sp-6) var(--sp-5);
+      margin-bottom: var(--sp-4);
+    }
+    :root[data-look="new"] .hero-label {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+    :root[data-look="new"] .hero-amount {
+      font-size: var(--fs-hero);
+      font-weight: 700;
+      letter-spacing: var(--tracking-hero);
+      margin: var(--sp-1) 0 var(--sp-2);
+      font-variant-numeric: tabular-nums;
+    }
+    :root[data-look="new"] .hero-sub { font-size: var(--fs-small); }
+    :root[data-look="new"] .hero-card.tactile {
+      box-shadow: 0 12px 24px -14px color-mix(in srgb, var(--surface-hero) 60%, black 40%);
+      transition: transform var(--dur-press) var(--ease-out);
+    }
+    :root[data-look="new"] .hero-card.tactile:active {
+      transform: scale(0.98);
+      box-shadow: 0 6px 14px -10px color-mix(in srgb, var(--surface-hero) 60%, black 40%);
+    }
+
+    :root[data-look="new"] .stat-grid {
+      grid-template-columns: 1fr 1fr;      /* always 2x2, also on wide screens */
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-4);
+    }
+    :root[data-look="new"] .stat-card {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      box-shadow: var(--shadow-card);
+      padding: var(--sp-4);
+      transition: transform var(--dur-press) var(--ease-out);
+    }
+    :root[data-look="new"] .stat-label {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: var(--sp-1);
+    }
+    :root[data-look="new"] .stat-value {
+      font-size: var(--fs-title);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
+    }
+    :root[data-look="new"] .chart-card {
+      padding: var(--sp-4);
+      margin-bottom: var(--sp-3);
+      transition: transform var(--dur-press) var(--ease-out);
+    }
+    :root[data-look="new"] .chart-head { font-size: var(--fs-small); margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .chart-link { font-size: var(--fs-caption); }
+    :root[data-look="new"] #homeRecentLabel {
+      font-size: var(--fs-body) !important;     /* the heading carries an inline size */
+      font-weight: 600;
+      margin: var(--sp-5) 0 var(--sp-2) !important;
+    }
+    :root[data-look="new"] .home-recent-row {
+      padding: var(--sp-3) var(--sp-4);
+      margin-bottom: var(--sp-2);
+      border-radius: var(--radius-md);
+      font-size: var(--fs-body);
+    }
+
+    /* Finger-down feedback on cards and tiles (same as the .press helper). */
+    :root[data-look="new"] .stat-card:active,
+    :root[data-look="new"] .chart-card:active,
+    :root[data-look="new"] .more-menu-item:active { transform: scale(0.97); }
+
+    /* ---------- Pending ---------- */
+    :root[data-look="new"] .pending-item.pl-new {
+      position: relative;
+      padding: var(--sp-4);
+      border-radius: var(--radius-lg);
+      margin-bottom: var(--sp-3);
+      touch-action: pan-y;                  /* up/down still scrolls; sideways is ours */
+      isolation: isolate;                   /* keeps the swipe panel behind the card, not behind the page */
+    }
+    :root[data-look="new"] .pending-item.pl-new .pending-top,
+    :root[data-look="new"] .pending-item.pl-new .pending-meta { display: none; }   /* replaced by the header below */
+    :root[data-look="new"] .pl-head {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-4);
+    }
+    :root[data-look="new"] .pl-icon {
+      flex: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    :root[data-look="new"] .pl-icon svg { width: 22px; height: 22px; }
+    :root[data-look="new"] .pl-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    :root[data-look="new"] .pl-name {
+      font-size: var(--fs-body);
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    :root[data-look="new"] .pl-sub { font-size: var(--fs-small); color: var(--text-muted); }
+    :root[data-look="new"] .pl-amt {
+      flex: none;
+      font-size: var(--fs-title);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      font-variant-numeric: tabular-nums;
+    }
+    :root[data-look="new"] .pending-item.pl-new .field { margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .pending-item.pl-new .field > label {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    /* Need / Want / Saving in ONE row (they used to stack, because every button is full width by default). */
+    :root[data-look="new"] .type-toggle .type-btn { width: auto; flex: 1 1 0; min-width: 0; }
+    :root[data-look="new"] .pending-item.pl-new .type-hint { font-size: var(--fs-small); }
+    :root[data-look="new"] .pending-item.pl-new .save-btn { margin-top: var(--sp-2); }
+
+    /* While a finger drags the card right: a green panel with a check appears on its left edge. */
+    :root[data-look="new"] .pending-item.pl-new.swiping { transition: none; user-select: none; cursor: grabbing; }
+    :root[data-look="new"] .pending-item.pl-new::before,
+    :root[data-look="new"] .pending-item.pl-new::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+      opacity: var(--swipe, 0);
+    }
+    :root[data-look="new"] .pending-item.pl-new::after {          /* the panel */
+      top: 0; bottom: 0; right: 100%;
+      width: 100%;
+      border-radius: var(--radius-lg);
+      background: var(--bg-success);
+      z-index: -1;
+    }
+    :root[data-look="new"] .pending-item.pl-new.armed::after {
+      background: color-mix(in srgb, var(--color-success) 26%, var(--bg-success));
+    }
+    :root[data-look="new"] .pending-item.pl-new::before {         /* the check mark, drawn with a border */
+      top: 50%;
+      right: calc(100% + 24px);
+      width: 9px; height: 17px;
+      border: solid var(--color-success);
+      border-width: 0 3px 3px 0;
+      transform: translateY(-65%) rotate(45deg);
+      z-index: 1;
+    }
+    :root[data-look="new"] .pending-item.pl-new.pl-return { animation: fin-return 0.3s var(--ease-out); }
+
+    /* ---------- Analysis ---------- */
+    :root[data-look="new"] .today-total-box {
+      padding: var(--sp-5);
+      margin-bottom: var(--sp-4);
+    }
+    :root[data-look="new"] .today-total-label {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+    :root[data-look="new"] .today-total-amount {
+      font-size: var(--fs-hero);
+      font-weight: 700;
+      letter-spacing: var(--tracking-hero);
+      font-variant-numeric: tabular-nums;
+    }
+    :root[data-look="new"] .today-split { font-size: var(--fs-small); margin-top: var(--sp-1); }
+    :root[data-look="new"] .month-nav { margin-bottom: var(--sp-4); }
+    :root[data-look="new"] .month-switcher span { font-size: var(--fs-body); }
+    :root[data-look="new"] .category-row { margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .category-bar-fill { transform-origin: left center; }
+    :root[data-look="new"] .category-bar-fill.fin-grow { animation: fin-grow 0.6s var(--ease-out) backwards; }
+
+    /* ---------- More ---------- */
+    :root[data-look="new"] .more-group-label {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      margin: var(--sp-6) var(--sp-1) var(--sp-2);
+    }
+    :root[data-look="new"] .more-group-label:first-child { margin-top: 0; }
+    :root[data-look="new"] .more-menu { gap: var(--sp-3); }
+    :root[data-look="new"] .more-menu-item.fin-only { display: flex; }
+    :root[data-look="new"] .more-menu-item.screen-hidden { display: none; }
+    :root[data-look="new"] .more-menu-item {
+      border-radius: var(--radius-lg);
+      padding: var(--sp-5) var(--sp-2);
+      gap: var(--sp-2);
+      font-size: var(--fs-small);
+      box-shadow: var(--shadow-card);
+      transition: transform var(--dur-press) var(--ease-out);
+    }
+    :root[data-look="new"] .more-menu-item.tactile,
+    :root[data-look="new"] .more-menu-item.tactile:active { box-shadow: var(--shadow-card); }
+    :root[data-look="new"] .more-menu-icon { width: 44px; height: 44px; }
+
+    /* ---------- Small message at the bottom (Undo / hints) ---------- */
+    .fin-toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+      transform: translate(-50%, 12px);
+      opacity: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      max-width: min(92vw, 380px);
+      padding: var(--sp-1) var(--sp-4);
+      min-height: 48px;
+      border-radius: var(--radius-pill);
+      background: var(--text-primary);
+      color: var(--bg-page);
+      font-size: var(--fs-small);
+      font-weight: 500;
+      box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+      z-index: 80;
+      visibility: hidden;     /* hidden = not focusable and not read out */
+      transition: opacity var(--dur-base) linear, transform var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base);
+    }
+    .fin-toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; visibility: visible; transition-delay: 0s; }
+    .fin-toast .fin-toast-action {
+      width: auto;
+      min-height: 44px;
+      padding: 0 var(--sp-2);
+      background: transparent;
+      color: inherit;
+      font-size: var(--fs-small);
+      font-weight: 700;
+      text-decoration: underline;
+    }
+    .fin-toast .fin-toast-action:hover { background: transparent; }
+    .fin-toast .fin-toast-bar {
+      position: absolute;
+      left: 0; bottom: 0;
+      height: 3px;
+      width: 100%;
+      background: currentColor;
+      opacity: 0.45;
+      transform-origin: left center;
+    }
+
+    /* ---------- Add-a-transaction bottom sheet ---------- */
+    :root[data-look="new"] .fin-sheet-backdrop,
+    :root[data-look="new"] .fin-sheet { display: block; }
+    .fin-sheet-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity var(--dur-base) linear, visibility 0s linear var(--dur-base);
+      z-index: 90;
+    }
+    .fin-sheet-backdrop.open { opacity: 1; visibility: visible; transition-delay: 0s; }
+    .fin-sheet {
+      position: fixed;
+      left: 50%;
+      bottom: 0;
+      width: 100%;
+      max-width: 420px;
+      max-height: 92vh;
+      max-height: 92dvh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      background: var(--surface-card);
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding: 0 var(--sp-5) calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
+      box-shadow: 0 -16px 40px -16px rgba(0, 0, 0, 0.4);
+      transform: translate(-50%, 105%);
+      visibility: hidden;
+      transition: transform var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base);
+      z-index: 91;
+    }
+    .fin-sheet.open { transform: translate(-50%, 0); visibility: visible; transition-delay: 0s; }
+    .fin-sheet.dragging { transition: none; }
+    .fin-sheet-grab { touch-action: none; padding-top: var(--sp-3); cursor: grab; }
+    .fin-sheet-handle {
+      width: 40px;
+      height: 5px;
+      border-radius: 3px;
+      margin: 0 auto var(--sp-3);
+      background: var(--text-muted);
+      opacity: 0.45;
+    }
+    .fin-sheet-title { margin: 0; font-size: var(--fs-title); font-weight: 700; letter-spacing: -0.02em; color: var(--text-primary); }
+    .fin-sheet-sub { margin: var(--sp-1) 0 var(--sp-4); font-size: var(--fs-small); color: var(--text-secondary); }
+    .fin-sheet #addManualForm { flex-direction: column; gap: var(--sp-1); margin-bottom: 0 !important; }   /* the form carries an inline margin */
+    .fin-sheet .manual-amount-field { order: -1; text-align: center; margin-bottom: var(--sp-2); }
+    .fin-sheet .manual-amount-field input {
+      font-size: var(--fs-hero);
+      font-weight: 700;
+      letter-spacing: var(--tracking-hero);
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      padding: var(--sp-2) 0;
+    }
+    .fin-sheet #saveManualButton { margin-top: var(--sp-2); }
+    /* While the sheet is open the old inline "+ Add a transaction" button is not needed. */
+    :root[data-look="new"] #addManualToggle { display: none; }
+    @media (min-width: 700px) { .fin-sheet { max-width: 640px; } }
+
+    /* People who turn animations off get none of the movement above. */
+    @media (prefers-reduced-motion: reduce) {
+      :root[data-look="new"] .tab-view.fin-slide-r,
+      :root[data-look="new"] .tab-view.fin-slide-l,
+      :root[data-look="new"] .tab-btn.active .tab-icon svg,
+      :root[data-look="new"] .category-bar-fill.fin-grow,
+      :root[data-look="new"] .pending-item.pl-new.pl-return,
+      :root[data-look="new"] .skeleton-block { animation: none; }
+      :root[data-look="new"] .stat-card,
+      :root[data-look="new"] .chart-card,
+      :root[data-look="new"] .more-menu-item,
+      :root[data-look="new"] .hero-card.tactile,
+      :root[data-look="new"] .tab-fab { transition: none; }
+      :root[data-look="new"] .stat-card:active,
+      :root[data-look="new"] .chart-card:active,
+      :root[data-look="new"] .more-menu-item:active,
+      :root[data-look="new"] .hero-card.tactile:active,
+      :root[data-look="new"] .tab-fab:active { transform: none; }
+      .fin-toast, .fin-sheet, .fin-sheet-backdrop { transition: none; }
+      .fin-toast .fin-toast-bar { display: none !important; }
+    }
+
+    /* =====================================================================
+       UI/UX MAKEOVER, PART B (2026-10-17)
+       Every screen that is not Home, Pending, Analysis or the main More menu:
+       History, Debts + people, Cash, Investments, CC Advisor, Savings,
+       Planner, Reconcile, Settings, Access, Today, sign-in, What's New,
+       empty / error states. Same rules as Part A: only with the New look
+       switch on (:root[data-look="new"]), only existing colour tokens, and
+       every size / space / speed comes from --fs-*, --sp-*, --dur-*.
+       Where a selector is easy to beat later it is wrapped in :where().
+       ===================================================================== */
+
+    /* Things that only exist in the new look stay hidden otherwise. */
+    .fin-switch, .fin-whatsnew-list { display: none; }
+
+    /* ---------- Sub-screens slide in from the side they belong to ---------- */
+    :root[data-look="new"] #view-more .fin-slide-r { animation: fin-slide-r var(--dur-base) var(--ease-out) backwards; }
+    :root[data-look="new"] #view-more .fin-slide-l { animation: fin-slide-l var(--dur-base) var(--ease-out) backwards; }
+
+    /* ---------- Back button: a real 44px target ---------- */
+    :root[data-look="new"] .back-to-more {
+      min-height: 44px;
+      padding: 0 var(--sp-4) 0 var(--sp-3);
+      margin-bottom: var(--sp-3);
+      font-size: var(--fs-small);
+    }
+    :root[data-look="new"] #view-more h3:not(.fin-sheet-title) {
+      font-size: var(--fs-body) !important;       /* the headings carry an inline size */
+      font-weight: 600;
+      margin: var(--sp-5) 0 var(--sp-2) !important;
+    }
+
+    /* ---------- Form fields: 48px tall, soft focus ring ---------- */
+    :root[data-look="new"] :where(.field, .hist-bar) > label,
+    :root[data-look="new"] .field > label {
+      font-size: var(--fs-small);
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: var(--sp-2);
+    }
+    :root[data-look="new"] .field { margin-bottom: var(--sp-3); }
+    :root[data-look="new"] :where(.field, .hist-bar) :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select) {
+      min-height: 48px;
+      padding: var(--sp-3) var(--sp-4);
+      font-size: 1rem;
+      border-radius: var(--radius-md);
+    }
+    :root[data-look="new"] input:focus,
+    :root[data-look="new"] select:focus {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+    }
+    :root[data-look="new"] .planner-income-input-wrap input { padding-left: 34px; }
+    :root[data-look="new"] .planner-income-currency { left: var(--sp-4); }
+    :root[data-look="new"] .planner-input-row input { width: 128px; }
+    :root[data-look="new"] .pending-status { font-size: var(--fs-small); line-height: 1.5; color: var(--text-secondary); }
+    :root[data-look="new"] .pending-result { font-size: var(--fs-small); margin-top: var(--sp-2); }
+
+    /* ---------- One card shape for every list item and group ---------- */
+    :root[data-look="new"] .category-row,
+    :root[data-look="new"] .debt-item,
+    :root[data-look="new"] .person-row,
+    :root[data-look="new"] .planner-cat-card,
+    :root[data-look="new"] .removed-item,
+    :root[data-look="new"] .settings-group,
+    :root[data-look="new"] .planner-overview-card,
+    :root[data-look="new"] .planner-total-card {
+      border-radius: var(--radius-md);
+      padding: var(--sp-4);
+      box-shadow: var(--shadow-card);
+    }
+    :root[data-look="new"] .debt-item,
+    :root[data-look="new"] .person-row,
+    :root[data-look="new"] .planner-cat-card { margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .settings-group,
+    :root[data-look="new"] .planner-overview-card { margin-bottom: var(--sp-4); }
+    :root[data-look="new"] .planner-total-card { margin: var(--sp-2) 0 var(--sp-4); }
+    :root[data-look="new"] .pending-item:not(.pl-new) {
+      border-radius: var(--radius-md);
+      padding: var(--sp-4);
+      margin-bottom: var(--sp-3);
+    }
+    :root[data-look="new"] .pending-item:not(.pl-new) .pending-top { margin-bottom: var(--sp-1); align-items: center; }
+    :root[data-look="new"] .pending-item:not(.pl-new) .pending-meta { font-size: var(--fs-small); margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .pending-item .pending-amount { font-size: var(--fs-title); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] .settings-group-title {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      margin-bottom: var(--sp-3);
+    }
+    /* The Investments breakdown puts rows inside a group card: flat rows, not cards inside a card. */
+    :root[data-look="new"] .settings-group .category-row {
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      padding: 0;
+      margin-bottom: var(--sp-4);
+    }
+    :root[data-look="new"] .category-top { font-size: var(--fs-body); }
+    :root[data-look="new"] .category-top > span:last-child:not(:first-child):not(.category-badge) { margin-left: auto; }   /* amount sits at the right edge */
+    :root[data-look="new"] .category-top .cat-amt,
+    :root[data-look="new"] .category-top > span:last-child:not(.cat-amt):not(.category-badge) { font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] .category-txn-line { font-size: var(--fs-small); }
+
+    /* ---------- "+ add" buttons: calm outline button that opens a bottom sheet ---------- */
+    :root[data-look="new"] #addCashToggleButton,
+    :root[data-look="new"] #addInvestmentToggleButton,
+    :root[data-look="new"] #addDebtToggleButton,
+    :root[data-look="new"] #addGoalToggleButton,
+    :root[data-look="new"] #logSavingToggleButton {
+      min-height: 48px;
+      margin-top: var(--sp-4) !important;         /* some carry an inline margin */
+      background: var(--surface-card);
+      color: var(--color-primary);
+      border: 0.5px solid var(--border-hairline);
+      box-shadow: var(--shadow-card);
+    }
+    :root[data-look="new"] #addCashToggleButton:hover,
+    :root[data-look="new"] #addInvestmentToggleButton:hover,
+    :root[data-look="new"] #addDebtToggleButton:hover,
+    :root[data-look="new"] #addGoalToggleButton:hover,
+    :root[data-look="new"] #logSavingToggleButton:hover { background: var(--surface-inset); }
+    :root[data-look="new"] #addCashToggleButton { margin-top: 0 !important; }
+    :root[data-look="new"] #addFriendToggle { min-height: 48px; margin: var(--sp-1) 0 var(--sp-4) !important; }
+
+    /* The same forms while they sit inside the bottom sheet. */
+    .fin-sheet .fin-in-sheet { display: block !important; margin: 0 !important; }
+    .fin-sheet .fin-in-sheet .pending-result { margin-top: var(--sp-3); }
+    .fin-sheet .fin-in-sheet > button,
+    .fin-sheet .fin-in-sheet > div > button { margin-top: var(--sp-2); }
+    .fin-sheet #quickActionLabel { display: none; }                  /* its words become the sheet subtitle */
+    .fin-sheet #quickActionCancelButton { margin-top: var(--sp-2) !important; }
+    .fin-sheet.fin-nosub .fin-sheet-title { margin-bottom: var(--sp-4); }
+
+    /* Every plain button darkens to the blue fill on hover, and on a phone "hover" sticks after a tap. Buttons that have their
+       own look keep it. (This was turning an opened History row, an unselected chip and outline buttons solid blue.) */
+    :root[data-look="new"] :is(.hist-row, .more-menu-item):hover { background: var(--surface-card); }
+    :root[data-look="new"] :is(.hist-chip, .type-btn, .fe-btn):not(.active):hover { background: var(--surface-inset); }
+    :root[data-look="new"] .hist-chip.active:hover { background: var(--text-primary); }
+    :root[data-look="new"] :is(.view-toggle-btn, .mode-toggle-btn):not(.active):hover { background: transparent; }
+    :root[data-look="new"] .secondary:hover { background: var(--surface-inset); }
+    :root[data-look="new"] :is(.removed-toggle, .signout-link, .access-screens-head):hover { background: transparent; }
+
+    /* Two-way choices that are not Need / Want / Saving (Auto / Manual split, who paid, UPI / Cash) show which is picked. */
+    :root[data-look="new"] .type-btn.active:not([data-type]) { background: var(--button-fill); color: white; }
+    :root[data-look="new"] .secondary { border: 1px solid color-mix(in srgb, var(--text-muted) 45%, transparent); }
+
+    /* ---------- Segmented controls and chips: 44px targets ---------- */
+    :root[data-look="new"] .view-toggle { padding: 3px; }
+    :root[data-look="new"] .view-toggle-btn { min-height: 44px; font-size: var(--fs-small); }
+    :root[data-look="new"] .hist-chips {
+      gap: var(--sp-2);
+      padding: 0 0 var(--sp-2);
+      scrollbar-width: none;
+    }
+    :root[data-look="new"] .hist-chips::-webkit-scrollbar { display: none; }
+    :root[data-look="new"] .hist-chip {
+      min-height: 44px;
+      padding: 0 var(--sp-4);
+      font-size: var(--fs-small);
+    }
+    :root[data-look="new"] .status-pill { font-weight: 600; font-size: var(--fs-small); }
+    /* Small round buttons keep their look but get a 44px touch area around them. */
+    :root[data-look="new"] .month-btn,
+    :root[data-look="new"] .mode-toggle-btn,
+    :root[data-look="new"] .carousel-dot,
+    :root[data-look="new"] .avatar-btn { position: relative; }
+    :root[data-look="new"] .month-btn::before { content: ""; position: absolute; inset: -7px; }
+    :root[data-look="new"] .mode-toggle-btn::before { content: ""; position: absolute; inset: -8px 0; }
+    :root[data-look="new"] .avatar-btn::before { content: ""; position: absolute; inset: -5px; }
+    :root[data-look="new"] .carousel-dot { width: 44px; height: 32px; }
+    :root[data-look="new"] .carousel-dot::before { content: ""; position: absolute; inset: -6px 0; }
+    :root[data-look="new"] .carousel-dots { gap: 0; margin: 0 0 var(--sp-3); }
+    :root[data-look="new"] .pending-notice {
+      border-radius: var(--radius-md);
+      padding: var(--sp-3) var(--sp-4);
+      margin-bottom: var(--sp-3);
+      font-size: var(--fs-small);
+    }
+    :root[data-look="new"] .pending-notice-dismiss { min-width: 44px; min-height: 44px; margin: calc(-1 * var(--sp-2)) calc(-1 * var(--sp-3)) calc(-1 * var(--sp-2)) 0; }
+    :root[data-look="new"] .pending-notice .pending-notice-undo { min-height: 44px; padding: 0 var(--sp-4); }
+    :root[data-look="new"] .removed-toggle { min-height: 44px; }
+    :root[data-look="new"] .removed-item .restore-btn { min-height: 44px; }
+
+    /* ---------- Empty, error and loading states ---------- */
+    :root[data-look="new"] .empty-state { padding: var(--sp-6) var(--sp-4); }
+    :root[data-look="new"] .empty-state .empty-icon {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto var(--sp-3);
+      border-radius: 50%;
+      background: var(--surface-inset);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+    }
+    :root[data-look="new"] .empty-state p { font-size: var(--fs-body); max-width: 30ch; margin: 0 auto; line-height: 1.45; }
+    :root[data-look="new"] .error-state {
+      padding: var(--sp-6) var(--sp-4);
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+    }
+    :root[data-look="new"] .error-state svg { width: 32px; height: 32px; margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .error-state p { font-size: var(--fs-body); margin-bottom: var(--sp-4); }
+    :root[data-look="new"] .retry-btn { min-height: 44px; padding: 0 var(--sp-6); font-size: var(--fs-body); }
+    :root[data-look="new"] .skeleton-block { border-radius: var(--radius-md); }
+
+    /* ---------- History ---------- */
+    :root[data-look="new"] .hist-bar { position: relative; margin-bottom: var(--sp-4); }
+    :root[data-look="new"] .hist-bar::before {            /* magnifier, drawn as a mask so it follows the text colour in both themes */
+      content: "";
+      position: absolute;
+      left: var(--sp-4);
+      top: 14px;
+      width: 20px;
+      height: 20px;
+      background: var(--text-muted);
+      pointer-events: none;
+      z-index: 1;
+      -webkit-mask: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") center / contain no-repeat;
+              mask: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    :root[data-look="new"] .hist-bar input[type="search"] { padding-left: 46px; border-radius: var(--radius-pill); margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .hist-bar select { margin-top: var(--sp-1); }
+    :root[data-look="new"] .hist-month-head {
+      font-size: var(--fs-caption);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin: var(--sp-5) var(--sp-1) var(--sp-2);
+    }
+    :root[data-look="new"] .hist-row-wrap { margin-bottom: var(--sp-2); }
+    :root[data-look="new"] .hist-row {
+      min-height: 56px;
+      align-items: center;
+      padding: var(--sp-3) var(--sp-4);
+      transition: transform var(--dur-press) var(--ease-out);
+    }
+    :root[data-look="new"] .hist-row .hr-title { font-size: var(--fs-body); }
+    :root[data-look="new"] .hist-row .hr-sub { font-size: var(--fs-small); }
+    :root[data-look="new"] .hist-row .hr-amount { font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] .hist-summary-card { padding: var(--sp-4); font-size: var(--fs-small); margin-bottom: var(--sp-3); }
+
+    /* ---------- Debts, people and splits ---------- */
+    :root[data-look="new"] .debt-item .debt-top { align-items: center; margin-bottom: var(--sp-1); font-weight: 600; }
+    :root[data-look="new"] .debt-item .debt-amount { font-size: var(--fs-number); font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] .debt-item .debt-meta { font-size: var(--fs-small); margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .debt-item button { margin-top: var(--sp-2); }
+    :root[data-look="new"] .person-row {
+      gap: var(--sp-3);
+      min-height: 64px;
+      transition: transform var(--dur-press) var(--ease-out);
+    }
+    :root[data-look="new"] .person-row:active { transform: scale(0.98); }
+    :root[data-look="new"] .person-row::after {                    /* "opens" chevron, drawn with borders */
+      content: "";
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border: solid var(--text-muted);
+      border-width: 0 2px 2px 0;
+      transform: rotate(-45deg);
+      margin-left: calc(-1 * var(--sp-1));
+    }
+    :root[data-look="new"] .person-avatar { width: 44px; height: 44px; font-size: var(--fs-body); }
+    :root[data-look="new"] .person-name { font-size: var(--fs-body); }
+    :root[data-look="new"] .person-sub { font-size: var(--fs-small); }
+    :root[data-look="new"] .person-amount { font-size: var(--fs-number); font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] .person-pay-form {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: var(--sp-4);
+      box-shadow: var(--shadow-card);
+    }
+    :root[data-look="new"] .person-ledger {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 0 var(--sp-4);
+      box-shadow: var(--shadow-card);
+    }
+    :root[data-look="new"] .person-ledger .ledger-row:first-child { border-top: 0; }
+    :root[data-look="new"] .person-ledger .empty-state { padding: var(--sp-5) 0; }
+    :root[data-look="new"] .ledger-row { padding: var(--sp-3) 0; }
+    :root[data-look="new"] .ledger-title { font-size: var(--fs-body); }
+    :root[data-look="new"] .ledger-meta { font-size: var(--fs-small); }
+    :root[data-look="new"] .ledger-amount { font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] .ledger-undo { width: auto; min-height: 44px; padding: 0 var(--sp-5); margin-top: var(--sp-2); font-size: var(--fs-small); }
+    /* The split panel on a Pending card: a soft inset area with white fields. */
+    :root[data-look="new"] .split-panel {
+      background: var(--surface-inset);
+      border: 0;
+      border-radius: var(--radius-md);
+      padding: var(--sp-4);
+      margin-top: var(--sp-3);
+    }
+    :root[data-look="new"] .split-panel :where(input, select) { background: var(--surface-card); }
+    :root[data-look="new"] .pending-item .link-btn { min-height: 44px; }
+
+    /* ---------- Savings ---------- */
+    :root[data-look="new"] .goal-card-actions { gap: var(--sp-2); margin-top: var(--sp-3); }
+    :root[data-look="new"] .goal-card-actions button { min-height: 44px; font-size: var(--fs-small); }
+
+    /* ---------- Planner ---------- */
+    :root[data-look="new"] .planner-overview-card { padding: var(--sp-5); }
+    :root[data-look="new"] .planner-overview-head {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: var(--sp-4);
+    }
+    :root[data-look="new"] .planner-bucket-top,
+    :root[data-look="new"] .planner-track-row-top { font-size: var(--fs-body); gap: var(--sp-3); }
+    :root[data-look="new"] .planner-track-row .status-pill {   /* a long "close to your target" note wraps instead of running off the screen */
+      white-space: normal;
+      line-height: 1.35;
+      border-radius: var(--radius-md);
+      padding: var(--sp-1) var(--sp-3);
+    }
+    :root[data-look="new"] .planner-bucket-amt,
+    :root[data-look="new"] .planner-total-amount { font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] .planner-total-card .planner-total-amount { font-size: var(--fs-title); letter-spacing: -0.02em; }
+    :root[data-look="new"] .planner-total-card .planner-total-label { font-size: var(--fs-small); }
+    :root[data-look="new"] .planner-type-tag { font-size: var(--fs-caption); }
+    :root[data-look="new"] .planner-suggestion-note,
+    :root[data-look="new"] .planner-track-of { font-size: var(--fs-small); }
+
+    /* ---------- Reconcile: file picker as a drop-zone style target ---------- */
+    :root[data-look="new"] .file-input-label {
+      min-height: 64px;
+      justify-content: center;
+      font-size: var(--fs-body);
+      background: transparent;
+      border: 1.5px dashed color-mix(in srgb, var(--text-muted) 75%, transparent);
+      border-radius: var(--radius-md);
+    }
+    :root[data-look="new"] .file-input-label.has-file { border-style: solid; background: var(--surface-card); }
+    :root[data-look="new"] .recon-include { width: 22px; height: 22px; accent-color: var(--color-primary); }
+    :root[data-look="new"] .pending-top > label { min-height: 44px; padding: 0 var(--sp-2); }
+    /* The small amount boxes inside edit cards (Cash, Investments) carry inline sizes; make them real targets. */
+    :root[data-look="new"] .cash-edit-amount,
+    :root[data-look="new"] .invest-edit-amount {
+      min-height: 44px;
+      width: 128px !important;
+      padding: var(--sp-2) var(--sp-3) !important;
+      font-size: var(--fs-number) !important;
+      border-radius: var(--radius-sm) !important;
+    }
+
+    /* ---------- Settings: grouped sections with real switches ---------- */
+    :root[data-look="new"] .field.fin-has-switch {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      column-gap: var(--sp-4);
+    }
+    :root[data-look="new"] .field.fin-has-switch > label { grid-column: 1; margin: 0; font-size: var(--fs-body); font-weight: 500; color: var(--text-primary); }
+    :root[data-look="new"] .field.fin-has-switch > select { display: none; }
+    :root[data-look="new"] .field.fin-has-switch > .fin-switch { grid-column: 2; grid-row: 1; }
+    :root[data-look="new"] .field.fin-has-switch > :not(label):not(select):not(.fin-switch) { grid-column: 1 / -1; }
+    :root[data-look="new"] .fin-switch {
+      display: inline-flex;
+      align-items: center;
+      position: relative;
+      width: 52px;
+      height: 32px;
+      padding: 0;
+      border-radius: 16px;
+      background: var(--surface-inset);
+      box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--text-muted) 80%, transparent);
+      transition: background-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+    }
+    :root[data-look="new"] .fin-switch:hover { background: var(--surface-inset); }
+    :root[data-look="new"] .fin-switch::before { content: ""; position: absolute; inset: -6px -4px; }   /* 44px touch area */
+    :root[data-look="new"] .fin-switch-knob {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: transform var(--dur-base) var(--ease-spring), background-color var(--dur-base) var(--ease-out);
+    }
+    :root[data-look="new"] .fin-switch[aria-checked="true"] { background: var(--button-fill); box-shadow: none; }
+    :root[data-look="new"] .fin-switch[aria-checked="true"]:hover { background: var(--button-fill); }
+    :root[data-look="new"] .fin-switch[aria-checked="true"] .fin-switch-knob { transform: translateX(20px); background: white; }
+    :root[data-look="new"] .fin-switch:active .fin-switch-knob { width: 28px; }
+    :root[data-look="new"] .fin-switch[aria-checked="true"]:active .fin-switch-knob { transform: translateX(16px); }
+    /* The per-friend switches on the Access screen get the same look and size. */
+    :root[data-look="new"] .access-switch {
+      width: 52px;
+      height: 32px;
+      border-radius: 16px;
+      box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--text-muted) 80%, transparent);
+    }
+    :root[data-look="new"] .access-switch::before { content: ""; position: absolute; inset: -6px -4px; }
+    :root[data-look="new"] .access-switch::after {
+      top: 4px;
+      left: 4px;
+      width: 24px;
+      height: 24px;
+      background: var(--text-muted);
+      transition: transform var(--dur-base) var(--ease-spring), background-color var(--dur-base) var(--ease-out);
+    }
+    :root[data-look="new"] .access-switch.on { box-shadow: none; }
+    :root[data-look="new"] .access-switch.on::after { transform: translateX(20px); background: white; }
+    :root[data-look="new"] .access-toggle { min-height: 44px; }
+    :root[data-look="new"] .access-row { padding: var(--sp-3) 0; }
+    :root[data-look="new"] .access-screens-head { min-height: 44px; }
+    :root[data-look="new"] .access-screen-row { padding: var(--sp-2) 0; min-height: 44px; }
+    :root[data-look="new"] .access-pill { font-size: var(--fs-caption); }
+    :root[data-look="new"] #saveSettingsButton { margin: var(--sp-2) 0 var(--sp-4); }
+
+    /* ---------- Sign-in screen ---------- */
+    :root[data-look="new"] .login-hero { padding: var(--sp-6) var(--sp-3) var(--sp-4); }
+    :root[data-look="new"] .login-mark { width: 72px; height: 72px; border-radius: 24px; margin-bottom: var(--sp-5); }
+    :root[data-look="new"] .login-title { font-size: var(--fs-title); letter-spacing: -0.02em; margin-bottom: var(--sp-2); }
+    :root[data-look="new"] .login-sub { font-size: var(--fs-body); line-height: 1.5; }
+    :root[data-look="new"] .signin-box { border-radius: var(--radius-lg); padding: var(--sp-5); margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .trust-line { font-size: var(--fs-small); margin: var(--sp-2) 0 var(--sp-4); }
+    :root[data-look="new"] .signout-link { min-height: 44px; padding: 0 var(--sp-3); font-size: var(--fs-body); }
+
+    /* ---------- What's New popup ---------- */
+    :root[data-look="new"] .whats-new-overlay { padding: var(--sp-5); }
+    :root[data-look="new"] .whats-new-card {
+      padding: var(--sp-6) var(--sp-5) var(--sp-5);
+      border-radius: var(--radius-lg);
+      text-align: left;
+      max-height: 82vh;
+      max-height: 82dvh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      animation: fin-return 0.3s var(--ease-out);
+    }
+    :root[data-look="new"] .whats-new-card h3 { font-size: var(--fs-title); font-weight: 700; letter-spacing: -0.02em; margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .whats-new-card p { font-size: var(--fs-body); }
+    :root[data-look="new"] .whats-new-card p.fin-has-list { display: none; }
+    :root[data-look="new"] .fin-whatsnew-list {
+      display: block;
+      margin: 0 0 var(--sp-5);
+      padding: 0;
+      list-style: none;
+    }
+    :root[data-look="new"] .fin-whatsnew-list li {
+      position: relative;
+      padding: 0 0 var(--sp-3) var(--sp-5);
+      font-size: var(--fs-body);
+      line-height: 1.45;
+      color: var(--text-secondary);
+    }
+    :root[data-look="new"] .fin-whatsnew-list li::before {
+      content: "";
+      position: absolute;
+      left: var(--sp-1);
+      top: 0.55em;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-primary);
+    }
+    :root[data-look="new"] .whats-new-card button { min-height: 48px; }
+
+    /* The round + button sticks up above the bottom bar: keep the little message clear of it. */
+    :root[data-look="new"] .fin-toast { bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
+
+    /* Demo banner and profile menu: comfortable targets. */
+    :root[data-look="new"] .demo-banner button { min-height: 36px; }
+    :root[data-look="new"] .profile-signout-btn { min-height: 44px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      :root[data-look="new"] #view-more .fin-slide-r,
+      :root[data-look="new"] #view-more .fin-slide-l,
+      :root[data-look="new"] .whats-new-card { animation: none; }
+      :root[data-look="new"] .hist-row,
+      :root[data-look="new"] .person-row,
+      :root[data-look="new"] .fin-switch,
+      :root[data-look="new"] .fin-switch-knob,
+      :root[data-look="new"] .access-switch::after { transition: none; }
+      :root[data-look="new"] .person-row:active,
+      :root[data-look="new"] .fin-switch:active .fin-switch-knob { transform: none; }
+    }
+
+    /* =====================================================================
+       FIRST-RUN WELCOME TOUR (2026-10-17)
+       Same bottom-sheet frame as .fin-sheet (it carries both classes), so
+       with the New look switch off nothing here is ever shown. Colours are
+       existing tokens only; spacing/sizes come from --sp-* and --fs-*.
+       ===================================================================== */
+    .fin-onb-only { display: none; }
+    :root[data-look="new"] .fin-onb-only { display: block; }
+    body.friend-mode .fin-onb-only { display: none !important; }
+
+    .fin-sheet-backdrop.fin-onb-backdrop { z-index: 94; }
+    :root[data-look="new"] .fin-sheet.fin-onb {
+      display: flex;
+      flex-direction: column;
+      z-index: 95;
+      min-height: min(620px, 92vh);
+      min-height: min(620px, 92dvh);
+      padding-top: var(--sp-3);
+      overflow: hidden;            /* the middle part scrolls; Back / Next stay in view */
+    }
+    :root[data-look="new"] .fin-onb-top { display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; }
+    :root[data-look="new"] .fin-onb-dots { display: flex; gap: 6px; align-items: center; flex: 1; min-width: 0; }
+    :root[data-look="new"] .fin-onb-dot {
+      width: 8px; height: 8px; border-radius: 4px;
+      background: var(--surface-inset);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-muted) 55%, transparent);
+      transition: width var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out);
+    }
+    :root[data-look="new"] .fin-onb-dot.done { background: color-mix(in srgb, var(--color-primary) 45%, var(--surface-inset)); box-shadow: none; }
+    :root[data-look="new"] .fin-onb-dot.on { width: 22px; background: var(--color-primary); box-shadow: none; }
+    :root[data-look="new"] .fin-onb .sr-only {
+      position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+    :root[data-look="new"] .fin-onb .fin-onb-skip {
+      border: none;
+      width: auto; min-height: 44px; padding: 0 var(--sp-3);
+      font-size: var(--fs-body); font-weight: 600;
+      color: var(--text-secondary);
+    }
+    :root[data-look="new"] .fin-onb-body { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: var(--sp-4) 0 var(--sp-3); }
+    :root[data-look="new"] .fin-onb-step { display: flex; flex-direction: column; gap: var(--sp-3); }
+    :root[data-look="new"] .fin-onb-step.fin-slide-r { animation: fin-slide-r var(--dur-base) var(--ease-out) backwards; }
+    :root[data-look="new"] .fin-onb-step.fin-slide-l { animation: fin-slide-l var(--dur-base) var(--ease-out) backwards; }
+    :root[data-look="new"] .fin-onb-step:focus, :root[data-look="new"] .fin-onb-step .fin-sheet-title:focus { outline: none; }
+    :root[data-look="new"] .fin-onb-art {
+      width: 64px; height: 64px; border-radius: 22px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 14%, var(--surface-card));
+    }
+    :root[data-look="new"] .fin-onb-art svg { width: 32px; height: 32px; }
+    :root[data-look="new"] .fin-onb-step p { margin: 0; font-size: var(--fs-body); line-height: 1.5; color: var(--text-secondary); }
+    :root[data-look="new"] .fin-onb-step p.fin-onb-note { font-size: var(--fs-small); color: var(--text-muted); }
+    :root[data-look="new"] .fin-onb-step p strong { color: var(--text-primary); font-weight: 600; }
+
+    /* The little made-up example on step 2 (not tappable, hidden from screen readers). */
+    :root[data-look="new"] .fin-onb-mock { display: flex; flex-direction: column; gap: var(--sp-2); }
+    :root[data-look="new"] .fin-onb-mock-cap { font-size: var(--fs-caption); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+    :root[data-look="new"] .fin-onb-bubble {
+      display: flex; align-items: center; gap: var(--sp-3);
+      padding: var(--sp-3);
+      border-radius: var(--radius-md);
+      background: var(--surface-inset);
+      font-size: var(--fs-small);
+      color: var(--text-primary);
+    }
+    :root[data-look="new"] .fin-onb-bubble .ic {
+      flex: none; width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 14%, var(--surface-card));
+    }
+    :root[data-look="new"] .fin-onb-bubble .ic svg { width: 18px; height: 18px; }
+    :root[data-look="new"] .fin-onb-bubble .tx { flex: 1; min-width: 0; line-height: 1.35; }
+    :root[data-look="new"] .fin-onb-bubble .tx b { display: block; font-weight: 600; }
+    :root[data-look="new"] .fin-onb-bubble .tx span { color: var(--text-muted); }
+    :root[data-look="new"] .fin-onb-bubble .amt { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] .fin-onb-arrow { align-self: center; color: var(--text-muted); line-height: 0; }
+    :root[data-look="new"] .fin-onb-arrow svg { width: 18px; height: 18px; }
+    :root[data-look="new"] .fin-onb-mock .type-toggle { gap: var(--sp-2); }
+    :root[data-look="new"] .fin-onb-mock .type-btn { padding: 8px 0; min-width: 0; text-align: center; }
+    :root[data-look="new"] .fin-onb-mock .fin-onb-note-box {
+      padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-sm);
+      background: var(--surface-card); font-size: var(--fs-small); color: var(--text-primary);
+    }
+    :root[data-look="new"] .fin-onb-chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+    :root[data-look="new"] .fin-onb-chip {
+      padding: 6px var(--sp-3); border-radius: var(--radius-pill);
+      font-size: var(--fs-small); font-weight: 500;
+      color: var(--text-secondary); background: var(--surface-inset);
+    }
+
+    /* Step 5 rows reuse the Settings switch row (.field.fin-has-switch). */
+    :root[data-look="new"] .fin-onb-rows .field.fin-has-switch { margin-bottom: 0; padding: var(--sp-2) 0; min-height: 56px; }
+    :root[data-look="new"] .fin-onb-rows .field.fin-has-switch > label { font-size: var(--fs-body); }
+    :root[data-look="new"] .fin-onb-hint { font-size: var(--fs-small); color: var(--text-muted); margin-top: 2px; }
+
+    :root[data-look="new"] .fin-onb-nav { display: flex; gap: var(--sp-3); padding-top: var(--sp-2); }
+    :root[data-look="new"] .fin-onb-nav button { min-height: 48px; }
+    :root[data-look="new"] .fin-onb-nav #finOnbBack { flex: 0 0 34%; }
+    :root[data-look="new"] .fin-onb-nav #finOnbNext { flex: 1; }
+    :root[data-look="new"] .fin-onb-nav #finOnbBack[hidden] { display: block; visibility: hidden; }
+    :root[data-look="new"] #finOnbReplay { min-height: 48px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      :root[data-look="new"] .fin-onb-step.fin-slide-r, :root[data-look="new"] .fin-onb-step.fin-slide-l { animation: none; }
+      :root[data-look="new"] .fin-onb-dot { transition: none; }
+    }
+
   </style>
 </head>
 <body>
@@ -2983,7 +3991,7 @@
               <option value="credit">Received</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field manual-amount-field">
             <label>Amount (&#8377;)</label>
             <input type="number" id="manualAmountInput" min="0" step="0.01" placeholder="0" inputmode="decimal">
           </div>
@@ -3109,7 +4117,7 @@
             </button>
           </div>
 
-          <div class="more-group-label">Advisors</div>
+          <div class="more-group-label" id="moreGroupAdvisors">Advisors</div>
           <div class="more-menu">
             <button type="button" class="more-menu-item tactile" data-target="cc">
               <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 9.5h19"/><path d="M6 14.5h4"/></svg></span>
@@ -3118,6 +4126,10 @@
             <button type="button" class="more-menu-item tactile" data-target="debts">
               <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3v12"/><path d="M13 11l4 4 4-4"/><path d="M7 21V9"/><path d="M11 13l-4-4-4 4"/></svg></span>
               <span>Debts</span>
+            </button>
+            <button type="button" class="more-menu-item tactile fin-only" id="moreSplitsTile" data-target="debts">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3 19c.5-3 2.8-4.6 6-4.6s5.5 1.6 6 4.6"/><path d="M16 14.6c2.4-.2 4.4 1 5 3.9"/></svg></span>
+              <span>Splits</span>
             </button>
             <button type="button" class="more-menu-item tactile" data-target="savings">
               <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg></span>
@@ -3619,6 +4631,17 @@
           </div>
         </div>
 
+        <!-- New look only: which screens this phone shows, and the welcome tour again. -->
+        <div class="settings-group fin-onb-only" id="finScreensUsedGroup">
+          <div class="settings-group-title">Screens I use</div>
+          <p class="pending-status" style="margin-top:-2px;">Switch off what you do not use and it is hidden on this phone only. Nothing is deleted.</p>
+          <div id="finScreensUsedList"></div>
+        </div>
+        <div class="settings-group fin-onb-only" id="finOnbReplayGroup">
+          <div class="settings-group-title">Welcome tour</div>
+          <button type="button" class="secondary" id="finOnbReplay">Replay the welcome tour</button>
+        </div>
+
         <div class="settings-group">
           <div class="settings-group-title">Speed</div>
           <div class="field real-owner-only" style="margin-bottom:0;">
@@ -3821,6 +4844,8 @@
       <button class="tab-btn" data-tab="pending" type="button">
         <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h9"/><path d="M4 12h9"/><path d="M4 18h6"/><path d="M16 16l2.5 2.5L22 14"/></svg></span>Pending
       </button>
+      <!-- Round "+" button (New look only; hidden otherwise). Opens the add-a-transaction sheet. -->
+      <span class="tab-fab-slot"><button class="tab-fab" id="tabFab" type="button" aria-label="Add a transaction" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button></span>
       <button class="tab-btn" data-tab="analysis" type="button">
         <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/></svg></span>Analysis
       </button>
@@ -3828,6 +4853,33 @@
         <span class="tab-icon"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span>More
       </button>
     </nav>
+
+    <!-- Add-a-transaction bottom sheet (New look only). It borrows the existing
+         "Add a transaction" form from Pending while open and gives it back after. -->
+    <div class="fin-sheet-backdrop" id="finSheetBackdrop"></div>
+    <div class="fin-sheet" id="finSheet" role="dialog" aria-modal="true" aria-labelledby="finSheetTitle" aria-hidden="true">
+      <div class="fin-sheet-grab" id="finSheetGrab">
+        <div class="fin-sheet-handle"></div>
+        <h3 class="fin-sheet-title" id="finSheetTitle">Add a transaction</h3>
+        <p class="fin-sheet-sub" id="finSheetSub">For a payment that had no bank text message. Add a note and Need or Want on its card in Pending afterwards.</p>
+      </div>
+      <div id="finSheetBody"></div>
+    </div>
+
+    <!-- First-run welcome tour (New look only; same frame as the sheet above, filled in by finOnb* in the script). -->
+    <div class="fin-sheet-backdrop fin-onb-backdrop" id="finOnbBackdrop"></div>
+    <div class="fin-sheet fin-onb" id="finOnb" role="dialog" aria-modal="true" aria-labelledby="finOnbTitle" aria-hidden="true">
+      <div class="fin-onb-top">
+        <div class="fin-onb-dots" id="finOnbDots" aria-hidden="true"></div>
+        <span class="sr-only" id="finOnbCount" aria-live="polite"></span>
+        <button type="button" class="secondary fin-onb-skip" id="finOnbSkip">Skip</button>
+      </div>
+      <div class="fin-onb-body" id="finOnbBody"></div>
+      <div class="fin-onb-nav">
+        <button type="button" class="secondary" id="finOnbBack">Back</button>
+        <button type="button" id="finOnbNext">Next</button>
+      </div>
+    </div>
 
   </div>
 
@@ -3864,8 +4916,10 @@
           // (rAF never fires there), or the number is trivial.
           if (reduced() || document.hidden || to === 0) { el.textContent = fmt(to, d); return; }
           let start = null;
+          const run = el._finRun = (el._finRun || 0) + 1;   // a newer count on the same element cancels this one
           el.textContent = fmt(0, d);
           const step = function (t) {
+            if (el._finRun !== run) return;
             if (start === null) start = t;
             const p = Math.min((t - start) / ms, 1);
             el.textContent = fmt(to * (1 - Math.pow(1 - p, 3)), d);
@@ -3890,8 +4944,948 @@
       return { countUp: countUp, stagger: stagger };
     })();
 
-    const APP_VERSION = "2026-10-17-03";
-    const APP_CHANGELOG = "New: Settings > Appearance > \"New look (preview)\" lets you try the app makeover as it is built (off by default, only on your phone). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
+
+    // =========================================================
+    // UI/UX makeover, PART A (2026-10-17). Everything in this block only
+    // does anything when the "New look (preview)" switch is on
+    // (html[data-look="new"]); with it off none of it is ever called.
+    // =========================================================
+    function finLookOn() { return document.documentElement.dataset.look === "new"; }
+
+    // ---- Pure logic (no screen access, so it is unit-tested in plain Node:
+    //      backend/tests/finSwipeConfirm.test.js reads this block) ----
+    // FIN-LOGIC-START
+    // Is a Pending card ready to be confirmed by a swipe? It must have what
+    // Save needs plus what a good answer needs: a note, and a Need/Want/Saving
+    // choice whenever the card asks for one. Returns a short plain hint if not.
+    function finSwipeEligibility(s) {
+      if (!String(s.note || "").trim()) return { ok: false, hint: "Add a note first, then swipe to confirm." };
+      if (s.needsDirection && !s.direction) return { ok: false, hint: "Choose spent or received first, then swipe." };
+      if (s.needsAmount && !(Number(s.amount) > 0)) return { ok: false, hint: "Enter the amount first, then swipe." };
+      if (s.typeRequired && !s.type && !s.typeUnsure) return { ok: false, hint: "Pick Need, Want or Saving first, then swipe." };
+      if (s.splitOpen) return { ok: false, hint: "Finish the split first, or tap Save." };
+      return { ok: true, hint: "" };
+    }
+
+    // "Confirm now, send a moment later": a confirmed card is only SENT after
+    // delayMs, so Undo is honest (nothing has left the phone yet). Only one
+    // confirm waits at a time: a newer one sends the older one straight away.
+    // flush() sends the waiting one immediately (used when leaving the screen
+    // or closing the app, so a confirm is never lost).
+    function finMakeConfirmQueue(opts) {
+      let current = null;
+      function take() {
+        if (!current) return null;
+        const c = current; current = null;
+        opts.clearTimer(c.timer);
+        return c;
+      }
+      function flush() {
+        const c = take();
+        if (!c) return false;
+        try { c.entry.commit(); } finally { if (c.entry.onDone) c.entry.onDone("sent"); }
+        return true;
+      }
+      function undo() {
+        const c = take();
+        if (!c) return false;
+        try { c.entry.onUndo(); } finally { if (c.entry.onDone) c.entry.onDone("undone"); }
+        return true;
+      }
+      function add(entry) {
+        flush();
+        current = { entry: entry, timer: null };
+        current.timer = opts.setTimer(flush, opts.delayMs);
+        return true;
+      }
+      return { add: add, flush: flush, undo: undo, pending: function () { return !!current; } };
+    }
+
+    // Reads ONE number out of a short piece of text such as "₹1,24,000", "-₹500", "37%" or
+    // "₹820 " (so the screen can make it count up). Text with no number, or with more than one
+    // ("₹100 of ₹500", "12:30") is left alone: returns null.
+    function finParseCountText(text) {
+      const m = /^([^\d]*?)(\d[\d,]*(?:\.\d+)?)([^\d]*)$/.exec(String(text == null ? "" : text));
+      if (!m) return null;
+      const value = parseFloat(m[2].replace(/,/g, ""));
+      if (!isFinite(value)) return null;
+      return { prefix: m[1], value: value, suffix: m[3] };
+    }
+    // FIN-LOGIC-END
+
+    // ---- Numbers that count up: "₹" + <span data-count>1,240</span> ----
+    // (FinMotion.countUp only writes the digits, so the symbol sits outside.)
+    function finNum(n, prefix, suffix) {
+      n = Number(n) || 0;
+      const abs = Math.abs(n);
+      const dec = Math.round(abs) === abs ? 0 : 2;
+      const shown = abs.toLocaleString("en-IN", dec ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : undefined);
+      return (prefix || "") + (n < 0 ? "-" : "") + '<span class="fin-num" data-count="' + abs + '" data-dec="' + dec + '">' + shown + '</span>' + (suffix || "");
+    }
+    // Writes a number into a fixed element only when it changed, so a quiet
+    // background refresh with the same value never restarts a count.
+    function finPutNum(el, n, prefix, suffix) {
+      if (!el) return;
+      const key = (prefix || "") + "|" + (suffix || "") + "|" + Number(n);
+      if (el.dataset.finKey === key && el.querySelector(".fin-num")) return;   // (an optimistic edit may have replaced the number with plain text)
+      el.dataset.finKey = key;
+      el.innerHTML = finNum(n, prefix, suffix);
+    }
+
+    // ---- Part B helpers: turn a plain "₹1,240" on a screen into a number that counts up ----
+    // Only looks at the FIRST piece of text inside the element, so "₹820 <small>of ₹1,000</small>"
+    // counts the 820 and leaves the rest alone. Called only when a screen opens (never on a quiet refresh).
+    function finMakeCountable(el) {
+      if (!el || el.querySelector(".fin-num")) return;
+      const first = el.firstChild;
+      if (!first || first.nodeType !== 3) return;
+      const p = finParseCountText(first.nodeValue);
+      if (!p) return;
+      const t = document.createElement("template");
+      t.innerHTML = finNum(p.value, escapeHtml(p.prefix), escapeHtml(p.suffix));
+      el.replaceChild(t.content, first);
+    }
+    function finGrowBar(b) { b.classList.remove("fin-grow"); void b.offsetWidth; b.classList.add("fin-grow"); }
+
+    // Plays one screen (or part of one): summary numbers count, sections fade up one by one,
+    // the rows of list containers fade up one by one (rows never count), bars grow.
+    //   cfg.counts : selectors of SUMMARY numbers      cfg.lists : selectors of list containers
+    //   cfg.bars   : also grow every progress bar
+    function finPlayInto(root, cfg) {
+      (cfg.counts || []).forEach(function (sel) { root.querySelectorAll(sel).forEach(finMakeCountable); });
+      FinMotion.stagger(root);
+      const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--stagger-step")) || 55;
+      (cfg.lists || []).forEach(function (sel) {
+        const list = root.querySelector(sel);
+        if (!list || !list.children.length) return;
+        let top = list;
+        while (top.parentNode && top.parentNode !== root) top = top.parentNode;
+        const direct = top === list;
+        if (direct) { list.classList.remove("fin-rise"); list.style.animationDelay = ""; }   // its rows fade, not the box
+        const base = Array.prototype.indexOf.call(root.children, top) * gap;
+        FinMotion.stagger(list);
+        Array.prototype.forEach.call(list.children, function (c, i) { c.style.animationDelay = (base + Math.min(i, 9) * gap) + "ms"; });
+      });
+      FinMotion.countUp(root);
+      if (cfg.bars) root.querySelectorAll(".category-bar-fill").forEach(finGrowBar);
+    }
+
+    // Writes a rupee amount. New look: as a count-up number that is only rewritten when it changed;
+    // switch off: exactly the plain text the screen always wrote.
+    function finMoneyInto(el, n) {
+      if (finLookOn()) finPutNum(el, n, "₹");
+      else el.textContent = "₹" + n.toLocaleString("en-IN");
+    }
+
+    // A plain count (no rupee sign), same idea as finMoneyInto.
+    function finPutNumOrText(el, n) {
+      if (finLookOn()) finPutNum(el, n, "");
+      else el.textContent = String(n);
+    }
+
+    // ---- Screen-open play: cards fade up, numbers count, bars grow ----
+    const FinPlay = (function () {
+      const armed = {};
+      const rootOf = {
+        home:     function () { return document.getElementById("homeContent"); },
+        analysis: function () { return document.getElementById("analysisContent"); },
+        pending:  function () { return document.getElementById("pendingList"); },
+        more:     function () { return document.getElementById("moreMenu"); }
+      };
+      // Screens inside More (Part B). root = the part that shows once data has arrived; ready = something that
+      // must exist first, so the play waits for real rows instead of loading placeholders.
+      const SUB = {
+        today:       { root: "todayContent",       counts: ["#todayTotalAmount", "#todayCategories .category-top > span:last-child"], lists: ["#todayCategories"], bars: true },
+        cc:          { root: "ccContent",          counts: ["#ccOutstandingAmount", "#ccCurrentAmount", "#ccTopCategories .category-top > span:last-child", "#ccCardBreakdown .category-top > span:last-child"], lists: ["#ccTopCategories", "#ccCardBreakdown"], bars: true },
+        debts:       { root: "debtsContent",       counts: ["#debtsNetAmount"], lists: ["#peopleList", "#debtsYouOwe", "#debtsTheyOwe"] },
+        savings:     { root: "savingsContent",     counts: ["#savingsCarouselInner .today-total-amount", "#savingsDetailList .category-top > span:last-child"], lists: ["#savingsDetailList"], bars: true },
+        investments: { root: "investmentsContent", counts: ["#investmentsTotalAmount", "#investmentsBreakdown .category-top > span:last-child"], lists: ["#investmentsBreakdown", "#investmentsRecent"], bars: true },
+        cash:        { root: "cashContent",        counts: ["#cashBalanceAmount"], lists: ["#cashRecent"] },
+        history:     { root: "view-history",       lists: ["#historyList"], ready: ".hist-row-wrap" },
+        planner:     { root: "plannerContent",     counts: ["#plannerTrackAmount", "#plannerRunningTotal", "#plannerOverviewCard [data-role=\"amt\"]", "#plannerOverviewCard .planner-track-row-top .cat-amt", "#plannerTrackList .planner-track-row-top .cat-amt"], lists: ["#plannerSetList", "#plannerTrackList"], bars: true },
+        access:      { root: "accessContent",      counts: ["#accessTotal"], lists: ["#accessList"] },
+        reconcile:   { root: "view-reconcile" },
+        settings:    { root: "view-settings" }
+      };
+      function arm(name) { if (finLookOn()) armed[name] = true; }
+      function isArmed(name) { return !!armed[name]; }
+      function play(name) {
+        if (!armed[name] || !finLookOn()) return;
+        const sub = SUB[name];
+        const root = sub ? document.getElementById(sub.root) : (rootOf[name] && rootOf[name]());
+        if (!root || root.offsetParent === null) return;                 // not on screen yet: stay armed
+        if (name === "pending" && !root.querySelector(".pending-item")) return;   // still skeletons: wait for the real cards
+        if (sub && sub.ready && !root.querySelector(sub.ready)) return;
+        armed[name] = false;
+        if (sub) { finPlayInto(root, sub); return; }
+        FinMotion.stagger(root);
+        if (name === "home" || name === "analysis") FinMotion.countUp(root);
+        if (name === "analysis") {
+          root.querySelectorAll(".category-bar-fill").forEach(function (b) {
+            b.classList.remove("fin-grow"); void b.offsetWidth; b.classList.add("fin-grow");
+          });
+        }
+      }
+      return { arm: arm, play: play, isArmed: isArmed };
+    })();
+
+    // ---- Small message at the bottom: "Confirmed. Undo" / hints ----
+    const FinToast = (function () {
+      let el = null, hideTimer = null;
+      function ensure() {
+        if (el) return el;
+        el = document.createElement("div");
+        el.className = "fin-toast";
+        el.setAttribute("role", "status");
+        el.setAttribute("aria-live", "polite");
+        el.innerHTML = '<span class="fin-toast-text"></span><button type="button" class="fin-toast-action" style="display:none"></button><span class="fin-toast-bar" style="display:none"></span>';
+        document.body.appendChild(el);
+        return el;
+      }
+      function hide() {
+        clearTimeout(hideTimer);
+        if (el) el.classList.remove("show");
+      }
+      // o: { text, actionLabel, onAction, ms (how long to stay), bar (show the countdown line), holdUntilHidden }
+      function show(o) {
+        const t = ensure();
+        clearTimeout(hideTimer);
+        t.querySelector(".fin-toast-text").textContent = o.text || "";
+        const act = t.querySelector(".fin-toast-action");
+        const bar = t.querySelector(".fin-toast-bar");
+        act.style.display = o.actionLabel ? "" : "none";
+        act.textContent = o.actionLabel || "";
+        act.onclick = o.onAction ? function () { o.onAction(); } : null;
+        bar.style.display = o.bar ? "" : "none";
+        if (o.bar) {
+          bar.style.animation = "none"; void bar.offsetWidth;
+          bar.style.animation = "fin-toast-bar " + (o.ms || 4000) + "ms linear forwards";
+        }
+        t.classList.add("show");
+        if (o.ms && !o.holdUntilHidden) hideTimer = setTimeout(hide, o.ms);
+      }
+      return { show: show, hide: hide };
+    })();
+
+    // ---- Swipe-to-confirm on Pending cards ----
+    const FIN_UNDO_MS = 4000;
+    const finQueue = finMakeConfirmQueue({
+      delayMs: FIN_UNDO_MS,
+      setTimer: function (f, ms) { return setTimeout(f, ms); },
+      clearTimer: function (t) { clearTimeout(t); }
+    });
+    // Leaving the screen or closing the app inside the undo window still sends the save.
+    document.addEventListener("visibilitychange", function () { if (document.hidden) finQueue.flush(); });
+    window.addEventListener("pagehide", function () { finQueue.flush(); });
+
+    function finFlyOut(card) {
+      const reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      card.classList.remove("swiping");
+      if (reduced) { card.style.display = "none"; return; }
+      card.style.transition = "transform .22s cubic-bezier(0.2,0.8,0.2,1), opacity .22s linear";
+      card.style.transform = "translateX(110%)";
+      card.style.opacity = "0";
+      card.style.pointerEvents = "none";
+      setTimeout(function () {
+        if (!card.style.transform) return;                 // already undone
+        card.style.height = card.offsetHeight + "px";
+        card.style.overflow = "hidden";
+        void card.offsetHeight;
+        card.style.transition = "height .22s cubic-bezier(0.2,0.8,0.2,1), margin .22s, padding .22s, border-width .22s";
+        card.style.height = "0px";
+        card.style.marginTop = "0px"; card.style.marginBottom = "0px";
+        card.style.paddingTop = "0px"; card.style.paddingBottom = "0px";
+        card.style.borderWidth = "0px";
+      }, 200);
+    }
+    function finShowCardAgain(card, animate) {
+      card.removeAttribute("style");
+      card.classList.remove("swiping", "armed", "pl-return");
+      if (animate) { void card.offsetWidth; card.classList.add("pl-return"); setTimeout(function () { card.classList.remove("pl-return"); }, 400); }
+    }
+
+    function finConfirmCard(card) {
+      const sw = card._finSwipe;
+      const row = card.dataset.row;
+      finFlyOut(card);
+      card.dataset.finWaiting = "1";            // see refreshUneditedNoteSuggestions
+      finQueue.add({
+        commit: function () {
+          delete card.dataset.finWaiting;
+          // Back to normal looks first: if the save fails, the app puts this card back at the top and it must look normal.
+          finShowCardAgain(card, false);
+          sw.commit();                                      // the SAME Save the button runs
+          if (card.isConnected) return;                     // Save refused (a check failed): it stays on screen with its own message
+          // The list was redrawn while we waited (a fresh card for this row may be on screen): drop that duplicate.
+          document.querySelectorAll('#pendingList .pending-item[data-row="' + row + '"]').forEach(function (c) { if (c !== card) c.remove(); });
+        },
+        onUndo: function () { delete card.dataset.finWaiting; finShowCardAgain(card, true); },
+        onDone: function () { FinToast.hide(); }
+      });
+      FinToast.show({
+        text: "Confirmed",
+        actionLabel: "Undo",
+        onAction: function () { finQueue.undo(); },
+        ms: FIN_UNDO_MS, bar: true, holdUntilHidden: true
+      });
+    }
+
+    (function wireSwipeToConfirm() {
+      const list = document.getElementById("pendingList");
+      let st = null;
+      function threshold(w) { return Math.max(84, Math.round(w * 0.28)); }
+      function springBack(card) {
+        card.classList.remove("swiping", "armed");
+        card.style.transition = "transform .3s cubic-bezier(0.34,1.56,0.64,1)";
+        card.style.transform = "translateX(0)";
+        card.style.setProperty("--swipe", "0");
+        setTimeout(function () { if (!card.style.opacity) { card.style.transition = ""; card.style.transform = ""; card.style.removeProperty("--swipe"); } }, 340);
+      }
+      list.addEventListener("pointerdown", function (e) {
+        if (!finLookOn()) return;
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        const card = e.target.closest(".pending-item.pl-new");
+        if (!card || !card._finSwipe || card.style.pointerEvents === "none") return;
+        if (e.target.closest("input, select, textarea")) return;       // keep text selection working
+        st = { card: card, id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, locked: false, w: card.offsetWidth };
+      });
+      list.addEventListener("pointermove", function (e) {
+        if (!st || e.pointerId !== st.id) return;
+        const dx = e.clientX - st.x, dy = e.clientY - st.y;
+        if (!st.locked) {
+          if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { st = null; return; }   // it is a scroll
+          if (dx > 10 && dx > Math.abs(dy) * 1.2) {
+            st.locked = true;
+            st.card.style.transition = "";
+            st.card.classList.add("swiping");
+            try { st.card.setPointerCapture(e.pointerId); } catch (err) { /* fine */ }
+          } else { return; }
+        }
+        const thr = threshold(st.w);
+        const move = Math.max(0, dx);
+        const shown = move > thr ? thr + (move - thr) * 0.35 : move;   // resists after the line
+        st.dx = move;
+        st.card.style.transform = "translateX(" + shown + "px)";
+        st.card.style.setProperty("--swipe", String(Math.min(move / thr, 1)));
+        st.card.classList.toggle("armed", move >= thr);
+      });
+      function end(e, cancelled) {
+        if (!st || e.pointerId !== st.id) return;
+        const s = st; st = null;
+        if (!s.locked) return;
+        // The release should not also count as a tap on whatever button is under the finger.
+        const stopper = function (ev) { ev.stopPropagation(); ev.preventDefault(); };
+        s.card.addEventListener("click", stopper, { capture: true, once: true });
+        setTimeout(function () { s.card.removeEventListener("click", stopper, true); }, 60);
+        if (cancelled || s.dx < threshold(s.w)) { springBack(s.card); return; }
+        const check = s.card._finSwipe.check();
+        if (!check.ok) {
+          springBack(s.card);
+          // Never replace the "Confirmed / Undo" toast while a confirm is still waiting.
+          if (!finQueue.pending()) FinToast.show({ text: check.hint, ms: 3200 });
+          return;
+        }
+        finConfirmCard(s.card);
+      }
+      list.addEventListener("pointerup", function (e) { end(e, false); });
+      list.addEventListener("pointercancel", function (e) { end(e, true); });
+    })();
+
+    // ---- Bottom sheet: the Pending "Add a transaction" form, and (Part B) every other
+    //      "+ add" form in the app. The form is the app's OWN form with its own Save code: the sheet
+    //      only lends it a nicer frame and gives it back afterwards. ----
+    let finSheetOpen = false;
+    let finSheetToken = 0;
+    let finSheetCur = null;           // what the sheet holds now: { form, manual, title, sub, dismiss, opener, focus }
+    function finSheetEls() {
+      return { sheet: document.getElementById("finSheet"), back: document.getElementById("finSheetBackdrop"),
+               body: document.getElementById("finSheetBody"), form: document.getElementById("addManualForm"),
+               title: document.getElementById("finSheetTitle"), sub: document.getElementById("finSheetSub") };
+    }
+    function finSetBackgroundInert(on) {
+      ["appContent", "tabBar"].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (on) el.setAttribute("inert", ""); else el.removeAttribute("inert");
+      });
+    }
+    // cfg left out = the Pending "Add a transaction" form. Otherwise
+    // { form, title, sub, focus (id), opener (id of the button to focus afterwards), dismiss (put the form away) }.
+    function finOpenSheet(cfg) {
+      if (!finLookOn() || finSheetOpen) return;
+      if (!cfg && friendMode) return;
+      finQueue.flush();
+      FinToast.hide();
+      const e = finSheetEls();
+      const c = cfg || { form: e.form, manual: true, focus: "manualAmountInput",
+        title: "Add a transaction",
+        sub: "For a payment that had no bank text message. Add a note and Need or Want on its card in Pending afterwards." };
+      finSheetOpen = true;
+      finSheetToken++;
+      finSheetCur = c;
+      if (!c.form._finHome) c.form._finHome = { parent: c.form.parentNode, next: c.form.nextSibling };
+      e.title.textContent = typeof c.title === "function" ? c.title() : c.title;
+      const subText = typeof c.sub === "function" ? c.sub() : c.sub;
+      e.sub.textContent = subText || "";
+      e.sub.style.display = subText ? "" : "none";
+      e.sheet.classList.toggle("fin-nosub", !subText);
+      e.body.appendChild(c.form);
+      if (c.manual) {
+        e.form.style.display = "flex";
+        const today = manualTodayString();
+        manualDateEl.value = today; manualDateEl.max = today;
+        manualResultEl.textContent = "";
+      } else {
+        c.form.classList.add("fin-in-sheet");     // shown by the sheet's own rule, whatever the screen's code does to it
+      }
+      finSetBackgroundInert(true);       // keyboard / screen reader stay inside the sheet
+      e.back.classList.add("open");
+      e.sheet.classList.add("open");
+      e.sheet.setAttribute("aria-hidden", "false");
+      setTimeout(function () {
+        if (!finSheetOpen || finSheetCur !== c) return;
+        const f = c.focus && document.getElementById(c.focus);
+        if (f) { try { f.focus({ preventScroll: true }); } catch (err) { f.focus(); } }
+      }, 320);
+    }
+    // byCode = the screen's own code already put the form away (after Save): nothing more to undo.
+    function finCloseSheet(instant, byCode) {
+      if (!finSheetOpen) return;
+      const e = finSheetEls();
+      const cur = finSheetCur;
+      finSheetOpen = false;
+      const token = ++finSheetToken;
+      e.sheet.style.transform = "";
+      e.sheet.classList.remove("open", "dragging");
+      e.back.classList.remove("open");
+      e.sheet.setAttribute("aria-hidden", "true");
+      finSetBackgroundInert(false);
+      // Closed by hand (backdrop, swipe down, Escape, leaving the screen): put the form away the way its own button would.
+      if (!byCode && cur && !cur.manual && cur.dismiss) { try { cur.dismiss(); } catch (err) { /* fine */ } }
+      function giveFormBack() {
+        if (token !== finSheetToken || finSheetOpen || !cur) return;      // opened again meanwhile
+        const f = cur.form, h = f._finHome;
+        f.classList.remove("fin-in-sheet");
+        if (h) { if (h.next && h.next.parentNode === h.parent) h.parent.insertBefore(f, h.next); else h.parent.appendChild(f); }
+        if (cur.manual) f.style.display = "none";
+      }
+      if (instant) giveFormBack(); else setTimeout(giveFormBack, 320);
+      const back = cur && (cur.opener ? document.getElementById(cur.opener) : (cur.manual ? document.getElementById("tabFab") : null));
+      if (back && !instant) { try { back.focus({ preventScroll: true }); } catch (err) { /* fine */ } }
+    }
+    function finAfterManualAdded() {
+      finCloseSheet();
+      FinToast.show({ text: "Added. Pick a note for it below.", ms: 3200 });
+      if (finCurrentTab !== "pending") switchTab("pending");
+    }
+    document.getElementById("tabFab").addEventListener("click", function () { finOpenSheet(); });
+    document.getElementById("finSheetBackdrop").addEventListener("click", function () { finCloseSheet(); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finSheetOpen) finCloseSheet(); });
+    (function wireSheetDrag() {
+      const grab = document.getElementById("finSheetGrab");
+      const sheet = document.getElementById("finSheet");
+      let d = null;
+      grab.addEventListener("pointerdown", function (e) {
+        if (!finSheetOpen) return;
+        d = { id: e.pointerId, y: e.clientY, t: Date.now(), dy: 0 };
+        try { grab.setPointerCapture(e.pointerId); } catch (err) { /* fine */ }
+        sheet.classList.add("dragging");
+      });
+      grab.addEventListener("pointermove", function (e) {
+        if (!d || e.pointerId !== d.id) return;
+        d.dy = Math.max(0, e.clientY - d.y);
+        sheet.style.transform = "translate(-50%, " + d.dy + "px)";
+      });
+      function up(e) {
+        if (!d || e.pointerId !== d.id) return;
+        const s = d; d = null;
+        sheet.classList.remove("dragging");
+        const fast = s.dy > 30 && (Date.now() - s.t) < 220;      // a quick flick down
+        if (s.dy > 100 || fast) { finCloseSheet(); }
+        else { sheet.style.transform = ""; }
+      }
+      grab.addEventListener("pointerup", up);
+      grab.addEventListener("pointercancel", up);
+    })();
+
+    // ---- Part B: every "+ add" form opens in the bottom sheet (New look only) ----
+    // The screens show and hide their own form by changing its style, exactly as before. We just WATCH that:
+    // when the form is shown, lend it to the sheet; when the screen's own code hides it (after Save) close the sheet.
+    // Nothing about saving changes. A tap on the dark area or a swipe down closes it the same way Cancel would.
+    const FIN_SHEET_FORMS = [
+      { form: "addCashForm",       title: "Log cash",           sub: "Cash you spent or received.",                     focus: "cashAmountInput",   opener: "addCashToggleButton",       save: "#saveCashButton" },
+      { form: "addInvestmentForm", title: "Log an investment",  sub: "Money you put into a fund, stock or gold.",       focus: "investAmountInput", opener: "addInvestmentToggleButton", save: "#saveInvestmentButton" },
+      { form: "addDebtForm",       title: "Add a debt",         sub: "Money you lent or borrowed, outside of splits.",  focus: "debtPersonInput",   opener: "addDebtToggleButton",       save: "#saveDebtButton" },
+      { form: "addFriendForm",     title: "Add a friend",       sub: "Someone you split payments with.",                focus: "friendNameInput",   opener: "addFriendToggle",           save: "#saveFriendButton" },
+      { form: "addGoalForm",       title: "Add to wish list",   sub: "Something you are saving up for.",                focus: "goalNameInput",     opener: "addGoalToggleButton",       save: "#saveGoalButton" },
+      { form: "logSavingSheet",    title: "Log a saving",       sub: "Split it automatically or choose where it goes.", focus: "logAmountInput",   opener: "logSavingToggleButton",     save: "#confirmAutoSplitButton, #saveManualSplitButton" },
+      { form: "quickActionPanel",  title: function () { return quickActionState && quickActionState.mode === "withdraw" ? "Withdraw money" : "Add money"; },
+                                   sub: function () { return quickActionLabelEl.textContent; },
+                                   focus: "quickActionAmountInput", save: "#quickActionConfirmButton", cancel: "quickActionCancelButton" }
+    ];
+    let finSaveClicked = false;     // true only for the instant right after a Save tap
+    (function wireFormSheets() {
+      FIN_SHEET_FORMS.forEach(function (c) {
+        const form = document.getElementById(c.form);
+        if (!form) return;
+        const cfg = {
+          form: form, title: c.title, sub: c.sub, focus: c.focus, opener: c.opener,
+          dismiss: c.cancel ? function () { document.getElementById(c.cancel).click(); }
+                            : function () { form.style.display = "none"; }
+        };
+        // Runs BEFORE the Save button's own code (capture phase) so we know a Save tap caused the form to hide.
+        form.addEventListener("click", function (ev) {
+          if (ev.target.closest && ev.target.closest(c.save)) { finSaveClicked = true; setTimeout(function () { finSaveClicked = false; }, 0); }
+        }, true);
+        new MutationObserver(function () {
+          if (!finLookOn()) return;
+          const shown = form.style.display !== "none";
+          if (shown && !finSheetOpen) {
+            finOpenSheet(cfg);
+          } else if (!shown && finSheetOpen && finSheetCur && finSheetCur.form === form) {
+            const saved = finSaveClicked;
+            finSaveClicked = false;
+            finCloseSheet(false, true);
+            if (saved) FinToast.show({ text: "Saved", ms: 2200 });
+          }
+        }).observe(form, { attributes: true, attributeFilter: ["style"] });
+      });
+    })();
+
+    // ---- Part B: opening a screen inside More ----
+    let finOpenSub = null;          // the More screen that is open now (null = the menu)
+    let finSubObs = null, finSubObsTimer = null;
+    function finUnwatchSub() {
+      if (finSubObs) { finSubObs.disconnect(); finSubObs = null; }
+      clearTimeout(finSubObsTimer);
+    }
+    // A screen opened before its data arrived plays as soon as the first real content shows (up to 8 seconds).
+    function finWatchSub(name) {
+      finUnwatchSub();
+      const view = subViews[name];
+      finSubObs = new MutationObserver(function () {
+        FinPlay.play(name);
+        if (!FinPlay.isArmed(name)) finUnwatchSub();
+      });
+      finSubObs.observe(view, { subtree: true, childList: true, attributes: true, attributeFilter: ["style"] });
+      finSubObsTimer = setTimeout(finUnwatchSub, 8000);
+    }
+    function finSlideIn(el, dir) {
+      if (!el) return;
+      el.classList.remove("fin-slide-r", "fin-slide-l");
+      void el.offsetWidth;
+      el.classList.add(dir === "l" ? "fin-slide-l" : "fin-slide-r");
+      setTimeout(function () { el.classList.remove("fin-slide-r", "fin-slide-l"); }, 420);
+    }
+    function finSubOpened(name) {
+      finUnwatchSub();
+      if (finSheetOpen) finCloseSheet(true);
+      finOpenSub = name;
+      if (!finLookOn()) return;
+      if (name === "settings") finRenderScreensUsed();
+      FinPlay.arm(name);
+      finSlideIn(subViews[name], "r");
+      FinPlay.play(name);
+      if (FinPlay.isArmed(name)) finWatchSub(name);
+    }
+    function finMenuShown() {
+      finUnwatchSub();
+      if (finSheetOpen) finCloseSheet(true);
+      const cameBack = finOpenSub !== null;
+      finOpenSub = null;
+      if (!finLookOn()) return;
+      if (cameBack) { FinPlay.arm("more"); finSlideIn(moreMenuEl, "l"); }
+      FinPlay.play("more");            // armed by a tab change or by coming back from a screen
+    }
+    // One person's page (Debts): the balance counts and the history rows fade in, once per person / balance.
+    let finPersonKey = "";
+    function finPlayPerson(email, bal) {
+      if (!finLookOn()) return;
+      const key = email + "|" + bal;
+      if (key === finPersonKey) return;
+      finPersonKey = key;
+      finPlayInto(personDetailEl, { counts: [".today-total-amount"], lists: [".person-ledger"] });
+    }
+
+    // ---- Part B: real on/off switches in Settings ----
+    // The screen keeps its own dropdowns (its Save code reads them). In the new look each on/off dropdown is
+    // hidden and a switch sits in its place; tapping the switch changes the dropdown and tells it, as a tap on it would.
+    const FIN_SWITCHES = [
+      { id: "settingsDailySummary", on: "on", off: "off" },
+      { id: "settingsFastViews",    on: "on", off: "off" },
+      { id: "settingsLookPreview",  on: "on", off: "off" }
+    ];
+    function finSyncSwitches() {
+      if (!finLookOn()) return;
+      FIN_SWITCHES.forEach(function (s) {
+        const sel = document.getElementById(s.id);
+        const field = sel && sel.closest(".field");
+        if (!field) return;
+        let sw = field.querySelector(".fin-switch");
+        if (!sw) {
+          const lab = field.querySelector("label");
+          sw = document.createElement("button");
+          sw.type = "button";
+          sw.className = "fin-switch";
+          sw.setAttribute("role", "switch");
+          sw.setAttribute("aria-label", lab ? lab.textContent : "");
+          sw.innerHTML = '<span class="fin-switch-knob"></span>';
+          sw.addEventListener("click", function () {
+            sel.value = sel.value === s.on ? s.off : s.on;
+            sel.dispatchEvent(new Event("change", { bubbles: true }));
+            finSyncSwitches();
+          });
+          field.appendChild(sw);
+          field.classList.add("fin-has-switch");
+        }
+        sw.setAttribute("aria-checked", sel.value === s.on ? "true" : "false");
+      });
+    }
+
+    // ---- Part B: small wording that differs in the new look ----
+    function finApplyLabels() {
+      const adv = document.getElementById("moreGroupAdvisors");
+      if (adv) adv.textContent = finLookOn() ? "Money" : "Advisors";
+    }
+    finApplyLabels();
+
+    // ---- Screen change: slide a few px from the side it belongs to ----
+    const FIN_TAB_ORDER = ["home", "pending", "analysis", "more"];
+    let finCurrentTab = "home";
+    function finOnTabChange(next) {
+      const prev = finCurrentTab;
+      finCurrentTab = next;
+      finQueue.flush();
+      if (finSheetOpen) finCloseSheet(true);
+      if (!finLookOn() || prev === next) return;
+      const view = tabViews[next];
+      const fromRight = FIN_TAB_ORDER.indexOf(next) > FIN_TAB_ORDER.indexOf(prev);
+      view.classList.remove("fin-slide-r", "fin-slide-l");
+      void view.offsetWidth;
+      view.classList.add(fromRight ? "fin-slide-r" : "fin-slide-l");
+      setTimeout(function () { view.classList.remove("fin-slide-r", "fin-slide-l"); }, 420);
+      FinPlay.arm(next);
+      FinPlay.play(next);
+    }
+
+    // Splits shortcut tile (New look): opens Debts and scrolls to "People you split with".
+    document.getElementById("moreSplitsTile").addEventListener("click", function () {
+      setTimeout(function () {
+        const list = document.getElementById("peopleList");
+        if (list && list.previousElementSibling) list.previousElementSibling.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+    });
+
+
+    // =========================================================
+    // FIRST-RUN WELCOME TOUR (2026-10-17). New look only. Shows once per
+    // Google account on this phone, always skippable, never covers the
+    // sign-in screen. Choices about "what I use" only hide screens ON THIS
+    // PHONE (localStorage); they are layered on top of the owner's own
+    // hidden-screens list and can never un-hide anything the owner hid.
+    // =========================================================
+
+    // ---- Pure logic (no screen access; unit-tested in plain Node by
+    //      backend/tests/finOnboarding.test.js, which reads this block) ----
+    // FIN-ONB-LOGIC-START
+    const FIN_ONB_QUESTIONS = [
+      { key: "cc",     ask: "Do you have a credit card?",         name: "Credit card",           screens: ["cc"],                     shows: "CC Advisor, and CC usage on Home" },
+      { key: "lend",   ask: "Do you lend or borrow money?",       name: "Lending and borrowing", screens: ["debts"],                  shows: "Debts" },
+      { key: "splits", ask: "Do you split costs with friends?",   name: "Splits with friends",   screens: ["debts"],                  shows: "Splits" },
+      { key: "invest", ask: "Do you invest or save regularly?",   name: "Investing and saving",  screens: ["investments", "savings"], shows: "Investments, Savings and Wish List" },
+      { key: "cash",   ask: "Do you use cash?",                   name: "Cash",                  screens: ["cash"],                   shows: "Cash, and the cash balance on Home" }
+    ];
+    // One memory slot per Google account (never shared between accounts).
+    function finOnbSeenKey(email) { return "finOnboarded:" + String(email || "").trim().toLowerCase(); }
+    function finOnbUsedKey(email) { return "finScreensUsed:" + String(email || "").trim().toLowerCase(); }
+    // stored = what this phone remembers for the account ("full", "friend" or nothing).
+    // A splits-only friend who is later given the whole app sees the full tour once.
+    function finOnbShouldShow(stored, variant) {
+      if (variant !== "full" && variant !== "friend") return false;
+      if (!stored) return true;
+      return stored === "friend" && variant === "full";
+    }
+    // Which cards, in order. A friend only sees cards that are true for splits-only.
+    function finOnbCards(variant, hasScreenQuestions) {
+      if (variant === "friend") return ["welcomeFriend", "splitsHow", "done"];
+      const c = ["welcome", "arrives", "messages", "banks"];
+      if (hasScreenQuestions) c.push("screens");
+      c.push("done");
+      return c;
+    }
+    function finOnbMessagesVariant(userAgent) {
+      return String(userAgent || "").indexOf("FinAppNativeAndroid") !== -1 ? "native" : "web";
+    }
+    // Questions worth asking: skip one whose screens the owner already hid for this person.
+    function finOnbQuestionsFor(ownerHidden) {
+      const oh = Array.isArray(ownerHidden) ? ownerHidden : [];
+      return FIN_ONB_QUESTIONS.filter(function (q) {
+        return q.screens.some(function (s) { return oh.indexOf(s) === -1; });
+      });
+    }
+    // Reads the saved answers. Only an explicit "no" (false) for a known question counts; anything else is "yes".
+    function finOnbParseUsed(raw) {
+      const out = {};
+      let o = null;
+      try { o = raw ? JSON.parse(raw) : null; } catch (e) { o = null; }
+      if (!o || typeof o !== "object" || Array.isArray(o)) return out;
+      FIN_ONB_QUESTIONS.forEach(function (q) { if (o[q.key] === false) out[q.key] = false; });
+      return out;
+    }
+    function finOnbSetUsed(used, key, on) {
+      const out = {};
+      Object.keys(used || {}).forEach(function (k) { out[k] = used[k]; });
+      if (on) delete out[key]; else out[key] = false;
+      return out;
+    }
+    // Screens this phone hides because of the answers. A splits-only friend never has anything hidden.
+    function finOnbHiddenByUsed(used, friend) {
+      if (friend) return [];
+      const u = used || {};
+      const out = [];
+      function add(n) { if (out.indexOf(n) === -1) out.push(n); }
+      if (u.cc === false) add("cc");
+      if (u.cash === false) add("cash");
+      if (u.invest === false) { add("investments"); add("savings"); }
+      if (u.lend === false && u.splits === false) add("debts");   // Debts also holds the splits, so both must be "no"
+      return out;
+    }
+    function finOnbSplitsTileOff(used, friend) { return !friend && !!used && used.splits === false; }
+    // The final answer for one screen: hidden if the owner hid it OR the person chose to. Never the other way round.
+    function finOnbIsHidden(name, ownerHidden, used, friend) {
+      return (Array.isArray(ownerHidden) && ownerHidden.indexOf(name) !== -1) || finOnbHiddenByUsed(used, friend).indexOf(name) !== -1;
+    }
+    // FIN-ONB-LOGIC-END
+
+    let finOnbOpen = false, finOnbState = null, finOnbRowSeq = 0;
+    let finOnbUsedMem = null;     // { email, used } so a blocked/full storage still works for this visit
+    function finOnbEmail() { return currentUser && currentUser.email ? String(currentUser.email).trim().toLowerCase() : ""; }
+    function finOnbReadUsed() {
+      const email = finOnbEmail();
+      if (!email) return {};
+      if (finOnbUsedMem && finOnbUsedMem.email === email) return finOnbUsedMem.used;
+      let raw = null;
+      try { raw = localStorage.getItem(finOnbUsedKey(email)); } catch (e) { /* storage blocked: treat as "no answers" */ }
+      const used = finOnbParseUsed(raw);
+      finOnbUsedMem = { email: email, used: used };
+      return used;
+    }
+    function finOnbWriteUsed(key, on) {
+      const email = finOnbEmail();
+      if (!email) return;
+      const used = finOnbSetUsed(finOnbReadUsed(), key, on);
+      finOnbUsedMem = { email: email, used: used };
+      try {
+        if (Object.keys(used).length) localStorage.setItem(finOnbUsedKey(email), JSON.stringify(used));
+        else localStorage.removeItem(finOnbUsedKey(email));
+      } catch (e) { /* storage blocked: the choice still holds until the app is closed */ }
+    }
+    // What applyHiddenScreens() adds on top of the owner's list. Empty with the switch off or for a splits-only friend.
+    function finLocalHidden() { return (!finLookOn() || friendMode) ? [] : finOnbHiddenByUsed(finOnbReadUsed(), false); }
+    function finLocalSplitsOff() { return finLookOn() && !friendMode && finOnbSplitsTileOff(finOnbReadUsed(), false); }
+    function finIsScreenHidden(name) { return hiddenScreens.indexOf(name) !== -1 || finLocalHidden().indexOf(name) !== -1; }
+
+    // One yes/no row, built like the Settings switch rows (same .field.fin-has-switch + .fin-switch pieces).
+    function finOnbMakeRow(q, labelText) {
+      const field = document.createElement("div");
+      field.className = "field fin-has-switch";
+      const lab = document.createElement("label");
+      lab.id = "finOnbLab" + (++finOnbRowSeq);
+      lab.textContent = labelText;
+      const sw = document.createElement("button");
+      sw.type = "button";
+      sw.className = "fin-switch";
+      sw.setAttribute("role", "switch");
+      sw.setAttribute("aria-labelledby", lab.id);
+      sw.innerHTML = '<span class="fin-switch-knob"></span>';
+      const hint = document.createElement("div");
+      hint.className = "fin-onb-hint";
+      function paint(on) {
+        sw.setAttribute("aria-checked", on ? "true" : "false");
+        hint.textContent = on ? "Shows: " + q.shows : "Hidden on this phone";
+      }
+      paint(finOnbReadUsed()[q.key] !== false);
+      sw.addEventListener("click", function () {
+        const now = sw.getAttribute("aria-checked") !== "true";
+        finOnbWriteUsed(q.key, now);
+        paint(now);
+        applyHiddenScreens(hiddenScreens);     // re-apply the owner's list plus this phone's choices
+      });
+      field.appendChild(lab); field.appendChild(sw); field.appendChild(hint);
+      return field;
+    }
+    function finOnbFillRows(container, useAsk) {
+      container.textContent = "";
+      finOnbQuestionsFor(hiddenScreens).forEach(function (q) { container.appendChild(finOnbMakeRow(q, useAsk ? q.ask : q.name)); });
+    }
+    // Settings > Screens I use (new look only; the group is hidden by CSS otherwise).
+    function finRenderScreensUsed() {
+      const list = document.getElementById("finScreensUsedList");
+      const group = document.getElementById("finScreensUsedGroup");
+      if (!list || !group) return;
+      finOnbFillRows(list, false);
+      group.style.display = list.children.length ? "" : "none";
+    }
+
+    const FIN_ONB_SVG = function (inner) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg>'; };
+    const FIN_ONB_ART = {
+      wallet:  '<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1.1"/>',
+      phone:   '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>',
+      chat:    '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8"/><path d="M8 12.5h5"/>',
+      bank:    '<path d="M3 10l9-6 9 6"/><path d="M5.5 10v8"/><path d="M10 10v8"/><path d="M14 10v8"/><path d="M18.5 10v8"/><path d="M3 20.5h18"/>',
+      screens: '<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>',
+      people:  '<circle cx="9" cy="8.5" r="3"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3 19c.5-3 2.8-4.6 6-4.6s5.5 1.6 6 4.6"/><path d="M16 14.6c2.4-.2 4.4 1 5 3.9"/>',
+      check:   '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/>',
+      bell:    '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+      down:    '<path d="M12 5v14"/><path d="M6 13l6 6 6-6"/>'
+    };
+    function finOnbArt(name) { return '<div class="fin-onb-art" aria-hidden="true">' + FIN_ONB_SVG(FIN_ONB_ART[name]) + '</div>'; }
+
+    const FIN_ONB_BANKS = ["HDFC", "ICICI", "SBI", "Axis", "Kotak", "Federal Bank", "Yes Bank", "Bank of Baroda", "PNB", "Canara", "Union Bank", "IDBI", "IndusInd", "IDFC First", "Bandhan", "RBL", "UCO", "Bank of India", "KVB", "Paytm", "PayZapp", "Jupiter"];
+
+    // The words and pictures of each card. Only fixed text lives here (nothing typed by anyone is ever put in).
+    function finOnbCardHtml(id) {
+      const title = function (t) { return '<h3 class="fin-sheet-title" id="finOnbTitle" tabindex="-1">' + t + '</h3>'; };
+      const isOwner = finOnbEmail() === ALLOWED_EMAIL.toLowerCase();
+      switch (id) {
+        case "welcome":
+          return finOnbArt("wallet") + title("Welcome to your money tracker") +
+            '<p>This app reads your bank messages and shows where your money goes. You only add a short note to each payment.</p>' +
+            '<p>Everything you see here is private to you. Setting up takes about a minute.</p>';
+        case "welcomeFriend":
+          return finOnbArt("people") + title("Welcome") +
+            '<p>This is where you keep track of money you share with friends.</p>' +
+            '<p>Only you and the friend on each split can see it.</p>';
+        case "splitsHow":
+          return finOnbArt("people") + title("How splits work") +
+            '<p>When a friend splits a payment with you, your share is added to your balance with them. There is one running balance for each friend.</p>' +
+            '<p>When one of you pays the other back, record the payment and the balance goes down. Made a mistake? Any entry can be undone.</p>';
+        case "arrives":
+          return title("How a payment arrives") +
+            '<div class="fin-onb-mock" aria-hidden="true">' +
+              '<div class="fin-onb-mock-cap">Example</div>' +
+              '<div class="fin-onb-bubble"><span class="ic">' + FIN_ONB_SVG(FIN_ONB_ART.chat) + '</span><span class="tx"><b>Bank message</b><span>Paid to Cafe Aroma</span></span><span class="amt">₹320</span></div>' +
+              '<div class="fin-onb-arrow">' + FIN_ONB_SVG(FIN_ONB_ART.down) + '</div>' +
+              '<div class="fin-onb-bubble"><span class="ic">' + FIN_ONB_SVG(FIN_ONB_ART.bell) + '</span><span class="tx"><b>New payment</b><span>Tap to add a note</span></span></div>' +
+              '<div class="fin-onb-arrow">' + FIN_ONB_SVG(FIN_ONB_ART.down) + '</div>' +
+              '<div class="fin-onb-bubble" style="flex-direction:column; align-items:stretch; gap:8px;">' +
+                '<div class="fin-onb-note-box">Chai with the team</div>' +
+                '<div class="type-toggle"><span class="type-btn" data-type="Need">Need</span><span class="type-btn active" data-type="Want">Want</span><span class="type-btn" data-type="Saving">Saving</span></div>' +
+              '</div>' +
+            '</div>' +
+            '<p>A bank message comes in and the app tells you. Tap it, add a short note, pick Need, Want or Saving, then confirm. In Pending you can also swipe a ready card to the right.</p>';
+        case "messages":
+          if (finOnbMessagesVariant(navigator.userAgent) === "native") {
+            return finOnbArt("chat") + title("Why the app reads your messages") +
+              '<p>To fill in your payments by itself, the Android app reads your text messages. It only uses bank messages about money going out or coming in, and skips everything else.</p>' +
+              '<p><strong>Nothing is sold or shared.</strong></p>' +
+              '<p class="fin-onb-note">Your phone will ask you to allow this. Choose Allow. You can change it later in your phone\'s app settings.</p>';
+          }
+          return finOnbArt("phone") + title("Messages and this device") +
+            '<p>Bank messages are read by the Android app. On this device you can add a payment by hand with the + button at the bottom.</p>' +
+            '<p class="fin-onb-note">Use the Android app if you want payments to fill in by themselves.</p>';
+        case "banks":
+          return finOnbArt("bank") + title("Your banks") +
+            '<p>The app already understands messages from many banks, including:</p>' +
+            '<div class="fin-onb-chips">' + FIN_ONB_BANKS.map(function (b) { return '<span class="fin-onb-chip">' + b + '</span>'; }).join("") + '</div>' +
+            '<p class="fin-onb-note">If your bank is not here, its messages still show up in Pending marked "needs review", so nothing is lost. ' +
+              (isOwner ? 'You can teach it your bank later in More, then Access.' : 'The owner of the app can teach it your bank later.') + '</p>';
+        case "screens":
+          return title("What do you use?") +
+            '<p>Switch off what you do not use. Those screens are hidden on this phone only, nothing is deleted, and you can change it any time in Settings.</p>' +
+            '<div class="fin-onb-rows"></div>';
+        default:   // "done"
+          return finOnbArt("check") + title("You are all set") +
+            (finOnbState && finOnbState.variant === "friend"
+              ? '<p>Your splits are on this screen. Open it any time to see what you owe or are owed.</p>'
+              : '<p>New payments will show up in Pending for a quick note. You can replay this tour any time in Settings.</p>');
+      }
+    }
+
+    function finOnbRender(dir) {
+      const st = finOnbState;
+      if (!st) return;
+      const id = st.cards[st.i];
+      const body = document.getElementById("finOnbBody");
+      body.innerHTML = '<div class="fin-onb-step">' + finOnbCardHtml(id) + '</div>';
+      const step = body.firstChild;
+      if (dir) step.classList.add(dir > 0 ? "fin-slide-r" : "fin-slide-l");
+      if (id === "screens") finOnbFillRows(step.querySelector(".fin-onb-rows"), true);
+      const dots = document.getElementById("finOnbDots");
+      dots.textContent = "";
+      st.cards.forEach(function (c, i) {
+        const d = document.createElement("span");
+        d.className = "fin-onb-dot" + (i === st.i ? " on" : (i < st.i ? " done" : ""));
+        dots.appendChild(d);
+      });
+      document.getElementById("finOnbCount").textContent = "Step " + (st.i + 1) + " of " + st.cards.length;
+      const back = document.getElementById("finOnbBack");
+      if (st.i === 0) back.setAttribute("hidden", ""); else back.removeAttribute("hidden");
+      back.tabIndex = st.i === 0 ? -1 : 0;
+      document.getElementById("finOnbNext").textContent = st.i === st.cards.length - 1 ? "Done" : "Next";
+      const t = document.getElementById("finOnbTitle");
+      if (t) { try { t.focus({ preventScroll: true }); } catch (e) { t.focus(); } }
+      document.getElementById("finOnb").scrollTop = 0;
+    }
+
+    function finOnbStart(variant) {
+      if (finOnbOpen || finSheetOpen || !finLookOn() || demoMode) return;   // never in Demo Mode: its switches would write the REAL account's choices
+      const qs = finOnbQuestionsFor(hiddenScreens);
+      finOnbState = { variant: variant, cards: finOnbCards(variant, qs.length > 0), i: 0, lastFocus: document.activeElement };
+      finQueue.flush();
+      FinToast.hide();
+      finOnbOpen = true;
+      finSetBackgroundInert(true);
+      document.getElementById("finOnbBackdrop").classList.add("open");
+      const sheet = document.getElementById("finOnb");
+      sheet.classList.add("open");
+      sheet.setAttribute("aria-hidden", "false");
+      finOnbRender(0);
+    }
+    function finOnbClose() {
+      if (!finOnbOpen) return;
+      const st = finOnbState;
+      finOnbOpen = false;
+      document.getElementById("finOnbBackdrop").classList.remove("open");
+      const sheet = document.getElementById("finOnb");
+      sheet.classList.remove("open");
+      sheet.setAttribute("aria-hidden", "true");
+      finSetBackgroundInert(false);
+      finOnbState = null;
+      if (st && st.lastFocus && st.lastFocus.focus && document.contains(st.lastFocus)) { try { st.lastFocus.focus({ preventScroll: true }); } catch (e) { /* fine */ } }
+    }
+    // The only door in. Shows the tour once per account on this phone; any doubt (storage blocked, signed out, a popup in the way) means skip.
+    function finOnbMaybeStart(variant) {
+      if (!finLookOn() || finOnbOpen || finSheetOpen || demoMode || !currentUser || !finOnbEmail()) return;
+      if (appContent.style.display === "none") return;                                   // login / not-allowed screen is showing
+      if (document.getElementById("whatsNewOverlay").style.display === "flex") return;   // retried when that popup is dismissed
+      const key = finOnbSeenKey(finOnbEmail());
+      try {
+        if (!finOnbShouldShow(localStorage.getItem(key), variant)) return;
+        localStorage.setItem(key, variant);                                              // remembered BEFORE showing, so it can never loop
+        if (localStorage.getItem(key) !== variant) return;
+      } catch (e) { return; }                                                            // storage blocked: skip, never an error loop
+      finOnbStart(variant);
+    }
+    document.getElementById("finOnbNext").addEventListener("click", function () {
+      const st = finOnbState;
+      if (!st) return;
+      if (st.i < st.cards.length - 1) { st.i++; finOnbRender(1); return; }
+      const goHome = st.variant === "full";
+      finOnbClose();
+      if (goHome) switchTab("home");
+    });
+    document.getElementById("finOnbBack").addEventListener("click", function () {
+      const st = finOnbState;
+      if (!st || st.i === 0) return;
+      st.i--; finOnbRender(-1);
+    });
+    document.getElementById("finOnbSkip").addEventListener("click", function () { finOnbClose(); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
+    document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
+
+    const APP_VERSION = "2026-10-17-06";
+    const APP_CHANGELOG = "New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -3910,13 +5904,42 @@
 
       if (lastSeen !== APP_VERSION) {
         document.getElementById("whatsNewText").textContent = APP_CHANGELOG;
+        finRenderWhatsNew();
         document.getElementById("whatsNewOverlay").style.display = "flex";
       }
+    }
+
+    // New look: the long one-paragraph note becomes a short list (one line per sentence) under a plainer heading.
+    // With the switch off the popup is exactly as before (the list stays hidden by CSS and the heading is unchanged).
+    function finRenderWhatsNew() {
+      const p = document.getElementById("whatsNewText");
+      const heading = p.parentNode.querySelector("h3");
+      let ul = document.getElementById("whatsNewList");
+      p.classList.remove("fin-has-list");
+      if (heading && !heading.dataset.oldText) heading.dataset.oldText = heading.textContent;
+      if (!finLookOn()) { if (heading && heading.dataset.oldText) heading.textContent = heading.dataset.oldText; return; }   // switch off: nothing is added
+      if (!ul) {
+        ul = document.createElement("ul");
+        ul.id = "whatsNewList";
+        ul.className = "fin-whatsnew-list";
+        p.parentNode.insertBefore(ul, p.nextSibling);
+      }
+      ul.textContent = "";
+      if (heading) heading.textContent = "What's new";
+      String(APP_CHANGELOG).split(/\.\s+/).forEach(function (sentence) {
+        const t = sentence.replace(/\.$/, "").trim();
+        if (!t) return;
+        const li = document.createElement("li");
+        li.textContent = t.charAt(0).toUpperCase() + t.slice(1) + ".";
+        ul.appendChild(li);
+      });
+      p.classList.add("fin-has-list");
     }
 
     document.getElementById("whatsNewDismiss").addEventListener("click", function () {
       document.getElementById("whatsNewOverlay").style.display = "none";
       localStorage.setItem("lastSeenAppVersion", APP_VERSION);
+      if (!friendMode) setTimeout(function () { finOnbMaybeStart("full"); }, 300);   // the tour waited for this popup
     });
 
     // ---------------------------------------------------------
@@ -4010,10 +6033,15 @@
       // covers both a fresh sign-in and a restored (remembered) session,
       // since both paths call this same function.
       checkWhatsNew();
+
+      // New look only: the first-run welcome tour (once per account on this phone; a splits-only friend's
+      // tour waits for the access check in startFriendMode so a not-allowed account never sees it).
+      if (!friendMode) setTimeout(function () { if (!friendMode) finOnbMaybeStart("full"); }, 700);
     }
 
     // Shows the sign-in button and hides the app
     function showSignedOutUI() {
+      finOnbClose();
       avatarWrap.style.display = "none";
       profilePopover.style.display = "none";
       notAllowedBox.style.display = "none";
@@ -4026,6 +6054,7 @@
 
     // Shows the "wrong account" message and hides the app
     function showNotAllowedUI() {
+      finOnbClose();
       signInBox.style.display = "none";
       loginHero.style.display = "none";
       trustLine.style.display = "none";
@@ -4265,6 +6294,9 @@
     }
 
     signOutButton.addEventListener("click", function () {
+      // A confirm still inside its 4-second Undo window must be sent now,
+      // while we are still signed in (afterwards the save would fail).
+      try { finQueue.flush(); } catch (e) { /* never block sign-out */ }
       stopFastViews(false);
       currentUser = null;
       localStorage.removeItem(STORAGE_KEY);
@@ -7357,6 +9389,7 @@
     function updateHomeDebtsNet() {
       const friendsNet = peopleData ? (peopleData.owedToMe - peopleData.iOwe) : 0;
       const net = Math.round((homeDebtsBaseNet + friendsNet) * 100) / 100;
+      if (finLookOn()) { finPutNum(homeDebtsNetEl, Math.abs(net), net >= 0 ? "+₹" : "-₹"); return; }
       homeDebtsNetEl.textContent = (net >= 0 ? "+₹" : "-₹") + Math.abs(net).toLocaleString("en-IN");
     }
 
@@ -7387,6 +9420,18 @@
       dashboardFull = d.full || null;
       renderHomeRecentList(homeRecentMode);
       renderHomeCharts(dashboardFull);
+
+      if (finLookOn()) {
+        // New look: the summary numbers are written as count-up numbers. finPutNum
+        // leaves a number alone if it did not change, so a quiet refresh never restarts a count.
+        finPutNum(homeTodaySpendEl, d.todaySpend, "₹");
+        finPutNum(homeMonthSpendEl, d.monthSpend, "₹", " this month");
+        finPutNum(homePendingCountEl, d.pendingCount, "");
+        finPutNum(homeCashBalanceEl, d.cashBalance, "₹");
+        finPutNum(homeCCUsageEl, d.ccUsagePct, "", "%");
+        FinPlay.arm("home");      // the first time Home shows after sign-in
+        FinPlay.play("home");
+      }
     }
 
     // ---------------------------------------------------------
@@ -7652,6 +9697,7 @@
       });
       shownCount += nextItems.length;
       updatePendingStatusText();
+      FinPlay.play("pending");   // New look: cards fade up the first time the list shows
     }
 
     // Keeps the "Showing X of Y" text and the Show More button in sync
@@ -7755,9 +9801,25 @@
         '</div>';
     }
 
+    // New look only: icon circle + merchant + time/mode + amount at the top of a Pending card.
+    function finPendingHeadHtml(txn, category) {
+      const credit = txn.type === "credit";
+      const cat = credit ? "Income" : (CATEGORY_STYLES[category] ? category : "Other");
+      const css = CATEGORY_STYLES[cat].css;
+      const path = credit ? '<path d="M12 5v14"/><path d="M6 13l6 6 6-6"/>' : (CATEGORY_ICON_PATHS[cat] || CATEGORY_ICON_PATHS.Other);
+      const name = txn.counterparty || txn.bank || "Payment";
+      const sub = [txn.date, txn.time, txn.mode].filter(Boolean).join(" · ");
+      return '<div class="pl-head">' +
+        '<span class="pl-icon" style="background:var(--cat-' + css + '-bg); color:var(--cat-' + css + '-text);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + path + '</svg></span>' +
+        '<span class="pl-who"><span class="pl-name">' + escapeHtml(name) + '</span><span class="pl-sub">' + escapeHtml(sub) + '</span></span>' +
+        '<span class="pl-amt">' + (credit ? "+" : "") + '₹' + txn.amount.toLocaleString("en-IN") + '</span>' +
+        '</div>';
+    }
+
     function buildPendingItem(txn) {
       const card = document.createElement("div");
-      card.className = "pending-item";
+      const newLook = finLookOn();
+      card.className = newLook ? "pending-item pl-new" : "pending-item";
       card.dataset.row = txn.row;
 
       // Pre-select whatever category the smart engine guessed, so most
@@ -7864,6 +9926,7 @@
       ` : "";
 
       card.innerHTML = `
+        ${newLook ? finPendingHeadHtml(txn, suggested) : ""}
         <div class="pending-top">
           <span class="pending-amount">₹${txn.amount.toLocaleString("en-IN")}</span>
           <span>${escapeHtml(txn.mode)}</span>
@@ -8363,6 +10426,26 @@
         }
       });
 
+      // Swipe right to confirm (New look). check() says whether this card is ready; commit() runs
+      // the exact same Save the button runs. Nothing is sent until the undo window ends (see finConfirmCard).
+      card._finSwipe = {
+        check: function () {
+          const splitPanel = card.querySelector(".split-panel");
+          const helpDir = card.querySelector(".help-direction");
+          const helpAmt = card.querySelector(".help-amount");
+          return finSwipeEligibility({
+            note: noteInput.value,
+            typeRequired: !!(showTypeToggle && typeFieldEl && typeFieldEl.style.display !== "none"),
+            type: selectedType,
+            typeUnsure: typeSource === "unsure",
+            needsDirection: !!helpDir, direction: helpDir ? helpDir.value : "",
+            needsAmount: !!helpAmt, amount: helpAmt ? helpAmt.value : "",
+            splitOpen: !!(splitPanel && splitPanel.style.display !== "none")
+          });
+        },
+        commit: function () { saveButton.click(); }
+      };
+
       // "Not a transaction" (added 2026-09-18) — for the rare case a
       // spam/promotional SMS got wrongly parsed and landed in Pending.
       // Needs a real second tap first, since removing it here is the
@@ -8552,6 +10635,9 @@
       freshTransactions.forEach(function (fresh) {
         const card = pendingListEl.querySelector('[data-row="' + fresh.row + '"]');
         if (!card) return;
+        // A card swiped to confirm is waiting out its Undo window: its note must
+        // stay exactly what the owner saw when swiping.
+        if (card.dataset.finWaiting) return;
 
         const noteInput = card.querySelector(".note-input");
         if (!noteInput || noteInput.value !== card.dataset.autoNote) return;
@@ -8727,6 +10813,7 @@
         tabViews[key].style.display = "none";
       });
       tabViews[tabName].style.display = "block";
+      finOnTabChange(tabName);   // New look only: slide + play (does nothing with the switch off)
 
       tabButtons.forEach(function (btn) {
         btn.classList.toggle("active", btn.dataset.tab === tabName);
@@ -8755,11 +10842,12 @@
       });
       moreMenuEl.style.display = "block";
       saveActiveTab("more", null);
+      finMenuShown();   // New look: menu slides back in; does nothing with the switch off
     }
 
     // Shows one of the 5 sub-screens, hiding the menu grid
     function showMoreSubView(name) {
-      if (hiddenScreens.indexOf(name) !== -1) { showMoreMenu(); return; }   // owner hid this one for her
+      if (finIsScreenHidden(name)) { showMoreMenu(); return; }   // owner hid this one for her (or she turned it off on this phone)
       moreMenuEl.style.display = "none";
       Object.keys(subViews).forEach(function (key) {
         subViews[key].style.display = (key === name) ? "block" : "none";
@@ -8809,6 +10897,8 @@
         loadPlanner();
       }
       if (name === "access") loadAccess();      // always fresh: it is a small admin list
+      if (name === "settings") finSyncSwitches();   // New look: on/off dropdowns show as switches
+      finSubOpened(name);   // New look: slide in, numbers count, rows fade in; does nothing with the switch off
     }
 
     document.querySelectorAll(".more-menu-item").forEach(function (btn) {
@@ -8861,7 +10951,7 @@
       todayStatusEl.textContent = "";
       todayContentEl.style.display = "block";
 
-      todayTotalAmountEl.textContent = "₹" + summary.total.toLocaleString("en-IN");
+      finMoneyInto(todayTotalAmountEl, summary.total);
       todaySplitEl.textContent =
         "Bank: ₹" + summary.bankSpend.toLocaleString("en-IN") +
         "  ·  Cash: ₹" + summary.cashSpend.toLocaleString("en-IN") +
@@ -9149,11 +11239,20 @@
     // at — same rendering code the "All" view always used, just fed a
     // different slice. Called on toggle tap (no network call) and once
     // right after a fresh/cached load.
+    // New look: wraps the real renderer so the screen "plays" (fade up, count, bars grow) when it was
+    // just opened or the month / payment mode changed, but not on a quiet background refresh.
+    let finAnalysisSig = "";
     function renderAnalysisForMode() {
+      renderAnalysisForModeInner();
+      FinPlay.play("analysis");
+    }
+
+    function renderAnalysisForModeInner() {
       if (!analysisLastData) return;
       const a = getAnalysisModeSlice(analysisLastData, analysisMode);
 
-      analysisTotalAmountEl.textContent = "₹" + a.totalDebit.toLocaleString("en-IN");
+      if (finLookOn()) finPutNum(analysisTotalAmountEl, a.totalDebit, "₹");
+      else analysisTotalAmountEl.textContent = "₹" + a.totalDebit.toLocaleString("en-IN");
 
       const savingsText = a.savings >= 0
         ? "Savings: ₹" + a.savings.toLocaleString("en-IN")
@@ -9184,6 +11283,12 @@
       // payment-mode-filtered data, never stale.
       updateAnalysisViewUI();
 
+      // New look: a quiet refresh with identical categories leaves the list (and any open row) alone,
+      // so a count or bar that is mid-animation is not cut short.
+      const catSig = finLookOn() ? analysisMode + "|" + JSON.stringify(a.categories) + "|" + a.topAmount : "";
+      if (finLookOn() && !FinPlay.isArmed("analysis") && catSig === finAnalysisSig && analysisCategoriesEl.children.length) return;
+      finAnalysisSig = catSig;
+
       analysisCategoriesEl.innerHTML = "";
 
       if (a.categories.length === 0) {
@@ -9213,7 +11318,7 @@
         row.innerHTML = `
           <div class="category-top" style="cursor:pointer;">
             ${categoryBadgeHtml(entry.category)}
-            <span class="cat-amt">₹${entry.amount.toLocaleString("en-IN")}</span>
+            <span class="cat-amt">${finLookOn() ? finNum(entry.amount, "\u20b9") : "₹" + entry.amount.toLocaleString("en-IN")}</span>
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M6 9l6 6 6-6"/></svg>
           </div>
           <div class="category-bar-track">
@@ -9286,6 +11391,7 @@
           if (btn.dataset.mode === analysisMode) return; // already selected
           analysisMode = btn.dataset.mode;
           updateAnalysisModeToggleUI();
+          FinPlay.arm("analysis");
           renderAnalysisForMode();
         });
       });
@@ -9320,6 +11426,7 @@
       analysisMonth += delta;
       if (analysisMonth < 1)  { analysisMonth = 12; analysisYear--; }
       if (analysisMonth > 12) { analysisMonth = 1;  analysisYear++; }
+      FinPlay.arm("analysis");
       loadMonthlyAnalysis();
     }
 
@@ -9458,11 +11565,11 @@
         ccOutstandingMetaEl.textContent = "No card spend last cycle.";
       } else if (out.isPaid) {
         ccOutstandingLabelEl.textContent = "Last bill — paid";
-        ccOutstandingAmountEl.textContent = "₹" + out.amount.toLocaleString("en-IN");
+        finMoneyInto(ccOutstandingAmountEl, out.amount);
         ccOutstandingMetaEl.textContent = out.cycleStart + " → " + out.cycleEnd;
       } else {
         ccOutstandingLabelEl.textContent = out.isOverdue ? "Overdue" : "Bill due";
-        ccOutstandingAmountEl.textContent = "₹" + out.amount.toLocaleString("en-IN");
+        finMoneyInto(ccOutstandingAmountEl, out.amount);
         const dueText = out.isOverdue
           ? Math.abs(out.daysUntilDue) + " day" + (Math.abs(out.daysUntilDue) === 1 ? "" : "s") + " overdue"
           : out.daysUntilDue + " day" + (out.daysUntilDue === 1 ? "" : "s") + " left";
@@ -9493,7 +11600,7 @@
       // Current, still-accumulating cycle — not due yet, kept clearly
       // separate from the outstanding bill above.
       const cur = cc.current;
-      ccCurrentAmountEl.textContent = "₹" + cur.spend.toLocaleString("en-IN");
+      finMoneyInto(ccCurrentAmountEl, cur.spend);
       ccUsageBarEl.style.width = Math.min(cur.usagePct, 100) + "%";
       // Round 6: this bar fill reads --chart-danger/--chart-warning (the
       // chart-only tier), not --color-danger/--color-warning directly —
@@ -9960,7 +12067,7 @@
       const theyOweTotal = d.totalTheyOwe + friendsOwed;
       const net = theyOweTotal - youOweTotal;
       debtsNetLabelEl.textContent = net >= 0 ? "You're Ahead" : "You're Behind";
-      debtsNetAmountEl.textContent = "₹" + Math.abs(net).toLocaleString("en-IN");
+      finMoneyInto(debtsNetAmountEl, Math.abs(net));
       debtsTotalsLineEl.textContent =
         "You owe: ₹" + youOweTotal.toLocaleString("en-IN") +
         "  ·  Owed to you: ₹" + theyOweTotal.toLocaleString("en-IN");
@@ -10131,8 +12238,8 @@
       showMoreSubView("debts");                     // also loads the people list
       // Has the owner switched this friend on for the FULL app? If so, upgrade right away (2026-10-13).
       callAppsScript({ action: "getMyAccess", idToken: currentUser.idToken }).then(function (d) {
-        if (d && d.ok && d.fullApp && !d.isOwner) { applyHiddenScreens(d.hidden); upgradeFriendToFullApp(); }
-        else if (d && d.ok && !d.fullApp) forgetIngestKeyOnPhone();     // switched off: stop sending their messages
+        if (d && d.ok && d.fullApp && !d.isOwner) { applyHiddenScreens(d.hidden); upgradeFriendToFullApp(); applyHiddenScreens(hiddenScreens);   /* again, now that friendMode is off, so "Screens I use" choices stick after a reload */ setTimeout(function () { finOnbMaybeStart("full"); }, 700); }
+        else if (d && d.ok && !d.fullApp) { forgetIngestKeyOnPhone(); setTimeout(function () { if (friendMode) finOnbMaybeStart("friend"); }, 700); }     // switched off: stop sending their messages
       }).catch(function () { /* stay on Splits only; the next open asks again */ });
     }
 
@@ -10140,13 +12247,19 @@
     // for cash / cc / debts use the same names in data-widget. Hiding is for clutter, not privacy.
     function applyHiddenScreens(list) {
       hiddenScreens = Array.isArray(list) ? list.filter(function (n) { return SWITCHABLE_SCREENS.indexOf(n) !== -1; }) : [];
+      // New look only: this phone's own "what I use" choices are ADDED on top of the owner's list (never instead of it).
+      // With the switch off, or for a splits-only friend, finLocalHidden() is empty and this is exactly the old behaviour.
+      const local = finLocalHidden();
+      const splitsOff = finLocalSplitsOff();
       document.querySelectorAll(".more-menu-item[data-target], .stat-card[data-widget]").forEach(function (el) {
         const name = el.dataset.target || el.dataset.widget;
-        el.classList.toggle("screen-hidden", hiddenScreens.indexOf(name) !== -1);
+        let hide = hiddenScreens.indexOf(name) !== -1 || local.indexOf(name) !== -1;
+        if (el.id === "moreSplitsTile") hide = hiddenScreens.indexOf("debts") !== -1 || splitsOff;   // its own switch ("Do you split costs?")
+        el.classList.toggle("screen-hidden", hide);
       });
       // If she is standing on a screen that just got hidden, go back to the menu.
       const here = (history.state && history.state.subView) || null;
-      if (here && hiddenScreens.indexOf(here) !== -1) showMoreMenu();
+      if (here && finIsScreenHidden(here)) showMoreMenu();
     }
 
     // A friend the owner switched on: show the whole tracker, working on THEIR OWN private data (the backend enforces that).
@@ -10303,7 +12416,7 @@
     function renderAccess(d) {
       accessStatusEl.style.display = "none";
       accessContentEl.style.display = "block";
-      document.getElementById("accessTotal").textContent = String(d.totals.everyone);
+      finPutNumOrText(document.getElementById("accessTotal"), d.totals.everyone);
       document.getElementById("accessSplit").textContent = "You + " + d.totals.friends + " friend" + (d.totals.friends === 1 ? "" : "s") +
         " · " + d.totals.fullApp + " with the full app · " + d.totals.splitsOnly + " Splits only";
       const list = document.getElementById("accessList");
@@ -10401,6 +12514,11 @@
           '<div class="person-sub">' + sub + '</div></div>' +
           '<div class="person-amount ' + state + '">' + (p.balance === 0 ? "" : splitMoney(p.balance)) + '</div>';
         row.addEventListener("click", function () { openPerson(p.email); });
+        if (finLookOn()) {   // New look: reachable with a keyboard / screen reader too
+          row.setAttribute("role", "button");
+          row.tabIndex = 0;
+          row.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); openPerson(p.email); } });
+        }
         peopleListEl.appendChild(row);
       });
     }
@@ -10452,6 +12570,7 @@
     }
 
     function openPerson(email) {
+      finPersonKey = "";   // New look: the page plays again for a freshly opened person
       setDebtsChromeHidden(true);
       currentPersonEmail = email;
       debtsContentEl.style.display = "none";
@@ -10592,6 +12711,7 @@
         });
         ledgerEl.appendChild(row);
       });
+      finPlayPerson(p.email, bal);   // New look: balance counts, history rows fade in
     }
 
     // ---- "Split with a friend" on a Pending card ----
@@ -11940,7 +14060,7 @@
       investmentsStatusEl.textContent = "";
       investmentsContentEl.style.display = "block";
 
-      investmentsTotalAmountEl.textContent = "₹" + inv.total.toLocaleString("en-IN");
+      finMoneyInto(investmentsTotalAmountEl, inv.total);
 
       renderInvestmentBreakdown(inv.breakdown);
 
@@ -12321,7 +14441,7 @@
       cashStatusEl.textContent = "";
       cashContentEl.style.display = "block";
 
-      cashBalanceAmountEl.textContent = "₹" + c.balance.toLocaleString("en-IN");
+      finMoneyInto(cashBalanceAmountEl, c.balance);
       cashTodaySpendEl.textContent = "Spent today: ₹" + c.todaySpend.toLocaleString("en-IN");
 
       cashRecentEl.innerHTML = "";
@@ -12467,7 +14587,7 @@
         manualAmountEl.value = "";
         manualWhoEl.value = "";
         manualResultEl.textContent = "";
-        addManualFormEl.style.display = "none";
+        if (finSheetOpen) { finAfterManualAdded(); } else { addManualFormEl.style.display = "none"; }   // New look: the form lives in the sheet while it is open
         pendingStatusEl.textContent = "Added. Pick a note and category for it below.";
         loadPendingTransactions();                     // brings the new card into the list
       }).catch(function () {
@@ -13083,6 +15203,7 @@
     const settingsLookEl = document.getElementById("settingsLookPreview");
     try { settingsLookEl.value = localStorage.getItem("lookPreview") === "on" ? "on" : "off"; } catch (e) { /* default Off */ }
     settingsLookEl.addEventListener("change", function () {
+      finCloseSheet(true);   // never leave the add sheet open across a look change
       try {
         if (settingsLookEl.value === "on") {
           localStorage.setItem("lookPreview", "on");
@@ -13092,6 +15213,11 @@
           document.documentElement.removeAttribute("data-look");
         }
       } catch (e) { /* ignore */ }
+      finApplyLabels();      // "Money" in the new look, "Advisors" in the old
+      finSyncSwitches();
+      finOnbClose();
+      applyHiddenScreens(hiddenScreens);   // this phone's "what I use" choices only count in the new look
+      finRenderScreensUsed();
     });
 
     // New server (beta) switch (local to this phone, takes effect immediately) + what the last request used.
@@ -13166,6 +15292,7 @@
       settingsMonthlyInvestmentGoalEl.value = s.monthlyInvestmentGoal;
       settingsDailySummaryEl.value = s.dailySummary === false ? "off" : "on";     // on unless switched off (an older server does not send it)
       settingsPendingReminderEl.value = ["30", "60", "twice", "off"].indexOf(s.pendingReminder) !== -1 ? s.pendingReminder : "60";   // hourly unless chosen
+      finSyncSwitches();   // New look: the switches follow the dropdowns
     }
 
     saveSettingsButtonEl.addEventListener("click", function () {
@@ -13786,7 +15913,7 @@
         if (c.actual.total > 0) anySpend = true;
       });
 
-      plannerTrackAmountEl.textContent = "₹" + Math.round(totalActual).toLocaleString("en-IN");
+      finMoneyInto(plannerTrackAmountEl, Math.round(totalActual));
 
       if (totalTarget > 0) {
         const pct = Math.round((totalActual / totalTarget) * 100);
