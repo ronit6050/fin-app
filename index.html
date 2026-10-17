@@ -1507,6 +1507,26 @@
       letter-spacing: -0.8px;
     }
 
+    /* Income link + the small "what is in it" panel on Analysis (added 2026-10-17). */
+    .income-link {
+      background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit;
+      text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;
+      cursor: pointer; min-height: 0; border-radius: 0; box-shadow: none;
+    }
+    .income-link:active { opacity: 0.7; transform: none; }
+    .income-detail {
+      margin-top: 10px; padding: 10px 12px; border-radius: 14px;
+      background: transparent; color: var(--text-on-hero); font-size: 0.8125rem;
+      border: 1px solid color-mix(in srgb, var(--text-on-hero) 40%, transparent);   /* outline, not a tint: keeps the hero's own text contrast */
+    }
+    .income-detail[hidden] { display: none; }
+    .income-detail .inc-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+    .income-detail .inc-row span:first-child { min-width: 0; overflow-wrap: anywhere; }
+    .income-detail .inc-row span:last-child { white-space: nowrap; font-weight: 600; }
+    .income-detail .inc-sum { border-top: 1px solid color-mix(in srgb, var(--text-on-hero) 40%, transparent); margin-top: 6px; padding-top: 6px; }
+    .income-detail .inc-head { font-weight: 600; margin: 8px 0 2px; }
+    .income-detail .inc-note { margin-top: 6px; font-size: 0.75rem; }
+
     .today-split {
       font-size: 0.85rem;
       color: var(--text-on-hero-muted);
@@ -4063,6 +4083,7 @@
             </div>
             <div class="today-total-amount" id="analysisTotalAmount">₹0</div>
             <div class="today-split" id="analysisSplit"></div>
+            <div class="income-detail" id="analysisIncomeDetail" hidden></div>
             <div class="today-split" id="analysisFinancialEvents"></div>
           </div>
 
@@ -7663,7 +7684,7 @@
         totalDebit: 0, totalCredit: 0, categoryTotals: {}, categoryTxns: {},
         dailyTotals: {}, topAmount: 0, topNote: "",
         typeTotals: { Need: 0, Want: 0, Saving: 0, Investment: 0 },
-        untaggedTotal: 0, untaggedCount: 0, fixedObligations: 0, invested: 0
+        untaggedTotal: 0, untaggedCount: 0, fixedObligations: 0, invested: 0, incomeItems: []
       };
     }
 
@@ -7682,6 +7703,7 @@
         totalDebit: bucket.totalDebit, totalCredit: bucket.totalCredit, savings: savings, avgDaily: avgDaily,
         topAmount: bucket.topAmount, topNote: bucket.topNote, categories: categories,
         fixedObligations: bucket.fixedObligations, invested: bucket.invested,
+        incomeItems: bucket.incomeItems.slice().sort(function (a, b) { return b.amount - a.amount; }),
         needWantSaving: { need: bucket.typeTotals.Need, want: bucket.typeTotals.Want, saving: bucket.typeTotals.Saving, investment: bucket.typeTotals.Investment, untagged: bucket.untaggedTotal, untaggedCount: bucket.untaggedCount, taggedTotal: taggedTotal }
       };
     }
@@ -7691,6 +7713,7 @@
       const categoryTotals = {}, categoryTxns = {}, dailyTotals = {};
       const typeTotals = { Need: 0, Want: 0, Saving: 0, Investment: 0 };
       let untaggedTotal = 0, untaggedCount = 0, fixedObligations = 0, invested = 0;
+      const incomeItems = [];
       const modeBuckets = { bank: demoFreshModeBucket(), card: demoFreshModeBucket(), wallet: demoFreshModeBucket() };
 
       demoState.transactions.forEach(function (t) {
@@ -7733,6 +7756,8 @@
         } else if (t.type === "credit") {
           totalCredit += t.amount;
           modeBucket.totalCredit += t.amount;
+          const inItem = { label: t.counterparty || t.note || "Credit", amount: t.amount, date: demoFmtDateShort(t.date), source: "bank" };
+          incomeItems.push(inItem); modeBucket.incomeItems.push(inItem);
         }
       });
 
@@ -7752,6 +7777,7 @@
           else { untaggedTotal += c.amount; untaggedCount++; }
         } else if (c.type === "credit") {
           totalCredit += c.amount;
+          incomeItems.push({ label: c.note || "Cash received", amount: c.amount, date: demoFmtDateShort(c.date), source: "cash" });
         }
       });
 
@@ -7768,6 +7794,7 @@
         totalDebit: totalDebit, totalCredit: totalCredit, savings: savings, avgDaily: avgDaily,
         topAmount: topAmount, topNote: topNote, categories: categories,
         fixedObligations: fixedObligations, invested: invested,
+        incomeItems: incomeItems.sort(function (a, b) { return b.amount - a.amount; }),
         needWantSaving: { need: typeTotals.Need, want: typeTotals.Want, saving: typeTotals.Saving, investment: typeTotals.Investment, untagged: untaggedTotal, untaggedCount: untaggedCount, taggedTotal: taggedTotal },
         byMode: {
           bank:   demoFinalizeModeBucket(modeBuckets.bank),
@@ -11252,6 +11279,60 @@
     // right after a fresh/cached load.
     // New look: wraps the real renderer so the screen "plays" (fade up, count, bars grow) when it was
     // just opened or the month / payment mode changed, but not on a quiet background refresh.
+    // Whole rupees show without decimals; anything with paise shows exactly 2 decimals
+    // (so "14,081.3" reads "14,081.30"). Also rounds away tiny floating-point leftovers.
+    function analysisRs(n) {
+      const v = Math.round((Number(n) || 0) * 100) / 100;
+      return Number.isInteger(v)
+        ? v.toLocaleString("en-IN")
+        : v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function analysisSavings(a) {
+      return (Number(a.totalCredit) || 0) - (Number(a.totalDebit) || 0) - (Number(a.fixedObligations) || 0);
+    }
+
+    // "What is in my income?" — tap Income to see every credit counted this month and the
+    // sum that gives the Savings figure. Starts closed; stays open across quiet refreshes.
+    let analysisIncomeOpen = false;
+    function renderAnalysisIncomeDetail(a, savings) {
+      const el = document.getElementById("analysisIncomeDetail");
+      if (!el) return;
+      el.hidden = !analysisIncomeOpen;
+      if (!analysisIncomeOpen) return;
+      const items = Array.isArray(a.incomeItems) ? a.incomeItems : null;
+      let html = '<div class="inc-head">Money that came in</div>';
+      if (items && items.length) {
+        let listed = 0;
+        items.forEach(function (it) {
+          listed += Number(it.amount) || 0;
+          html += '<div class="inc-row"><span>' + escapeHtml((it.date ? it.date + " · " : "") + (it.label || "Credit")) +
+                  '</span><span>₹' + analysisRs(it.amount) + '</span></div>';
+        });
+        const rest = Math.round(((Number(a.totalCredit) || 0) - listed) * 100) / 100;
+        if (Math.abs(rest) >= 0.01) html += '<div class="inc-row"><span>Other credits</span><span>₹' + analysisRs(rest) + '</span></div>';
+      } else if (items) {
+        html += '<div class="inc-row"><span>Nothing came in this month</span><span>₹0</span></div>';
+      } else {
+        html += '<div class="inc-note">The list will appear after the next refresh.</div>';
+      }
+      html += '<div class="inc-row inc-sum"><span>Income</span><span>₹' + analysisRs(a.totalCredit) + '</span></div>' +
+              '<div class="inc-row"><span>Spent day to day</span><span>− ₹' + analysisRs(a.totalDebit) + '</span></div>';
+      if (a.fixedObligations) html += '<div class="inc-row"><span>Rent and EMI</span><span>− ₹' + analysisRs(a.fixedObligations) + '</span></div>';
+      html += '<div class="inc-row inc-sum"><span>' + (savings >= 0 ? "Savings" : "Over by") + '</span><span>₹' + analysisRs(Math.abs(savings)) + '</span></div>';
+      if (a.invested) html += '<div class="inc-note">Invested ₹' + analysisRs(a.invested) + ' is not counted as spent.</div>';
+      el.innerHTML = html;
+    }
+    // One listener for the Income link (the line is rebuilt on every render).
+    (function () {
+      const split = document.getElementById("analysisSplit");
+      if (!split) return;
+      split.addEventListener("click", function (e) {
+        if (!e.target.closest || !e.target.closest("#analysisIncomeBtn")) return;
+        analysisIncomeOpen = !analysisIncomeOpen;
+        if (analysisLastData) renderAnalysisForModeInner();
+      });
+    })();
+
     let finAnalysisSig = "";
     function renderAnalysisForMode() {
       renderAnalysisForModeInner();
@@ -11263,16 +11344,22 @@
       const a = getAnalysisModeSlice(analysisLastData, analysisMode);
 
       if (finLookOn()) finPutNum(analysisTotalAmountEl, a.totalDebit, "₹");
-      else analysisTotalAmountEl.textContent = "₹" + a.totalDebit.toLocaleString("en-IN");
+      else analysisTotalAmountEl.textContent = "₹" + analysisRs(a.totalDebit);
 
-      const savingsText = a.savings >= 0
-        ? "Savings: ₹" + a.savings.toLocaleString("en-IN")
-        : "Over by ₹" + Math.abs(a.savings).toLocaleString("en-IN");
+      // Savings = what is left of your income after day-to-day spending AND Rent/EMI.
+      // (It used to ignore Rent/EMI, so it came out too high. Invested money is not "spent",
+      // so it is not taken off here.)
+      const savings = analysisSavings(a);
+      const savingsText = savings >= 0
+        ? "Savings: ₹" + analysisRs(savings)
+        : "Over by ₹" + analysisRs(Math.abs(savings));
 
-      analysisSplitEl.textContent =
-        "Income: ₹" + a.totalCredit.toLocaleString("en-IN") +
+      analysisSplitEl.innerHTML =
+        '<button type="button" class="income-link" id="analysisIncomeBtn" aria-expanded="' + (analysisIncomeOpen ? "true" : "false") +
+        '" aria-controls="analysisIncomeDetail">Income: ₹' + analysisRs(a.totalCredit) + ' ›</button>' +
         "  ·  " + savingsText +
-        "  ·  Avg/day: ₹" + a.avgDaily.toLocaleString("en-IN");
+        "  ·  Avg/day: ₹" + analysisRs(a.avgDaily);
+      renderAnalysisIncomeDetail(a, savings);
 
       // Rent + confirmed EMIs, and real Investments — kept out of the
       // total above entirely, shown here as their own line instead.
@@ -11392,6 +11479,9 @@
         analysisModeResetFor = monthKey;
       }
       analysisLastData = a;
+      // The screen can be filled from the Home data on sign-in without loadMonthlyAnalysis() ever running,
+      // which used to leave the month heading as a dash until you changed month.
+      monthLabelEl.textContent = MONTH_NAMES[analysisMonth - 1] + " " + analysisYear;
       updateAnalysisModeToggleUI();
       renderAnalysisForMode();
     }

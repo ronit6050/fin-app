@@ -1330,7 +1330,8 @@ function freshModeBucket(){
     untaggedTotal: 0,
     untaggedCount: 0,
     fixedObligations: 0,
-    invested: 0
+    invested: 0,
+    incomeItems: []   // every credit counted in totalCredit, for the Analysis "what is in my income" panel
   };
 }
 
@@ -1360,6 +1361,7 @@ function finalizeModeBucket(bucket){
     categories:  categories,
     fixedObligations: bucket.fixedObligations,
     invested:         bucket.invested,
+    incomeItems:      bucket.incomeItems.slice().sort(function(a, b){ return b.amount - a.amount; }),
     needWantSaving: {
       need:           bucket.typeTotals.Need,
       want:           bucket.typeTotals.Want,
@@ -1410,6 +1412,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   // spend total entirely, not just re-labeled.
   let fixedObligations = 0;
   let invested = 0;
+  const incomeItems = []; // see freshModeBucket: lets the app show what makes up the Income figure
 
   // Bank/Card/Wallet buckets — Transactions rows only, Cash never
   // contributes (see function comment above).
@@ -1508,6 +1511,14 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
       } else if(type === "credit"){
         totalCredit += amount;
         modeBucket.totalCredit += amount;
+        const incomeItem = {
+          label:  (counterparty || note || "Credit").toString(),
+          amount: amount,
+          date:   Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM"),
+          source: "bank"
+        };
+        incomeItems.push(incomeItem);
+        modeBucket.incomeItems.push(incomeItem);
       }
     }
   }
@@ -1545,6 +1556,12 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
         }
       } else if(type === "credit"){
         totalCredit += amount;
+        incomeItems.push({
+          label:  (cashData[i][5] || "").toString().trim() || "Cash received",
+          amount: amount,
+          date:   Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM"),
+          source: "cash"
+        });
       }
     }
   }
@@ -1574,6 +1591,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
     categories:  categories,
     fixedObligations: fixedObligations,
     invested:         invested,
+    incomeItems:      incomeItems.sort(function(a, b){ return b.amount - a.amount; }),
     needWantSaving: {
       need:           typeTotals.Need,
       want:           typeTotals.Want,
