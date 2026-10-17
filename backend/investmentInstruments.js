@@ -475,11 +475,20 @@ function computeInvestmentsOverview_(rows, instruments, monthlyGoal, now, archiv
     }
   });
 
+  const knownNames = {};
+  instruments.forEach(function(i){ knownNames[i.name] = true; });
   (archiveRows || []).forEach(function(r){
-    const name = (r[1] || "").toString().trim();
+    let name = (r[1] || "").toString().trim();
     const amount = Number(r[2]) || 0;
     const d = invEntryDate_(r[0]);
     if(!name || !d || !invIsAddedMoney_(invKind_(r), amount)) return;
+    // An old free-typed name (e.g. "Mutual Funds SIP") that is not one of the holdings: when exactly ONE SIP holding has this
+    // exact amount, it is that SIP (same rule "start over" uses for the SIP memory). Without it the payment could not be
+    // matched to the one typed in again after starting over, and would count twice.
+    if(!knownNames[name]){
+      const same = instruments.filter(function(i){ return Number(i.sipAmount) > 0 && Number(i.sipAmount) === amount; });
+      if(same.length === 1) name = same[0].name;
+    }
     const idx = invMonthIndex_(d);
     const again = liveAdded.some(function(a){ return a.name === name && a.idx === idx && a.amount === amount; });
     if(again) return;                      // "Already paid this month" (or a re-entered payment) is already counted

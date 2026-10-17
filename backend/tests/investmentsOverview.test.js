@@ -288,6 +288,21 @@ console.log("\n--- 13. Archived payments feed the bars and SIP history, never th
   assert(w.sb.computeInvestmentsOverview_([], [], 0, new Date()).monthly.length === 6, "no archive and no rows still works");
 }
 
+
+console.log("\n--- 13b. An old free-typed SIP name in the archive is not counted twice ---");
+{
+  const w = world([["2026-10-10", "HDFC Nifty 50 Index Fund", 3000, "SIP paid this month", "payment"]], INS);
+  w.addSheet("Investments_Archive", [["Date", "Name", "Amount", "Note", "Kind", "ArchivedOn"],
+    ["2026-10-10", "Mutual Funds SIP", 3000, "x", "", "2026-10-17"],
+    ["2026-09-10", "Mutual Funds SIP", 3000, "x", "", "2026-10-17"],
+    ["2026-09-12", "Mutual Funds SIP", 4321, "x", "", "2026-10-17"]]);
+  const o = w.sb.getInvestmentsOverview_();
+  assert(o.thisMonth === 3000, "October shows the 3000 once, not twice (got " + o.thisMonth + ")");
+  assert(o.monthly.find((m) => m.month === 9).amount === 3000 + 4321, "September counts both archived payments (the odd amount stays under its old name)");
+  const n = o.sips.find((s) => s.name === "HDFC Nifty 50 Index Fund");
+  assert(n.trackedMonths === 1 && n.paidMonths === 1, "the old-name September payment counts as the Nifty SIP's history");
+}
+
 console.log("\n--- 14. Remove a holding you do not have ---");
 {
   const w = world([["2026-10-10", "Tata Steel", 500, "", "manual"]], INS,
