@@ -3588,6 +3588,17 @@
           </div>
         </div>
 
+        <div class="settings-group">
+          <div class="settings-group-title">Notifications</div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Evening summary at 9pm (how much you spent today)</label>
+            <select id="settingsDailySummary">
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
+        </div>
+
         <button type="button" id="saveSettingsButton">Save</button>
         <div id="settingsResult" class="pending-result"></div>
 
@@ -3719,8 +3730,8 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-16-01";
-    const APP_CHANGELOG = "Behind the scenes: the app now sends simple usage counts (which screens are opened) and error reports to the owner's private admin page, so problems can be found and fixed faster. It never sends amounts, notes, payees or message text.";
+    const APP_VERSION = "2026-10-17-01";
+    const APP_CHANGELOG = "New: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -12884,6 +12895,7 @@
     const settingsMonthlyExpensesEl = document.getElementById("settingsMonthlyExpenses");
     const settingsMonthlySaveGoalEl = document.getElementById("settingsMonthlySaveGoal");
     const settingsMonthlyInvestmentGoalEl = document.getElementById("settingsMonthlyInvestmentGoal");
+    const settingsDailySummaryEl = document.getElementById("settingsDailySummary");
     const saveSettingsButtonEl      = document.getElementById("saveSettingsButton");
     const settingsResultEl          = document.getElementById("settingsResult");
 
@@ -12976,6 +12988,7 @@
       settingsMonthlyExpensesEl.value = s.monthlyExpenses;
       settingsMonthlySaveGoalEl.value = s.monthlySaveGoal;
       settingsMonthlyInvestmentGoalEl.value = s.monthlyInvestmentGoal;
+      settingsDailySummaryEl.value = s.dailySummary === false ? "off" : "on";     // on unless switched off (an older server does not send it)
     }
 
     saveSettingsButtonEl.addEventListener("click", function () {
@@ -12990,7 +13003,8 @@
           ccAlertPct:      (parseFloat(settingsCcAlertPctEl.value) || 0) / 100,
           monthlyExpenses: parseFloat(settingsMonthlyExpensesEl.value) || 0,
           monthlySaveGoal: parseFloat(settingsMonthlySaveGoalEl.value) || 0,
-          monthlyInvestmentGoal: parseFloat(settingsMonthlyInvestmentGoalEl.value) || 0
+          monthlyInvestmentGoal: parseFloat(settingsMonthlyInvestmentGoalEl.value) || 0,
+          dailySummary: settingsDailySummaryEl.value === "on"
         }
       })
         .then(function (data) {

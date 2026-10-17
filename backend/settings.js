@@ -32,7 +32,9 @@ function getSettings(){
     // before the matching transaction happens (or if you invest in
     // installments across the month). 0 default = feature is a no-op
     // for anyone who hasn't set it.
-    monthlyInvestmentGoal: Number(props.getProperty("SETTING_MONTHLY_INVESTMENT_GOAL")) || 0
+    monthlyInvestmentGoal: Number(props.getProperty("SETTING_MONTHLY_INVESTMENT_GOAL")) || 0,
+    // Added 2026-10-17 - the 9pm "how much you spent today" notification (dailySummary.js). On unless switched off here.
+    dailySummary: String(props.getProperty("SETTING_DAILY_SUMMARY_OFF") || "") !== "1"
   };
 }
 
@@ -49,6 +51,8 @@ function updateSettings(newSettings){
     if(newSettings.monthlySaveGoal) props.setProperty("SETTING_MONTHLY_SAVE_GOAL", String(newSettings.monthlySaveGoal));
     if(newSettings.monthlyInvestmentGoal !== undefined && newSettings.monthlyInvestmentGoal !== null && newSettings.monthlyInvestmentGoal !== "")
       props.setProperty("SETTING_MONTHLY_INVESTMENT_GOAL", String(newSettings.monthlyInvestmentGoal));
+    if(newSettings.dailySummary === true || newSettings.dailySummary === false)
+      props.setProperty("SETTING_DAILY_SUMMARY_OFF", newSettings.dailySummary ? "" : "1");
 
     return { ok: true };
   }catch(err){

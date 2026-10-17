@@ -226,7 +226,7 @@ console.log("\n--- 10. The four daily jobs run from the tick: once a day, at the
   const w = build(); seed(w); const sb = w.sb;
   asNewServer(w);
   const ran = [];
-  ["checkUpcomingObligations", "checkDebtDueDates", "checkAppHealth", "sendDailyCashCheckin"].forEach(function(n){ sb[n] = function(){ ran.push(n); }; });
+  ["checkUpcomingObligations", "checkDebtDueDates", "checkAppHealth", "dailySummaryRun_"].forEach(function(n){ sb[n] = function(){ ran.push(n); }; });
   let clock = { date: "2026-10-15", minutes: 8 * 60 };
   sb.timerIstClock_ = function(){ return clock; };
   tick(); sb.timerTick_();                                                        // first tick: a full look (never looked) but no daily job yet
@@ -243,7 +243,9 @@ console.log("\n--- 10. The four daily jobs run from the tick: once a day, at the
   clock = { date: "2026-10-15", minutes: 9 * 60 + 40 }; tick(); sb.timerTick_();
   assert(ran.slice(-1)[0] === "checkAppHealth", "09:40: the app health check");
   clock = { date: "2026-10-15", minutes: 20 * 60 + 2 }; tick(); sb.timerTick_();
-  assert(ran.slice(-1)[0] === "sendDailyCashCheckin" && ran.length === 4, "20:02: the cash check-in; each of the four ran exactly once today");
+  assert(ran.length === 3, "20:02: nothing is due (the evening summary moved to 21:00)");
+  clock = { date: "2026-10-15", minutes: 21 * 60 + 2 }; tick(); sb.timerTick_();
+  assert(ran.slice(-1)[0] === "dailySummaryRun_" && ran.length === 4, "21:02: the 9pm spending summary; each of the four ran exactly once today");
   tick(); sb.timerTick_(); tick(); sb.timerTick_();
   assert(ran.length === 4, "more ticks the same day run nothing more");
   clock = { date: "2026-10-16", minutes: 9 * 60 + 10 }; tick(); sb.timerTick_();
@@ -255,11 +257,11 @@ console.log("\n--- 10b. Catch-up after downtime, and one failing job does not st
   const w = build(); seed(w); const sb = w.sb;
   asNewServer(w);
   const ran = [];
-  ["checkUpcomingObligations", "checkAppHealth", "sendDailyCashCheckin"].forEach(function(n){ sb[n] = function(){ ran.push(n); }; });
+  ["checkUpcomingObligations", "checkAppHealth", "dailySummaryRun_"].forEach(function(n){ sb[n] = function(){ ran.push(n); }; });
   sb.checkDebtDueDates = function(){ throw new Error("debts exploded"); };
   sb.timerIstClock_ = function(){ return { date: "2026-10-15", minutes: 21 * 60 }; };        // the server was down all day: first tick at 21:00
   const r = sb.timerTick_();
-  assert(ran.join() === "checkUpcomingObligations,checkAppHealth,sendDailyCashCheckin", "all the jobs that were missed run, in order; the failing one does not stop the rest");
+  assert(ran.join() === "checkUpcomingObligations,checkAppHealth,dailySummaryRun_", "all the jobs that were missed run, in order; the failing one does not stop the rest");
   assert(w.errors("DAILY_JOB_FAILED").length === 1 && /debts exploded/.test(w.errors("DAILY_JOB_FAILED")[0][2]), "the failure is logged");
   assert(timerDoc(w).daily_debts === "2026-10-15", "and a failed job still counts as today's run (it cannot repeat every 5 minutes)");
   tick();

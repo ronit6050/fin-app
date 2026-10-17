@@ -65,14 +65,14 @@ var TIMER_DAILY_JOBS_ = [
   { key: "obligations", hour: 8,  minute: 30 },
   { key: "debts",       hour: 9,  minute: 0  },
   { key: "health",      hour: 9,  minute: 30 },
-  { key: "cash",        hour: 20, minute: 0  }
+  { key: "cash",        hour: 21, minute: 0  }     // the evening job: since 2026-10-17 it sends the 9pm "how much you spent today" summary to everyone (dailySummary.js); the key stays "cash" so the old Apps Script 8pm check-in keeps stepping aside
 ];
 
 function timerDailyRunner_(key){
   if(key === "obligations") return checkUpcomingObligations;
   if(key === "debts") return checkDebtDueDates;
   if(key === "health") return checkAppHealth;
-  if(key === "cash") return sendDailyCashCheckin;
+  if(key === "cash") return dailySummaryRun_;
   return null;
 }
 
