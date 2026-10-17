@@ -7782,6 +7782,12 @@
       });
 
       const savings = totalCredit - totalDebit;
+      // What was put away this month (Savings screen entries; withdrawals are negative).
+      let demoSaved = 0;
+      (demoState.savingsEntries || []).forEach(function (e) {
+        const ed = new Date(e.date);
+        if (ed.getFullYear() === year && (ed.getMonth() + 1) === month) demoSaved += Number(e.amount) || 0;
+      });
       const days = Object.keys(dailyTotals).length || 1;
       const avgDaily = Math.round(totalDebit / days);
       const categories = Object.entries(categoryTotals).sort(function (a, b) { return b[1] - a[1]; }).map(function (e) {
@@ -7794,6 +7800,7 @@
         totalDebit: totalDebit, totalCredit: totalCredit, savings: savings, avgDaily: avgDaily,
         topAmount: topAmount, topNote: topNote, categories: categories,
         fixedObligations: fixedObligations, invested: invested,
+        saved: demoSaved, savingGoal: (demoState.settings && demoState.settings.monthlySaveGoal) || 0,
         incomeItems: incomeItems.sort(function (a, b) { return b.amount - a.amount; }),
         needWantSaving: { need: typeTotals.Need, want: typeTotals.Want, saving: typeTotals.Saving, investment: typeTotals.Investment, untagged: untaggedTotal, untaggedCount: untaggedCount, taggedTotal: taggedTotal },
         byMode: {
@@ -10345,6 +10352,7 @@
             counterparty: txn.counterparty,
             fp:           txn.fp,
             type:         savedType,
+            typeChosen:   true,       // a person picked/confirmed this tag on the card (lets the Saving tag move money to Savings)
             financialEvent:       savedFinancialEvent,
             financialEventName:   savedFinancialEventName,
             eventDeclined:        financialEvent.declined === true,
@@ -11287,14 +11295,21 @@
         ? v.toLocaleString("en-IN")
         : v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    function analysisSavings(a) {
-      return (Number(a.totalCredit) || 0) - (Number(a.totalDebit) || 0) - (Number(a.fixedObligations) || 0);
+    // "Saving" means money you PUT AWAY on purpose (logged on the Savings screen, cash or bank),
+    // not whatever happens to be left over. The leftover is shown separately as "Not yet used".
+    // Only meaningful for the All view and for data that carries `saved` (older cached copies do not).
+    function analysisFlow(a) {
+      const show = analysisMode === "all" && typeof a.saved === "number";
+      if (!show) return { show: false };
+      const saved = Number(a.saved) || 0;
+      const notUsed = (Number(a.totalCredit) || 0) - (Number(a.totalDebit) || 0) - (Number(a.fixedObligations) || 0) - (Number(a.invested) || 0) - saved;
+      return { show: true, saved: saved, goal: Number(a.savingGoal) || 0, notUsed: Math.round(notUsed * 100) / 100 };
     }
 
     // "What is in my income?" — tap Income to see every credit counted this month and the
     // sum that gives the Savings figure. Starts closed; stays open across quiet refreshes.
     let analysisIncomeOpen = false;
-    function renderAnalysisIncomeDetail(a, savings) {
+    function renderAnalysisIncomeDetail(a, flow) {
       const el = document.getElementById("analysisIncomeDetail");
       if (!el) return;
       el.hidden = !analysisIncomeOpen;
@@ -11315,11 +11330,17 @@
       } else {
         html += '<div class="inc-note">The list will appear after the next refresh.</div>';
       }
-      html += '<div class="inc-row inc-sum"><span>Income</span><span>₹' + analysisRs(a.totalCredit) + '</span></div>' +
-              '<div class="inc-row"><span>Spent day to day</span><span>− ₹' + analysisRs(a.totalDebit) + '</span></div>';
-      if (a.fixedObligations) html += '<div class="inc-row"><span>Rent and EMI</span><span>− ₹' + analysisRs(a.fixedObligations) + '</span></div>';
-      html += '<div class="inc-row inc-sum"><span>' + (savings >= 0 ? "Savings" : "Over by") + '</span><span>₹' + analysisRs(Math.abs(savings)) + '</span></div>';
-      if (a.invested) html += '<div class="inc-note">Invested ₹' + analysisRs(a.invested) + ' is not counted as spent.</div>';
+      html += '<div class="inc-row inc-sum"><span>Income</span><span>₹' + analysisRs(a.totalCredit) + '</span></div>';
+      if (flow && flow.show) {
+        // Where the money went. What is left at the bottom is NOT "savings": savings is only what you
+        // put away on purpose (the Saved line).
+        html += '<div class="inc-row"><span>Spent day to day</span><span>− ₹' + analysisRs(a.totalDebit) + '</span></div>';
+        if (a.fixedObligations) html += '<div class="inc-row"><span>Rent and EMI</span><span>− ₹' + analysisRs(a.fixedObligations) + '</span></div>';
+        if (a.invested) html += '<div class="inc-row"><span>Invested</span><span>− ₹' + analysisRs(a.invested) + '</span></div>';
+        html += '<div class="inc-row"><span>Saved (Savings screen)</span><span>− ₹' + analysisRs(flow.saved) + '</span></div>';
+        html += '<div class="inc-row inc-sum"><span>' + (flow.notUsed >= 0 ? "Not yet used" : "Used from earlier money") + '</span><span>₹' + analysisRs(Math.abs(flow.notUsed)) + '</span></div>';
+        html += '<div class="inc-note">Saved is what you put away on purpose. Not yet used is money in that you have not spent, saved or invested yet; it is approximate, because cash you saved may not have come from this month.</div>';
+      }
       el.innerHTML = html;
     }
     // One listener for the Income link (the line is rebuilt on every render).
@@ -11346,20 +11367,12 @@
       if (finLookOn()) finPutNum(analysisTotalAmountEl, a.totalDebit, "₹");
       else analysisTotalAmountEl.textContent = "₹" + analysisRs(a.totalDebit);
 
-      // Savings = what is left of your income after day-to-day spending AND Rent/EMI.
-      // (It used to ignore Rent/EMI, so it came out too high. Invested money is not "spent",
-      // so it is not taken off here.)
-      const savings = analysisSavings(a);
-      const savingsText = savings >= 0
-        ? "Savings: ₹" + analysisRs(savings)
-        : "Over by ₹" + analysisRs(Math.abs(savings));
-
+      const flow = analysisFlow(a);
       analysisSplitEl.innerHTML =
         '<button type="button" class="income-link" id="analysisIncomeBtn" aria-expanded="' + (analysisIncomeOpen ? "true" : "false") +
         '" aria-controls="analysisIncomeDetail">Income: ₹' + analysisRs(a.totalCredit) + ' ›</button>' +
-        "  ·  " + savingsText +
         "  ·  Avg/day: ₹" + analysisRs(a.avgDaily);
-      renderAnalysisIncomeDetail(a, savings);
+      renderAnalysisIncomeDetail(a, flow);
 
       // Rent + confirmed EMIs, and real Investments — kept out of the
       // total above entirely, shown here as their own line instead.
@@ -11367,8 +11380,14 @@
       // than a "₹0" that looks like a real, checked number.
       // See docs/features/financial-events.md.
       const feParts = [];
-      if (a.fixedObligations) feParts.push("Fixed obligations ₹" + a.fixedObligations.toLocaleString("en-IN"));
-      if (a.invested) feParts.push("Invested ₹" + a.invested.toLocaleString("en-IN"));
+      if (a.fixedObligations) feParts.push("Fixed obligations ₹" + analysisRs(a.fixedObligations));
+      if (a.invested) feParts.push("Invested ₹" + analysisRs(a.invested));
+      if (flow.show) {
+        feParts.push("Saved ₹" + analysisRs(flow.saved) + (flow.goal > 0 ? " of ₹" + analysisRs(flow.goal) + " goal" : ""));
+        feParts.push(flow.notUsed >= 0
+          ? "Not yet used ₹" + analysisRs(flow.notUsed)
+          : "Used ₹" + analysisRs(Math.abs(flow.notUsed)) + " from earlier money");
+      }
       analysisFinancialEventsEl.innerHTML = feParts.length
         ? '<div class="fe-pills">' + feParts.map(function (p) { return '<span class="fe-pill">' + escapeHtml(p) + '</span>'; }).join("") + '</div>'
         : "";
@@ -16466,6 +16485,7 @@
           counterparty: txn.counterparty,
           fp:           txn.fp,
           type:         sentType,
+          typeChosen:   true,       // a person picked/confirmed this tag in History
           amount:       sentAmount,
           financialEvent:       financialEvent.type,
           financialEventName:   financialEvent.name,
@@ -16508,6 +16528,18 @@
               // tab total. See docs/features/investment-instruments.md.
               resultEl.style.color = "var(--color-danger)";
               resultEl.textContent = "Saved, but this wasn't logged to Investments (looks like a duplicate of something already there) — check the Investments tab.";
+            } else if (data.savingUndoKept) {
+              // Moved away from Saving, but the entry on the Savings screen no longer looks exactly like the one
+              // the app wrote (it was edited by hand), so it was left alone rather than guessed at.
+              resultEl.style.color = "var(--color-danger)";
+              resultEl.textContent = "Saved. Its entry on the Savings screen could not be matched safely (it may have been changed by hand, or another saving has the same amount that day), so it was left as it is — check the Savings screen.";
+            } else if (data.savingEvent && data.savingLogged === false) {
+              resultEl.style.color = "var(--color-danger)";
+              resultEl.textContent = "Saved as a saving, but it was not added to the Savings screen (an entry for the same amount is already there) — check the Savings screen.";
+            } else if (data.savingEvent) {
+              resultEl.textContent = "Saved. Counted as a saving, not spending.";
+            } else if (data.savingUndone) {
+              resultEl.textContent = "Saved. Also taken off your Savings screen.";
             }
             // otherwise: fully saved, "Saved." is already showing
             if (data.ok && txn.onSaved) txn.onSaved();   // refresh the chip counts ("Needs attention" just shrank)

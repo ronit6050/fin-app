@@ -374,6 +374,37 @@ function autoLogSaving(dateStr, amount, note){
   return { logged: true };
 }
 
+// Reverses an automatic saving log (added 2026-10-17). Used when a payment that was tagged
+// Saving (the button, or the word "saving" in its note) is later changed to something else, so
+// the Savings screen does not keep money that is no longer a saving.
+// Deliberately cautious: it only removes a row that looks EXACTLY like the one autoLogSaving
+// wrote (same day, same amount, type "auto", destination "Free", same note) and only when there
+// is exactly one such row. Anything else is left alone and reported, never guessed at.
+function undoAutoLogSaving(dateStr, amount, note){
+  var savSheet = getSavingsSheet_();
+  if(!savSheet) return { removed: false, reason: "no sheet" };
+  var cleanAmount = Number(amount) || 0;
+  if(cleanAmount <= 0) return { removed: false, reason: "invalid amount" };
+
+  var data = savSheet.getDataRange().getValues();
+  var wantNote = (note || "saving").toString();
+  var matches = [];
+  for(var i = 1; i < data.length; i++){
+    var r = data[i];
+    if(!r[0]) continue;
+    var rowDay = Utilities.formatDate(new Date(r[0]), Session.getScriptTimeZone(), "yyyy-MM-dd");
+    if(rowDay !== dateStr) continue;
+    if(Math.abs((Number(r[1]) || 0) - cleanAmount) > 0.009) continue;
+    if((r[2] || "").toString() !== "auto") continue;
+    if((r[4] || "").toString() !== "Free") continue;
+    if((r[3] || "").toString() !== wantNote) continue;
+    matches.push(i + 1); // sheet row number
+  }
+  if(matches.length !== 1) return { removed: false, reason: matches.length ? "several matches" : "no match" };
+  savSheet.deleteRow(matches[0]);
+  return { removed: true };
+}
+
 // ===============================
 // AUTO-LOGGING — Debts tab (added 2026-08-10)
 // ===============================

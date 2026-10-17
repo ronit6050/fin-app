@@ -133,6 +133,10 @@ function pwaDispatch_(data, verified){
     // must not teach the shop's category memory or add a Need/Want vote. The typed note
     // itself is still remembered (you really did type it).
     const replyOpts = data.autoType ? { learnCategory: false, learnTypeVote: false } : {};
+    // typeChosen (added 2026-10-17): the Pending card / History edit sends it, meaning a PERSON picked or confirmed this
+    // tag. Notification buttons, notification replies and the app's own guesses never send it, so a guessed "Saving"
+    // can not move money to the Savings screen by itself.
+    if(data.typeChosen === true && !data.autoType) replyOpts.typeChosen = true;
     if(data.noCount === true) replyOpts.noCount = true;            // admin counters: a bulk save nobody inspected (Reconcile) is not a "checked" reading
     if(data.autoType) replyOpts.autoType = true;                   // admin counters: a notification reply is not a Pending-card decision
     // The guess the card showed (admin counters only: was it kept?). Just two short words, never anything about the payment.
@@ -1464,6 +1468,12 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
           // snapshot bar still showed Saving+Invest 0%.
           typeTotals.Investment += amount;
           modeBucket.typeTotals.Investment += amount;
+        } else if(financialEvent === "Saving"){
+          // Money you moved into savings (Saving button or the word "saving" in the note): not spent,
+          // but it still belongs in the Need/Want/Saving chart's Saving slice. The amount itself is
+          // reported as `saved` below, from the Savings screen's own entries.
+          typeTotals.Saving += amount;
+          modeBucket.typeTotals.Saving += amount;
         }
         continue; // not day-to-day spend — tracked as its own line, not blended into spend/category totals
       }
@@ -1570,6 +1580,27 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   const days    = Object.keys(dailyTotals).length || 1;
   const avgDaily = Math.round(totalDebit / days);
 
+  // What you actually set aside this month (added 2026-10-17): the net of the Savings screen's
+  // own entries dated in this month (adds minus withdrawals), in cash or bank. A saving is
+  // something you DO on purpose, not whatever is left over after spending.
+  let saved = 0;
+  try{
+    const savSheet = ss.getSheetByName("Savings");
+    if(savSheet){
+      const savData = savSheet.getDataRange().getValues();
+      for(let i = 1; i < savData.length; i++){
+        if(!savData[i][0]) continue;
+        const sd = new Date(savData[i][0]);
+        if(sd.getFullYear() === year && (sd.getMonth() + 1) === month){
+          saved += Number(savData[i][1]) || 0;
+        }
+      }
+    }
+  }catch(savedErr){ saved = 0; }
+  // The monthly saving goal from Settings, shown next to it ("Saved X of Y").
+  let savingGoal = 0;
+  try{ if(typeof getSettings === "function") savingGoal = Number(getSettings().monthlySaveGoal) || 0; }catch(goalErr){ savingGoal = 0; }
+
   const categories = Object.entries(categoryTotals)
     .sort(function(a, b){ return b[1] - a[1]; })
     .map(function(entry){
@@ -1591,6 +1622,8 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
     categories:  categories,
     fixedObligations: fixedObligations,
     invested:         invested,
+    saved:            saved,
+    savingGoal:       savingGoal,
     incomeItems:      incomeItems.sort(function(a, b){ return b.amount - a.amount; }),
     needWantSaving: {
       need:           typeTotals.Need,
@@ -2375,7 +2408,7 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
 //      hasLikelyDuplicateInvestment / hasLikelyDuplicateSaving).
 function applyFinancialEventToRow_(sheet, row, financialEvent, financialEventName, counterparty, note){
   writeFinancialEventCells_(sheet, row, financialEvent, financialEventName);
-  runFinancialEventSideEffects_(sheet, row, financialEvent, financialEventName, counterparty, note, true);
+  return runFinancialEventSideEffects_(sheet, row, financialEvent, financialEventName, counterparty, note, true);
 }
 
 // Step 1 of the above: just the two cells (column R, and column S for a
@@ -2405,8 +2438,26 @@ function runFinancialEventSideEffects_(sheet, row, financialEvent, financialEven
   if(financialEvent === "Investment"){
     autoLogInvestment(txnDateStr, financialEventName, feAmount, note);
   } else if(financialEvent === "Saving"){
-    autoLogSaving(txnDateStr, feAmount, note);
+    return { saving: autoLogSaving(txnDateStr, feAmount, note) };   // { logged, reason }: the caller can tell whether it really landed
   }
+  return null;
+}
+
+// True when ANOTHER payment (not this row) is also marked Saving with the same day and amount: then the
+// automatic Savings entry could belong to either of them, so it must never be deleted on one's behalf.
+function savingEntryShared_(sheet, row, dateStr, amount){
+  const data = sheet.getDataRange().getValues();
+  const want = Number(amount) || 0;
+  for(let i = 1; i < data.length; i++){
+    if(i + 1 === row) continue;
+    if((data[i][17] || "").toString().trim() !== "Saving") continue;
+    if(Math.abs((Number(data[i][5]) || 0) - want) > 0.009) continue;
+    if(!data[i][0]) continue;
+    let day = "";
+    try{ day = Utilities.formatDate(new Date(data[i][0]), Session.getScriptTimeZone(), "yyyy-MM-dd"); }catch(e){ continue; }
+    if(day === dateStr) return true;
+  }
+  return false;
 }
 
 // Writes the note + category you typed back into the right row.
@@ -2517,6 +2568,9 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     const prevNote = (sheet.getRange(row, 13).getValue() || "").toString().trim().toLowerCase();
     const prevCategory = (sheet.getRange(row, 14).getValue() || "").toString().trim();
     const prevType = (sheet.getRange(row, 17).getValue() || "").toString().trim();
+    const prevFinancialEvent = (sheet.getRange(row, 18).getValue() || "").toString().trim(); // column R, before this save (for "un-saving" below)
+    const prevNoteRaw = (sheet.getRange(row, 13).getValue() || "").toString();               // exact old note and amount: what the automatic Savings entry was logged with
+    const prevAmountRaw = Number(sheet.getRange(row, 6).getValue()) || 0;
     const isRepeatSave = prevNote !== "" &&
       prevNote === (note || "").toString().trim().toLowerCase() &&
       prevCategory === (category || "").toString().trim() &&
@@ -2555,15 +2609,60 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     // Lending — so it can apply even though the frontend never sent a
     // financialEvent for it. An explicit chip selection always wins if
     // one was actually sent.
-    const effectiveFinancialEvent = financialEvent || (isSavingsNote(note) ? "Saving" : "");
+    //
+    // The Saving BUTTON counts the same way (added 2026-10-17): tapping Saving on a payment you
+    // SENT means "this money went into savings", so it is left out of Spent and logged on the
+    // Savings screen exactly like the word "saving" in the note. A lending transfer never counts.
+    const savedDirection = (sheet.getRange(row, 4).getValue() || "").toString().toLowerCase(); // column D
+    // Only a person's own choice (opts.typeChosen), only on money sent, never over a Rent/EMI/Investment marker.
+    const savingButtonTapped = opts.typeChosen === true && opts.autoType !== true && type === "Saving" && savedDirection === "debit" &&
+      !isLendingTransfer(counterparty, note) && (prevFinancialEvent === "" || prevFinancialEvent === "Saving");
+    const effectiveFinancialEvent = financialEvent || (isSavingsNote(note) ? "Saving" : "") || (savingButtonTapped ? "Saving" : "");
     const effectiveFinancialEventName = financialEvent ? financialEventName : null;
 
+    // This payment WAS a saving before this save (column R). Whatever the new save is, the automatic
+    // Savings-screen entry the app wrote for it has to be dealt with first, using the OLD date/amount/note it
+    // was logged with:
+    //   - changed away from Saving: take the entry back out and clear the marker;
+    //   - still a Saving but the amount or note changed: take the old entry out, then log the new one
+    //     (otherwise an edit would log a second entry and double-count the saving).
+    // Only an exact, single match that belongs to no other Saving payment is removed (undoAutoLogSaving,
+    // savingEntryShared_). If it can not be removed safely it is left alone, nothing new is logged on top of it,
+    // and the answer says so.
+    const wasSaving = prevFinancialEvent === "Saving";
+    const isSaving = effectiveFinancialEvent === "Saving";
+    let savingUndo = null;
+    let savingRelogSkipped = false;
+    let savingLogResult = null;
+    if(wasSaving){
+      try{
+        const undoDateRaw = sheet.getRange(row, 1).getValue();
+        const undoDateStr = Utilities.formatDate(new Date(undoDateRaw), Session.getScriptTimeZone(), "yyyy-MM-dd");
+        if(savingEntryShared_(sheet, row, undoDateStr, prevAmountRaw)){
+          savingUndo = { removed: false, reason: "shared" };
+        }else{
+          savingUndo = undoAutoLogSaving(undoDateStr, prevAmountRaw, prevNoteRaw);   // the amount and note it was logged with
+        }
+      }catch(undoErr){
+        logAI("SAVING_UNDO_ERROR", undoErr.toString());
+        savingUndo = { removed: false, reason: "error" };
+      }
+      if(!isSaving && !effectiveFinancialEvent) sheet.getRange(row, 18).setValue(""); // column R
+    }
+
     if(effectiveFinancialEvent){
-      // Moved into a shared helper 2026-10-10 so the automatic "settle
-      // known transactions" path (autoSettle.js) runs exactly the same
-      // steps as a human tapping "Yes" on the chip — the two can never
-      // drift apart. Behavior here is unchanged.
-      applyFinancialEventToRow_(sheet, row, effectiveFinancialEvent, effectiveFinancialEventName, counterparty, note);
+      if(isSaving && wasSaving && !(savingUndo && savingUndo.removed)){
+        // Still a saving and the old entry could not be taken out safely: keep the marker, do not log a second entry.
+        writeFinancialEventCells_(sheet, row, "Saving", null);
+        savingRelogSkipped = true;
+      }else{
+        // Moved into a shared helper 2026-10-10 so the automatic "settle
+        // known transactions" path (autoSettle.js) runs exactly the same
+        // steps as a human tapping "Yes" on the chip — the two can never
+        // drift apart. Behavior here is unchanged.
+        const feResult = applyFinancialEventToRow_(sheet, row, effectiveFinancialEvent, effectiveFinancialEventName, counterparty, note);
+        if(feResult && feResult.saving) savingLogResult = feResult.saving;
+      }
     }
 
     // "No, regular spend" (added 2026-10-14): remember that the person looked at the Rent/EMI/Investment
@@ -2707,7 +2806,10 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     const isNonSpendTransfer = isCreditCardBillPayment(savedMode, counterparty, note, savedAmount) || isWalletTopUp(counterparty, savedReference);
 
     let typeSaved = false;
-    if(type && !isLendingTransfer(counterparty, note) && !effectiveFinancialEvent && !isNonSpendTransfer && !investmentInstrumentValid){
+    // (A Saving event is the one exception: the tag stays on the row when it IS "Saving", so the
+    // Need/Want/Saving chart and the learning still see it.)
+    const eventBlocksType = !!effectiveFinancialEvent && !(effectiveFinancialEvent === "Saving" && type === "Saving");
+    if(type && !isLendingTransfer(counterparty, note) && !eventBlocksType && !isNonSpendTransfer && !investmentInstrumentValid){
       sheet.getRange(row, 17).setValue(type); // column Q
       typeSaved = true;
 
@@ -2737,6 +2839,10 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
     }
 
     return { ok:true, typeRequested: !!type, typeSaved: typeSaved, savedType: typeSaved ? type : "", investmentLogged: investmentLogged,
+             savingEvent: effectiveFinancialEvent === "Saving",
+             // false = counted as a saving but NOT added to the Savings screen (an entry for the same amount was already there)
+             savingLogged: savingLogResult ? savingLogResult.logged === true : null,
+             savingUndone: !!(savingUndo && savingUndo.removed), savingUndoKept: !!(savingUndo && !savingUndo.removed) || savingRelogSkipped,
              debtLinked: !!(debtResult && (debtResult.logged === true || debtResult.ok === true)),
              debtAlreadyLinked: !!(debtResult && debtResult.reason === "already linked") };
   }catch(err){

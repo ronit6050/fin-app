@@ -247,7 +247,7 @@ assertEqual(result.categories[0].amount, 1050, "All's Food category amount is 10
 
 // Shape check — every field the function returned before this change
 // must still be present, plus the new byMode key.
-const expectedTopLevelKeys = ["totalDebit","totalCredit","savings","avgDaily","topAmount","topNote","categories","fixedObligations","invested","incomeItems","needWantSaving","byMode"];
+const expectedTopLevelKeys = ["totalDebit","totalCredit","savings","avgDaily","topAmount","topNote","categories","fixedObligations","invested","saved","savingGoal","incomeItems","needWantSaving","byMode"];
 const actualTopLevelKeys = Object.keys(result);
 expectedTopLevelKeys.forEach(function(key){
   assert(actualTopLevelKeys.indexOf(key) !== -1, "result still has the '" + key + "' field");

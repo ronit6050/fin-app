@@ -25,6 +25,7 @@ FakeSheet.prototype.hideSheet = function(){ this.hidden = true; };
 FakeSheet.prototype.getLastRow = function(){ return this.rows.length; };
 FakeSheet.prototype.getLastColumn = function(){ return this._width(); };
 FakeSheet.prototype.appendRow = function(values){ this.rows.push(values.slice()); };
+FakeSheet.prototype.deleteRow = function(r){ this.rows.splice(r - 1, 1); };
 FakeSheet.prototype.getDataRange = function(){
   const self = this;
   return {
