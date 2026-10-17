@@ -17,6 +17,13 @@
       if (saved === "light" || saved === "dark") {
         document.documentElement.setAttribute("data-theme", saved);
       }
+      // "New look (preview)" switch (UI/UX makeover, 2026-10-17). Local to
+      // this phone, off unless Settings > Appearance turns it on. Every new
+      // look rule is written as :root[data-look="new"] ..., so with the
+      // switch off the app is byte-for-byte how it was.
+      if (localStorage.getItem("lookPreview") === "on") {
+        document.documentElement.setAttribute("data-look", "new");
+      }
     })();
   </script>
 
@@ -315,6 +322,82 @@
            shapes don't reliably support box-shadow across browsers). */
       --chart-glow-shadow: none;
       --chart-glow-filter: none;
+    }
+
+    /* ---------- Design foundation (UI/UX phase 1, 2026-10-17) ----------
+       Colours live in the blocks above and below. THESE are the shared
+       non-colour building blocks every screen should use from now on, so
+       screens line up and feel like one app: one font, one type scale,
+       one spacing grid (multiples of 4/8), one set of motion speeds.
+       Same in light and dark, so they live in one place here and nothing
+       in the dark blocks needs to repeat them. Nothing below changes how
+       a screen looks by itself; screens opt in as they are rebuilt. */
+    :root {
+      /* "Inter" is loaded from fonts/ once the font file is added (see the
+         @font-face note near the end of this style block); until then,
+         and for any phone that can't load it, the list falls back to the
+         phone's own native font exactly as before. */
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+      /* Type scale (rem). Big numbers get tight spacing; small labels stay
+         readable (never below 0.6875rem = 11px). */
+      --fs-caption: 0.6875rem;
+      --fs-small:   0.8125rem;
+      --fs-body:    0.9375rem;
+      --fs-title:   1.25rem;
+      --fs-number:  1.0625rem;   /* a figure inside a small tile */
+      --fs-hero:    2.125rem;    /* the one big number on a screen */
+      --tracking-hero: -0.03em;
+
+      /* Spacing grid. */
+      --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;
+      --sp-4: 16px; --sp-5: 20px; --sp-6: 24px;
+
+      /* Motion — all short on purpose. "Lively, not busy." */
+      --ease-out:    cubic-bezier(0.2, 0.8, 0.2, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --dur-press:   0.12s;   /* finger-down feedback */
+      --dur-base:    0.28s;   /* screen slide / fade */
+      --dur-count:   800ms;   /* summary numbers counting up (JS reads this) */
+      --stagger-step: 55ms;   /* gap between cards fading up one by one */
+    }
+
+    /* Inter, self-hosted (fonts/, SIL Open Font License, licence file kept
+       beside it). Only used when the "New look (preview)" switch is on. */
+    @font-face {
+      font-family: "Inter";
+      src: url("fonts/Inter-latin-wght.woff2") format("woff2");
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+    :root[data-look="new"] {
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* Cards fade up one after another when a screen opens. Added by
+       FinMotion.stagger() below. "backwards" fill = it only affects the
+       start; once finished the element goes back to its normal style, so
+       it never fights other transitions (swipe, remove, etc.). */
+    @keyframes fin-rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: none; }
+    }
+    .fin-rise { animation: fin-rise 0.38s var(--ease-out) backwards; }
+
+    /* Finger-down feedback for any tappable card/tile: add class "press". */
+    .press { transition: transform var(--dur-press); }
+    .press:active { transform: scale(0.96); }
+
+    /* Figures line up in columns and don't jiggle while they count. */
+    .fin-num { font-variant-numeric: tabular-nums; }
+
+    /* People who turn animations off in their phone settings get none of
+       the above: no rise, no press shrink, and numbers just show the final
+       value (FinMotion.countUp checks the same setting). */
+    @media (prefers-reduced-motion: reduce) {
+      .fin-rise { animation: none !important; }
+      .press, .press:active { transition: none; transform: none; }
     }
 
     /* Locks the browser to light form controls/scrollbars when Light is
@@ -696,7 +779,7 @@
          (San Francisco on iPhone, Roboto on Android, Segoe UI on
          Windows...) instead of always forcing Arial — makes the app
          feel like it belongs on your device. */
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: var(--font-sans);
       background-color: var(--bg-page);
       color: var(--text-primary);
       transition: background-color 0.2s ease, color 0.2s ease;
@@ -706,6 +789,13 @@
       justify-content: center;
       padding: 16px;
     }
+
+    /* Buttons and form fields use the browser's own font by default, which
+       would ignore the app font above — make them follow it. */
+    :root[data-look="new"] button,
+    :root[data-look="new"] input,
+    :root[data-look="new"] select,
+    :root[data-look="new"] textarea { font-family: inherit; }
 
     .app {
       width: 100%;
@@ -3519,6 +3609,14 @@
               <option value="dark">Dark</option>
             </select>
           </div>
+          <div class="field" style="margin-bottom:0; margin-top:12px;">
+            <label>New look (preview)</label>
+            <select id="settingsLookPreview">
+              <option value="off">Off</option>
+              <option value="on">On</option>
+            </select>
+            <div style="font-size:0.75rem; margin-top:4px; color:var(--text-muted);">Try the app makeover as it is built. Only this phone; switch it off any time.</div>
+          </div>
         </div>
 
         <div class="settings-group">
@@ -3740,8 +3838,60 @@
     // landed. Runs immediately, doesn't need sign-in. Bump APP_VERSION
     // and update APP_CHANGELOG every time a real user-facing change ships.
     // ---------------------------------------------------------
-    const APP_VERSION = "2026-10-17-02";
-    const APP_CHANGELOG = "New: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
+    // ---------------------------------------------------------
+    // FinMotion — small, shared "lively" helpers (UI/UX phase 1, 2026-10-17).
+    // Rules agreed with the owner: SUMMARY numbers (tiles, totals, category
+    // amounts) count up when a screen opens; LISTS (Pending, History rows)
+    // never count — they only fade in. Everything is short, never blocks a
+    // tap, and does nothing for people who turned animations off.
+    //   <span class="fin-num" data-count="1240">1,240</span>
+    //   data-count = final number; optional data-dec="1" for decimals.
+    // Not used by any screen yet; screens opt in as they are rebuilt.
+    // ---------------------------------------------------------
+    const FinMotion = (function () {
+      const reduced = () => window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const fmt = (v, d) => v.toLocaleString("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+      // Counts every [data-count] element inside `root` from 0 up to its value.
+      function countUp(root) {
+        const scope = root || document;
+        const ms = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dur-count")) || 800;
+        scope.querySelectorAll("[data-count]").forEach(function (el) {
+          const to = parseFloat(el.dataset.count);
+          const d = parseInt(el.dataset.dec || "0", 10);
+          if (!isFinite(to)) return;
+          // Final value straight away if motion is off, the tab is hidden
+          // (rAF never fires there), or the number is trivial.
+          if (reduced() || document.hidden || to === 0) { el.textContent = fmt(to, d); return; }
+          let start = null;
+          el.textContent = fmt(0, d);
+          const step = function (t) {
+            if (start === null) start = t;
+            const p = Math.min((t - start) / ms, 1);
+            el.textContent = fmt(to * (1 - Math.pow(1 - p, 3)), d);
+            if (p < 1) requestAnimationFrame(step);
+            else el.textContent = fmt(to, d);   // always land exactly on the real value
+          };
+          requestAnimationFrame(step);
+        });
+      }
+
+      // Fades the direct children of `el` up one after another.
+      function stagger(el) {
+        if (!el || reduced()) return;
+        const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--stagger-step")) || 55;
+        Array.prototype.forEach.call(el.children, function (c, i) {
+          c.classList.remove("fin-rise");
+          void c.offsetWidth;                       // restart the animation
+          c.style.animationDelay = (i * gap) + "ms";
+          c.classList.add("fin-rise");
+        });
+      }
+      return { countUp: countUp, stagger: stagger };
+    })();
+
+    const APP_VERSION = "2026-10-17-03";
+    const APP_CHANGELOG = "New: Settings > Appearance > \"New look (preview)\" lets you try the app makeover as it is built (off by default, only on your phone). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -12927,6 +13077,21 @@
         localStorage.setItem("themePreference", choice);
         document.documentElement.setAttribute("data-theme", choice);
       }
+    });
+
+    // New look (preview) switch — local to this phone, instant, no Save.
+    const settingsLookEl = document.getElementById("settingsLookPreview");
+    try { settingsLookEl.value = localStorage.getItem("lookPreview") === "on" ? "on" : "off"; } catch (e) { /* default Off */ }
+    settingsLookEl.addEventListener("change", function () {
+      try {
+        if (settingsLookEl.value === "on") {
+          localStorage.setItem("lookPreview", "on");
+          document.documentElement.setAttribute("data-look", "new");
+        } else {
+          localStorage.removeItem("lookPreview");
+          document.documentElement.removeAttribute("data-look");
+        }
+      } catch (e) { /* ignore */ }
     });
 
     // New server (beta) switch (local to this phone, takes effect immediately) + what the last request used.
