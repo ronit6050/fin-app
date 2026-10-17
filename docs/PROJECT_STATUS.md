@@ -115,7 +115,7 @@ Two special ones need `local-data/` (real messages): `smsReplay.test.js`, and th
 
 ## 6. NEXT (in order) and ideas not started
 
-**Investments tab makeover (2026-10-17): BUILT and tested, reviewed independently, NOT LIVE yet.** The audit found the tab total
+**Investments tab makeover (2026-10-17): LIVE (Apps Script `@372`, new server updated, app `2026-10-17-09`, commit `bfbb7b5`), reviewed independently; the owner has not yet pressed "Start over from scratch".** The audit found the tab total
 mixed opening balances with later payments, was all-time while Analysis shows this month, and had old (Mar-Jul) payments logged on
 top of balances that already included them. Owner chose to start fresh: the New look screen has "Start over from scratch" (archives
 every entry to `Investments_Archive`, nothing deleted) and a setup list where each holding's total, SIP amount, due day and
