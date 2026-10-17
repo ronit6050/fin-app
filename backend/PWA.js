@@ -8,7 +8,7 @@
 const PWA_ALLOWED_EMAIL = "ronitnadar9@gmail.com";
 
 // Must match the Client ID used in the PWA's webpage.
-const PWA_CLIENT_ID = "1090460874478-0mnc81l34b10hi7n0u6bl9bkv9a45862.apps.googleusercontent.com";
+const PWA_CLIENT_ID = "921605499750-2oo6c0qnhr0ha617l4btu8vrlpqem0fv.apps.googleusercontent.com";
 
 // The action handler's public door. It wraps the real handler below so that,
 // after any action that CHANGES data, the finished screens are refreshed in
