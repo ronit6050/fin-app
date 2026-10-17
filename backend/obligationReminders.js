@@ -84,10 +84,15 @@ function ordinalDay_(day){
 function getDistinctObligations_(financialEventsData){
   var seen = {};
   var list = [];
+  var paused = {};   // paused SIPs (marker row "InvestmentPaused") get no reminder
+  for(var p = 1; p < financialEventsData.length; p++){
+    if((financialEventsData[p][0] || "").toString().trim() === "InvestmentPaused") paused[(financialEventsData[p][4] || "").toString().trim()] = true;
+  }
   for(var i = 1; i < financialEventsData.length; i++){
     var type = (financialEventsData[i][0] || "").toString().trim();
     var name = (financialEventsData[i][4] || "").toString().trim();
-    if(!type) continue;
+    if(!type || type === "InvestmentPaused") continue;
+    if(type === "Investment" && paused[name]) continue;
     var key = type + "||" + name;
     if(seen[key]) continue;
     seen[key] = true;

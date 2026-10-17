@@ -26,7 +26,7 @@ var V2_FRIEND_FULL_ACTIONS_ = [
   "getDebts", "addDebt", "settleDebt", "recordDebtPayment",
   "getSavingsGoals", "previewSavingsSplit", "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
   "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal",
-  "getInvestments", "getInvestmentInstruments", "addInvestmentInstrument", "logInvestment", "updateInvestment",
+  "getInvestments", "getInvestmentInstruments", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh",
   "getCash", "addCashEntry", "addManualTransaction", "updateCashEntry", "registerPushToken", "getDashboard", "getSettings", "updateSettings",
   "getTransactionHistory", "getPlannerData", "saveBudgets"
 ];
@@ -42,8 +42,8 @@ var V2_TEMPLATE_TABS_ = {
   "Debts": ["Date", "Person", "Type", "Amount", "Note", "DueDate", "Status", "SettledDate"],
   "Savings": ["Date", "Amount", "Type", "Note", "Destination"],
   "Goals": ["Name", "Type", "Target", "Status", "Priority", "DateAdded", "TargetDate"],
-  "Investments": ["Date", "Name", "Amount", "Note"],
-  "InvestmentInstruments": ["Name", "Category", "SipAmount"],
+  "Investments": ["Date", "Name", "Amount", "Note", "Kind"],
+  "InvestmentInstruments": ["Name", "Category", "SipAmount", "SipDay", "SipActive"],
   "FinancialEvents": ["Type", "Amount", "Counterparty", "Confirmed", "Name"],
   "Budgets": ["Month", "Category", "Type", "Target"],
   "SmartMemory": ["Merchant", "Category", "Subcategory", "Confidence", "TimesUsed", "LastUsed"],

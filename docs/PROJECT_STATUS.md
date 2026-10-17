@@ -115,11 +115,14 @@ Two special ones need `local-data/` (real messages): `smsReplay.test.js`, and th
 
 ## 6. NEXT (in order) and ideas not started
 
-**NEXT (owner asked 2026-10-17): rebuild the Investments tab; the owner says ALL its numbers look wrong.** Do in this order:
-1. **Audit first (read-only, with the robot key / tools/):** list the owner's Investments entries, find duplicates (same purchase logged by the payment note AND by hand), SIP payments that exist in Transactions (Financial Event "Investment") but have NO Investments row, and compare the tab's all-time total with Analysis' "Invested" for the same month. Show the owner what is wrong before fixing; never hand-edit data without a backup and approval.
-2. Likely causes already found in code (backend/PWA.js getInvestmentsData): total is ALL-TIME while Analysis shows THIS MONTH; only logged entries count (unconfirmed SIPs / un-noted stocks are missing); possible double counting; "Recent" is only 5; Settings monthlyInvestmentGoal (9,000) is not shown here.
-3. Redesign (mockup approved in direction, shown 2026-10-17): hero "Put in so far", "This month X of goal" (same figure as Analysis), Monthly SIP tracker (due date, Paid / Expected), Holdings, 6-month bars, Log sheet with duplicate warning. **"Worth now" / gains is deliberately DEFERRED**: the owner has an advanced idea for it and will explain later (rule: no outside price services).
-4. Same process as Savings: backend additions + New-look UI behind the switch, independent review, then ship (backend clasp + firebase, then git push).
+**Investments tab makeover (2026-10-17): BUILT and tested, reviewed independently, NOT LIVE yet.** The audit found the tab total
+mixed opening balances with later payments, was all-time while Analysis shows this month, and had old (Mar-Jul) payments logged on
+top of balances that already included them. Owner chose to start fresh: the New look screen has "Start over from scratch" (archives
+every entry to `Investments_Archive`, nothing deleted) and a setup list where each holding's total, SIP amount, due day and
+running/paused is typed once ("Already paid this month" avoids false overdue alerts). New figures, SIP tracker, donut, holdings,
+6-month bars, Add money with a duplicate warning, sale, entry edit/delete. Doc: docs/features/investments-redesign.md. To ship:
+run all tests, `clasp push` + `clasp deploy`, `firebase deploy --only functions`, then `git push`. After it is live the owner
+presses "Start over from scratch" once and re-enters his holdings. "Worth now"/gains still deferred (owner has an idea).
 
 1. **See a real transaction alerted by the new timer** (owner: tell me when a real bank SMS notification arrives; I check the logs: exactly once, from the new server).
 2. **Vaidehi** installs the new app (`FinApp-2026-10-14-new-server-sms.apk`); check her messages arrive through the new server.

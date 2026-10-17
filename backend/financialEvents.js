@@ -148,11 +148,18 @@ function payeeFitsNamedEvent_(type, name, counterparty, financialEventsData){
 function matchRecurringNamedEvent(type, amount, note, financialEventsData, counterparty){
   var noteText = (note || "").toString().toLowerCase();
   var seenNames = {};
+  // A paused SIP is not recognised any more (investmentsOverview.js leaves a "InvestmentPaused" marker row with its name).
+  var pausedNames = {};
+  if(type === "Investment"){
+    for(var p = 1; p < financialEventsData.length; p++){
+      if(financialEventsData[p][0] === "InvestmentPaused") pausedNames[(financialEventsData[p][4] || "").toString()] = true;
+    }
+  }
 
   for(var i = 1; i < financialEventsData.length; i++){
     if(financialEventsData[i][0] !== type) continue;
     var name = (financialEventsData[i][4] || "").toString();
-    if(!name || seenNames[name]) continue;
+    if(!name || seenNames[name] || pausedNames[name]) continue;
     if(amountsMatch(financialEventsData[i][1], amount)){
       if(counterparty !== undefined && !payeeFitsNamedEvent_(type, name, counterparty, financialEventsData)) continue;
       return { name: name };
@@ -163,7 +170,7 @@ function matchRecurringNamedEvent(type, amount, note, financialEventsData, count
     for(var j = 1; j < financialEventsData.length; j++){
       if(financialEventsData[j][0] !== type) continue;
       var n = (financialEventsData[j][4] || "").toString();
-      if(!n || seenNames[n]) continue;
+      if(!n || seenNames[n] || pausedNames[n]) continue;
       seenNames[n] = true;
       var keyword = eventKeywordFromName(n);
       if(keyword && noteText.indexOf(keyword) !== -1){
@@ -303,7 +310,8 @@ function autoLogInvestment(dateStr, name, amount, note, skipDuplicateCheck){
   if(!skipDuplicateCheck && hasLikelyDuplicateInvestment(dateStr, amount)) return { logged: false, reason: "duplicate" };
   var investSheet = dbSs_().getSheetByName("Investments");
   if(!investSheet) return { logged: false, reason: "no sheet" };
-  investSheet.appendRow([dateStr, name || "Investment", Number(amount) || 0, note || ""]);
+  // 5th column "Kind" (added 2026-10-17): money the app saw leave the bank is a "payment" (see investmentsOverview.js).
+  investSheet.appendRow([dateStr, name || "Investment", Number(amount) || 0, note || "", "payment"]);
   return { logged: true };
 }
 

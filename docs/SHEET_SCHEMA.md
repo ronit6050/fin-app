@@ -127,6 +127,9 @@ One row per investment log entry.
 | B | Name | The specific instrument's name (must match a row in `InvestmentInstruments`) — **column header was stale ("Type") until this cleanup pass relabeled it** |
 | C | Amount | |
 | D | Note | |
+| E | Kind | Added 2026-10-17: `opening` (what you had put in when you started tracking, or typed in setup), `payment` (the app saw it leave the bank), `manual` (added by hand), `sale` (money taken out, negative amount). Older rows have no Kind: "Starting Balance" note = opening, negative = sale, else payment. |
+
+Archive: `Investments_Archive` (Date, Name, Amount, Note, Kind, ArchivedOn) is created by "Start over from scratch" and only ever written to.
 
 ---
 
@@ -139,6 +142,8 @@ Fixed, named list of real investments (replaced free-typed "Type" text,
 | A | Name | |
 | B | Category | `SIP`, `One-time Fund`, `Stock`, or `Gold` |
 | C | SipAmount | Only set for SIPs — used for amount-matching a recurring payment |
+| D | SipDay | Added 2026-10-17: usual day of the month (1-31) the SIP is paid |
+| E | SipActive | Added 2026-10-17: `yes` running, `no` paused (blank with an amount = running). A paused SIP also has a marker row in `FinancialEvents` (Type `InvestmentPaused`, Name = the SIP) so its payments stop being recognised. |
 
 ---
 

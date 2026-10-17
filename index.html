@@ -3567,6 +3567,62 @@
     :root[data-look="new"] .goal-card-actions { gap: var(--sp-2); margin-top: var(--sp-3); }
     :root[data-look="new"] .goal-card-actions button { min-height: 44px; font-size: var(--fs-small); }
 
+    /* ---------- Investments, redesigned (New look, 2026-10-17) ----------
+       Same pieces as the redesigned Savings screen (it reuses the .sv-* classes: hero, cards, rows, chart, sheet fields)
+       plus a few of its own (.iv-*). Existing colour tokens only. The new screen shows only with the New look on AND
+       when the server sent the new figures (the script adds .iv-newon); otherwise the older markup (.iv-old) stays. */
+    :root[data-look="new"] #investmentsContent.iv-newon #investmentsNew { display: block !important; }
+    :root[data-look="new"] #investmentsContent.iv-newon > .iv-old { display: none !important; }
+    :root[data-look="new"] #view-investments.iv-detail-open > .back-to-more,
+    :root[data-look="new"] #view-investments.iv-detail-open > .section-title { display: none; }
+    :root[data-look="new"] .iv-tiles { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); }
+    :root[data-look="new"] .iv-tile {
+      flex: 1; min-width: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--text-on-hero) 16%, transparent);
+    }
+    :root[data-look="new"] .iv-tile-label { display: block; font-size: var(--fs-caption); color: var(--text-on-hero-muted); }
+    :root[data-look="new"] .iv-tile-value { display: block; margin-top: 2px; font-size: var(--fs-body); font-weight: 700; color: var(--text-on-hero); font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] .sv-home.iv-alert { background: var(--bg-warning); }
+    :root[data-look="new"] .iv-alert .sv-home-title { color: var(--text-primary); }
+    :root[data-look="new"] .iv-sipbox { padding-top: var(--sp-2); padding-bottom: var(--sp-2); }
+    :root[data-look="new"] button.iv-sip {
+      display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 60px; padding: var(--sp-3) 0;
+      border-top: 0.5px solid var(--border-hairline); text-align: left; font: inherit; font-weight: 400; color: var(--text-primary);
+      background: transparent; border-radius: 0;
+    }
+    :root[data-look="new"] button.iv-sip:first-of-type { border-top: 0; }
+    :root[data-look="new"] button.iv-sip:hover, :root[data-look="new"] button.iv-sip:active { background: transparent; }
+    :root[data-look="new"] .iv-day {
+      flex: none; width: 38px; height: 38px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;
+      background: var(--investment-bg); color: var(--investment-text); font-weight: 700; font-size: var(--fs-small); font-variant-numeric: tabular-nums;
+    }
+    :root[data-look="new"] .iv-day.late { background: var(--bg-warning); color: var(--color-warning); }
+    :root[data-look="new"] .iv-day.off { background: var(--surface-inset); color: var(--text-secondary); }
+    :root[data-look="new"] .iv-sip-main { flex: 1; min-width: 0; display: block; }
+    :root[data-look="new"] .iv-sip-name { display: block; font-size: var(--fs-body); font-weight: 600; overflow-wrap: anywhere; }
+    :root[data-look="new"] .iv-sip-sub { display: block; margin-top: 2px; font-size: var(--fs-small); color: var(--text-secondary); }
+    :root[data-look="new"] .iv-sip .status-pill { flex: none; }
+    :root[data-look="new"] .iv-foot { margin: var(--sp-2) 0 0; padding-top: var(--sp-3); border-top: 0.5px solid var(--border-hairline); font-size: var(--fs-small); color: var(--text-secondary); }
+    :root[data-look="new"] .iv-donut { display: flex; align-items: center; gap: var(--sp-5); }
+    :root[data-look="new"] .iv-donut svg { flex: none; width: 112px; height: 112px; }
+    :root[data-look="new"] .iv-legend { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); font-size: var(--fs-small); }
+    :root[data-look="new"] .iv-legend > div { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+    :root[data-look="new"] .iv-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: var(--sp-2); }
+    :root[data-look="new"] .iv-legend b { font-weight: 700; font-variant-numeric: tabular-nums; }
+    :root[data-look="new"] button.iv-more { background: transparent; color: var(--text-secondary); min-height: 44px; box-shadow: none; }
+    :root[data-look="new"] .iv-fresh { margin-top: var(--sp-6); }
+    :root[data-look="new"] .iv-setup { text-align: left; }
+    :root[data-look="new"] .iv-setup .sv-pace { margin-bottom: var(--sp-3); }
+    :root[data-look="new"] .iv-sipstate { margin: var(--sp-3) 0 0; font-size: var(--fs-body); color: var(--text-secondary); }
+    :root[data-look="new"] .iv-sipstate strong { color: var(--text-primary); }
+    .fin-sheet .iv-check { display: flex; align-items: center; gap: var(--sp-3); min-height: 48px; font-size: var(--fs-body); color: var(--text-primary); }
+    .fin-sheet .iv-check input { width: 22px; height: 22px; flex: none; margin: 0; }
+    .fin-sheet .iv-sipfields { margin-top: var(--sp-2); }
+    .fin-sheet .iv-twocol { display: flex; gap: var(--sp-3); }
+    .fin-sheet .iv-twocol > .field { flex: 1; min-width: 0; }
+    .fin-sheet .iv-readonly { margin: 0 0 var(--sp-3); font-size: var(--fs-body); font-weight: 700; color: var(--text-primary); }
+    .fin-sheet .iv-secondary { margin-top: var(--sp-2); }
+
     /* ---------- Savings, redesigned (New look, 2026-10-17) ----------
        Everything here is under :root[data-look="new"] except the "hidden unless the New look is on" defaults.
        Existing colour tokens only. Text colours used: --text-primary / --text-secondary on --surface-card and
@@ -4640,6 +4696,22 @@
         </div>
         <div id="investmentsContent" style="display:none">
 
+          <!-- New look (2026-10-17): the redesigned Investments screen is drawn into #investmentsNew by
+               renderInvestmentsNew(). With the New look switch off (or if the server sent no overview) it stays
+               hidden and the older markup inside .iv-old is used exactly as before. -->
+          <div id="investmentsNew" style="display:none">
+            <div id="ivMain"></div>
+            <div id="ivDetail" style="display:none"></div>
+          </div>
+          <!-- Forms lent to the bottom sheet by the new Investments screen (filled in when opened). -->
+          <div id="ivForms" style="display:none">
+            <div id="ivAddForm" style="display:none"></div>
+            <div id="ivHoldingForm" style="display:none"></div>
+            <div id="ivSaleForm" style="display:none"></div>
+            <div id="ivEntryForm" style="display:none"></div>
+          </div>
+
+          <div class="iv-old">
           <div class="today-total-box">
             <div class="today-total-label">Total Invested</div>
             <div class="today-total-amount" id="investmentsTotalAmount">₹0</div>
@@ -4668,6 +4740,7 @@
             </div>
             <button type="button" id="saveInvestmentButton">Save</button>
             <div id="logInvestmentResult" class="pending-result"></div>
+          </div>
           </div>
         </div>
       </div>
@@ -5689,6 +5762,7 @@
       const cameBack = finOpenSub !== null;
       finOpenSub = null;
       svLeave();   // Savings (New look): next time it opens it starts on the overview
+      ivLeave();   // Investments (New look): same
       if (!finLookOn()) return;
       if (cameBack) { FinPlay.arm("more"); finSlideIn(moreMenuEl, "l"); }
       FinPlay.play("more");            // armed by a tab change or by coming back from a screen
@@ -6082,8 +6156,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-17-08";
-    const APP_CHANGELOG = "New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
+    const APP_VERSION = "2026-10-17-09";
+    const APP_CHANGELOG = "New look preview: the Investments screen is redesigned, with what you have put in so far, this month against your goal, a tracker for each monthly SIP (paid, coming up or overdue), where your money sits, each holding with its share, the last 6 months, and one Add money sheet. In Investments you can set up each holding with its SIP day and amount, pause a SIP, record a sale, or start over from scratch. New look preview: on the Savings screen, deleting an entry now asks you to tap again to confirm, and old entries keep their original destination when you only change the note. New look preview: the Savings screen is redesigned, with your total saved and this month against your goal, a Safety section, goals that show how long they will take, a 6-month chart, a grouped activity list, and one Add savings sheet. New look preview: a short welcome tour shows the first time you sign in on a phone (you can skip it), and Settings has a Screens I use list to hide what you do not need on this phone. New look preview, part 3: the rest of the app (History, Debts, Cash, Investments, CC Advisor, Savings, Planner, Reconcile, Settings and the sign-in screen) is restyled, the add forms slide up from the bottom, and Settings has real on/off switches. New look preview, part 2: a round + button adds a payment from any screen, swipe a ready card right in Pending to confirm it (with a few seconds to undo), screens slide in, and the Home, Pending, Analysis and More screens are restyled. Still only if you turned on Settings > Appearance > New look (preview). Earlier: an evening summary at 9pm tells you how much you spent today (your own share of split payments, cash included), how that compares with your usual day, and how many payments still need a note. You can switch it off in Settings > Notifications. A gentle reminder (hourly by default, between 8am and 10pm, at most 8 a day) also tells you when payments are waiting for a note; you can change how often, or turn it off, in the same place. Also new: when you add a debt, pay one off or settle one with a friend who uses the app, that friend is told, like a split.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -7427,7 +7501,7 @@
     // The saving actions the new server accepts (must match WRITE_ACTIONS in functions/index.js; one it does not know just answers "fallback").
     const NEW_SERVER_WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
-      "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
+      "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh",
       "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "registerPushToken",
       "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "insertReconciledTransactions", "fixCreditCardTransactionMode",
       "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey", "adminLog", "resolveAdminProblem"];
@@ -7623,9 +7697,9 @@
       // copied here so Demo Mode's Investments tab looks and behaves
       // exactly like the real one, with no network call needed.
       const investmentInstruments = [
-        { name: "HDFC Nifty 50 Index Fund", category: "SIP", sipAmount: 3000 },
-        { name: "HDFC Mid Cap Fund", category: "SIP", sipAmount: 4000 },
-        { name: "Bandhan Small Cap (Money2Mgt SIP)", category: "SIP", sipAmount: 2000 },
+        { name: "HDFC Nifty 50 Index Fund", category: "SIP", sipAmount: 3000, sipDay: 10, sipActive: true },
+        { name: "HDFC Mid Cap Fund", category: "SIP", sipAmount: 4000, sipDay: 10, sipActive: true },
+        { name: "Bandhan Small Cap (Money2Mgt SIP)", category: "SIP", sipAmount: 2000, sipDay: 15, sipActive: true },
         { name: "Motilal Oswal Flexi Cap", category: "One-time Fund", sipAmount: null },
         { name: "HDFC Gold ETF Fund", category: "One-time Fund", sipAmount: null },
         { name: "Bandhan Small Cap", category: "One-time Fund", sipAmount: null },
@@ -7774,13 +7848,26 @@
 
       // ---- Investments — matches the 3 confirmed SIPs above, plus a
       // couple of one-time/stock/gold purchases for variety ----
-      const investments = [
-        { date: demoDayOfThisMonth(0.25, 10, 0), type: "HDFC Nifty 50 Index Fund", amount: 3000, note: "" },
-        { date: demoDayOfThisMonth(0.28, 10, 5), type: "HDFC Mid Cap Fund", amount: 4000, note: "" },
-        { date: demoDayOfThisMonth(0.30, 10, 10), type: "Bandhan Small Cap (Money2Mgt SIP)", amount: 2000, note: "" },
-        { date: demoDaysAgo(18), type: "Tata Steel", amount: 5000, note: "" },
-        { date: demoDaysAgo(9), type: "Digital Gold", amount: 2000, note: "" }
-      ];
+      const investments = [];
+      (function () {
+        const now = new Date();
+        function at(back, day) { return new Date(now.getFullYear(), now.getMonth() - back, day, 10, 0, 0, 0); }
+        function add(date, type, amount, note, kind) { investments.push({ date: date, type: type, amount: amount, note: note, kind: kind }); }
+        // What was already put in when tracking began
+        [["HDFC Nifty 50 Index Fund", 20000], ["HDFC Mid Cap Fund", 11000], ["Bandhan Small Cap (Money2Mgt SIP)", 58000],
+         ["Tata Steel", 5000], ["Digital Gold", 5615], ["HDFC Silver ETF", 5000]].forEach(function (r) { add(at(4, 11), r[0], r[1], "Starting Balance", "opening"); });
+        // Three months of SIP payments (the Bandhan one is paid on the 15th)
+        for (let m = 3; m >= 1; m--) {
+          add(at(m, 10), "HDFC Nifty 50 Index Fund", 3000, "SIP", "payment");
+          add(at(m, 10), "HDFC Mid Cap Fund", 4000, "SIP", "payment");
+          add(at(m, 15), "Bandhan Small Cap (Money2Mgt SIP)", 2000, "SIP", "payment");
+        }
+        // This month: the two 10th SIPs are paid; Bandhan shows as coming up, or overdue once the 17th has passed
+        const tenth = Math.min(10, now.getDate());
+        add(at(0, tenth), "HDFC Nifty 50 Index Fund", 3000, "SIP", "payment");
+        add(at(0, tenth), "HDFC Mid Cap Fund", 4000, "SIP", "payment");
+        add(demoDaysAgo(9), "Tata Steel", 2000, "top-up", "manual");
+      })();
 
       // ---- Planner (2026-08-18) — a real month's worth of already-saved
       // targets, deliberately mixed: Food shows a saved, split (Need/
@@ -8128,12 +8215,74 @@
         .sort(function (a, b) { return b.rawDate - a.rawDate; })
         .slice(0, 5)
         .map(function (r) { return { row: r.row, date: demoFmtDateShort(r.rawDate), type: r.type, amount: r.amount }; });
-      return { total: total, breakdown: breakdown, recent: recent };
+      return { total: total, breakdown: breakdown, recent: recent, overview: demoComputeInvestmentsOverview() };
+    }
+
+    // Demo twin of computeInvestmentsOverview_ (backend/investmentInstruments.js): the same rules, on the pretend entries.
+    function demoComputeInvestmentsOverview() {
+      const now = new Date();
+      const idxOf = function (d) { return d.getFullYear() * 12 + d.getMonth(); };
+      const nowIdx = idxOf(now);
+      const kindOf = function (e) { return e.kind || (e.note === "Starting Balance" ? "opening" : (e.amount < 0 ? "sale" : "payment")); };
+      const goal = Number(demoState.settings && demoState.settings.monthlyInvestmentGoal) || 9000;
+      const byName = {}, monthAdded = {};
+      let totalPutIn = 0, addedSinceStart = 0;
+      demoState.investments.forEach(function (e, i) {
+        if (!e.amount || !e.type) return;
+        const kind = kindOf(e);
+        const h = byName[e.type] || (byName[e.type] = { putIn: 0, last: null, entries: [], months: {} });
+        h.putIn += e.amount; totalPutIn += e.amount;
+        if (kind !== "opening") addedSinceStart += e.amount;
+        if (!h.last || e.date > h.last) h.last = e.date;
+        h.entries.push({ row: i + 2, date: demoFmtISODate(e.date), amount: e.amount, kind: kind, note: e.note || "" });
+        if ((kind === "payment" || kind === "manual") && e.amount > 0) { monthAdded[idxOf(e.date)] = (monthAdded[idxOf(e.date)] || 0) + e.amount; h.months[idxOf(e.date)] = e.date; }
+      });
+      const monthly = [];
+      for (let k = 5; k >= 0; k--) { const idx = nowIdx - k; monthly.push({ year: Math.floor(idx / 12), month: (idx % 12) + 1, amount: monthAdded[idx] || 0 }); }
+      const sips = []; let paidT = 0, ofT = 0;
+      demoState.investmentInstruments.forEach(function (inst) {
+        if (!(inst.sipAmount > 0)) return;
+        const h = byName[inst.name], active = inst.sipActive !== false;
+        const day = inst.sipDay >= 1 ? Math.min(inst.sipDay, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()) : null;
+        const first = h ? Object.keys(h.months).map(Number).sort(function (a, b) { return a - b; })[0] : undefined;
+        const paidNow = h && h.months[nowIdx] ? h.months[nowIdx] : null;
+        let status = "upcoming", daysLate = 0, daysUntil = null;
+        if (!active) status = "paused"; else if (paidNow) status = "paid";
+        else if (day !== null && now.getDate() - day >= 2) { status = "overdue"; daysLate = now.getDate() - day; }
+        else if (day !== null) daysUntil = Math.max(day - now.getDate(), 0);
+        let tracked = 0, paid = 0;
+        if (first !== undefined) for (let i = first; i < nowIdx; i++) { tracked++; if (h.months[i]) paid++; }
+        if (active) { paidT += paid; ofT += tracked; }
+        sips.push({ name: inst.name, amount: inst.sipAmount, day: day, active: active, status: status, paidOn: paidNow ? demoFmtISODate(paidNow) : "", daysLate: daysLate, daysUntil: daysUntil, paidMonths: paid, trackedMonths: tracked });
+      });
+      const act = sips.filter(function (x) { return x.active; });
+      const known = {}; demoState.investmentInstruments.forEach(function (i) { known[i.name] = i; });
+      const holdings = [], cat = {};
+      Object.keys(byName).forEach(function (name) {
+        const h = byName[name], inst = known[name] || {};
+        holdings.push({ name: name, category: inst.category || "", putIn: Math.round(h.putIn * 100) / 100, hasSip: inst.sipAmount > 0, sipActive: inst.sipActive !== false, lastDate: demoFmtISODate(h.last), entries: h.entries.slice(-12).reverse() });
+        if (h.putIn > 0) cat[inst.category || "Other"] = (cat[inst.category || "Other"] || 0) + h.putIn;
+      });
+      demoState.investmentInstruments.forEach(function (inst) {
+        if (inst.sipAmount > 0 && !byName[inst.name]) holdings.push({ name: inst.name, category: inst.category, putIn: 0, hasSip: true, sipActive: inst.sipActive !== false, lastDate: "", entries: [] });
+      });
+      const pos = holdings.reduce(function (a, h) { return a + Math.max(h.putIn, 0); }, 0);
+      holdings.forEach(function (h) { h.share = pos > 0 ? Math.round(Math.max(h.putIn, 0) / pos * 1000) / 10 : 0; });
+      holdings.sort(function (a, b) { return b.putIn - a.putIn; });
+      const allocation = Object.keys(cat).map(function (c) { return { category: c, amount: cat[c], pct: pos > 0 ? Math.round(cat[c] / pos * 1000) / 10 : 0 }; }).sort(function (a, b) { return b.amount - a.amount; });
+      return {
+        totalPutIn: Math.round(totalPutIn * 100) / 100, addedSinceStart: Math.round(addedSinceStart * 100) / 100, thisMonth: monthAdded[nowIdx] || 0,
+        monthlyGoal: goal, monthly: monthly, sips: sips, sipCommitment: act.reduce(function (a, x) { return a + x.amount; }, 0), sipsActive: act.length,
+        sipsPaid: act.filter(function (x) { return x.status === "paid"; }).length, sipsOverdue: act.filter(function (x) { return x.status === "overdue"; }).length,
+        onTime: { paid: paidT, of: ofT }, holdings: holdings, allocation: allocation,
+        instruments: demoState.investmentInstruments.map(function (i) { return { name: i.name, category: i.category, sipAmount: i.sipAmount || null, sipDay: i.sipDay || null, sipActive: i.sipActive !== false }; }),
+        hasData: demoState.investments.length > 0
+      };
     }
 
     function demoGetInvestmentInstrumentsList() {
       const DEMO_INVESTMENT_CATEGORIES = ["SIP", "One-time Fund", "Stock", "Gold"];
-      const instruments = demoState.investmentInstruments.map(function (i) { return { name: i.name, category: i.category, sipAmount: i.sipAmount || null }; });
+      const instruments = demoState.investmentInstruments.map(function (i) { return { name: i.name, category: i.category, sipAmount: i.sipAmount || null, sipDay: i.sipDay || null, sipActive: i.sipActive !== false }; });
       const grouped = DEMO_INVESTMENT_CATEGORIES.map(function (cat) { return { category: cat, instruments: instruments.filter(function (i) { return i.category === cat; }) }; });
       return { instruments: instruments, grouped: grouped };
     }
@@ -8856,12 +9005,77 @@
       if (!found) return { ok: false, error: "Unknown investment — add it first." };
       return { ok: true, name: found.name };
     }
-    function demoLogInvestment(amount, instrumentName) {
+    function demoLogInvestment(amount, instrumentName, date, note, force) {
       const v = demoValidateInstrumentName(instrumentName);
       if (!v.ok) return v;
       if (!amount || Number(amount) <= 0) return { ok: false, error: "Enter a valid amount." };
-      demoState.investments.push({ date: new Date(), type: v.name, amount: Number(amount), note: "" });
+      let when = new Date();
+      if (date) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+        if (!m) return { ok: false, error: "Choose today or an earlier date." };
+        when = new Date(+m[1], +m[2] - 1, +m[3], 10, 0, 0, 0);
+        if (when > new Date()) return { ok: false, error: "Choose today or an earlier date." };
+      }
+      if (!force) {
+        const hit = demoState.investments.find(function (e) { return e.type === v.name && Math.abs(e.amount - Number(amount)) < 1 && Math.abs(e.date - when) <= 5 * 86400000; });
+        if (hit) return { ok: false, duplicate: true, error: v.name + " already has " + hit.amount + " on " + demoFmtISODate(hit.date) + ". Add it anyway?" };
+      }
+      demoState.investments.push({ date: when, type: v.name, amount: Number(amount), note: note || "", kind: "manual" });
       return { ok: true };
+    }
+    function demoInvHoldingTotal(name) {
+      return demoState.investments.reduce(function (a, e) { return e.type === name ? a + e.amount : a; }, 0);
+    }
+    function demoRecordInvestmentSale(name, amount, date, note) {
+      const v = demoValidateInstrumentName(name);
+      if (!v.ok) return v;
+      if (!amount || Number(amount) <= 0) return { ok: false, error: "Enter a valid amount." };
+      const have = demoInvHoldingTotal(v.name);
+      if (Number(amount) > have + 0.005) return { ok: false, error: "That is more than the " + have + " put into " + v.name + "." };
+      demoState.investments.push({ date: new Date(), type: v.name, amount: -Number(amount), note: note || "Sale", kind: "sale" });
+      return { ok: true };
+    }
+    function demoDeleteInvestmentEntry(row, name, amount) {
+      const e = demoState.investments[row - 2];
+      if (!e) return { ok: false, error: "Invalid row." };
+      if (e.type !== name || Math.abs(e.amount - Number(amount)) > 0.005) return { ok: false, stale: true, error: "That entry changed. Reopen the holding and try again." };
+      demoState.investments.splice(row - 2, 1);
+      return { ok: true };
+    }
+    function demoSaveInvestmentHolding(d) {
+      const name = (d.name || "").toString().trim();
+      if (!name) return { ok: false, error: "Enter a name." };
+      let inst = demoState.investmentInstruments.find(function (i) { return i.name.toLowerCase() === name.toLowerCase(); });
+      let category = d.category || (inst && inst.category) || "";
+      if (d.sipOn === true) {
+        if (!(Number(d.sipAmount) > 0)) return { ok: false, error: "Enter the SIP amount." };
+        if (!(Number.isInteger(d.sipDay) && d.sipDay >= 1 && d.sipDay <= 31)) return { ok: false, error: "Enter the day of the month, 1 to 31." };
+        category = "SIP";
+      } else if (d.sipOn === false && category === "SIP") category = "One-time Fund";
+      if (["SIP", "One-time Fund", "Stock", "Gold"].indexOf(category) === -1) return { ok: false, error: "Choose what kind of holding this is." };
+      if (!inst) { inst = { name: name, category: category, sipAmount: null }; demoState.investmentInstruments.push(inst); }
+      inst.category = category;
+      if (d.sipOn === true) { inst.sipAmount = Number(d.sipAmount); inst.sipDay = d.sipDay; inst.sipActive = d.sipActive !== false; }
+      else if (d.sipOn === false) { inst.sipAmount = null; inst.sipDay = null; inst.sipActive = true; }
+      if (d.sipOn === true && d.paidThisMonth === true && inst.sipActive !== false) {
+        const nowD = new Date();
+        const idxNow = nowD.getFullYear() * 12 + nowD.getMonth();
+        const already = demoState.investments.some(function (e) { return e.type === inst.name && e.amount > 0 && (e.kind === "payment" || e.kind === "manual") && e.date.getFullYear() * 12 + e.date.getMonth() === idxNow; });
+        if (!already) demoState.investments.push({ date: new Date(nowD.getFullYear(), nowD.getMonth(), Math.min(d.sipDay, nowD.getDate()), 10, 0, 0, 0), type: inst.name, amount: Number(d.sipAmount), note: "SIP paid this month", kind: "payment" });
+      }
+      if (d.putInSoFar !== undefined && d.putInSoFar !== null && d.putInSoFar !== "") {
+        const put = Number(d.putInSoFar);
+        if (!isFinite(put) || put < 0) return { ok: false, error: "Put in so far must be zero or more." };
+        const delta = Math.round((put - demoInvHoldingTotal(inst.name)) * 100) / 100;
+        if (delta !== 0) demoState.investments.push({ date: new Date(), type: inst.name, amount: delta, note: "Set up", kind: "opening" });
+      }
+      return { ok: true, name: inst.name, category: category };
+    }
+    function demoStartInvestmentsFresh(confirm) {
+      if (confirm !== "FRESH") return { ok: false, error: "Not confirmed." };
+      const n = demoState.investments.length;
+      demoState.investments.length = 0;
+      return { ok: true, archived: n, relabelled: 0 };
     }
     function demoUpdateInvestment(row, instrumentName, amount) {
       const e = demoState.investments[row - 2];
@@ -8948,7 +9162,11 @@
           case "getInvestments": return { ok: true, investments: demoComputeInvestments() };
           case "getInvestmentInstruments": return Object.assign({ ok: true }, demoGetInvestmentInstrumentsList());
           case "addInvestmentInstrument": return demoAddInvestmentInstrument(data.name, data.category);
-          case "logInvestment": return demoLogInvestment(data.amount, data.instrumentName);
+          case "logInvestment": return demoLogInvestment(data.amount, data.instrumentName, data.date, data.note, data.force === true);
+          case "saveInvestmentHolding": return demoSaveInvestmentHolding(data);
+          case "recordInvestmentSale": return demoRecordInvestmentSale(data.name, data.amount, data.date, data.note);
+          case "deleteInvestmentEntry": return demoDeleteInvestmentEntry(data.row, data.name, data.amount);
+          case "startInvestmentsFresh": return demoStartInvestmentsFresh(data.confirm);
           case "updateInvestment": return demoUpdateInvestment(data.row, data.instrumentName, data.amount);
           case "getCash": return { ok: true, cash: demoComputeCashData() };
           case "addCashEntry": return demoAddCashEntry(data.type, data.amount, data.note, data.category, data.needWantSaving);
@@ -9333,7 +9551,7 @@
       "saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
       "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
-      "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment",
+      "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh",
       "addCashEntry", "addManualTransaction", "updateCashEntry", "insertReconciledTransactions",
       "fixCreditCardTransactionMode", "updateSettings", "saveBudgets"
     ];
@@ -11045,6 +11263,15 @@
           if (cur) history.pushState(cur, "");
         } catch (e) { /* ignore */ }
         if (finOnbOpen) finOnbClose(); else finCloseSheet(false);
+        return;
+      }
+      // New look, Investments: Back from a holding's page goes to the Investments overview first.
+      if (finLookOn() && ivOpenName && subViews.investments.style.display !== "none") {
+        try {
+          const cur = JSON.parse(localStorage.getItem(TAB_STORAGE_KEY) || "null");
+          if (cur) history.pushState(cur, "");
+        } catch (e) { /* ignore */ }
+        ivCloseDetail();
         return;
       }
       // New look, Savings: Back from a goal's page goes to the Savings overview first.
@@ -15404,6 +15631,14 @@
       investmentsStatusEl.textContent = "";
       investmentsContentEl.style.display = "block";
 
+      // New look: the redesigned screen (see INVESTMENTS, NEW LOOK below), when the server sent its figures.
+      if (finLookOn() && inv.overview) {
+        investmentsContentEl.classList.add("iv-newon");
+        renderInvestmentsNew(inv);
+        return;
+      }
+      investmentsContentEl.classList.remove("iv-newon");
+
       finMoneyInto(investmentsTotalAmountEl, inv.total);
 
       renderInvestmentBreakdown(inv.breakdown);
@@ -15473,6 +15708,516 @@
           investAmountInputEl.value = amount;
           logInvestmentResultEl.textContent = "Couldn't save (" + err.message + ") — check your connection and try again.";
         });
+    });
+
+    // ---------------------------------------------------------
+    // INVESTMENTS, NEW LOOK (2026-10-17)
+    // ---------------------------------------------------------
+    // The redesigned Investments screen. It is drawn from getInvestments().overview (backend/investmentInstruments.js,
+    // inside investmentInstruments.js): put in so far, this month against the goal, a tracker for each monthly SIP,
+    // where the money sits, holdings with their share, and the last 6 months. It reuses the Savings screen's .sv-*
+    // look. Nothing here guesses a number: every figure comes from the server. With the New look off (or if the
+    // server sent no overview) renderInvestments() keeps drawing the older screen exactly as before.
+    const ivViewEl = document.getElementById("view-investments");
+    const ivMainEl = document.getElementById("ivMain");
+    const ivDetailEl = document.getElementById("ivDetail");
+    let ivOpenName = null;        // the holding whose own page is open, or null for the overview
+    let ivShowAll = false;        // "Show all holdings" on the overview
+    let ivLastSig = "";
+    let ivHoldShown = [];         // the holdings drawn on screen, so a tap can find its holding by number
+    let ivEntriesShown = [];      // the entries drawn on a holding's page
+
+    const IV_COLORS = { "SIP": "var(--chart-lifestyle)", "One-time Fund": "var(--chart-transport)", "Stock": "var(--chart-financial)", "Gold": "var(--chart-education)" };
+    const IV_CAT_LABELS = { "SIP": "SIP funds", "One-time Fund": "One-time funds", "Stock": "Stocks", "Gold": "Gold" };
+    const IV_KIND_LABELS = { opening: "Starting amount", payment: "From your bank", manual: "Added by you", sale: "Taken out" };
+    function ivColor(cat) { return IV_COLORS[cat] || "var(--chart-other)"; }
+    function ivShortDate(iso) {
+      const d = svParseDate(iso);
+      return d ? d.d + " " + SV_MON[d.m - 1] : "";
+    }
+    function ivOrdinal(n) {
+      const v = n % 100;
+      const suffix = (v >= 11 && v <= 13) ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+      return n + suffix;
+    }
+    function ivDays(n) { return n === 1 ? "1 day" : n + " days"; }
+    function ivFindHolding(name) {
+      const o = investmentsData && investmentsData.overview;
+      return o ? (o.holdings || []).find(function (h) { return h.name === name; }) || null : null;
+    }
+    function ivFindSip(name) {
+      const o = investmentsData && investmentsData.overview;
+      return o ? (o.sips || []).find(function (s) { return s.name === name; }) || null : null;
+    }
+
+    function ivSipPill(s) {
+      if (s.status === "paid") return '<span class="status-pill success">Paid ' + escapeHtml(ivShortDate(s.paidOn)) + '</span>';
+      if (s.status === "overdue") return '<span class="status-pill warning">Overdue ' + ivDays(s.daysLate) + '</span>';
+      if (s.status === "paused") return '<span class="status-pill info">Paused</span>';
+      if (s.daysUntil === 0) return '<span class="status-pill info">Due today</span>';
+      if (s.daysUntil !== null) return '<span class="status-pill info">Due in ' + ivDays(s.daysUntil) + '</span>';
+      return '<span class="status-pill info">Active</span>';
+    }
+
+    function ivHeroHtml(o) {
+      const goal = Number(o.monthlyGoal) || 0;
+      const pct = goal > 0 ? svPct(o.thisMonth, goal) : 0;
+      let h = '<div class="today-total-box sv-hero"><div class="today-total-label">Put in so far</div>' +
+              '<div class="today-total-amount">' + finNum(o.totalPutIn, "₹") + '</div>';
+      h += '<div class="sv-hero-line">This month: ' + finNum(o.thisMonth, "₹") + (goal > 0 ? " of " + finNum(goal, "₹") + " goal" : "") + '</div>';
+      if (goal > 0) {
+        h += svBarHtml(pct) + '<div class="sv-hero-foot"><span>' + (o.thisMonth >= goal ? "Goal reached" : finNum(goal - o.thisMonth, "₹") + " to go") + '</span>' +
+             (o.sipsActive ? "<span>" + o.sipsPaid + " of " + o.sipsActive + " SIPs paid</span>" : "") + '</div>';
+      }
+      h += '<div class="iv-tiles">' +
+           '<div class="iv-tile"><span class="iv-tile-label">Added so far</span><span class="iv-tile-value">' + svRs(o.addedSinceStart) + '</span></div>' +
+           '<div class="iv-tile"><span class="iv-tile-label">Monthly SIPs</span><span class="iv-tile-value">' + svRs(o.sipCommitment) + '</span></div>' +
+           '<div class="iv-tile"><span class="iv-tile-label">Worth now</span><span class="iv-tile-value">Soon</span></div></div></div>';
+      return h;
+    }
+
+    function ivDonutHtml(o) {
+      const C = 2 * Math.PI * 46;
+      let off = 0, circles = "";
+      o.allocation.forEach(function (a) {
+        const len = Math.max(0, a.pct / 100 * C);
+        circles += '<circle cx="60" cy="60" r="46" fill="none" stroke="' + ivColor(a.category) + '" stroke-width="18" stroke-dasharray="' + len.toFixed(2) + " " + (C - len).toFixed(2) +
+                   '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 60 60)"/>';
+        off += len;
+      });
+      const count = o.holdings.filter(function (x) { return x.putIn > 0; }).length;
+      const label = "Where your money is: " + o.allocation.map(function (a) { return (IV_CAT_LABELS[a.category] || a.category) + " " + a.pct + "%"; }).join(", ");
+      return '<div class="sv-card iv-donut"><svg viewBox="0 0 120 120" role="img" aria-label="' + escapeHtml(label) + '">' +
+             '<circle cx="60" cy="60" r="46" fill="none" stroke="var(--chart-track-bg)" stroke-width="18"/>' + circles +
+             '<text x="60" y="58" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text-primary)">' + count + '</text>' +
+             '<text x="60" y="75" text-anchor="middle" font-size="11" fill="var(--text-secondary)">holdings</text></svg>' +
+             '<div class="iv-legend">' + o.allocation.map(function (a) {
+               return '<div><span><i style="background:' + ivColor(a.category) + '"></i>' + escapeHtml(IV_CAT_LABELS[a.category] || a.category) + '</span><b>' + a.pct + '%</b></div>';
+             }).join("") + '</div></div>';
+    }
+
+    function ivHoldingCardHtml(h, idx) {
+      const bits = [h.hasSip ? "SIP · " + (h.sipActive ? "running" : "paused") : (IV_CAT_LABELS[h.category] || h.category || "Other")];
+      bits.push(h.share + "% of total");
+      return '<button type="button" class="sv-card sv-tap" data-hold="' + idx + '"><span class="sv-card-top"><span class="sv-card-name">' + escapeHtml(h.name) +
+             '</span><span class="sv-card-amt">' + finNum(h.putIn, "₹") + '</span></span><span class="sv-card-of">' + escapeHtml(bits.join(" · ")) + '</span>' +
+             svBarHtml(Math.round(h.share)) + '</button>';
+    }
+
+    function ivMonthsHtml(o) {
+      const goal = Number(o.monthlyGoal) || 0;
+      const max = Math.max(goal, Math.max.apply(null, o.monthly.map(function (m) { return m.amount; })), 1);
+      const bars = o.monthly.map(function (m, i) {
+        return { label: SV_MON[m.month - 1], amount: m.amount, pct: Math.round(m.amount / max * 100), met: goal > 0 && m.amount >= goal, current: i === o.monthly.length - 1 };
+      });
+      const label = "Put in each month: " + bars.map(function (b) { return b.label + " " + svRs(b.amount) + (goal ? (b.met ? ", goal met" : ", goal not met") : ""); }).join("; ") + (goal ? ". Monthly goal " + svRs(goal) + "." : ".");
+      return '<h3 class="sv-sec">Last 6 months</h3><div class="sv-card sv-chart" role="img" aria-label="' + escapeHtml(label) + '"><div class="sv-chart-area">' +
+        (goal > 0 ? '<div class="sv-chart-line" style="bottom:' + Math.round(goal / max * 100) + '%"></div>' : "") +
+        bars.map(function (b) {
+          return '<div class="sv-chart-col"><span class="sv-chart-val" style="--sv-h:' + b.pct + '%">' + (b.amount ? svCompact(b.amount) : "") + '</span><div class="sv-chart-bar' + (b.met ? " met" : "") + '" style="height:' + b.pct + '%"></div></div>';
+        }).join("") + '</div><div class="sv-chart-labels">' +
+        bars.map(function (b) { return '<span' + (b.current ? ' class="now"' : "") + '>' + b.label + '</span>'; }).join("") + '</div>' +
+        (goal > 0 ? '<p class="sv-line">The dashed line is your monthly goal of ' + svRs(goal) + '. A green bar means you reached it. Starting amounts are not counted here.</p>' : '<p class="sv-line">Starting amounts are not counted here, only money added since.</p>') + '</div>';
+    }
+
+    // A holding with nothing put in yet: tap to enter what you have put in (and its SIP plan, if it has one).
+    function ivInstCardHtml(inst, i) {
+      const bits = [inst.sipAmount ? "SIP " + svRs(inst.sipAmount) + " on the " + ivOrdinal(inst.sipDay || 1) + (inst.sipActive ? "" : ", paused") : (IV_CAT_LABELS[inst.category] || inst.category)];
+      return '<button type="button" class="sv-card sv-tap" data-inst="' + i + '"><span class="sv-card-top"><span class="sv-card-name">' + escapeHtml(inst.name) +
+             '</span><span class="sv-card-amt">Enter amount</span></span><span class="sv-card-of">' + escapeHtml(bits.join(" · ")) + '</span></button>';
+    }
+
+    function ivOverviewHtml(o) {
+      let h = ivHeroHtml(o);
+      h += '<button type="button" class="sv-add" id="ivAddBtn">' + SV_PLUS + 'Add money</button>';
+      ivHoldShown = [];
+
+      // Nothing set up yet (or just started over): walk through the holdings instead of an empty screen.
+      if (!o.hasData) {
+        h += '<div class="sv-card iv-setup"><div class="sv-card-top"><span class="sv-card-name">Set up your investments</span></div>' +
+             '<p class="sv-pace">Add what you have put into each holding so far. For a monthly SIP, switch it on and give its amount and the day it is paid, so the app can tell you when one is missed.</p>' +
+             '<button type="button" id="ivNewBtn">Add a holding</button></div>';
+        if (o.instruments.length) {
+          h += '<h3 class="sv-sec">Your holdings</h3>';
+          o.instruments.forEach(function (inst, i) { h += ivInstCardHtml(inst, i); });
+        }
+        return h;
+      }
+
+      // A SIP that should have been paid by now.
+      const late = o.sips.filter(function (s) { return s.status === "overdue"; });
+      if (late.length) {
+        const s = late[0];
+        h += '<div class="sv-home iv-alert"><div class="sv-home-text"><span class="sv-home-title">' + escapeHtml(s.name) + ' not seen yet</span>' +
+             '<span class="sv-home-sub">' + svRs(s.amount) + ', due on the ' + ivOrdinal(s.day) + (late.length > 1 ? " · " + (late.length - 1) + " more overdue" : "") + '</span></div>' +
+             '<button type="button" id="ivLogLate" data-sip="' + escapeHtml(s.name) + '">Log it</button></div>';
+      }
+
+      if (o.sips.length) {
+        h += '<h3 class="sv-sec">Monthly SIPs</h3><div class="sv-card iv-sipbox">';
+        o.sips.forEach(function (s) {
+          const idx = o.holdings.findIndex(function (x) { return x.name === s.name; });
+          ivHoldShown.push(idx >= 0 ? o.holdings[idx] : null);
+          h += '<button type="button" class="iv-sip sv-tap" data-hold="' + (ivHoldShown.length - 1) + '"><span class="iv-day' + (s.status === "overdue" ? " late" : (s.status === "paused" ? " off" : "")) + '">' + (s.day || "·") + '</span>' +
+               '<span class="iv-sip-main"><span class="iv-sip-name">' + escapeHtml(s.name) + '</span><span class="iv-sip-sub">' + svRs(s.amount) + ' every month</span></span>' + ivSipPill(s) + '</button>';
+        });
+        const notes = [];
+        if (o.onTime.of > 0) notes.push("Paid on time " + o.onTime.paid + " of " + o.onTime.of + " months.");
+        if (o.monthlyGoal > 0 && o.sipsActive) {
+          const diff = o.monthlyGoal - o.sipCommitment;
+          notes.push("Your running SIPs add up to " + svRs(o.sipCommitment) + " a month" + (diff === 0 ? ", matching your goal." : diff > 0 ? ", " + svRs(diff) + " short of your goal." : ", " + svRs(-diff) + " more than your goal."));
+        }
+        if (notes.length) h += '<p class="iv-foot">' + escapeHtml(notes.join(" ")) + '</p>';
+        h += '</div>';
+      }
+
+      if (o.allocation.length) h += '<h3 class="sv-sec">Where your money is</h3>' + ivDonutHtml(o);
+
+      const holdings = o.holdings.filter(function (x) { return x.entries.length > 0; });
+      h += '<h3 class="sv-sec">Holdings</h3>';
+      if (!holdings.length) {
+        h += '<p class="sv-empty">No holdings with money in them yet.</p>';
+      } else {
+        const shown = ivShowAll ? holdings : holdings.slice(0, 5);
+        shown.forEach(function (x) { ivHoldShown.push(x); h += ivHoldingCardHtml(x, ivHoldShown.length - 1); });
+        if (holdings.length > 5) h += '<button type="button" class="secondary iv-more" id="ivMore">' + (ivShowAll ? "Show fewer" : "Show all " + holdings.length + " holdings") + '</button>';
+      }
+      h += '<button type="button" class="secondary sv-newgoal" id="ivNewBtn">New holding</button>';
+
+      // Holdings that have no entries at all yet (after a start over, or a new SIP): tap to fill in.
+      const unfilled = [];
+      o.instruments.forEach(function (inst, i) {
+        const hd = o.holdings.find(function (x) { return x.name === inst.name; });
+        if (!hd || hd.entries.length === 0) unfilled.push([inst, i]);
+      });
+      if (unfilled.length) {
+        h += '<h3 class="sv-sec">Not filled in yet</h3>';
+        unfilled.forEach(function (u) { h += ivInstCardHtml(u[0], u[1]); });
+      }
+
+      h += ivMonthsHtml(o);
+
+      h += '<button type="button" class="secondary iv-fresh" id="ivFreshBtn">Start over from scratch</button>' +
+           '<p class="sv-hint">Moves every entry to an archive and empties this screen, so you can enter your holdings again. Your holdings and SIP plans stay.</p>';
+      return h;
+    }
+
+    function ivDetailHtml(o, hd) {
+      const sip = ivFindSip(hd.name);
+      let h = '<button type="button" class="back-to-more sv-back" id="ivBack">' + SV_CHEVRON + 'Investments</button>';
+      h += '<div class="today-total-box sv-hero"><div class="today-total-label">' + escapeHtml(hd.name) + '</div><div class="today-total-amount">' + finNum(hd.putIn, "₹") + '</div>' +
+           '<div class="today-split">' + escapeHtml(IV_CAT_LABELS[hd.category] || hd.category || "Holding") + ' · ' + hd.share + '% of everything you have put in</div></div>';
+      if (sip) {
+        h += '<div class="sv-card"><div class="sv-card-top"><span class="sv-card-name">Monthly SIP' + ivSipPill(sip) + '</span></div>' +
+             '<p class="sv-pace"><strong>' + svRs(sip.amount) + '</strong> on the ' + (sip.day ? ivOrdinal(sip.day) : "(day not set)") + ' of every month' + (sip.active ? "" : ", paused") + '.</p>' +
+             (sip.trackedMonths > 0 ? '<p class="sv-line">Paid in ' + sip.paidMonths + ' of ' + sip.trackedMonths + ' earlier months.</p>' : "") + '</div>';
+      }
+      h += '<div class="sv-actions"><button type="button" data-act="add">Add money</button>';
+      if (hd.putIn > 0) h += '<button type="button" class="secondary" data-act="sale">Record a sale</button>';
+      if (sip) h += '<button type="button" class="secondary" data-act="' + (sip.active ? "pause" : "resume") + '">' + (sip.active ? "Pause SIP" : "Resume SIP") + '</button>';
+      h += '<button type="button" class="secondary" data-act="edit">Edit holding</button></div>';
+
+      h += '<h3 class="sv-sec">Money in and out</h3>';
+      ivEntriesShown = [];
+      if (!hd.entries.length) {
+        h += '<p class="sv-empty">Nothing here yet.</p>';
+      } else {
+        h += '<div class="sv-list">';
+        hd.entries.forEach(function (e) {
+          const neg = Number(e.amount) < 0;
+          h += '<button type="button" class="sv-row sv-tap" data-ent="' + ivEntriesShown.length + '"><span class="sv-row-main"><span class="sv-row-title">' +
+               escapeHtml(e.note || IV_KIND_LABELS[e.kind] || "Entry") + '</span><span class="sv-row-sub">' + escapeHtml(ivShortDate(e.date) + " · " + (IV_KIND_LABELS[e.kind] || "")) +
+               '</span></span><span class="sv-row-amt">' + (neg ? "-" : "+") + svRs(Math.abs(e.amount)) + '</span></button>';
+          ivEntriesShown.push(e);
+        });
+        h += '</div>';
+        if (hd.entries.length >= 12) h += '<p class="sv-hint">Showing the latest 12.</p>';
+      }
+      return h;
+    }
+
+    function renderInvestmentsNew(inv) {
+      const o = inv.overview;
+      if (ivOpenName && !ivFindHolding(ivOpenName)) ivOpenName = null;
+      ivViewEl.classList.toggle("iv-detail-open", !!ivOpenName);
+      ivDetailEl.style.display = ivOpenName ? "block" : "none";
+      ivMainEl.style.display = ivOpenName ? "none" : "block";
+      const shown = ivOpenName ? ivDetailEl : ivMainEl;
+      const sig = JSON.stringify([o, ivOpenName, ivShowAll]);
+      if (sig === ivLastSig && shown.children.length) return;   // a quiet refresh with nothing new must not redraw or restart anything
+      ivLastSig = sig;
+      ivMainEl.innerHTML = ivOverviewHtml(o);
+      if (ivOpenName) ivDetailEl.innerHTML = ivDetailHtml(o, ivFindHolding(ivOpenName)); else ivDetailEl.innerHTML = "";
+      const fresh = document.getElementById("ivFreshBtn");
+      if (fresh) bindConfirmAction(fresh, ivStartFresh, "Tap again to archive everything");
+    }
+
+    function ivGrowChart(root) {
+      (root || document).querySelectorAll(".sv-chart-bar").forEach(function (b, i) {
+        b.style.animationDelay = (i * 60) + "ms";
+        b.classList.remove("sv-grow"); void b.offsetWidth; b.classList.add("sv-grow");
+      });
+    }
+    function ivOpenDetail(hd) {
+      if (!hd || !investmentsData || !investmentsData.overview) return;
+      ivOpenName = hd.name;
+      renderInvestmentsNew(investmentsData);
+      finSlideIn(ivDetailEl, "r");
+      finPlayInto(ivDetailEl, { bars: true });
+      window.scrollTo(0, 0);
+    }
+    function ivCloseDetail() {
+      ivOpenName = null;
+      if (investmentsData && investmentsData.overview) renderInvestmentsNew(investmentsData);
+      finSlideIn(ivMainEl, "l");
+      window.scrollTo(0, 0);
+    }
+    // Leaving the screen (More menu shown): start on the overview next time.
+    function ivLeave() {
+      ivOpenName = null; ivLastSig = ""; ivShowAll = false;
+      if (ivViewEl) ivViewEl.classList.remove("iv-detail-open");
+      if (ivMainEl) ivMainEl.style.display = "block";
+      if (ivDetailEl) ivDetailEl.style.display = "none";
+    }
+    // The New look switch was flipped: draw the screen in whichever look is now on.
+    function ivLookChanged() {
+      ivLeave();
+      if (investmentsData) renderInvestments(investmentsData);
+    }
+
+    // ---- Talking to the server ----
+    function ivCall(req, onOk, onFail) {
+      req.idToken = currentUser.idToken;
+      return callAppsScript(req).then(function (data) {
+        if (data && data.ok) { onOk(data); } else { onFail(data || { error: "No answer" }); }
+      }).catch(function (err) { onFail({ error: err.message || "No connection" }); });
+    }
+    // After any change: bring in the real figures and the instrument list for the older pickers.
+    function ivAfterSave() {
+      refreshInvestmentsQuiet();
+      loadInvestmentInstruments();
+    }
+    function ivStartFresh() {
+      ivCall({ action: "startInvestmentsFresh", confirm: "FRESH" }, function (d) {
+        FinToast.show({ text: d.archived ? d.archived + " entries moved to the archive" : "Nothing to archive", ms: 3200 });
+        ivOpenName = null;
+        ivAfterSave();
+      }, function (d) { FinToast.show({ text: "Couldn't start over (" + d.error + ")", ms: 5000 }); });
+    }
+
+    // ---- Sheets ----
+    function ivInstrumentOptions(selected) {
+      const o = investmentsData && investmentsData.overview;
+      const list = o ? o.instruments : [];
+      let html = '<option value="">Choose a holding...</option>';
+      INSTRUMENT_CATEGORY_ORDER.forEach(function (cat) {
+        const items = list.filter(function (i) { return i.category === cat; });
+        if (!items.length) return;
+        html += '<optgroup label="' + escapeHtml(IV_CAT_LABELS[cat] || cat) + '">' + items.map(function (i) {
+          return '<option value="' + escapeHtml(i.name) + '"' + (i.name === selected ? " selected" : "") + '>' + escapeHtml(i.name) + '</option>';
+        }).join("") + '</optgroup>';
+      });
+      return html;
+    }
+    function ivSetBusy(btn, busy, label) { btn.disabled = busy; btn.textContent = busy ? "Saving..." : label; }
+
+    function ivOpenAddSheet(pre) {
+      if (!finLookOn() || finSheetOpen || !investmentsData || !investmentsData.overview) return;
+      pre = pre || {};
+      const form = document.getElementById("ivAddForm");
+      const today = svIndiaISO();
+      form.innerHTML =
+        '<div class="field sv-amount-field"><label for="ivAddAmount">Amount (₹)</label><input type="number" id="ivAddAmount" inputmode="decimal" min="0" step="1" placeholder="0"></div>' +
+        '<div class="field"><label for="ivAddName">Into which holding</label><select id="ivAddName" class="sv-select">' + ivInstrumentOptions(pre.name) + '</select></div>' +
+        '<div class="field"><label for="ivAddDate">Date</label><input type="date" id="ivAddDate" max="' + today + '"></div>' +
+        '<div class="field"><label for="ivAddNote">Note (optional)</label><input type="text" id="ivAddNote" placeholder="e.g. top-up"></div>' +
+        '<button type="button" id="ivAddSave">Save</button><button type="button" class="secondary iv-secondary" id="ivAddAnyway" style="display:none">Add it anyway</button>' +
+        '<div class="pending-result" id="ivAddResult" aria-live="polite"></div>';
+      const amountEl = form.querySelector("#ivAddAmount"), nameEl = form.querySelector("#ivAddName"), dateEl = form.querySelector("#ivAddDate"), noteEl = form.querySelector("#ivAddNote");
+      const resultEl = form.querySelector("#ivAddResult"), saveBtn = form.querySelector("#ivAddSave"), anywayBtn = form.querySelector("#ivAddAnyway");
+      amountEl.value = pre.amount || ""; dateEl.value = today;
+      function save(force) {
+        const amount = parseFloat(amountEl.value);
+        if (!nameEl.value) { resultEl.textContent = "Choose a holding first."; return; }
+        if (!amount || amount <= 0) { resultEl.textContent = "Enter an amount first."; return; }
+        if (!dateEl.value || dateEl.value > today) { resultEl.textContent = "Choose today or an earlier date."; return; }
+        ivSetBusy(saveBtn, true, "Save"); anywayBtn.style.display = "none"; resultEl.textContent = "";
+        ivCall({ action: "logInvestment", amount: amount, instrumentName: nameEl.value, date: dateEl.value, note: noteEl.value.trim(), force: force === true }, function () {
+          finCloseSheet(false, true);
+          FinToast.show({ text: "Saved", ms: 2200 });
+          ivAfterSave();
+        }, function (d) {
+          ivSetBusy(saveBtn, false, "Save");
+          resultEl.textContent = d.duplicate ? d.error : "Couldn't save (" + d.error + "). Check your connection and try again.";
+          if (d.duplicate) anywayBtn.style.display = "block";
+        });
+      }
+      saveBtn.addEventListener("click", function () { save(false); });
+      anywayBtn.addEventListener("click", function () { save(true); });
+      finOpenSheet({ form: form, title: "Add money", sub: "Money you put into one of your holdings.", focus: pre.name ? "ivAddAmount" : "ivAddName", opener: "ivAddBtn" });
+    }
+
+    // New holding, or edit one (inst = its entry in overview.instruments, hd = its holding when it has money in it).
+    function ivOpenHoldingSheet(inst, hd) {
+      if (!finLookOn() || finSheetOpen || !investmentsData || !investmentsData.overview) return;
+      const editing = !!inst;
+      const form = document.getElementById("ivHoldingForm");
+      const hasSip = !!(inst && inst.sipAmount);
+      const kind = inst && inst.category !== "SIP" ? inst.category : "One-time Fund";
+      form.innerHTML =
+        (editing ? '<p class="iv-readonly">' + escapeHtml(inst.name) + '</p>'
+                 : '<div class="field"><label for="ivHName">Name</label><input type="text" id="ivHName" maxlength="60" placeholder="e.g. Parag Parikh Flexi Cap"></div>') +
+        '<div class="field" id="ivHKindField"><label for="ivHKind">What kind is it</label><select id="ivHKind" class="sv-select">' +
+          ["One-time Fund", "Stock", "Gold"].map(function (c) { return '<option value="' + c + '"' + (c === kind ? " selected" : "") + '>' + (c === "One-time Fund" ? "Fund (not a monthly SIP)" : c) + '</option>'; }).join("") + '</select></div>' +
+        '<div class="field sv-amount-field"><label for="ivHPut">Put in so far (₹)</label><input type="number" id="ivHPut" inputmode="decimal" min="0" step="1" placeholder="0"></div>' +
+        '<label class="iv-check"><input type="checkbox" id="ivHSip"> This is a monthly SIP</label>' +
+        '<div class="iv-sipfields" id="ivHSipFields" style="display:none"><div class="iv-twocol">' +
+          '<div class="field"><label for="ivHSipAmt">SIP amount (₹)</label><input type="number" id="ivHSipAmt" inputmode="decimal" min="0" step="1"></div>' +
+          '<div class="field"><label for="ivHSipDay">Day of month</label><input type="number" id="ivHSipDay" inputmode="numeric" min="1" max="31" step="1" placeholder="10"></div></div>' +
+          '<label class="iv-check"><input type="checkbox" id="ivHSipOn" checked> This SIP is running</label>' +
+          '<label class="iv-check" id="ivHPaidRow"><input type="checkbox" id="ivHPaid"> Already paid this month</label></div>' +
+        '<button type="button" id="ivHSave">Save</button><div class="pending-result" id="ivHResult" aria-live="polite"></div>';
+      const q = function (id) { return form.querySelector(id); };
+      const sipEl = q("#ivHSip"), fieldsEl = q("#ivHSipFields"), kindField = q("#ivHKindField");
+      const sipNow = inst ? ivFindSip(inst.name) : null;
+      const showPaid = !sipNow || sipNow.status !== "paid";     // already shown as paid this month: nothing to ask
+      function syncSip() {
+        fieldsEl.style.display = sipEl.checked ? "block" : "none"; kindField.style.display = sipEl.checked ? "none" : "block";
+        q("#ivHPaidRow").style.display = (showPaid && q("#ivHSipOn").checked) ? "flex" : "none";
+      }
+      sipEl.checked = hasSip; syncSip();
+      sipEl.addEventListener("change", syncSip);
+      q("#ivHSipOn").addEventListener("change", syncSip);
+      if (hasSip) { q("#ivHSipAmt").value = inst.sipAmount; q("#ivHSipDay").value = inst.sipDay || ""; q("#ivHSipOn").checked = inst.sipActive !== false; }
+      syncSip();
+      if (editing) q("#ivHPut").value = hd ? hd.putIn : "";
+      const resultEl = q("#ivHResult"), saveBtn = q("#ivHSave");
+      saveBtn.addEventListener("click", function () {
+        const name = editing ? inst.name : q("#ivHName").value.trim();
+        if (!name) { resultEl.textContent = "Enter a name first."; return; }
+        const req = { action: "saveInvestmentHolding", name: name, category: sipEl.checked ? "SIP" : q("#ivHKind").value, sipOn: sipEl.checked };
+        const put = q("#ivHPut").value;
+        if (put !== "") req.putInSoFar = parseFloat(put);
+        if (sipEl.checked) {
+          req.sipAmount = parseFloat(q("#ivHSipAmt").value);
+          req.sipDay = parseInt(q("#ivHSipDay").value, 10);
+          req.sipActive = q("#ivHSipOn").checked;
+          if (req.sipActive && showPaid && q("#ivHPaid").checked) req.paidThisMonth = true;
+          if (!(req.sipAmount > 0)) { resultEl.textContent = "Enter the SIP amount."; return; }
+          if (!(req.sipDay >= 1 && req.sipDay <= 31)) { resultEl.textContent = "Enter the day of the month, 1 to 31."; return; }
+        }
+        ivSetBusy(saveBtn, true, "Save"); resultEl.textContent = "";
+        ivCall(req, function () {
+          finCloseSheet(false, true);
+          FinToast.show({ text: "Saved", ms: 2200 });
+          ivAfterSave();
+        }, function (d) { ivSetBusy(saveBtn, false, "Save"); resultEl.textContent = "Couldn't save (" + d.error + "). Check your connection and try again."; });
+      });
+      finOpenSheet({ form: form, title: editing ? "Edit holding" : "New holding", sub: editing ? "Change what you have put in, or its SIP plan." : "Add something you invest in.", focus: editing ? "ivHPut" : "ivHName", opener: editing ? null : "ivNewBtn" });
+    }
+
+    function ivOpenSaleSheet(hd) {
+      if (!finLookOn() || finSheetOpen || !hd) return;
+      const form = document.getElementById("ivSaleForm");
+      const today = svIndiaISO();
+      form.innerHTML =
+        '<div class="field sv-amount-field"><label for="ivSaleAmount">Amount taken out (₹)</label><input type="number" id="ivSaleAmount" inputmode="decimal" min="0" step="1" placeholder="0"></div>' +
+        '<div class="field"><label for="ivSaleDate">Date</label><input type="date" id="ivSaleDate" max="' + today + '"></div>' +
+        '<p class="sv-line">' + escapeHtml(hd.name) + ' has ' + svRs(hd.putIn) + ' put in. A sale lowers it by what you take out.</p>' +
+        '<button type="button" id="ivSaleSave">Save</button><div class="pending-result" id="ivSaleResult" aria-live="polite"></div>';
+      const amountEl = form.querySelector("#ivSaleAmount"), dateEl = form.querySelector("#ivSaleDate"), resultEl = form.querySelector("#ivSaleResult"), saveBtn = form.querySelector("#ivSaleSave");
+      dateEl.value = today;
+      saveBtn.addEventListener("click", function () {
+        const amount = parseFloat(amountEl.value);
+        if (!amount || amount <= 0) { resultEl.textContent = "Enter an amount first."; return; }
+        if (amount > hd.putIn + 0.005) { resultEl.textContent = "That is more than the " + svRs(hd.putIn) + " put in."; return; }
+        if (!dateEl.value || dateEl.value > today) { resultEl.textContent = "Choose today or an earlier date."; return; }
+        ivSetBusy(saveBtn, true, "Save"); resultEl.textContent = "";
+        ivCall({ action: "recordInvestmentSale", name: hd.name, amount: amount, date: dateEl.value }, function () {
+          finCloseSheet(false, true);
+          FinToast.show({ text: "Saved", ms: 2200 });
+          ivAfterSave();
+        }, function (d) { ivSetBusy(saveBtn, false, "Save"); resultEl.textContent = "Couldn't save (" + d.error + ")."; });
+      });
+      finOpenSheet({ form: form, title: "Record a sale", sub: "Money you took out of this holding.", focus: "ivSaleAmount" });
+    }
+
+    function ivOpenEntrySheet(e, hd) {
+      if (!finLookOn() || finSheetOpen || !e || !hd) return;
+      const form = document.getElementById("ivEntryForm");
+      const neg = Number(e.amount) < 0;
+      form.innerHTML =
+        '<p class="iv-readonly">' + escapeHtml(hd.name) + '</p>' +
+        '<p class="sv-line">' + escapeHtml(ivShortDate(e.date) + " · " + (IV_KIND_LABELS[e.kind] || "") + (e.note ? " · " + e.note : "")) + '</p>' +
+        (neg ? "" : '<div class="field sv-amount-field"><label for="ivEntAmount">Amount (₹)</label><input type="number" id="ivEntAmount" inputmode="decimal" min="0" step="1"></div>' +
+                    '<button type="button" id="ivEntSave">Save amount</button>') +
+        '<button type="button" class="secondary iv-secondary" id="ivEntDelete">Delete entry</button><div class="pending-result" id="ivEntResult" aria-live="polite"></div>';
+      const resultEl = form.querySelector("#ivEntResult");
+      const amountEl = form.querySelector("#ivEntAmount");
+      if (amountEl) {
+        amountEl.value = e.amount;
+        const saveBtn = form.querySelector("#ivEntSave");
+        saveBtn.addEventListener("click", function () {
+          const amount = parseFloat(amountEl.value);
+          if (!amount || amount <= 0) { resultEl.textContent = "Enter an amount first."; return; }
+          ivSetBusy(saveBtn, true, "Save amount"); resultEl.textContent = "";
+          ivCall({ action: "updateInvestment", row: e.row, instrumentName: hd.name, amount: amount, expectName: hd.name, expectAmount: e.amount }, function () {
+            finCloseSheet(false, true); FinToast.show({ text: "Saved", ms: 2200 }); ivAfterSave();
+          }, function (d) { ivSetBusy(saveBtn, false, "Save amount"); resultEl.textContent = "Couldn't save (" + d.error + ")."; });
+        });
+      }
+      const del = form.querySelector("#ivEntDelete");
+      bindConfirmAction(del, function () {
+        resultEl.textContent = "";
+        ivCall({ action: "deleteInvestmentEntry", row: e.row, name: hd.name, amount: e.amount }, function () {
+          finCloseSheet(false, true); FinToast.show({ text: "Entry deleted", ms: 2200 }); ivAfterSave();
+        }, function (d) { resultEl.textContent = d.stale ? d.error : "Couldn't delete (" + d.error + ")."; });
+      }, "Tap again to delete");
+      finOpenSheet({ form: form, title: "Entry", sub: "", focus: amountEl ? "ivEntAmount" : null });
+    }
+
+    function ivSetSipRunning(hd, running) {
+      const sip = ivFindSip(hd.name);
+      if (!sip) return;
+      if (!sip.day) {   // no due day saved yet: ask for it instead of guessing one
+        const o = investmentsData.overview;
+        ivOpenHoldingSheet(o.instruments.find(function (i) { return i.name === hd.name; }) || null, hd);
+        return;
+      }
+      ivCall({ action: "saveInvestmentHolding", name: hd.name, sipOn: true, sipAmount: sip.amount, sipDay: sip.day, sipActive: running }, function () {
+        FinToast.show({ text: running ? "SIP resumed" : "SIP paused", ms: 2200 });
+        ivAfterSave();
+      }, function (d) { FinToast.show({ text: "Couldn't save (" + d.error + ")", ms: 5000 }); });
+    }
+
+    // ---- Taps (one listener; the screen is redrawn often) ----
+    document.getElementById("investmentsNew").addEventListener("click", function (ev) {
+      if (!finLookOn() || !investmentsData || !investmentsData.overview) return;
+      const o = investmentsData.overview;
+      const t = ev.target;
+      let el;
+      if ((el = t.closest("[data-ent]"))) { ivOpenEntrySheet(ivEntriesShown[Number(el.dataset.ent)], ivFindHolding(ivOpenName)); return; }
+      if ((el = t.closest("[data-hold]"))) { ivOpenDetail(ivHoldShown[Number(el.dataset.hold)]); return; }
+      if ((el = t.closest("[data-inst]"))) {
+        const inst = o.instruments[Number(el.dataset.inst)];
+        ivOpenHoldingSheet(inst, ivFindHolding(inst.name));
+        return;
+      }
+      if (t.closest("#ivAddBtn")) { ivOpenAddSheet(); return; }
+      if (t.closest("#ivNewBtn")) { ivOpenHoldingSheet(null, null); return; }
+      if ((el = t.closest("#ivLogLate"))) { const s = ivFindSip(el.dataset.sip); ivOpenAddSheet(s ? { name: s.name, amount: s.amount } : null); return; }
+      if (t.closest("#ivMore")) { ivShowAll = !ivShowAll; renderInvestmentsNew(investmentsData); return; }
+      if (t.closest("#ivBack")) { ivCloseDetail(); return; }
+      if ((el = t.closest("[data-act]"))) {
+        const hd = ivFindHolding(ivOpenName);
+        if (!hd) return;
+        const act = el.dataset.act;
+        if (act === "add") ivOpenAddSheet({ name: hd.name });
+        else if (act === "sale") ivOpenSaleSheet(hd);
+        else if (act === "edit") ivOpenHoldingSheet(o.instruments.find(function (i) { return i.name === hd.name; }) || null, hd);
+        else if (act === "pause") ivSetSipRunning(hd, false);
+        else if (act === "resume") ivSetSipRunning(hd, true);
+      }
     });
 
     // ---------------------------------------------------------
@@ -16559,6 +17304,7 @@
       } catch (e) { /* ignore */ }
       finApplyLabels();      // "Money" in the new look, "Advisors" in the old
       svLookChanged();       // Savings: draw whichever look is now on
+      ivLookChanged();       // Investments: same
       finSyncSwitches();
       finOnbClose();
       applyHiddenScreens(hiddenScreens);   // this phone's "what I use" choices only count in the new look

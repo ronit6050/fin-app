@@ -182,10 +182,16 @@ function strictPayeeMatch_(incoming, remembered){
 function findSilentFinancialEventMatch_(counterparty, amount, financialEventsData){
   var keys = {};
   var found = [];
+  // A paused SIP (marker row "InvestmentPaused", see investmentInstruments.js) is not recognised, so never settled silently.
+  var paused = {};
+  for(var p = 1; p < financialEventsData.length; p++){
+    if((financialEventsData[p][0] || "").toString().trim() === "InvestmentPaused") paused[(financialEventsData[p][4] || "").toString().trim()] = true;
+  }
   for(var i = 1; i < financialEventsData.length; i++){
     var type = (financialEventsData[i][0] || "").toString().trim();
     if(type !== "Rent" && type !== "EMI" && type !== "Investment") continue;
     var name = (financialEventsData[i][4] || "").toString().trim();
+    if(type === "Investment" && paused[name]) continue;
     if(type === "Rent") name = "";
     else if(!name) continue; // an unnamed EMI/Investment can't be settled by name
     if(Math.abs((Number(financialEventsData[i][1]) || 0) - amount) > AUTO_SETTLE_AMOUNT_TOLERANCE_) continue;

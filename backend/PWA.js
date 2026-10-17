@@ -272,11 +272,28 @@ function pwaDispatch_(data, verified){
   }
 
   if(data.action === "logInvestment"){
-    return jsonResponse(logInvestmentFromApp(data.amount, data.instrumentName));
+    return jsonResponse(logInvestmentFromApp(data.amount, data.instrumentName, { date: data.date, note: data.note, force: data.force === true }));
+  }
+
+  // ── Investments tab makeover (2026-10-17, backend/investmentInstruments.js) ──
+  if(data.action === "saveInvestmentHolding"){
+    return jsonResponse(saveInvestmentHolding(data));
+  }
+
+  if(data.action === "recordInvestmentSale"){
+    return jsonResponse(recordInvestmentSale(data.name, data.amount, data.date, data.note));
+  }
+
+  if(data.action === "deleteInvestmentEntry"){
+    return jsonResponse(deleteInvestmentEntry(data.row, data.name, data.amount));
+  }
+
+  if(data.action === "startInvestmentsFresh"){
+    return jsonResponse(startInvestmentsFresh(data.confirm));
   }
 
   if(data.action === "updateInvestment"){
-    return jsonResponse(updateInvestmentEntry(data.row, data.instrumentName, data.amount));
+    return jsonResponse(updateInvestmentEntry(data.row, data.instrumentName, data.amount, data.expectName, data.expectAmount));
   }
 
   if(data.action === "getCash"){
@@ -624,43 +641,33 @@ function getInvestmentsData(){
       };
     });
 
-  return { total: total, breakdown: breakdown, recent: recent };
+  // The redesigned tab's figures (investmentsOverview.js). If they ever fail, the old fields above still come back.
+  let overview = null;
+  try{ overview = getInvestmentsOverview_(); }
+  catch(err){ logAI("INVESTMENTS_OVERVIEW_ERROR", err.toString()); }
+
+  return { total: total, breakdown: breakdown, recent: recent, overview: overview };
 }
 
-// Manual "+ Log an Investment" path. instrumentName must be an exact (or
-// case-insensitive) match to a name already in InvestmentInstruments —
-// validated server-side (never trust the frontend), same defensive
-// pattern as updateInvestmentEntry's row-number check below. Rewritten
-// 2026-08-11: used to take a free-typed "type" string directly (the
-// fragmentation bug this whole feature fixes — see
-// investmentInstruments.js's file header).
-function logInvestmentFromApp(amount, instrumentName){
-  try{
-    const validation = validateInvestmentInstrumentName_(instrumentName);
-    if(!validation.ok) return validation;
-    if(!amount || Number(amount) <= 0) return { ok:false, error:"Enter a valid amount." };
-
-    const investSheet = dbSs_().getSheetByName("Investments");
-    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-
-    investSheet.appendRow([today, validation.name, Number(amount), ""]);
-
-    return { ok: true };
-  }catch(err){
-    return { ok: false, error: err.toString() };
-  }
-}
+// (logInvestmentFromApp now lives in investmentsOverview.js: it also takes a date, a note and a "same amount again?" check.)
 
 // Fixes a past investment entry's instrument/amount — added 2026-08-10,
 // updated 2026-08-11 to validate instrumentName against
 // InvestmentInstruments the same way logInvestmentFromApp does, so an
 // edit can never reintroduce a stray free-typed spelling.
-function updateInvestmentEntry(row, instrumentName, amount){
+function updateInvestmentEntry(row, instrumentName, amount, expectName, expectAmount){
   try{
     const investSheet = dbSs_().getSheetByName("Investments");
 
     if(!Number.isInteger(row) || row < 2 || row > investSheet.getLastRow()){
       return { ok:false, error:"Invalid row." };
+    }
+    // New screen sends what it was looking at; a changed row (another device deleted or moved things) is refused.
+    if(expectName !== undefined && expectName !== null){
+      const cur = investSheet.getRange(row, 2, 1, 2).getValues()[0];
+      if((cur[0] || "").toString().trim() !== (expectName || "").toString().trim() || Math.abs((Number(cur[1]) || 0) - Number(expectAmount)) > 0.005){
+        return { ok:false, stale:true, error:"That entry changed. Reopen the holding and try again." };
+      }
     }
     if(!amount || Number(amount) <= 0){
       return { ok:false, error:"Enter a valid amount." };
