@@ -1172,6 +1172,62 @@
     .hm-wchip.warn { background: var(--want-bg); color: var(--want-text); }
     .hm-wchip.over { background: var(--bg-danger); color: var(--danger-text); }
 
+    /* ---------- Card Coach (2026-10-18): Home card + CC Advisor sections ----------
+       Only existing tokens are used (need / want / danger pairs and the chart tokens), so both looks and
+       both dark blocks already have a checked light + dark value for every colour here. */
+    .cch-card { cursor: pointer; }
+    .cch-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .cch-pill { flex: none; font-size: 0.72rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--surface-inset); color: var(--text-secondary); }
+    .cch-pill.ok { background: var(--need-bg); color: var(--need-text); }
+    .cch-pill.watch { background: var(--want-bg); color: var(--want-text); }
+    .cch-pill.over { background: var(--bg-danger); color: var(--danger-text); }
+    .cch-title { font-size: 0.88rem; color: var(--text-secondary); margin: 2px 0 0; }
+    .cch-amount { font-size: 2rem; font-weight: 700; letter-spacing: -0.5px; line-height: 1.15; color: var(--text-primary); font-variant-numeric: tabular-nums; margin: 2px 0 6px; }
+    .cch-amount.over { color: var(--danger-text); }
+    .cch-sentence { font-size: 0.9rem; line-height: 1.4; color: var(--text-primary); margin: 0 0 4px; }
+    .cch-hint { font-size: 0.8rem; line-height: 1.4; color: var(--text-secondary); margin: 4px 0 0; }
+    .cch-hint.quiet { margin: 0; }
+    .cch-track i, .cch-stack i { transition: width 0.4s ease; }
+    .cch-track i.watch { background: var(--chart-warning); }
+    .cch-track i.over { background: var(--chart-danger); }
+    .cch-util { font-size: 0.8rem; color: var(--text-secondary); }
+    .cch-suggest { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 0.5px solid var(--border-hairline); font-size: 0.84rem; line-height: 1.35; color: var(--text-secondary); }
+    .cch-suggest span { min-width: 0; }
+    .cch-sec-title { font-size: 0.95rem; font-weight: 700; margin: 18px 0 8px; color: var(--text-primary); }
+    .cch-stack { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; background: var(--chart-track-bg); margin: 8px 0 4px; }
+    .cch-stack i { display: block; height: 100%; min-width: 3px; }
+    .cch-stack i.fixed, .cch-dot.fixed { background: var(--chart-saving); }
+    .cch-stack i.need, .cch-dot.need { background: var(--chart-need); }
+    .cch-stack i.want, .cch-dot.want { background: var(--chart-want); }
+    .cch-stack i.unsorted, .cch-dot.unsorted { background: var(--text-muted); }
+    .cch-row { padding: 9px 0; font-size: 0.9rem; color: var(--text-primary); }
+    .cch-row + .cch-row { border-top: 0.5px solid var(--border-hairline); }
+    .cch-row-top { display: flex; align-items: center; gap: 8px; }
+    .cch-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+    .cch-row-top .nm { flex: 1; min-width: 0; }
+    .cch-row-top .amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .cch-row-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 0 18px; font-size: 0.78rem; color: var(--text-secondary); }
+    .cch-chip { font-size: 0.72rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--surface-inset); color: var(--text-secondary); }
+    .cch-chip.ok { background: var(--need-bg); color: var(--need-text); }
+    .cch-chip.warn { background: var(--want-bg); color: var(--want-text); }
+    .cch-chip.over { background: var(--bg-danger); color: var(--danger-text); }
+    button.cch-link, button.cch-link:hover { width: auto; min-height: 44px; padding: 0 4px; margin: 0; background: transparent; color: var(--color-primary); font-size: 0.84rem; border-radius: var(--radius-sm); text-decoration: underline; }
+    .cch-limit-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 8px; padding-top: 6px; border-top: 0.5px solid var(--border-hairline); font-size: 0.86rem; color: var(--text-primary); }
+    .cch-limit-line.over { color: var(--danger-text); }
+    .cch-limit-edit { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .cch-limit-edit input { flex: 1; min-width: 120px; margin: 0; }
+    .cch-limit-edit button { width: auto; min-height: 44px; padding: 0 16px; margin: 0; font-size: 0.85rem; }
+    .cch-plan-top { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
+    .cch-plan-amt { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.5px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .cch-line { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: 0.88rem; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .cch-line.total { border-top: 0.5px solid var(--border-hairline); margin-top: 4px; padding-top: 9px; font-weight: 700; }
+    .cch-line.short { color: var(--danger-text); }
+    .cch-plan-btn { margin-top: 10px; }
+    .cch-streak { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.9rem; color: var(--text-primary); }
+    @media (prefers-reduced-motion: reduce) {
+      .cch-track i, .cch-stack i { transition: none; }
+    }
+
     /* ---------- Loading spinner ---------- */
     .spinner {
       display: inline-block;
@@ -4538,6 +4594,9 @@
 
           <div class="home-card" id="homeNeeds"></div>
 
+          <!-- Card Coach (2026-10-18): filled by renderHomeCoach(); stays hidden when the server sends no `coach`. -->
+          <div class="home-card cch-card" id="homeCoach" data-goto-tab="cc" role="button" tabindex="0" style="display:none"></div>
+
           <div class="home-card hm-month" id="homeMonth" data-goto-tab="analysis" role="button" tabindex="0" style="display:none"></div>
           <div class="home-card" id="homeWatch" data-goto-tab="analysis" role="button" tabindex="0" style="display:none"></div>
 
@@ -4886,6 +4945,17 @@
               <div class="category-txn-line"><span>Savings goal</span><span id="ccCurAffSavings"></span></div>
             </div>
           </div>
+
+          <!-- Card Coach (2026-10-18): filled by renderCCCoach(); each part hides itself when the server sends no `coach`. -->
+          <div id="ccCoachWhat" style="display:none">
+            <h3 class="cch-sec-title">What is on your card</h3>
+            <div class="category-row" id="ccCoachWhatBody"></div>
+          </div>
+          <div id="ccCoachPlan" style="display:none">
+            <h3 class="cch-sec-title">Your plan for this bill</h3>
+            <div class="category-row" id="ccCoachPlanBody"></div>
+          </div>
+          <div class="category-row" id="ccCoachStreak" style="display:none; margin-top:14px;"></div>
 
           <h3 style="font-size:0.95rem; margin:14px 0 8px 0;" id="ccBreakdownHeading">Where this bill went</h3>
           <div id="ccTopCategories"></div>
@@ -5359,9 +5429,14 @@
             <label>CC warning threshold (% of limit)</label>
             <input type="number" id="settingsCcWarnPct" min="0" max="100" step="1">
           </div>
-          <div class="field" style="margin-bottom:0;">
+          <div class="field">
             <label>CC alert threshold (% of limit)</label>
             <input type="number" id="settingsCcAlertPct" min="0" max="100" step="1">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Card wants limit (₹)</label>
+            <input type="number" id="settingsCardWantsLimit" min="0" step="1" placeholder="0 = not set">
+            <p class="pending-status" style="margin:4px 0 0;">The most you are happy to put on the card for wants each cycle. Card Coach uses it.</p>
           </div>
         </div>
 
@@ -5404,6 +5479,14 @@
               <option value="off">Off</option>
             </select>
             <p class="pending-status" style="margin:4px 0 0;">Only between 8am and 10pm, at most 8 a day, and not while the app is open.</p>
+          </div>
+          <!-- Shown only when the server tells us about this setting (renderSettings). -->
+          <div class="field" id="settingsCardReminderField" style="margin-top:12px;margin-bottom:0;display:none;">
+            <label>Card bill reminder (3 days before it is due)</label>
+            <select id="settingsCardReminder">
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </select>
           </div>
         </div>
 
@@ -6195,7 +6278,8 @@
     const FIN_SWITCHES = [
       { id: "settingsDailySummary", on: "on", off: "off" },
       { id: "settingsFastViews",    on: "on", off: "off" },
-      { id: "settingsLookPreview",  on: "on", off: "off" }
+      { id: "settingsCardReminder", on: "on", off: "off" },
+      { id: "settingsLookPreview", on: "on", off: "off" }
     ];
     function finSyncSwitches() {
       if (!finLookOn()) return;
@@ -6568,8 +6652,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-18-04";
-    const APP_CHANGELOG = "Home and Pending have a new look: today's spend with your last 7 days, how this month is going, a watch list, and Pending filters with one-tap confirm for ready payments. Analysis leaves today out of the week average and lists a category more neatly.";
+    const APP_VERSION = "2026-10-18-05";
+    const APP_CHANGELOG = "New Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -8192,12 +8276,14 @@
         addTxn({ date: demoDateWithinRange(cyc.outstandingStart, cyc.outstandingEnd, e.f, 15, 0), mode: "card-hdfc", type: "debit", amount: e.amt, counterparty: e.cp, note: e.note, category: e.cat, needWantSaving: "Want" });
       });
       [
-        { f: 0.15, cat: "Food", cp: "Swiggy", note: "Lunch", amt: 380 },
-        { f: 0.40, cat: "Shopping", cp: "Amazon", note: "Books", amt: 899 },
-        { f: 0.65, cat: "Lifestyle", cp: "Netflix", note: "Subscription", amt: 649 },
-        { f: 0.85, cat: "Food", cp: "Starbucks", note: "Coffee", amt: 410 }
+        { f: 0.15, cat: "Food", cp: "Swiggy", note: "Lunch", amt: 380, nws: "Need" },
+        { f: 0.25, cat: "Shopping", cp: "Myntra", note: "Sneakers", amt: 3200, nws: "Want" },
+        { f: 0.40, cat: "Shopping", cp: "Amazon", note: "Books", amt: 899, nws: "" },   // not sorted yet: Card Coach shows "Tag them in Pending"
+        { f: 0.55, cat: "Lifestyle", cp: "BookMyShow", note: "Movie night", amt: 1400, nws: "Want" },
+        { f: 0.65, cat: "Lifestyle", cp: "Netflix", note: "Subscription", amt: 649, nws: "Want" },
+        { f: 0.85, cat: "Food", cp: "Starbucks", note: "Coffee", amt: 410, nws: "Want" }
       ].forEach(function (e) {
-        addTxn({ date: demoDateWithinRange(cyc.currentStart, cyc.today, e.f, 12, 30), mode: "card-hdfc", type: "debit", amount: e.amt, counterparty: e.cp, note: e.note, category: e.cat, needWantSaving: "Want" });
+        addTxn({ date: demoDateWithinRange(cyc.currentStart, cyc.today, e.f, 12, 30), mode: "card-hdfc", type: "debit", amount: e.amt, counterparty: e.cp, note: e.note, category: e.cat, needWantSaving: e.nws });
       });
 
       // Still-unnoted transactions — what the Pending tab shows, dated
@@ -8319,7 +8405,7 @@
         investments: investments,
         investmentInstruments: investmentInstruments,
         budgets: budgets,
-        settings: { ccLimit: 50000, ccWarnPct: 0.25, ccAlertPct: 0.30, monthlyExpenses: 30000, monthlySaveGoal: 3000, monthlyInvestmentGoal: 9000 }
+        settings: { ccLimit: 50000, ccWarnPct: 0.25, ccAlertPct: 0.30, monthlyExpenses: 30000, monthlySaveGoal: 3000, monthlyInvestmentGoal: 9000, cardWantsLimit: 4000, cardReminder: true }
       };
     }
 
@@ -9417,7 +9503,45 @@
           affordabilityNow: computeAfford(current.total), affordabilityProjected: computeAfford(projected)
         },
         cycleStart: demoFmtDateLong(cyc.currentStart), cycleEnd: demoFmtDateLong(cyc.currentEnd), cycleSpend: current.total, usagePct: usagePct,
-        status: status, txnCount: current.txnCount, cardBreakdown: current.cardBreakdown, topCategories: current.topCategories, recentCardTxns: current.recentTxns
+        status: status, txnCount: current.txnCount, cardBreakdown: current.cardBreakdown, topCategories: current.topCategories, recentCardTxns: current.recentTxns,
+        coach: demoComputeCoach(cyc, current.txnCount > 0, outstanding.total, daysUntilDue, isOverdue, fixedObl, recentIncome)
+      };
+    }
+
+    // Pretend Card Coach numbers (2026-10-18). Splits the running cycle's card swipes the way the real server does:
+    // a Subscription or a Bills payment is a fixed bill, the Need tag is a need, Want is a want, no tag is "not sorted yet".
+    // The bank balance is the same pretend one the Home run-out card uses, so entering a low balance there shows the "over" wording.
+    function demoComputeCoach(cyc, useCurrent, billAmount, daysUntilDue, isOverdue, fixedObl, recentIncome) {
+      // On the day a cycle has just closed the running cycle is still empty, so Demo Mode coaches on the closed one instead (so the demo is never blank).
+      const from = useCurrent ? cyc.currentStart : cyc.outstandingStart, to = useCurrent ? cyc.today : cyc.outstandingEnd;
+      const split = { fixed: 0, need: 0, want: 0, unsorted: 0 }, fixedMerchants = [];
+      demoState.transactions.forEach(function (t) {
+        if (t.type !== "debit" || t.mode.indexOf("card") !== 0 || t.date < from || t.date > to) return;
+        if (t.category === "Bills" || /subscription/i.test(t.note || "")) { split.fixed += t.amount; if (t.counterparty) fixedMerchants.push(t.counterparty); }
+        else if (t.needWantSaving === "Need") split.need += t.amount;
+        else if (t.needWantSaving === "Want") split.want += t.amount;
+        else split.unsorted += t.amount;
+      });
+      const settings = demoState.settings;
+      const cycleSpent = split.fixed + split.need + split.want + split.unsorted;
+      const usagePct = Math.round(cycleSpent / settings.ccLimit * 100);
+      const wantsLimit = settings.cardWantsLimit > 0 ? settings.cardWantsLimit : null;
+      const balance = demoState.runwayBalance !== undefined ? demoState.runwayBalance : 52000;
+      const safeToPut = Math.round((balance - 21200) * 0.4);
+      const wantsOver = wantsLimit ? Math.max(0, split.want - wantsLimit) : null;
+      const utilisationWatch = usagePct >= 30;
+      const tone = safeToPut < 0 ? "over" : ((wantsOver || utilisationWatch) ? "watch" : "ok");
+      const dueIso = demoFmtISODate(cyc.outstandingDue);
+      const salary = recentIncome > 0 ? recentIncome : 55000, rentEmi = fixedObl > 0 ? fixedObl : 15000;
+      return {
+        limit: settings.ccLimit, limitUsedPct: usagePct, cycleSpent: cycleSpent, split: split, fixedMerchants: fixedMerchants,
+        wantsLimit: wantsLimit, suggestedWantsLimit: 5000, wantsOver: wantsOver, safeToPut: safeToPut, safeUntil: dueIso, tone: tone, utilisationWatch: utilisationWatch,
+        bill: billAmount > 0 ? {
+          amount: billAmount, dueDate: dueIso, daysUntilDue: daysUntilDue, isPaid: false, isOverdue: isOverdue,
+          planLines: [{ label: "Salary", amount: salary, sign: 1 }, { label: "Rent and EMI", amount: rentEmi, sign: -1 }, { label: "This card bill", amount: billAmount, sign: -1 }],
+          leftUntilSalary: salary - rentEmi - billAmount
+        } : null,
+        paidInFullStreak: 4
       };
     }
 
@@ -9782,6 +9906,8 @@
       if (newSettings.monthlyExpenses) s.monthlyExpenses = Number(newSettings.monthlyExpenses);
       if (newSettings.monthlySaveGoal) s.monthlySaveGoal = Number(newSettings.monthlySaveGoal);
       if (newSettings.monthlyInvestmentGoal !== undefined && newSettings.monthlyInvestmentGoal !== null && newSettings.monthlyInvestmentGoal !== "") s.monthlyInvestmentGoal = Number(newSettings.monthlyInvestmentGoal);
+      if (newSettings.cardWantsLimit !== undefined && newSettings.cardWantsLimit !== null && newSettings.cardWantsLimit !== "") s.cardWantsLimit = Math.max(0, Number(newSettings.cardWantsLimit) || 0);
+      if (newSettings.cardReminder === true || newSettings.cardReminder === false) s.cardReminder = newSettings.cardReminder;
       return { ok: true };
     }
 
@@ -10764,6 +10890,261 @@
     }
     // HP-LOGIC-END
 
+    // CC-LOGIC-START
+    // ---- Card Coach: plain wording and maths (2026-10-18). No page access in here, so a test can run it alone. ----
+    var CCH_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    var CCH_MON3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    function cchNum(v) { if (v === null || v === undefined || v === "") return 0; var n = Number(v); return isFinite(n) ? n : 0; }
+    // A number, or null when it is missing (null must stay null: "unknown" is not the same as 0).
+    function cchOpt(v) { if (v === null || v === undefined || v === "" || typeof v === "boolean") return null; var n = Number(v); return isFinite(n) ? n : null; }
+    function cchRs(n) { return "₹" + Math.round(Math.abs(cchNum(n))).toLocaleString("en-IN"); }
+    function cchIso(iso) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso == null ? "" : iso));
+      if (!m) return null;
+      var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    function cchDate(iso) { var d = cchIso(iso); return d ? d.getDate() + " " + CCH_MON3[d.getMonth()] : ""; }
+    function cchMonth(iso) { var d = cchIso(iso); return d ? CCH_MONTHS[d.getMonth()] : ""; }
+    // "your November salary" when we know the month, otherwise "your next salary".
+    function cchSalaryPhrase(coach) {
+      var b = coach && coach.bill && typeof coach.bill === "object" ? coach.bill : null;
+      var m = cchMonth(b && b.dueDate) || cchMonth(coach && coach.safeUntil);
+      return m ? m + " salary" : "next salary";
+    }
+    function cchPlural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+    // ok / watch / over / unknown. Worked out from the numbers, so a odd server value can never cause a false alarm.
+    function cchTone(coach) {
+      if (!coach || typeof coach !== "object") return "unknown";
+      var safe = cchOpt(coach.safeToPut);
+      if (safe === null) return "unknown";
+      if (safe < 0) return "over";
+      if (coach.tone === "watch" || coach.utilisationWatch === true || cchNum(coach.wantsOver) > 0) return "watch";
+      return "ok";
+    }
+    var CCH_PILLS = { ok: "On track", watch: "Keep an eye", over: "Over", unknown: "" };
+    // The big card: title, hero amount, one calm sentence, an optional gentle option.
+    function cchHero(coach, where) {
+      coach = coach && typeof coach === "object" ? coach : {};
+      var tone = cchTone(coach), safe = cchOpt(coach.safeToPut);
+      var until = cchDate(coach.safeUntil), sal = cchSalaryPhrase(coach);
+      var out = { tone: tone, pill: CCH_PILLS[tone], title: "", amount: "", showAmount: false, sentence: "", hint: "" };
+      if (tone === "unknown") {
+        out.title = "Safe amount for your card";
+        out.sentence = where === "home" ? "Add your bank balance above to see this." : "Add your bank balance on Home to see this.";
+        return out;
+      }
+      if (tone === "over") {
+        out.title = "Past the safe amount";
+        out.amount = cchRs(safe); out.showAmount = true;
+        out.sentence = "You're " + cchRs(safe) + " past the safe amount. It will come out of your " + sal + ".";
+        out.hint = "Use UPI or wait for the next salary.";
+        return out;
+      }
+      out.title = until ? "Safe to put on card until " + until : "Safe to put on card";
+      out.amount = cchRs(safe); out.showAmount = true;
+      if (tone === "ok") {
+        out.sentence = "Nice: your card is on track this cycle.";
+      } else if (cchNum(coach.wantsOver) > 0) {
+        out.sentence = cchRs(coach.wantsOver) + " of your wants on the card is borrowed from next month. It will come out of your " + sal + ".";
+      } else if (coach.utilisationWatch === true && cchUtil(coach)) {
+        out.sentence = "You have used " + cchUtil(coach).pct + "% of your card limit. A lower share is easier on your credit score.";
+      } else {
+        out.sentence = "Your card is fine, but have a look before your next big spend.";
+      }
+      return out;
+    }
+    // "Used this cycle ₹X of ₹LIMIT · N%" and how full the thin bar is. Null when there is no limit to compare with.
+    function cchUtil(coach) {
+      var limit = cchNum(coach && coach.limit);
+      if (limit <= 0) return null;
+      var used = Math.max(0, cchNum(coach.cycleSpent));
+      var pct = Math.round(used / limit * 100);
+      var tone = pct >= 100 ? "over" : (coach.utilisationWatch === true ? "watch" : "");
+      return { text: "Used this cycle " + cchRs(used) + " of " + cchRs(limit) + " · " + pct + "%", pct: pct, width: Math.max(0, Math.min(100, pct)), tone: tone };
+    }
+    function cchMerchantsText(names) {
+      var list = (Array.isArray(names) ? names : []).filter(function (n) { return typeof n === "string" && n.trim(); }).map(function (n) { return n.trim(); });
+      if (!list.length) return "";
+      if (list.length <= 3) return list.join(", ");
+      return list.slice(0, 3).join(", ") + " and " + (list.length - 3) + " more";
+    }
+    // What is on the card: only the parts that have money in them, each with a plain-words note.
+    function cchSplitRows(coach) {
+      var s = coach && coach.split && typeof coach.split === "object" ? coach.split : {};
+      var amt = { fixed: Math.max(0, cchNum(s.fixed)), need: Math.max(0, cchNum(s.need)), want: Math.max(0, cchNum(s.want)), unsorted: Math.max(0, cchNum(s.unsorted)) };
+      var total = amt.fixed + amt.need + amt.want + amt.unsorted;
+      var wantsOver = cchNum(coach && coach.wantsOver) > 0;
+      var defs = [
+        { key: "fixed", label: "Fixed bills", chip: { text: "Fine", tone: "ok" }, sub: cchMerchantsText(coach && coach.fixedMerchants) },
+        { key: "need", label: "Needs", chip: { text: "Fine", tone: "ok" }, sub: "" },
+        { key: "want", label: "Wants", chip: { text: "Borrowed from next month", tone: wantsOver ? "warn" : "" }, sub: "" },
+        { key: "unsorted", label: "Not sorted yet", chip: { text: "Tag them in Pending", tone: "" }, sub: "", action: "pending" }
+      ];
+      var rows = [];
+      defs.forEach(function (d) {
+        if (amt[d.key] <= 0) return;
+        d.amount = amt[d.key];
+        d.text = cchRs(amt[d.key]);
+        d.pct = total > 0 ? Math.round(amt[d.key] / total * 1000) / 10 : 0;
+        rows.push(d);
+      });
+      return { rows: rows, total: total, empty: total <= 0 };
+    }
+    // "Your wants limit on card: ₹5,000 · over by ₹1,000". Null when no limit is set.
+    function cchWantsLine(coach) {
+      var limit = cchNum(coach && coach.wantsLimit);
+      if (limit <= 0) return null;
+      var want = Math.max(0, cchNum(coach.split && coach.split.want));
+      var over = cchOpt(coach.wantsOver);
+      if (over === null) over = Math.max(0, want - limit);
+      var head = "Your wants limit on card: " + cchRs(limit);
+      if (over > 0) return { text: head + " · over by " + cchRs(over), tone: "over" };
+      var left = limit - want;
+      return { text: head + (left > 0 ? " · " + cchRs(left) + " left" : " · right at your limit"), tone: "" };
+    }
+    // The "set a wants limit" prompt (only while no limit is set).
+    function cchSuggestion(coach) {
+      if (!coach || typeof coach !== "object") return null;
+      if (cchNum(coach.wantsLimit) > 0) return null;
+      var sug = Math.round(cchNum(coach.suggestedWantsLimit));
+      if (sug > 0) return { text: "Set a wants limit. Suggested " + cchRs(sug) + ", based on your last months.", btn: "Use " + cchRs(sug), amount: sug };
+      return { text: "Set a wants limit to keep card wants in check.", btn: "", amount: 0 };
+    }
+    function cchDueChip(bill) {
+      if (!bill) return { text: "", tone: "" };
+      var days = cchOpt(bill.daysUntilDue);
+      if (bill.isOverdue === true || (days !== null && days < 0)) return { text: "overdue", tone: "late" };
+      if (days === null) return { text: "", tone: "" };
+      if (days === 0) return { text: "due today", tone: "soon" };
+      return { text: "in " + cchPlural(days, "day", "days"), tone: days <= 3 ? "soon" : "" };
+    }
+    function cchPlanSum(lines) {
+      return (Array.isArray(lines) ? lines : []).reduce(function (t, l) { return t + l.sign * l.amount; }, 0);
+    }
+    // "Your plan for this bill". Null when there is no unpaid bill to plan for.
+    function cchPlan(coach) {
+      var b = coach && coach.bill && typeof coach.bill === "object" ? coach.bill : null;
+      if (!b || b.isPaid === true || cchNum(b.amount) <= 0) return null;
+      var dateTxt = cchDate(b.dueDate), overdue = b.isOverdue === true || cchNum(b.daysUntilDue) < 0;
+      var note = (overdue ? "Pay the full amount as soon as you can." : (dateTxt ? "Pay the full amount by " + dateTxt + "." : "Pay the full amount by the due date.")) +
+        " Paying only the minimum would add interest.";
+      var lines = (Array.isArray(b.planLines) ? b.planLines : []).filter(function (l) {
+        return l && typeof l === "object" && typeof l.label === "string" && l.label && cchOpt(l.amount) !== null;
+      }).map(function (l) {
+        var sign = Number(l.sign) === -1 ? -1 : 1;
+        var amount = Math.abs(cchNum(l.amount));
+        return { label: l.label, sign: sign, amount: amount, text: (sign > 0 ? "+ " : "− ") + cchRs(amount) };
+      });
+      var left = null;
+      if (b.leftUntilSalary === undefined) { if (lines.length) left = Math.round(cchPlanSum(lines)); }
+      else left = cchOpt(b.leftUntilSalary);
+      var leftInfo = null;
+      if (left !== null) {
+        leftInfo = left < 0
+          ? { label: "Short until next salary", text: cchRs(left), short: true, note: "The gap would come out of next month. You could use UPI for some spending until then." }
+          : { label: "Left until next salary", text: cchRs(left), short: false, note: "" };
+      }
+      return { amountText: cchRs(b.amount), dueText: dateTxt ? "Due " + dateTxt : "", chip: cchDueChip(b), note: note, lines: lines, left: leftInfo };
+    }
+    // What the "Remind me 3 days before" button says. It does not change anything: the reminder is a setting.
+    function cchReminderText(coach, on, now) {
+      if (on === false) return "The reminder is off. You can turn it on in Settings, under Notifications.";
+      var b = coach && coach.bill && typeof coach.bill === "object" ? coach.bill : null;
+      var due = b ? cchIso(b.dueDate) : null;
+      if (!due) return "The reminder is on. We will remind you 3 days before the due date.";
+      var remind = new Date(due.getFullYear(), due.getMonth(), due.getDate() - 3);
+      var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      if (remind >= today) return "The reminder is on. We will remind you on " + remind.getDate() + " " + CCH_MON3[remind.getMonth()] + ", 3 days before it is due.";
+      return "The reminder is on. This bill is due very soon, so keep it in mind.";
+    }
+    function cchStreakText(n) {
+      var v = cchOpt(n);
+      if (v === null || v < 1) return "";
+      v = Math.floor(v);
+      return "Paid in full " + cchPlural(v, "month", "months") + " in a row";
+    }
+    // A copy of the coach with a new wants limit (0 = remove it), used to update the screen before the server answers.
+    function cchApplyLimit(coach, limit) {
+      var c = {}; for (var k in coach) c[k] = coach[k];
+      var l = Math.max(0, Math.round(cchNum(limit)));
+      c.wantsLimit = l > 0 ? l : null;
+      c.wantsOver = l > 0 ? Math.max(0, cchNum(coach.split && coach.split.want) - l) : null;
+      return c;
+    }
+    // CC-LOGIC-END
+
+    // ---- Card Coach screens (2026-10-18) ----
+    let cchSettingsReminder = true;   // the "Card bill reminder" setting (true unless the server says off)
+    let cchEditOpen = false;          // the "Change limit" box on CC Advisor
+    let ccLastData = null;            // the CC Advisor answer last drawn (so a limit change can patch it)
+
+    function cchCoachOf(cc) { return cc && cc.coach && typeof cc.coach === "object" ? cc.coach : null; }
+
+    function cchSuggestHtml(sug, withOwn) {
+      return '<div class="cch-suggest"><span>' + escapeHtml(sug.text) + '</span>' +
+        (sug.btn ? '<button type="button" class="hm-btn" data-cch-use="' + sug.amount + '">' + escapeHtml(sug.btn) + '</button>' : "") + '</div>' +
+        (withOwn ? '<button type="button" class="cch-link" data-cch-edit="1">Set my own limit</button>' : "");
+    }
+
+    // The Home card. Hidden when the server sent no `coach` (an older server or an old saved copy).
+    function renderHomeCoach(d) {
+      const el = document.getElementById("homeCoach");
+      const coach = cchCoachOf(d && d.full && d.full.cc);
+      if (!coach) { el.style.display = "none"; el.innerHTML = ""; return; }
+      const h = cchHero(coach, "home"), u = cchUtil(coach), sug = cchSuggestion(coach);
+      let html = '<div class="cch-head"><div class="stat-label" style="margin:0">Card Coach</div>' +
+        (h.pill ? '<span class="cch-pill ' + h.tone + '">' + escapeHtml(h.pill) + '</span>' : "") + '</div>' +
+        '<p class="cch-title">' + escapeHtml(h.title) + '</p>' +
+        (h.showAmount ? '<div class="cch-amount ' + h.tone + '">' + escapeHtml(h.amount) + '</div>' : "") +
+        '<p class="cch-sentence">' + escapeHtml(h.sentence) + '</p>' +
+        (h.hint ? '<p class="cch-hint quiet">' + escapeHtml(h.hint) + '</p>' : "");
+      if (u) {
+        html += '<div class="hm-track cch-track" aria-hidden="true"><i class="' + u.tone + '" style="width:' + u.width + '%"></i></div>' +
+          '<div class="cch-util">' + escapeHtml(u.text) + '</div>';
+      }
+      if (sug) html += cchSuggestHtml(sug, false);
+      el.innerHTML = html;
+      el.style.display = "";
+      el.setAttribute("aria-label", "Card Coach. " + h.title + (h.showAmount ? " " + h.amount : "") + ". Open the card screen.");
+    }
+    (function () {
+      const el = document.getElementById("homeCoach");
+      el.addEventListener("click", function (e) {
+        const b = e.target.closest("[data-cch-use]");
+        if (b) { e.stopPropagation(); e.preventDefault(); cchSaveWantsLimit(Number(b.getAttribute("data-cch-use"))); }
+      }, true);   // capture phase: runs before the generic "go to the card screen" tap
+      el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { if (e.target === el) { e.preventDefault(); goToScreen("cc"); } } });
+    })();
+
+    // Saves a wants limit: the screens change at once; if the server says no, they change back and you are told.
+    function cchSaveWantsLimit(amount) {
+      amount = Math.max(0, Math.round(Number(amount) || 0));
+      const dashCc = dashboardFull && dashboardFull.cc ? dashboardFull.cc : null;
+      const olds = { dash: dashCc ? dashCc.coach : null, cc: ccLastData ? ccLastData.coach : null };
+      if (dashCc && cchCoachOf(dashCc)) dashCc.coach = cchApplyLimit(dashCc.coach, amount);
+      if (ccLastData && cchCoachOf(ccLastData)) ccLastData.coach = cchApplyLimit(ccLastData.coach, amount);
+      cchEditOpen = false;
+      if (dashCc && runwayLastDashboard) renderHomeCoach(runwayLastDashboard);
+      if (ccLastData) renderCCCoach(ccLastData);
+      callAppsScript({ action: "updateSettings", idToken: currentUser.idToken, settings: { cardWantsLimit: amount } })
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error((res && res.error) || "The server did not accept it.");
+          try { localStorage.removeItem("cache_cc"); localStorage.removeItem("cache_dashboard"); localStorage.removeItem("cache_settings"); } catch (e) { /* ignore */ }
+          loadDashboard({ forceNetwork: true });
+          callAppsScript({ action: "getCCAdvisor", idToken: currentUser.idToken }).then(function (r) {
+            if (r && r.ok && r.cc) { saveCache("cc", r.cc); renderCCAdvisor(r.cc); }
+          }).catch(function () { /* the screen already shows the new limit */ });
+        })
+        .catch(function (err) {
+          if (dashCc && olds.dash) dashCc.coach = olds.dash;
+          if (ccLastData && olds.cc) ccLastData.coach = olds.cc;
+          if (dashCc && runwayLastDashboard) renderHomeCoach(runwayLastDashboard);
+          if (ccLastData) renderCCCoach(ccLastData);
+          alert("Couldn't save your wants limit. " + (err && err.message ? err.message : "Check your connection and try again."));
+        });
+    }
+
     function renderDashboard(d) {
       homeStatusEl.textContent = "";
       homeContentEl.style.display = "block";
@@ -10793,6 +11174,7 @@
       renderHomeToday(d);
       renderRunway(d);
       renderHomeNeeds(d);
+      try { renderHomeCoach(d); } catch (e) { document.getElementById("homeCoach").style.display = "none"; }   // never let the coach card break Home
       renderHomeMonth(d);
       renderHomeWatch(d);
       renderHomeLatest(d);
@@ -14324,6 +14706,103 @@
       return "− ₹" + af.invested.toLocaleString("en-IN");
     }
 
+    // Card Coach on the CC Advisor screen (2026-10-18): "What is on your card", "Your plan for this bill", "Your record".
+    // Each part hides itself if the server sent no `coach` or has nothing to say.
+    function renderCCCoach(cc) {
+      const whatEl = document.getElementById("ccCoachWhat"), whatBody = document.getElementById("ccCoachWhatBody");
+      const planEl = document.getElementById("ccCoachPlan"), planBody = document.getElementById("ccCoachPlanBody");
+      const streakEl = document.getElementById("ccCoachStreak");
+      const coach = cchCoachOf(cc);
+      if (!coach) { whatEl.style.display = "none"; planEl.style.display = "none"; streakEl.style.display = "none"; return; }
+
+      // --- What is on your card ---
+      const h = cchHero(coach, "cc"), split = cchSplitRows(coach), wl = cchWantsLine(coach), sug = cchSuggestion(coach), u = cchUtil(coach);
+      const keepVal = (document.getElementById("cchLimitInput") || {}).value;   // do not lose a half-typed limit on a refresh
+      let html = '<p class="cch-sentence">' + escapeHtml(h.sentence) + '</p>' + (h.hint ? '<p class="cch-hint quiet">' + escapeHtml(h.hint) + '</p>' : "");
+      if (u) {
+        html += '<div class="hm-track cch-track" aria-hidden="true"><i class="' + u.tone + '" style="width:' + u.width + '%"></i></div><div class="cch-util">' + escapeHtml(u.text) + '</div>';
+      }
+      if (split.empty) {
+        html += '<p class="cch-hint">Nothing on the card yet this cycle. A calm start.</p>';
+      } else {
+        html += '<div class="cch-stack" role="img" aria-label="' + escapeHtml("What is on your card: " + split.rows.map(function (r) { return r.label + " " + r.text; }).join(", ")) + '">' +
+          split.rows.map(function (r) { return '<i class="' + r.key + '" style="width:' + r.pct + '%"></i>'; }).join("") + '</div>';
+        split.rows.forEach(function (r) {
+          html += '<div class="cch-row"><div class="cch-row-top"><span class="cch-dot ' + r.key + '"></span><span class="nm">' + escapeHtml(r.label) + '</span><span class="amt">' + escapeHtml(r.text) + '</span></div>' +
+            '<div class="cch-row-sub"><span class="cch-chip ' + r.chip.tone + '">' + escapeHtml(r.chip.text) + '</span>' +
+            (r.action === "pending" ? '<button type="button" class="cch-link" data-cch-pending="1">Open Pending</button>' : "") +
+            (r.sub ? '<span>' + escapeHtml(r.sub) + '</span>' : "") + '</div></div>';
+        });
+      }
+      if (wl) {
+        html += '<div class="cch-limit-line ' + wl.tone + '"><span>' + escapeHtml(wl.text) + '</span><button type="button" class="cch-link" data-cch-edit="1">Change limit</button></div>';
+      } else if (sug) {
+        html += cchSuggestHtml(sug, true);
+      }
+      html += '<div class="cch-limit-edit" id="cchLimitEdit" style="display:' + (cchEditOpen ? "flex" : "none") + '">' +
+        '<input type="number" id="cchLimitInput" inputmode="numeric" min="0" step="1" placeholder="Amount in rupees (0 = none)" aria-label="Wants limit on card, in rupees">' +
+        '<button type="button" data-cch-save="1">Save</button><button type="button" class="cch-link" data-cch-cancel="1">Cancel</button></div>';
+      whatBody.innerHTML = html;
+      whatEl.style.display = "";
+      const inp = document.getElementById("cchLimitInput");
+      if (keepVal !== undefined && keepVal !== "" && cchEditOpen) inp.value = keepVal;
+      else if (cchNum(coach.wantsLimit) > 0) inp.value = Math.round(cchNum(coach.wantsLimit));
+
+      // --- Your plan for this bill ---
+      const plan = cchPlan(coach);
+      if (!plan) {
+        planEl.style.display = "none";
+      } else {
+        let p = '<div class="cch-plan-top"><span class="cch-plan-amt">' + escapeHtml(plan.amountText) + '</span>' +
+          (plan.chip.text ? '<span class="hm-due ' + plan.chip.tone + '">' + escapeHtml(plan.chip.text) + '</span>' : "") +
+          (plan.dueText ? '<span class="cch-hint quiet">' + escapeHtml(plan.dueText) + '</span>' : "") + '</div>' +
+          '<p class="cch-hint">' + escapeHtml(plan.note) + '</p>';
+        plan.lines.forEach(function (l) {
+          p += '<div class="cch-line"><span>' + escapeHtml(l.label) + '</span><span>' + escapeHtml(l.text) + '</span></div>';
+        });
+        if (plan.left) {
+          p += '<div class="cch-line total' + (plan.left.short ? ' short' : '') + '"><span>' + escapeHtml(plan.left.label) + '</span><span>' + escapeHtml(plan.left.text) + '</span></div>' +
+            (plan.left.note ? '<p class="cch-hint">' + escapeHtml(plan.left.note) + '</p>' : "");
+        }
+        p += '<button type="button" class="secondary cch-plan-btn" data-cch-remind="1">Remind me 3 days before</button><p class="cch-hint" id="cchRemindText" style="display:none"></p>';
+        planBody.innerHTML = p;
+        planEl.style.display = "";
+      }
+
+      // --- Your record (never shows an interest amount) ---
+      const streak = cchStreakText(coach.paidInFullStreak);
+      if (!streak) { streakEl.style.display = "none"; }
+      else {
+        streakEl.innerHTML = '<div class="cch-streak"><span>Your record</span><span class="cch-chip ok">' + escapeHtml(streak) + '</span></div>';
+        streakEl.style.display = "";
+      }
+    }
+    (function () {
+      const root = document.getElementById("ccContent");
+      root.addEventListener("click", function (e) {
+        const t = e.target.closest("button");
+        if (!t || !root.contains(t)) return;
+        if (t.hasAttribute("data-cch-use")) { cchSaveWantsLimit(Number(t.getAttribute("data-cch-use"))); return; }
+        if (t.hasAttribute("data-cch-edit")) {
+          cchEditOpen = true;
+          const box = document.getElementById("cchLimitEdit"); if (box) { box.style.display = "flex"; const i = document.getElementById("cchLimitInput"); if (i) { i.focus(); i.select(); } }
+          return;
+        }
+        if (t.hasAttribute("data-cch-cancel")) { cchEditOpen = false; const box = document.getElementById("cchLimitEdit"); if (box) box.style.display = "none"; return; }
+        if (t.hasAttribute("data-cch-save")) {
+          const v = document.getElementById("cchLimitInput").value;
+          if (v === "" || !isFinite(Number(v)) || Number(v) < 0) { alert("Enter an amount in rupees, or 0 to remove the limit."); return; }
+          cchSaveWantsLimit(Number(v));
+          return;
+        }
+        if (t.hasAttribute("data-cch-pending")) { goToScreen("pending"); return; }
+        if (t.hasAttribute("data-cch-remind")) {
+          const out = document.getElementById("cchRemindText");
+          if (out) { out.textContent = cchReminderText(cchCoachOf(ccLastData), cchSettingsReminder, new Date()); out.style.display = ""; }
+        }
+      });
+    })();
+
     function renderCCAdvisor(cc) {
       ccStatusEl.textContent = "";
       ccContentEl.style.display = "block";
@@ -14448,6 +14927,12 @@
       // last bill is paid — same leadWithCurrentCycle switch as the
       // hero/order change above, so the heading and the numbers under it
       // always agree about which cycle they're describing.
+      ccLastData = cc;
+      try { renderCCCoach(cc); } catch (e) {   // never let the coach sections break CC Advisor
+        document.getElementById("ccCoachWhat").style.display = "none";
+        document.getElementById("ccCoachPlan").style.display = "none";
+        document.getElementById("ccCoachStreak").style.display = "none";
+      }
       ccBreakdownHeadingEl.textContent = leadWithCurrentCycle ? "Where this cycle's spend is going" : "Where this bill went";
       const cardData = leadWithCurrentCycle ? cc.cardBreakdown : out.cardBreakdown;
       ccCardBreakdownEl.innerHTML = "";
@@ -19478,6 +19963,9 @@
     const settingsCcLimitEl         = document.getElementById("settingsCcLimit");
     const settingsCcWarnPctEl       = document.getElementById("settingsCcWarnPct");
     const settingsCcAlertPctEl      = document.getElementById("settingsCcAlertPct");
+    const settingsCardWantsLimitEl  = document.getElementById("settingsCardWantsLimit");
+    const settingsCardReminderEl    = document.getElementById("settingsCardReminder");
+    const settingsCardReminderFieldEl = document.getElementById("settingsCardReminderField");
     const settingsMonthlyExpensesEl = document.getElementById("settingsMonthlyExpenses");
     const settingsMonthlySaveGoalEl = document.getElementById("settingsMonthlySaveGoal");
     const settingsMonthlyInvestmentGoalEl = document.getElementById("settingsMonthlyInvestmentGoal");
@@ -19595,6 +20083,11 @@
       settingsCcLimitEl.value         = s.ccLimit;
       settingsCcWarnPctEl.value       = Math.round(s.ccWarnPct * 100);
       settingsCcAlertPctEl.value      = Math.round(s.ccAlertPct * 100);
+      settingsCardWantsLimitEl.value  = s.cardWantsLimit > 0 ? Math.round(s.cardWantsLimit) : "";   // empty = not set
+      // The reminder switch only exists when the server tells us about it (an older server does not).
+      const hasReminder = typeof s.cardReminder === "boolean";
+      settingsCardReminderFieldEl.style.display = hasReminder ? "" : "none";
+      if (hasReminder) { settingsCardReminderEl.value = s.cardReminder ? "on" : "off"; cchSettingsReminder = s.cardReminder; }
       settingsMonthlyExpensesEl.value = s.monthlyExpenses;
       settingsMonthlySaveGoalEl.value = s.monthlySaveGoal;
       settingsMonthlyInvestmentGoalEl.value = s.monthlyInvestmentGoal;
@@ -19607,20 +20100,22 @@
     saveSettingsButtonEl.addEventListener("click", function () {
       settingsResultEl.textContent = "Saving...";
 
+      const reminderShown = settingsCardReminderFieldEl.style.display !== "none";
       callAppsScript({
         action:   "updateSettings",
         idToken:  currentUser.idToken,
-        settings: {
+        settings: Object.assign({
           ccLimit:         parseFloat(settingsCcLimitEl.value) || 0,
           ccWarnPct:       (parseFloat(settingsCcWarnPctEl.value) || 0) / 100,
           ccAlertPct:      (parseFloat(settingsCcAlertPctEl.value) || 0) / 100,
+          cardWantsLimit:  Math.max(0, Math.round(parseFloat(settingsCardWantsLimitEl.value) || 0)),
           monthlyExpenses: parseFloat(settingsMonthlyExpensesEl.value) || 0,
           monthlySaveGoal: parseFloat(settingsMonthlySaveGoalEl.value) || 0,
           monthlyInvestmentGoal: parseFloat(settingsMonthlyInvestmentGoalEl.value) || 0,
           salaryDay: parseInt(settingsSalaryDayEl.value, 10) || 0,
           dailySummary: settingsDailySummaryEl.value === "on",
           pendingReminder: settingsPendingReminderEl.value
-        }
+        }, reminderShown ? { cardReminder: settingsCardReminderEl.value === "on" } : {})
       })
         .then(function (data) {
           if (!data.ok) {
@@ -19628,6 +20123,7 @@
             return;
           }
           settingsResultEl.textContent = "Saved.";
+          if (reminderShown) cchSettingsReminder = settingsCardReminderEl.value === "on";
           // These feed CC Advisor and Savings — their caches are now
           // stale, so clear them and let the next visit fetch fresh.
           localStorage.removeItem("cache_cc");

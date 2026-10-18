@@ -1424,6 +1424,8 @@ this project's existing `test*`/`debug*` helpers. Both deployed live
 2026-09-07 (`@313`, same deploy as the Planner overview below) and
 committed to git the same day.
 
+**Card Coach backend (2026-10-18): built and tested, NOT yet pushed or deployed.** `backend/cardCoach.js`: `getCCAdvisorData` now returns a `coach` block ("safe to put on the card", fixed/need/want/unsorted split of this cycle, optional wants limit, the closed bill with a plan, paid-in-full streak; null if anything fails), ONE calm extra line on the existing new-transaction push for card swipes only, and a daily "card bill due in 3 days" reminder (new daily job `cardbill` at 09:15 in `fnTimer.js`, once per bill per person). New Settings values `cardWantsLimit` and `cardReminder`. `getOutstandingCCPaidTotal_` was moved out of `getCCAdvisorData` so the reminder and the coach share the same "bill paid" detection. Formula and worked example: [docs/features/card-coach.md](docs/features/card-coach.md). Tests: `backend/tests/cardCoach.test.js`.
+
 ## Live deployment reference
 - **PWA (what the user opens)**: https://ronit6050.github.io/fin-app/
 - **PWA source**: https://github.com/ronit6050/fin-app (this repo, `D:\fin-app` — the one this file lives in). Plain HTML/CSS/JS in `index.html`, plus `sw.js` (service worker), `manifest.json`, `icons/`.

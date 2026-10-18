@@ -1,0 +1,523 @@
+/* ============================================
+   CARD COACH (added 2026-10-18)
+
+   PLAIN-ENGLISH WHAT THIS IS: a card swipe for a "want" feels free, but it is next month's money spent early. Card Coach shows the real
+   cost at the moment of the decision, calmly (never shaming), as ONE motivating number: "safe to put on the card".
+
+   Three pieces live here:
+     1. getCardCoach_(input)        - works out the `coach` block that getCCAdvisorData returns (also inside the Home copy, full.cc.coach).
+     2. cardCoachPushLine_(...)     - the ONE short extra line added to the existing new-transaction notification, only for card swipes.
+     3. cardBillReminderRun_(...)   - one push, 3 days before the card bill is due (once per bill, never when it is already paid).
+   Full explanation, the formula and a worked example: docs/features/card-coach.md
+
+   getCardCoach_ is a pure function (no Sheets, no Properties): everything it needs comes in through `input`, so it is tested offline in
+   backend/tests/cardCoach.test.js. It NEVER throws: on any problem it returns null and the rest of the screen carries on without it.
+
+   Cards: statement closes on the 18th, bill is due on the 9th of the NEXT month (same cycle maths as getCCAdvisorData / getOutstandingCCCycleWindow_).
+   Column positions in Transactions (0-based): 0 date, 3 type, 4 mode, 5 amount, 7 counterparty, 12 note, 13 category,
+   16 Need/Want/Saving tag (column Q), 17 Financial Event (Rent/EMI/Investment).
+============================================ */
+
+var CARD_COACH_FIXED_TOLERANCE_ = 0.25;   // amounts within 25% of each other count as "the same charge each month"
+var CARD_COACH_CAP_PCT_         = 0.30;   // never suggest going past 30% of the limit (the app's existing "alert" line)
+var CARD_COACH_WATCH_PCT_       = 0.20;   // "watch" when the safe amount is under 20% of the limit
+var CARD_COACH_PUSH_MIN_        = 200;    // no extra notification line for swipes under this
+var CARD_COACH_STREAK_MAX_      = 12;     // look back at most this many closed bills for the paid-in-full streak
+var CARD_COACH_SALARY_LOOKBACK_DAYS_ = 70;
+var CARD_BILL_REMIND_DAYS_      = 3;      // reminder goes out when the bill is due within this many days
+var CARD_BILL_STATE_DOC_        = "_system/reminders";   // same small shared state document pendingReminder.js uses
+
+// ---------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------
+function cardCoachNorm_(name){
+  return String(name === undefined || name === null ? "" : name).toLowerCase().replace(/[0-9]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function cardCoachIso_(d){
+  return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+}
+
+var CARD_COACH_MONTHS_ = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function cardCoachShortDate_(d){
+  return d.getDate() + " " + CARD_COACH_MONTHS_[d.getMonth()];
+}
+
+function cardCoachMoney_(n){
+  return "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
+}
+
+function cardCoachRound2_(n){
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+function cardCoachRound500_(n){
+  return Math.round(n / 500) * 500;
+}
+
+// The cycle windows, worked out from `today` (a Date at midnight). closed(0) = the most recently CLOSED bill (the one due next),
+// closed(1) the one before, and so on. Same maths as getCCAdvisorData: a bill closes on the 18th, is due on the 9th of the next month.
+function cardCoachCycles_(today){
+  var dom = today.getDate();
+  var mrc = new Date(today.getFullYear(), today.getMonth() - (dom < 18 ? 1 : 0), 18);
+  var y = mrc.getFullYear(), m = mrc.getMonth();
+  return {
+    current: { start: new Date(y, m, 19), end: new Date(y, m + 1, 18), due: new Date(y, m + 2, 9) },
+    closed: function(k){
+      var end = new Date(y, m - k, 18);
+      return {
+        start: new Date(end.getFullYear(), end.getMonth() - 1, 19),
+        end: end,
+        due: new Date(end.getFullYear(), end.getMonth() + 1, 9)
+      };
+    }
+  };
+}
+
+// Every card swipe (a debit with a Mode starting "card" and an amount): the same rows CC Advisor counts.
+function cardCoachSwipes_(txnData){
+  var out = [];
+  for(var i = 1; i < txnData.length; i++){
+    var r = txnData[i];
+    if(!r[0]) continue;
+    var d = new Date(r[0]);
+    if(isNaN(d.getTime())) continue;
+    var type = (r[3] || "").toString().toLowerCase();
+    var mode = (r[4] || "").toString().toLowerCase().trim();
+    var amount = Number(r[5]) || 0;
+    if(type !== "debit" || mode.indexOf("card") !== 0 || !(amount > 0)) continue;
+    var cp = (r[7] || "").toString().trim();
+    out.push({
+      d: d, amount: amount, cp: cp, name: cardCoachNorm_(cp),
+      tag: (r[16] || "").toString().trim(),
+      event: (r[17] || "").toString().trim()
+    });
+  }
+  return out;
+}
+
+function cardCoachInWindow_(s, start, end){
+  return s.d >= start && s.d <= end;
+}
+
+// Names that behave like a fixed monthly bill: swipes in at least 2 of the 3 most recent CLOSED cycles with the cycle totals within 25%
+// of each other, OR a swipe the app already marked as a Rent/EMI/Investment Financial Event in those cycles.
+function cardCoachFixedNames_(swipes, cycles){
+  var perCycle = [];                      // [{ name: total }, ...] for closed cycles 0..2
+  var recurring = {};
+  for(var k = 0; k < 3; k++){
+    var w = cycles.closed(k), totals = {};
+    swipes.forEach(function(s){
+      if(!s.name || !cardCoachInWindow_(s, w.start, w.end)) return;
+      totals[s.name] = (totals[s.name] || 0) + s.amount;
+      if(s.event) recurring[s.name] = true;
+    });
+    perCycle.push(totals);
+  }
+  var fixed = {};
+  Object.keys(recurring).forEach(function(n){ fixed[n] = true; });
+  var names = {};
+  perCycle.forEach(function(t){ Object.keys(t).forEach(function(n){ names[n] = true; }); });
+  Object.keys(names).forEach(function(n){
+    var amounts = [];
+    perCycle.forEach(function(t){ if(t[n] > 0) amounts.push(t[n]); });
+    if(amounts.length < 2) return;
+    for(var a = 0; a < amounts.length; a++){
+      for(var b = a + 1; b < amounts.length; b++){
+        var hi = Math.max(amounts[a], amounts[b]), lo = Math.min(amounts[a], amounts[b]);
+        if((hi - lo) / hi <= CARD_COACH_FIXED_TOLERANCE_) fixed[n] = true;
+      }
+    }
+  });
+  return fixed;
+}
+
+// fixed / want / need / unsorted. A swipe the person tagged Want is ALWAYS want (they win over the merchant guess).
+// Saving and Investment tags count with Need (they are not "wants").
+function cardCoachBucket_(s, fixedNames){
+  if(s.tag === "Want") return "want";
+  if(s.event || (s.name && fixedNames[s.name])) return "fixed";
+  if(s.tag === "Need" || s.tag === "Saving" || s.tag === "Investment") return "need";
+  return "unsorted";
+}
+
+// Did the closed bill k (k >= 1) get paid in full? Payments are looked for between that cycle's close and the NEXT close (the 9th is in
+// that gap). A payment is a non-card debit whose wording says "credit card bill" (isBillWording) OR whose amount equals one card's total
+// for that cycle or all cards together. Same idea as isCreditCardBillPayment, applied to an older cycle.
+function cardCoachPaidInCycle_(txnData, cycles, k, total, perCard, isBillWording){
+  var w = cycles.closed(k), nextEnd = cycles.closed(k - 1).end;
+  var candidates = Object.keys(perCard).map(function(c){ return perCard[c]; });
+  candidates.push(total);
+  var paid = 0;
+  for(var i = 1; i < txnData.length; i++){
+    var r = txnData[i];
+    if(!r[0]) continue;
+    var d = new Date(r[0]);
+    if(isNaN(d.getTime()) || d <= w.end || d > nextEnd) continue;
+    if((r[3] || "").toString().toLowerCase() !== "debit") continue;
+    var mode = (r[4] || "").toString().toLowerCase().trim();
+    if(mode.indexOf("card") === 0) continue;
+    var amount = Number(r[5]) || 0;
+    if(!(amount > 0)) continue;
+    var hit = false;
+    if(isBillWording && isBillWording(r[4], r[7], r[12])) hit = true;
+    for(var c = 0; !hit && c < candidates.length; c++){ if(candidates[c] > 0 && Math.abs(amount - candidates[c]) < 1) hit = true; }
+    if(hit) paid += amount;
+  }
+  return paid >= total - 1;
+}
+
+// Consecutive most recent CLOSED bills paid in full. The open (not yet due) bill neither counts nor breaks the streak; an overdue one
+// makes it 0. A cycle with no card spend is skipped (no bill). null when no closed bill with spend can be found.
+function cardCoachStreak_(txnData, swipes, cycles, out, isBillWording){
+  var streak = 0, evaluated = false;
+  if(out && out.total > 0){
+    if(out.isPaid){ streak++; evaluated = true; }
+    else if(out.isOverdue){ return 0; }
+  }
+  for(var k = 1; k <= CARD_COACH_STREAK_MAX_; k++){
+    var w = cycles.closed(k), total = 0, perCard = {};
+    swipes.forEach(function(s){
+      if(!cardCoachInWindow_(s, w.start, w.end)) return;
+      total += s.amount;
+    });
+    if(!(total > 0)) continue;
+    // per card totals need the Mode, which `swipes` does not keep: rebuild from the sheet rows of this window
+    for(var i = 1; i < txnData.length; i++){
+      var r = txnData[i];
+      if(!r[0]) continue;
+      var d = new Date(r[0]);
+      if(isNaN(d.getTime()) || d < w.start || d > w.end) continue;
+      var mode = (r[4] || "").toString().toLowerCase().trim();
+      if((r[3] || "").toString().toLowerCase() === "debit" && mode.indexOf("card") === 0 && Number(r[5]) > 0) perCard[mode] = (perCard[mode] || 0) + Number(r[5]);
+    }
+    evaluated = true;
+    if(cardCoachPaidInCycle_(txnData, cycles, k, total, perCard, isBillWording)) streak++;
+    else break;
+  }
+  return evaluated ? streak : null;
+}
+
+// The usual salary: the biggest Income-tagged credit of the last ~70 days.
+function cardCoachSalaryAmount_(txnData, today){
+  var since = new Date(today.getTime() - CARD_COACH_SALARY_LOOKBACK_DAYS_ * 86400000);
+  var best = 0;
+  for(var i = 1; i < txnData.length; i++){
+    var r = txnData[i];
+    if(!r[0]) continue;
+    var d = new Date(r[0]);
+    if(isNaN(d.getTime()) || d < since || d > today) continue;
+    if((r[3] || "").toString().toLowerCase() !== "credit") continue;
+    if((r[13] || "").toString().trim() !== "Income") continue;
+    var a = Number(r[5]) || 0;
+    if(a > best) best = a;
+  }
+  return best > 0 ? best : null;
+}
+
+// ---------------------------------------------------------------------
+// The coach block. input = {
+//   txnData, today (Date at midnight), limit,
+//   wantsLimitSetting (number, 0/unset = none),
+//   outstanding: { total, isPaid, isOverdue, daysUntilDue, dueDate (Date) } | null,   // the most recently closed bill
+//   runway: computeRunway_() output | null, obligations: computeObligationStatuses_() output | [],
+//   isBillWording: optional function(mode, counterparty, note) (older bills' payment detection)
+// }
+// Returns the coach object, or null on ANY problem.
+// ---------------------------------------------------------------------
+function getCardCoach_(input){
+  try{
+    return cardCoachCompute_(input);
+  }catch(err){
+    return null;
+  }
+}
+
+function cardCoachCompute_(input){
+  if(!input || !input.txnData || !input.today) return null;
+  var limit = Number(input.limit);
+  if(!(limit > 0)) return null;
+  var today = input.today, txnData = input.txnData;
+  var cycles = cardCoachCycles_(today);
+  var cur = cycles.current;
+  var swipes = cardCoachSwipes_(txnData);
+  var fixedNames = cardCoachFixedNames_(swipes, cycles);
+
+  // This cycle's swipes, split four ways.
+  var split = { fixed: 0, need: 0, want: 0, unsorted: 0 };
+  var fixedSeen = {};            // normalised name -> { name, amount }
+  var cycleSpent = 0;
+  swipes.forEach(function(s){
+    if(!cardCoachInWindow_(s, cur.start, today)) return;
+    var b = cardCoachBucket_(s, fixedNames);
+    split[b] += s.amount;
+    cycleSpent += s.amount;
+    if(b === "fixed"){
+      var key = s.name || s.cp.toLowerCase();
+      if(!fixedSeen[key]) fixedSeen[key] = { name: s.cp || key, amount: 0 };
+      fixedSeen[key].amount += s.amount;
+    }
+  });
+  var fixedMerchants = Object.keys(fixedSeen).map(function(k){ return fixedSeen[k]; })
+    .sort(function(a, b){ return b.amount - a.amount; }).slice(0, 6).map(function(f){ return f.name; });
+
+  // Wants limit: the person's own setting, plus a suggestion from their last up-to-3 closed bills (or 10% of the limit with no history).
+  var wantsLimit = Number(input.wantsLimitSetting) > 0 ? Number(input.wantsLimitSetting) : null;
+  var wantTotals = [];
+  for(var k = 0; k < 3; k++){
+    var w = cycles.closed(k), cycleTotal = 0, cycleWant = 0;
+    swipes.forEach(function(s){
+      if(!cardCoachInWindow_(s, w.start, w.end)) return;
+      cycleTotal += s.amount;
+      if(cardCoachBucket_(s, fixedNames) === "want") cycleWant += s.amount;
+    });
+    if(cycleTotal > 0) wantTotals.push(cycleWant);
+  }
+  var suggested;
+  if(wantTotals.length){
+    var avg = wantTotals.reduce(function(a, b){ return a + b; }, 0) / wantTotals.length;
+    suggested = Math.max(1000, cardCoachRound500_(Math.min(avg, 0.2 * limit)));
+  }else{
+    suggested = Math.max(1000, cardCoachRound500_(0.1 * limit));
+  }
+  var wantsOver = wantsLimit !== null ? Math.max(0, cardCoachRound2_(split.want - wantsLimit)) : null;
+
+  // Safe to put on the card (the formula is explained with a worked example in docs/features/card-coach.md).
+  var runway = input.runway || null;
+  var out = input.outstanding || null;
+  var outUnpaid = (out && out.total > 0 && !out.isPaid) ? out.total : 0;
+  var safeToPut = null;
+  // A balance the person has not confirmed for over a week may be far off: a too-HIGH safe amount is the dangerous mistake, so go quiet (unknown) until they confirm it.
+  if(runway && !runway.askBalance && runway.estimatedBalance !== null && runway.estimatedBalance !== undefined && isFinite(runway.estimatedBalance)){
+    var billsAhead = Number(runway.billsAhead) || 0;
+    var cardBillCounted = (runway.bills || []).some(function(b){ return b.label === "Card bill"; });
+    var extraBill = cardBillCounted ? 0 : outUnpaid;                       // the closed bill reduces it exactly once
+    var horizon = (runway.daysToSalary !== null && runway.daysToSalary !== undefined) ? runway.daysToSalary : 30;
+    var living = (Number(runway.dailyPace) || 0) * horizon;
+    var free = runway.estimatedBalance - billsAhead - extraBill - living - cycleSpent;   // swipes already made reduce it once
+    var capRoom = CARD_COACH_CAP_PCT_ * limit - cycleSpent;                 // never suggest going past 30% of the limit
+    safeToPut = Math.round(Math.min(free, capRoom));
+  }
+
+  var utilisationWatch = cycleSpent >= CARD_COACH_CAP_PCT_ * limit;
+  var tone;
+  if((safeToPut !== null && safeToPut < 0) || (wantsOver !== null && wantsOver > 0)) tone = "over";
+  else if(safeToPut === null) tone = utilisationWatch ? "watch" : "unknown";
+  else if(safeToPut < CARD_COACH_WATCH_PCT_ * limit || utilisationWatch) tone = "watch";
+  else tone = "ok";
+
+  // The closed bill and what is planned around it.
+  var bill = null;
+  if(out && out.total > 0){
+    var planLines = [];
+    var dueIso = cardCoachIso_(out.dueDate);
+    if(!out.isPaid){
+      var salary = cardCoachSalaryAmount_(txnData, today);
+      if(runway && runway.salaryDate && salary && runway.salaryDate <= dueIso){
+        planLines.push({ label: "Salary expected " + cardCoachShortDate_(new Date(runway.salaryDate + "T00:00:00")), amount: Math.round(salary), sign: 1 });
+      }
+      (input.obligations || []).filter(function(o){
+        return o && o.enoughHistory && !o.alreadyThisMonth && o.daysUntil >= 0 && o.daysUntil <= out.daysUntilDue;
+      }).sort(function(a, b){ return a.daysUntil - b.daysUntil; }).forEach(function(o){
+        planLines.push({ label: o.label, amount: Math.round(o.avgAmount), sign: -1 });
+      });
+      planLines.push({ label: "Card bill", amount: Math.round(out.total), sign: -1 });
+    }
+    bill = {
+      amount: Math.round(out.total),
+      dueDate: dueIso,
+      daysUntilDue: out.daysUntilDue,
+      isPaid: !!out.isPaid,
+      isOverdue: !!out.isOverdue,
+      planLines: planLines,
+      leftUntilSalary: (runway && runway.estimatedBalance !== null && runway.estimatedBalance !== undefined && runway.salaryDate)
+        ? Math.round(runway.estimatedBalance - (Number(runway.billsAhead) || 0)) : null
+    };
+  }
+
+  var streak = null;
+  try{ streak = cardCoachStreak_(txnData, swipes, cycles, out, input.isBillWording); }catch(ignoreStreak){ streak = null; }
+
+  return {
+    limit: limit,
+    limitUsedPct: Math.min(100, Math.max(0, Math.round(cycleSpent / limit * 100))),
+    cycleSpent: cardCoachRound2_(cycleSpent),
+    split: { fixed: cardCoachRound2_(split.fixed), need: cardCoachRound2_(split.need), want: cardCoachRound2_(split.want), unsorted: cardCoachRound2_(split.unsorted) },
+    fixedMerchants: fixedMerchants,
+    wantsLimit: wantsLimit,
+    suggestedWantsLimit: suggested,
+    wantsOver: wantsOver,
+    safeToPut: safeToPut,
+    safeUntil: cardCoachIso_(cur.due),
+    tone: tone,
+    utilisationWatch: utilisationWatch,
+    bill: bill,
+    paidInFullStreak: streak
+  };
+}
+
+// ---------------------------------------------------------------------
+// Gathering the pieces that need Sheets/Properties (everything best-effort: a problem gives null / []).
+// ---------------------------------------------------------------------
+
+// Runway + obligations for the coach. monthSpend = this calendar month's spend (what Home's runway uses); null = runway unknown.
+function cardCoachGather_(txnData, today, settings, outstanding, monthSpend){
+  var result = { runway: null, obligations: [] };
+  try{
+    if(typeof computeObligationStatuses_ === "function"){
+      var feSheet = dbSs_().getSheetByName("FinancialEvents");
+      if(feSheet) result.obligations = computeObligationStatuses_(feSheet.getDataRange().getValues(), txnData, today) || [];
+    }
+  }catch(e1){ result.obligations = []; }
+  try{
+    if(typeof computeRunway_ === "function" && typeof getRunwayCheckpoint_ === "function" && monthSpend !== null && isFinite(monthSpend)){
+      var unpaid = (outstanding && outstanding.total > 0 && !outstanding.isPaid) ? outstanding.total : 0;
+      result.runway = computeRunway_({
+        txnData: txnData, today: today, now: new Date(),
+        checkpoint: getRunwayCheckpoint_(),
+        monthSpend: monthSpend,
+        monthlyExpensesSetting: settings.monthlyExpenses,
+        obligations: result.obligations,
+        ccBillAhead: unpaid,
+        ccDaysUntil: (outstanding && typeof outstanding.daysUntilDue === "number") ? outstanding.daysUntilDue : null,
+        salaryDaySetting: settings.salaryDay
+      });
+    }
+  }catch(e2){ result.runway = null; }
+  return result;
+}
+
+// The closed bill, worked out from the rows alone (used by the notification line and the reminder, which do not run the whole CC Advisor).
+// Paid-ness uses the very same detector as CC Advisor (isCreditCardBillPayment summed over payments after the close, getOutstandingCCPaidTotal_).
+function cardCoachOutstanding_(txnData, today){
+  var cycles = cardCoachCycles_(today);
+  var w = cycles.closed(0);
+  var total = 0;
+  cardCoachSwipes_(txnData).forEach(function(s){ if(cardCoachInWindow_(s, w.start, w.end)) total += s.amount; });
+  var paidTotal = 0;
+  if(total > 0 && typeof getOutstandingCCPaidTotal_ === "function") paidTotal = getOutstandingCCPaidTotal_(txnData, w.end);
+  var isPaid = total > 0 && paidTotal >= total - 1;
+  var daysUntilDue = Math.ceil((w.due - today) / 86400000);
+  return { total: total, isPaid: isPaid, isOverdue: !isPaid && total > 0 && daysUntilDue < 0, daysUntilDue: daysUntilDue, dueDate: w.due };
+}
+
+// A coach for callers that do not already have a CC Advisor result (the new-transaction notification). Never throws.
+function cardCoachForPush_(txnData, cashData){
+  try{
+    var settings = getSettings();
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var outstanding = cardCoachOutstanding_(txnData, today);
+    var monthSpend = null;
+    try{
+      var m = getMonthlyAnalysis(today.getFullYear(), today.getMonth() + 1, txnData, cashData || [[]]);
+      if(m && isFinite(m.totalDebit)) monthSpend = m.totalDebit;
+    }catch(ignoreMonth){}
+    var g = cardCoachGather_(txnData, today, settings, outstanding, monthSpend);
+    return getCardCoach_({
+      txnData: txnData, today: today, limit: settings.ccLimit, wantsLimitSetting: settings.cardWantsLimit,
+      outstanding: outstanding, runway: g.runway, obligations: g.obligations,
+      isBillWording: (typeof isCreditCardBillWording_ === "function") ? isCreditCardBillWording_ : null
+    });
+  }catch(err){
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------
+// The one extra line on the new-transaction notification.
+// ---------------------------------------------------------------------
+
+// Cheap pre-check on a raw Transactions row, BEFORE any coach is built: only card debits of at least Rs 200, and never a wallet top-up
+// or a row already marked as a fixed bill (Rent/EMI/SIP).
+function cardCoachPushWanted_(row){
+  try{
+    if((row[3] || "").toString().toLowerCase() !== "debit") return false;
+    if((row[4] || "").toString().toLowerCase().trim().indexOf("card") !== 0) return false;
+    if(!(Number(row[5]) >= CARD_COACH_PUSH_MIN_)) return false;
+    if((row[17] || "").toString().trim()) return false;
+    if(typeof isWalletTopUp === "function" && isWalletTopUp(row[7], row[6])) return false;
+    return true;
+  }catch(e){ return false; }
+}
+
+// "" (say nothing) or one calm sentence. A recurring merchant (listed in coach.fixedMerchants) gets no line.
+function cardCoachPushLine_(coach, row){
+  try{
+    if(!coach || !cardCoachPushWanted_(row)) return "";
+    if(coach.safeToPut === null || coach.safeToPut === undefined || coach.tone === "unknown") return "";
+    var name = cardCoachNorm_(row[7]);
+    if(name && (coach.fixedMerchants || []).some(function(n){ return cardCoachNorm_(n) === name; })) return "";
+    var amount = Number(row[5]) || 0;
+    if(coach.safeToPut >= 0) return "Safe left on card: " + cardCoachMoney_(coach.safeToPut) + ".";
+    var past = Math.min(amount, -coach.safeToPut);       // only the part of THIS swipe that is past the safe amount
+    return "That is " + cardCoachMoney_(past) + " past your safe amount; it comes out of next salary.";
+  }catch(e){ return ""; }
+}
+
+// ---------------------------------------------------------------------
+// Bill reminder: one push when the closed card bill is due within 3 days, once per bill, never when paid.
+// ---------------------------------------------------------------------
+
+// Decides, from one person's rows, whether a reminder is due. Returns null or { amount, dueIso, dueDate, daysUntilDue }.
+function cardBillReminderCheck_(txnData, today){
+  var o = cardCoachOutstanding_(txnData, today);
+  if(!(o.total > 0) || o.isPaid) return null;
+  if(o.daysUntilDue < 0 || o.daysUntilDue > CARD_BILL_REMIND_DAYS_) return null;
+  return { amount: Math.round(o.total), dueIso: cardCoachIso_(o.dueDate), dueDate: o.dueDate, daysUntilDue: o.daysUntilDue };
+}
+
+function cardBillReminderMessage_(r){
+  var title = r.daysUntilDue === 0 ? "Card bill is due today" : (r.daysUntilDue === 1 ? "Card bill is due tomorrow" : "Card bill due in " + r.daysUntilDue + " days");
+  return { title: title, body: "Card bill " + cardCoachMoney_(r.amount) + " is due on " + cardCoachShortDate_(r.dueDate) + ". Pay it in full." };
+}
+
+// The daily job (new server: fnTimer.js job "cardbill", about 09:15 India time). Returns how many reminders were sent. Never throws.
+// Once per bill per person: the due date of the bill already reminded about is remembered in the shared reminders document.
+function cardBillReminderRun_(nowMs){
+  var sent = 0;
+  try{
+    nowMs = nowMs || Date.now();
+    var quietFrom = (typeof REMINDER_QUIET_FROM_HOUR_ !== "undefined") ? REMINDER_QUIET_FROM_HOUR_ : 22;
+    var quietTo = (typeof REMINDER_QUIET_TO_HOUR_ !== "undefined") ? REMINDER_QUIET_TO_HOUR_ : 8;
+    var hour = Number(Utilities.formatDate(new Date(nowMs), "Asia/Kolkata", "HH"));
+    if(hour >= quietFrom || hour < quietTo) return 0;                          // quiet hours: nothing, and nothing read
+    var people = dailySummaryPeople_();
+    if(!people.length) return 0;
+    var today = new Date(nowMs); today.setHours(0, 0, 0, 0);
+    var expectedDue = cardCoachIso_(cardCoachCycles_(today).closed(0).due);
+    var stateDoc = fsGetPathMeta_(CARD_BILL_STATE_DOC_);
+    var state = (stateDoc && stateDoc.fields) || {};
+    var updates = {};
+    people.forEach(function(email){
+      try{
+        var sk = "cb_" + adminPersonKey_(email) + "_due";                        // field names must start with a letter
+        if(String(state[sk] || "") === expectedDue) return;                      // already reminded about this bill
+        var token = splitNotifyToken_(email);
+        if(!token) return;
+        var due = v2dbRun_(email, function(){
+          if(String(dbProps_().getProperty("SETTING_CARD_REMINDER_OFF") || "") === "1") return null;      // this person switched it off
+          var sheet = dbSs_().getSheetByName("Transactions");
+          return cardBillReminderCheck_(sheet ? sheet.getDataRange().getValues() : [[]], today);
+        }, { prefetch: ["Transactions", "_Props"] });
+        if(!due) return;
+        var msg = cardBillReminderMessage_(due);
+        var res = sendPushToToken_(token, msg.title, msg.body, { kind: "reminder", tag: "card-bill" });
+        if(res && res.sent === false) return;                                    // not delivered: try again next time the job runs
+        updates[sk] = due.dueIso;
+        sent++;
+      }catch(personErr){
+        try{ logAI("REMINDER_ERROR", "card bill, one person: " + String(personErr && personErr.message).slice(0, 150)); }catch(ignoreLog){}
+      }
+    });
+    if(Object.keys(updates).length) fsCommit_([{ merge: { path: CARD_BILL_STATE_DOC_, fields: updates, adds: [] } }]);
+    try{ fsFlushUsage_(); }catch(ignoreFlush){}
+  }catch(err){
+    try{ logAI("REMINDER_ERROR", "card bill: " + String(err && err.message).slice(0, 150)); }catch(ignoreLog2){}
+  }
+  return sent;
+}
+
+// Optional: the owner can also run this by hand from the Apps Script editor. It is safe to run any number of times (once per bill).
+function checkCardBillReminder(){
+  return cardBillReminderRun_();
+}

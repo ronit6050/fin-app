@@ -7,7 +7,7 @@ const FRIEND = "vaidehi@example.com";
 const FILES = [
   "category.js", "noteWordModel.js", "noteMemory.js", "needWantSaving.js", "financialEvents.js", "investmentInstruments.js", "savingsGoals.js",
   "PWA.js", "Recon.js", "Logger.js", "transactions.js", "autoSettle.js", "obligationReminders.js", "appHealth.js", "firestore.js", "viewPublisher.js",
-  "splits.js", "planner.js", "CCAdvisor.js", "DebtAdvisor.js", "SavingsAdvisor.js", "cash.js", "v2db.js", "settings.js", "v2route.js", "flags.js", "sharedLock.js", "fnTimer.js", "Credit Card.js", "v2owner.js", "admin.js", "ingest.js", "manualTxn.js", "smsFormats.js", "splitNotify.js", "push.js", "smsPipelineCore.js", "smsIn.js", "adminStats.js", "adminScores.js", "dailySummary.js", "pendingReminder.js"
+  "splits.js", "planner.js", "CCAdvisor.js", "DebtAdvisor.js", "SavingsAdvisor.js", "cash.js", "v2db.js", "settings.js", "v2route.js", "flags.js", "sharedLock.js", "fnTimer.js", "Credit Card.js", "v2owner.js", "admin.js", "ingest.js", "manualTxn.js", "smsFormats.js", "splitNotify.js", "push.js", "smsPipelineCore.js", "smsIn.js", "adminStats.js", "adminScores.js", "dailySummary.js", "pendingReminder.js", "cardCoach.js"
 ];
 const TXN_HEADER = ["Date", "Time", "Bank", "Type", "Mode", "Amount", "Reference", "Counterparty", "Channel", "Source", "RawSMS", "Sender", "Note", "Category", "TelegramMsgID", "Processed", "NeedWantSaving", "FinancialEvent", "FinancialEventName", "AutoSettled", "FriendShare"];
 

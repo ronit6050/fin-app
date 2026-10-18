@@ -1284,21 +1284,7 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
   // everywhere else in this amount-matching logic).
   let outstandingPaidTotal = 0;
   if(outstandingSummary.total > 0){
-    for(let i = 1; i < data.length; i++){
-      const rawDate = data[i][0];
-      if(!rawDate) continue;
-      const d = new Date(rawDate);
-      if(d <= outstandingCycleEnd) continue;
-      const type = (data[i][3] || "").toString().toLowerCase();
-      if(type !== "debit") continue;
-      const mode = (data[i][4] || "").toString();
-      const counterparty = (data[i][7] || "").toString();
-      const note = (data[i][12] || "").toString();
-      const amount = Number(data[i][5]) || 0;
-      if(isCreditCardBillPayment(mode, counterparty, note, amount, data)){
-        outstandingPaidTotal += amount;
-      }
-    }
+    outstandingPaidTotal = getOutstandingCCPaidTotal_(data, outstandingCycleEnd);
   }
   const outstandingPaid = outstandingSummary.total > 0 && outstandingPaidTotal >= outstandingSummary.total - 1;
 
@@ -1328,6 +1314,7 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
     }
   }
 
+  let coachMonthSpend = (monthTotals && isFinite(monthTotals.totalDebit)) ? Number(monthTotals.totalDebit) : null;
   let fixedObl = monthTotals ? monthTotals.fixedObligations : null;
   let investedActual = monthTotals ? monthTotals.invested : null;
   if(fixedObl === undefined || fixedObl === null){
@@ -1335,6 +1322,7 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
     const m = getMonthlyAnalysis(now.getFullYear(), now.getMonth() + 1, data, cashData);
     fixedObl = m.fixedObligations;
     investedActual = m.invested;
+    if(coachMonthSpend === null && isFinite(m.totalDebit)) coachMonthSpend = Number(m.totalDebit);
   }
 
   // CC Buffer now lives in the new Goals-based Savings engine — see
@@ -1406,8 +1394,24 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
   if(currentSummary.total >= ccAlertAmt) status = "alert";
   else if(currentSummary.total >= ccWarnAmt) status = "warning";
 
+  // Card Coach (cardCoach.js, added 2026-10-18): the calm "safe to put on the card" block. Best-effort - any problem leaves it null and
+  // the rest of this result is exactly as before.
+  let coach = null;
+  try{
+    if(typeof getCardCoach_ === "function"){
+      const coachOutstanding = { total: outstandingSummary.total, isPaid: outstandingPaid, isOverdue: isOverdue, daysUntilDue: daysUntilDue, dueDate: outstandingDueDate };
+      const gathered = cardCoachGather_(data, today, settings, coachOutstanding, coachMonthSpend);
+      coach = getCardCoach_({
+        txnData: data, today: today, limit: ccLimit, wantsLimitSetting: settings.cardWantsLimit,
+        outstanding: coachOutstanding, runway: gathered.runway, obligations: gathered.obligations,
+        isBillWording: isCreditCardBillWording_
+      });
+    }
+  }catch(coachErr){ coach = null; }
+
   return {
     limit: ccLimit,
+    coach: coach,
 
     outstanding: {
       amount: outstandingSummary.total,
@@ -1993,6 +1997,28 @@ function getOutstandingCCBillTotalsByCard(txnData){
     }
   }
   return totals;
+}
+
+// Adds up every real credit-card-bill-payment debit dated after the closed bill's close date (cycleEnd). Moved out of getCCAdvisorData
+// (2026-10-18) so Card Coach (cardCoach.js) uses EXACTLY the same "was the bill paid" detection. The caller compares the sum with the bill.
+function getOutstandingCCPaidTotal_(data, cycleEnd){
+  let paidTotal = 0;
+  for(let i = 1; i < data.length; i++){
+    const rawDate = data[i][0];
+    if(!rawDate) continue;
+    const d = new Date(rawDate);
+    if(d <= cycleEnd) continue;
+    const type = (data[i][3] || "").toString().toLowerCase();
+    if(type !== "debit") continue;
+    const mode = (data[i][4] || "").toString();
+    const counterparty = (data[i][7] || "").toString();
+    const note = (data[i][12] || "").toString();
+    const amount = Number(data[i][5]) || 0;
+    if(isCreditCardBillPayment(mode, counterparty, note, amount, data)){
+      paidTotal += amount;
+    }
+  }
+  return paidTotal;
 }
 
 // Just the ₹ total of the outstanding (most recently closed) credit card

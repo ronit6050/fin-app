@@ -134,14 +134,21 @@ function processNewTransactionsCore_() {
   // actually being alerted (it needs the whole Transactions sheet, while
   // `data` above is just the new rows). Best-effort: if it cannot be built,
   // notifications simply keep the older guess.
+  // The whole Transactions sheet, read at most once per run and shared by the note model and the Card Coach line below.
+  let fullTxnCache;
+  function getFullTxnOnce(){
+    if(fullTxnCache === undefined) fullTxnCache = sheet.getDataRange().getValues();
+    return fullTxnCache;
+  }
   let noteTypeModelCache;
   function getNoteTypeModelOnce(){
     if(noteTypeModelCache === undefined){
-      try{ noteTypeModelCache = buildNoteTypeModel_(sheet.getDataRange().getValues()); }
+      try{ noteTypeModelCache = buildNoteTypeModel_(getFullTxnOnce()); }
       catch(modelErr){ noteTypeModelCache = null; }
     }
     return noteTypeModelCache;
   }
+  let coachCache;   // Card Coach, built at most once per run (undefined = not built yet, null = could not be built)
   const noteMemorySheet = ss.getSheetByName("NoteMemory");
   const noteMemoryData  = noteMemorySheet ? noteMemorySheet.getDataRange().getValues() : [];
   const financialEventsSheet = ss.getSheetByName("FinancialEvents");
@@ -267,6 +274,20 @@ Reply to add a note for this transaction.`;
         const pushBody = "₹" + Number(amount).toLocaleString('en-IN') + " · " + bank +
           (counterparty ? " · " + counterparty : "") + hintLine;
 
+        // Card Coach (added 2026-10-18): for a card swipe only, ONE short calm line (cardCoach.js). Built lazily, best-effort: any problem
+        // simply leaves the notification exactly as it was, and nothing here can delay or stop it.
+        let pushBodyFinal = pushBody;
+        try{
+          if(typeof cardCoachPushWanted_ === "function" && cardCoachPushWanted_(data[i])){
+            if(coachCache === undefined){
+              const cashSheet = ss.getSheetByName("Cash");
+              coachCache = cardCoachForPush_(getFullTxnOnce(), cashSheet ? cashSheet.getDataRange().getValues() : [[]]);
+            }
+            const coachLine = cardCoachPushLine_(coachCache, data[i]);
+            if(coachLine) pushBodyFinal = pushBody + "\n" + coachLine;
+          }
+        }catch(coachErr){ pushBodyFinal = pushBody; }
+
         let pushExtra = null;
         if(options){
           pushExtra = {
@@ -287,7 +308,7 @@ Reply to add a note for this transaction.`;
             pushExtra.type         = guesses[0].type;
           }
         }
-        sendPushNotification("💳 New Transaction", pushBody, pushExtra);
+        sendPushNotification("💳 New Transaction", pushBodyFinal, pushExtra);
 
         // Save messageId (empty if Telegram is off) and mark as processed
         sheet.getRange(rowIndex, 15).setValue(messageId);

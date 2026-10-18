@@ -38,7 +38,11 @@ function getSettings(){
     // Added 2026-10-17 - the 9pm "how much you spent today" notification (dailySummary.js). On unless switched off here.
     dailySummary: String(props.getProperty("SETTING_DAILY_SUMMARY_OFF") || "") !== "1",
     // Added 2026-10-17 - how often to be reminded about payments waiting for a note (pendingReminder.js): off / 30 / 60 (default) / twice
-    pendingReminder: (typeof reminderChoice_ === "function") ? reminderChoice_(props.getProperty("SETTING_PENDING_REMINDER")) : "60"
+    pendingReminder: (typeof reminderChoice_ === "function") ? reminderChoice_(props.getProperty("SETTING_PENDING_REMINDER")) : "60",
+    // Added 2026-10-18 (Card Coach, cardCoach.js) - the most you want to spend on "wants" with the card in one billing cycle. 0 = not set.
+    cardWantsLimit: Number(props.getProperty("SETTING_CARD_WANTS_LIMIT")) || 0,
+    // Added 2026-10-18 - the "card bill is due in 3 days" notification (cardCoach.js). On unless switched off here.
+    cardReminder: String(props.getProperty("SETTING_CARD_REMINDER_OFF") || "") !== "1"
   };
 }
 
@@ -61,6 +65,12 @@ function updateSettings(newSettings){
     }
     if(newSettings.dailySummary === true || newSettings.dailySummary === false)
       props.setProperty("SETTING_DAILY_SUMMARY_OFF", newSettings.dailySummary ? "" : "1");
+    if(newSettings.cardWantsLimit !== undefined && newSettings.cardWantsLimit !== null && newSettings.cardWantsLimit !== ""){
+      const cw = Number(newSettings.cardWantsLimit);
+      if(isFinite(cw) && cw >= 0 && cw <= 10000000) props.setProperty("SETTING_CARD_WANTS_LIMIT", String(Math.round(cw)));   // 0 clears it
+    }
+    if(newSettings.cardReminder === true || newSettings.cardReminder === false)
+      props.setProperty("SETTING_CARD_REMINDER_OFF", newSettings.cardReminder ? "" : "1");
     if(["off", "30", "60", "twice"].indexOf(String(newSettings.pendingReminder)) !== -1)
       props.setProperty("SETTING_PENDING_REMINDER", String(newSettings.pendingReminder));
 
