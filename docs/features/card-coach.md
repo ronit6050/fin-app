@@ -26,7 +26,10 @@ nothing in it yet (same rule CC Advisor already used).
   wantsLimit: number|null,                        // the person's own setting (0/unset -> null)
   suggestedWantsLimit: number,
   wantsOver: number|null,                         // max(0, want - wantsLimit); null when no limit is set
-  safeToPut: number|null,                         // can be NEGATIVE = already past the safe amount; null = money picture unknown
+  safeToPut: number|null,                         // can be NEGATIVE only because of swipes already made this cycle; null = not enough history/income
+  safeReason: "ok"|"budget_full"|"over_by_swipes"|"unknown",
+  cardRoom: number|null,                          // money left each month for ALL card use (rounded; can be <= 0); null when unknown
+  monthlyIncome: number|null,                     // the usual income used (rounded); null when none found
   safeUntil: "yyyy-mm-dd",                        // due date of the bill that this cycle's swipes land in
   tone: "ok"|"watch"|"over"|"unknown",
   utilisationWatch: bool,                         // cycle spend >= 30% of the limit
@@ -47,31 +50,46 @@ nothing in it yet (same rule CC Advisor already used).
 * `wantsLimit` = Settings value `cardWantsLimit` (0 = not set -> null).
 * `suggestedWantsLimit` = the average of the "want" card spend of the last up-to-3 CLOSED bills (only bills that had card spend), capped at 20% of the limit, rounded to the nearest 500, at least 1,000. No history: 10% of the limit (same rounding and minimum). (Past bills use today's list of fixed merchants; good enough for a suggestion.)
 
-### Safe to put (the formula)
+### Safe to put (the formula) - rewritten 2026-10-18
 
-Needs a balance checkpoint (the "what is in your bank" number Home already asks for) and uses the Home run-out maths (`computeRunway_`). If there is no checkpoint, `safeToPut` is `null`.
+The first version compared swipes to today's bank balance. That was wrong: swipes made now are billed on the 18th and paid on the 9th of next month, from the
+NEXT salary, so this month-end balance says nothing about them (and a normal month-end gave an alarming negative number with zero swipes, and a person with no
+history could get a number from a typed balance alone). It is now a **monthly budget** built only from that person's own history. No bank balance, no staleness.
 
 ```
-free   = estimated bank balance
-         - bills before the next salary (runway.billsAhead: Rent/EMI/SIP not yet paid, plus the closed card bill if it is due before salary)
-         - the closed card bill, if unpaid AND the runway did not already count it   (it reduces the number exactly once)
-         - usual daily spend x days to next salary (30 days if the salary day is unknown)
-         - card swipes already made this cycle                                     (they reduce it exactly once)
-cap    = 30% of the limit - card swipes already made this cycle                    (never suggest going past 30% utilisation)
-safeToPut = round( min(free, cap) )         // negative = already over
+monthlyIncome = the SECOND-largest Income-tagged credit of the last 70 days when there are two or more (a one-off bonus/refund can never become
+                "salary"), else the only one. A salary paid in two parts is understated (the safe direction). Same figure the bill plan uses as "salary".
+committed     = each Rent/EMI/SIP that has enough history (average amount, each name once)
+                + Settings monthly savings goal + Settings monthly investment goal
+nonCardLiving = average monthly day-to-day spend NOT on the card, over the last up-to-3 CLOSED calendar months that have any rows
+                (this month is not included). The person's FIRST data month is skipped unless their first row is on or before day 7
+                of it (a part-month would look cheap and make the safe amount too high). Cash-sheet debits count as day-to-day spend (the Cash
+                tab; lending words excluded). Left out, like CC Advisor / Analysis: card swipes, credit card bill payments (by wording or by
+                equalling a card bill), wallet top-ups, loans, rows already marked Rent/EMI/SIP, and a split's friend share.
+                No usable closed month of real data -> unknown. (The Settings "monthly expenses" default of 30,000 is a made-up number and is NOT used.)
+cardRoom      = monthlyIncome - committed - nonCardLiving          (what is left each month for ALL card use: electricity AND wants)
+safeToPut     = round( min( max(cardRoom, 0), 30% of the limit ) - cardSwipesThisCycle )
 ```
 
-Worked example: balance 60,000; Rent 15,000 due before salary; closed card bill 8,000 due after salary; 700 a day for 10 days = 7,000; swipes so far 6,000.
-free = 60,000 - 15,000 - 8,000 - 7,000 - 6,000 = 24,000. cap = 15,000 - 6,000 = 9,000 (limit 50,000). Safe to put = **9,000**. With only 40,000 in the bank,
-free = 4,000, so it is 4,000. With 30,000, free = -6,000: already past the safe amount.
+Needs: a usual income AND at least 14 days of that person's own transactions AND at least one usable closed month; otherwise `safeToPut = null`, `safeReason = "unknown"`, tone `unknown`
+(a brand-new friend sees the quiet hint, never a number).
 
-Why it does not count a rupee twice: card swipes never leave the bank until the bill is paid, so the balance does not contain them; they are subtracted once (as "swipes already made"). The closed bill is either in the runway's bills or subtracted separately, never both. Daily spend is a forecast for the days ahead, not the swipes already made.
+`safeReason`: `ok` (room, not over) / `budget_full` (cardRoom <= 0: the person's usual month leaves nothing for the card, whatever they swipe; with zero swipes
+`safeToPut` is 0, not a negative number) / `over_by_swipes` (swipes this cycle pushed it below zero) / `unknown`.
+
+Worked example: income 60,000. Rent 15,000 + savings goal 5,000 + investment goal 3,000 = 23,000 committed. Ordinary UPI/cash living averaged 20,000 over
+Jul-Sep. cardRoom = 60,000 - 23,000 - 20,000 = **17,000**. Limit 50,000, so the 30% cap is 15,000; the smaller of the two is 15,000. Swiped so far this cycle 6,000
+-> safe to put = **9,000**. If living were 40,000, cardRoom = -3,000 -> `budget_full`, safe amount 0 with no swipes. If living were 32,000, cardRoom = 5,000 and
+the same 6,000 of swipes gives -1,000 -> `over_by_swipes`.
+
+Why it does not count a rupee twice: card swipes are subtracted once (as `cardSwipesThisCycle`), and the non-card living leaves card rows out, so a swipe is never
+in both. Card bill payments are left out of living (the swipes behind them were already counted as swipes). Rent/EMI/SIP are in `committed` only.
 
 ### Tone
 
-* `over`: `safeToPut < 0` or `wantsOver > 0`.
-* `unknown`: no `safeToPut` (no balance checkpoint) and not yet 30% used.
-* `watch`: `safeToPut` under 20% of the limit, or `utilisationWatch` (30% of the limit already used, which also makes it `watch` when the balance is unknown).
+* `over`: `safeToPut < 0` (always from swipes) or `wantsOver > 0`.
+* `unknown`: no `safeToPut` (no usual income or under 14 days of history) and not yet 30% used.
+* `watch`: `safeReason` is `budget_full` with nothing past zero, `safeToPut` under 20% of the limit, or `utilisationWatch` (30% of the limit already used, which also makes it `watch` when the balance is unknown).
 * `ok`: otherwise.
 
 ### The closed bill (`bill`)
@@ -86,8 +104,9 @@ Counts the most recent closed bills paid in full, going back at most 12. The new
 
 Added in `processNewTransactionsCore_` (`transactions.js`). Only for a **card debit of Rs 200 or more** that is not a fixed bill (a recurring merchant, or a row already marked Rent/EMI/SIP) and not a wallet top-up, and only if the safe amount is known:
 
-* room left (`safeToPut >= 0`): `Safe left on card: ₹8,200.`
-* past it: `That is ₹400 past your safe amount; it comes out of next salary.` (only the part of THIS swipe that is past the safe amount)
+* room left (`safeReason = "ok"`): `Safe left on card: ₹8,200.`
+* past it (**only** when `safeReason = "over_by_swipes"`): `That is ₹400 past your safe amount; it comes out of next salary.` (only the part of THIS swipe that is past the safe amount)
+* `budget_full` or unknown: no line at all.
 
 The coach is built lazily, once per timer run, only when such a swipe arrives, reusing the Transactions read the timer already does. If anything fails the notification goes out exactly as before. Note: the new swipe is already in the sheet when the coach is built, so the number already includes it; if several card swipes arrive in the same 5-minute run they all show the same figure.
 
@@ -103,7 +122,8 @@ Both come back from `getSettings` and are saved by `updateSettings` (a partial s
 
 ## Known limits
 
-* Needs the balance checkpoint for the safe amount; with none, the coach still shows the split and the 30% watch.
+* Needs a usual income and 14 days of history for the safe amount; otherwise the coach still shows the split and the 30% watch. The bank balance checkpoint is no longer used for the number (it still feeds the bill plan's "left until salary").
+* An Income credit is the only way income is known; a person paid in a way not tagged Income gets "unknown".
 * Older bills' "paid" detection (for the streak) is by amount/wording, a little looser than the latest bill's.
 * Two cards share one combined limit and one coach (as CC Advisor does).
 * `functions/backend/` is a generated copy; it is refreshed by the deploy step, nothing was edited by hand there.

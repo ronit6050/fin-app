@@ -6652,7 +6652,7 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-18-05";
+    const APP_VERSION = "2026-10-18-06";
     const APP_CHANGELOG = "New Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
@@ -10931,7 +10931,14 @@
       var out = { tone: tone, pill: CCH_PILLS[tone], title: "", amount: "", showAmount: false, sentence: "", hint: "" };
       if (tone === "unknown") {
         out.title = "Safe amount for your card";
-        out.sentence = where === "home" ? "Add your bank balance above to see this." : "Add your bank balance on Home to see this.";
+        out.sentence = "Card Coach needs your salary and about two weeks of history before it can show this.";
+        return out;
+      }
+      if (coach.safeReason === "budget_full") {
+        // The person's usual month (after rent, savings and everyday spending) leaves nothing for the card: not caused by a swipe.
+        out.title = "No room for card wants this month";
+        out.sentence = "After rent, savings and your usual spending, your income leaves no spare room. Keep the card for fixed bills only.";
+        out.hint = "Wants are easier on UPI or cash from savings.";
         return out;
       }
       if (tone === "over") {

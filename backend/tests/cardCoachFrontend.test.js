@@ -63,9 +63,14 @@ eq([h.tone, h.title, h.amount, h.showAmount], ["over", "Past the safe amount", "
 eq(h.sentence, "You're ₹1,200 past the safe amount. It will come out of your November salary.", "over sentence");
 eq(h.hint, "Use UPI or wait for the next salary.", "over gives one gentle option");
 h = f.cchHero(Object.assign(base(), { safeToPut: null }), "home");
-eq([h.tone, h.showAmount, h.sentence], ["unknown", false, "Add your bank balance above to see this."], "unknown on Home");
+eq([h.tone, h.showAmount, h.sentence], ["unknown", false, "Card Coach needs your salary and about two weeks of history before it can show this."], "unknown on Home");
+h = f.cchHero(Object.assign(base(), { safeToPut: 0, safeReason: "budget_full", tone: "watch" }), "home");
+eq([h.title, h.showAmount], ["No room for card wants this month", false], "budget_full never says 'past the safe amount' and shows no amount");
+ok(!/past/i.test(h.sentence) && clean(h.sentence), "budget_full sentence is calm");
+h = f.cchHero(Object.assign(base(), { safeToPut: -500, safeReason: "budget_full" }), "home");
+eq(h.title, "No room for card wants this month", "budget_full wins even when the number is negative");
 h = f.cchHero(Object.assign(base(), { safeToPut: null }), "cc");
-eq(h.sentence, "Add your bank balance on Home to see this.", "unknown on the card screen");
+eq(h.sentence, "Card Coach needs your salary and about two weeks of history before it can show this.", "unknown on the card screen");
 h = f.cchHero(Object.assign(base(), { safeUntil: "" }), "home");
 eq(h.title, "Safe to put on card", "no date -> no 'until'");
 h = f.cchHero(Object.assign(base(), { safeToPut: -50, bill: null, safeUntil: "2026-12-05" }), "home");

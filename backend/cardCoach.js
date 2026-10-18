@@ -198,10 +198,11 @@ function cardCoachStreak_(txnData, swipes, cycles, out, isBillWording){
   return evaluated ? streak : null;
 }
 
-// The usual salary: the biggest Income-tagged credit of the last ~70 days.
+// The usual salary: the SECOND-largest Income-tagged credit of the last ~70 days when there are two or more (a one-off bonus or refund
+// can then never become "salary"), else the only one. A salary paid in two parts is understated - that is the safe direction.
 function cardCoachSalaryAmount_(txnData, today){
   var since = new Date(today.getTime() - CARD_COACH_SALARY_LOOKBACK_DAYS_ * 86400000);
-  var best = 0;
+  var amounts = [];
   for(var i = 1; i < txnData.length; i++){
     var r = txnData[i];
     if(!r[0]) continue;
@@ -210,15 +211,147 @@ function cardCoachSalaryAmount_(txnData, today){
     if((r[3] || "").toString().toLowerCase() !== "credit") continue;
     if((r[13] || "").toString().trim() !== "Income") continue;
     var a = Number(r[5]) || 0;
-    if(a > best) best = a;
+    if(a > 0) amounts.push(a);
   }
-  return best > 0 ? best : null;
+  if(!amounts.length) return null;
+  amounts.sort(function(x, y){ return y - x; });
+  return amounts.length >= 2 ? amounts[1] : amounts[0];
+}
+
+// ---------------------------------------------------------------------
+// The monthly budget behind "safe to put" (added 2026-10-18).
+//   cardRoom = monthlyIncome - committed - nonCardLiving   (money left each month for ALL card use)
+// Returns { monthlyIncome, committed, nonCardLiving, cardRoom } or null when the inputs are not trustworthy
+// (no usual income, under 14 days of history, or no idea what normal living costs).
+// ---------------------------------------------------------------------
+var CARD_COACH_MIN_HISTORY_DAYS_ = 14;
+
+function cardCoachBudget_(input, txnData, today, cycles, swipes){
+  var monthlyIncome = cardCoachSalaryAmount_(txnData, today);
+  if(!(monthlyIncome > 0)) return null;
+
+  // History: the person's first real row must be at least ~14 days old.
+  var first = null;
+  for(var i = 1; i < txnData.length; i++){
+    var r = txnData[i];
+    if(!r || !r[0]) continue;
+    var d = new Date(r[0]);
+    if(isNaN(d.getTime())) continue;
+    if(first === null || d < first) first = d;
+  }
+  (input.cashData || []).forEach(function(cr, ci){
+    if(ci === 0 || !cr || !cr[1]) return;
+    var cd = new Date(cr[1]);
+    if(!isNaN(cd.getTime()) && (first === null || cd < first)) first = cd;
+  });
+  if(first === null || (today - first) / 86400000 < CARD_COACH_MIN_HISTORY_DAYS_) return null;
+
+  var settings = input.settings || {};
+
+  // Committed every month: each named Rent/EMI/SIP once, plus the savings and investment goals from Settings.
+  var committed = (Number(settings.monthlySaveGoal) || 0) + (Number(settings.monthlyInvestmentGoal) || 0);
+  var seen = {};
+  (input.obligations || []).forEach(function(o){
+    if(!o || !o.enoughHistory || !(Number(o.avgAmount) > 0)) return;
+    var key = cardCoachNorm_(o.label);
+    if(seen[key]) return;
+    seen[key] = true;
+    committed += Number(o.avgAmount);
+  });
+
+  // No made-up fallback: with no usable closed month of REAL data the answer is "unknown" (Settings' monthlyExpenses default is a guess).
+  var living = cardCoachNonCardLiving_(input, txnData, today, cycles, first);
+  if(living === null) return null;
+
+  return { monthlyIncome: monthlyIncome, committed: committed, nonCardLiving: living, cardRoom: monthlyIncome - committed - living };
+}
+
+// Average monthly day-to-day spend NOT on the card, over the last up-to-3 CLOSED calendar months that have any data. null = no such month.
+// Left out (same exclusions as CC Advisor / Analysis): card swipes, credit card bill payments, wallet top-ups, loans, and Rent/EMI/SIP rows.
+// Cash-sheet debits (input.cashData) count as day-to-day spend. The person's FIRST data month is skipped unless their first row is on or before
+// day 7 of it (a part-month would understate a normal month and make the safe amount too high).
+function cardCoachNonCardLiving_(input, txnData, today, cycles, first){
+  // amounts that are really "a card bill was paid": each closed bill's total, each card's own total, for the last few cycles
+  var billAmounts = [];
+  for(var k = 0; k < 6; k++){
+    var w = cycles.closed(k), perCard = {}, total = 0;
+    for(var i = 1; i < txnData.length; i++){
+      var r = txnData[i];
+      if(!r || !r[0]) continue;
+      var d = new Date(r[0]);
+      if(isNaN(d.getTime()) || d < w.start || d > w.end) continue;
+      var mode = (r[4] || "").toString().toLowerCase().trim();
+      var amt = Number(r[5]) || 0;
+      if((r[3] || "").toString().toLowerCase() === "debit" && mode.indexOf("card") === 0 && amt > 0){
+        perCard[mode] = (perCard[mode] || 0) + amt;
+        total += amt;
+      }
+    }
+    if(total > 0){ billAmounts.push(total); Object.keys(perCard).forEach(function(c){ billAmounts.push(perCard[c]); }); }
+  }
+
+  var perMonth = {};    // "y-m" -> { hasData, living }
+  for(var j = 1; j < txnData.length; j++){
+    var row = txnData[j];
+    if(!row || !row[0]) continue;
+    var dt = new Date(row[0]);
+    if(isNaN(dt.getTime())) continue;
+    var key = dt.getFullYear() + "-" + dt.getMonth();
+    if(!perMonth[key]) perMonth[key] = { y: dt.getFullYear(), m: dt.getMonth(), living: 0 };
+    if((row[3] || "").toString().toLowerCase() !== "debit") continue;
+    var md = (row[4] || "").toString().toLowerCase().trim();
+    if(md.indexOf("card") === 0) continue;                                     // card swipes are counted separately (cycleSpent)
+    var full = Number(row[5]) || 0;
+    if(!(full > 0)) continue;
+    if((row[17] || "").toString().trim()) continue;                            // Rent / EMI / Investment: already in "committed"
+    var cp = row[7], note = row[12];
+    if(typeof isWalletTopUp === "function" && isWalletTopUp(cp, row[6])) continue;
+    if(typeof isLendingTransfer === "function" && isLendingTransfer(cp, note)) continue;
+    if(input.isBillWording && input.isBillWording(row[4], cp, note)) continue;
+    var isBill = false;
+    for(var b = 0; !isBill && b < billAmounts.length; b++){ if(Math.abs(full - billAmounts[b]) < 1) isBill = true; }
+    if(isBill) continue;
+    var mine = (typeof txnMyAmount_ === "function") ? (Number(txnMyAmount_(row)) || 0) : full;   // a split's friend part is not their spend
+    perMonth[key].living += mine;
+  }
+
+  // Cash debits: day-to-day cash spend (same lending exclusion as Analysis).
+  var cashData = input.cashData || [];
+  for(var q = 1; q < cashData.length; q++){
+    var cr = cashData[q];
+    if(!cr || !cr[1]) continue;
+    var cdate = new Date(cr[1]);
+    if(isNaN(cdate.getTime())) continue;
+    var ckey = cdate.getFullYear() + "-" + cdate.getMonth();
+    if(!perMonth[ckey]) perMonth[ckey] = { y: cdate.getFullYear(), m: cdate.getMonth(), living: 0 };
+    if((cr[3] || "").toString().toLowerCase() !== "debit") continue;
+    var camt = Number(cr[4]) || 0;
+    if(!(camt > 0)) continue;
+    if(typeof isLendingTransfer === "function" && isLendingTransfer("", cr[5])) continue;
+    perMonth[ckey].living += camt;
+  }
+  var firstKey = first.getFullYear() + "-" + first.getMonth();
+
+  // the most recent up-to-3 calendar months BEFORE this month that have any rows at all
+  var picked = [];
+  var y = today.getFullYear(), m = today.getMonth();
+  for(var back = 1; back <= 24 && picked.length < 3; back++){
+    var mm = m - back, yy = y;
+    while(mm < 0){ mm += 12; yy--; }
+    var rec = perMonth[yy + "-" + mm];
+    if(!rec) continue;
+    if((yy + "-" + mm) === firstKey && first.getDate() > 7) continue;      // partial first month: skipped
+    picked.push(rec.living);
+  }
+  if(!picked.length) return null;
+  return picked.reduce(function(a, c){ return a + c; }, 0) / picked.length;
 }
 
 // ---------------------------------------------------------------------
 // The coach block. input = {
 //   txnData, today (Date at midnight), limit,
 //   wantsLimitSetting (number, 0/unset = none),
+//   settings: { monthlySaveGoal, monthlyInvestmentGoal }  (the person's Settings; used by the monthly budget), cashData (Cash sheet rows),
 //   outstanding: { total, isPaid, isOverdue, daysUntilDue, dueDate (Date) } | null,   // the most recently closed bill
 //   runway: computeRunway_() output | null, obligations: computeObligationStatuses_() output | [],
 //   isBillWording: optional function(mode, counterparty, note) (older bills' payment detection)
@@ -282,28 +415,28 @@ function cardCoachCompute_(input){
   }
   var wantsOver = wantsLimit !== null ? Math.max(0, cardCoachRound2_(split.want - wantsLimit)) : null;
 
-  // Safe to put on the card (the formula is explained with a worked example in docs/features/card-coach.md).
+  // Safe to put on the card: a MONTHLY BUDGET view that does not use today's bank balance at all (rewritten 2026-10-18; the formula and a
+  // worked example are in docs/features/card-coach.md).
   var runway = input.runway || null;
   var out = input.outstanding || null;
-  var outUnpaid = (out && out.total > 0 && !out.isPaid) ? out.total : 0;
-  var safeToPut = null;
-  // A balance the person has not confirmed for over a week may be far off: a too-HIGH safe amount is the dangerous mistake, so go quiet (unknown) until they confirm it.
-  if(runway && !runway.askBalance && runway.estimatedBalance !== null && runway.estimatedBalance !== undefined && isFinite(runway.estimatedBalance)){
-    var billsAhead = Number(runway.billsAhead) || 0;
-    var cardBillCounted = (runway.bills || []).some(function(b){ return b.label === "Card bill"; });
-    var extraBill = cardBillCounted ? 0 : outUnpaid;                       // the closed bill reduces it exactly once
-    var horizon = (runway.daysToSalary !== null && runway.daysToSalary !== undefined) ? runway.daysToSalary : 30;
-    var living = (Number(runway.dailyPace) || 0) * horizon;
-    var free = runway.estimatedBalance - billsAhead - extraBill - living - cycleSpent;   // swipes already made reduce it once
-    var capRoom = CARD_COACH_CAP_PCT_ * limit - cycleSpent;                 // never suggest going past 30% of the limit
-    safeToPut = Math.round(Math.min(free, capRoom));
+  var budget = cardCoachBudget_(input, txnData, today, cycles, swipes);
+  var safeToPut = null, safeReason = "unknown", cardRoom = null, monthlyIncome = null;
+  if(budget){
+    monthlyIncome = Math.round(budget.monthlyIncome);
+    cardRoom = Math.round(budget.cardRoom);
+    // cardRoom can be below zero (the usual month leaves nothing for the card): treat that as 0 room, so a negative number only ever comes from swipes.
+    var room = Math.min(Math.max(budget.cardRoom, 0), CARD_COACH_CAP_PCT_ * limit);
+    safeToPut = Math.round(room - cycleSpent);
+    if(budget.cardRoom <= 0) safeReason = "budget_full";
+    else if(safeToPut < 0) safeReason = "over_by_swipes";
+    else safeReason = "ok";
   }
 
   var utilisationWatch = cycleSpent >= CARD_COACH_CAP_PCT_ * limit;
   var tone;
   if((safeToPut !== null && safeToPut < 0) || (wantsOver !== null && wantsOver > 0)) tone = "over";
   else if(safeToPut === null) tone = utilisationWatch ? "watch" : "unknown";
-  else if(safeToPut < CARD_COACH_WATCH_PCT_ * limit || utilisationWatch) tone = "watch";
+  else if(safeReason === "budget_full" || safeToPut < CARD_COACH_WATCH_PCT_ * limit || utilisationWatch) tone = "watch";
   else tone = "ok";
 
   // The closed bill and what is planned around it.
@@ -348,6 +481,9 @@ function cardCoachCompute_(input){
     suggestedWantsLimit: suggested,
     wantsOver: wantsOver,
     safeToPut: safeToPut,
+    safeReason: safeReason,
+    cardRoom: cardRoom,
+    monthlyIncome: monthlyIncome,
     safeUntil: cardCoachIso_(cur.due),
     tone: tone,
     utilisationWatch: utilisationWatch,
@@ -414,7 +550,7 @@ function cardCoachForPush_(txnData, cashData){
     }catch(ignoreMonth){}
     var g = cardCoachGather_(txnData, today, settings, outstanding, monthSpend);
     return getCardCoach_({
-      txnData: txnData, today: today, limit: settings.ccLimit, wantsLimitSetting: settings.cardWantsLimit,
+      txnData: txnData, today: today, limit: settings.ccLimit, wantsLimitSetting: settings.cardWantsLimit, settings: settings, cashData: cashData || [],
       outstanding: outstanding, runway: g.runway, obligations: g.obligations,
       isBillWording: (typeof isCreditCardBillWording_ === "function") ? isCreditCardBillWording_ : null
     });
@@ -448,7 +584,8 @@ function cardCoachPushLine_(coach, row){
     var name = cardCoachNorm_(row[7]);
     if(name && (coach.fixedMerchants || []).some(function(n){ return cardCoachNorm_(n) === name; })) return "";
     var amount = Number(row[5]) || 0;
-    if(coach.safeToPut >= 0) return "Safe left on card: " + cardCoachMoney_(coach.safeToPut) + ".";
+    if(coach.safeReason === "ok" && coach.safeToPut >= 0) return "Safe left on card: " + cardCoachMoney_(coach.safeToPut) + ".";
+    if(coach.safeReason !== "over_by_swipes" || !(coach.safeToPut < 0)) return "";   // "budget_full" / unknown: no line (nothing useful to say per swipe)
     var past = Math.min(amount, -coach.safeToPut);       // only the part of THIS swipe that is past the safe amount
     return "That is " + cardCoachMoney_(past) + " past your safe amount; it comes out of next salary.";
   }catch(e){ return ""; }

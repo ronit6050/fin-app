@@ -1402,7 +1402,7 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
       const coachOutstanding = { total: outstandingSummary.total, isPaid: outstandingPaid, isOverdue: isOverdue, daysUntilDue: daysUntilDue, dueDate: outstandingDueDate };
       const gathered = cardCoachGather_(data, today, settings, coachOutstanding, coachMonthSpend);
       coach = getCardCoach_({
-        txnData: data, today: today, limit: ccLimit, wantsLimitSetting: settings.cardWantsLimit,
+        txnData: data, today: today, limit: ccLimit, wantsLimitSetting: settings.cardWantsLimit, settings: settings, cashData: cashData,
         outstanding: coachOutstanding, runway: gathered.runway, obligations: gathered.obligations,
         isBillWording: isCreditCardBillWording_
       });

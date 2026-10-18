@@ -113,50 +113,140 @@ console.log("\n--- A4. Wants limit, suggestion and wantsOver ---");
   assert(tiny.suggestedWantsLimit === 1000, "never below 1,000: " + tiny.suggestedWantsLimit);
 }
 
-console.log("\n--- A5. Safe to put: positive, negative, unknown, the 30% cap, nothing counted twice ---");
+console.log("\n--- A5. Safe to put: the MONTHLY BUDGET view (2026-10-18 rewrite) ---");
 {
-  const swipes = [row(D(2026, 10, 22), 6000, { cp: "Shop A" })];     // S = 6,000 this cycle
-  const outstandingUnpaid = { total: 8000, isPaid: false, isOverdue: false, daysUntilDue: 15, dueDate: D(2026, 11, 9) };
-  const runway = function(balance, o){ return Object.assign({ estimatedBalance: balance, billsAhead: 15000, bills: [{ label: "Rent", amount: 15000, daysUntil: 3 }], dailyPace: 700, daysToSalary: 10, salaryDate: "2026-11-04" }, o || {}); };
-  // worked example: 60,000 - 15,000 (rent) - 8,000 (closed card bill, due after salary so the runway left it out) - 7,000 (10 days x 700) - 6,000 (swipes) = 24,000 free; 30% cap = 15,000 - 6,000 = 9,000
-  let c = coachOf(swipes, { runway: runway(60000), outstanding: outstandingUnpaid });
-  assert(c.safeToPut === 9000, "plenty of money: the 30% cap (9,000 = 15,000 - 6,000 already used) is the limit: " + c.safeToPut);
-  assert(c.utilisationWatch === false && c.tone === "watch", "9,000 left is under 20% of the limit (10,000): tone watch: " + c.tone);
-  c = coachOf([row(D(2026, 10, 22), 1000)], { runway: runway(200000) });
-  assert(c.safeToPut === 14000 && c.tone === "ok", "lots of room (cap 15,000 - 1,000 = 14,000): tone ok: " + c.safeToPut + " " + c.tone);
-  // 40,000 -> free = 4,000, below the cap
-  c = coachOf(swipes, { runway: runway(40000), outstanding: outstandingUnpaid });
-  assert(c.safeToPut === 4000 && c.tone === "watch", "less money: safe 4,000 and tone watch (under 20% of the limit): " + c.safeToPut + " " + c.tone);
-  // 30,000 -> free = -6,000: already over
-  c = coachOf(swipes, { runway: runway(30000), outstanding: outstandingUnpaid });
-  assert(c.safeToPut === -6000 && c.tone === "over", "already past the safe amount: negative and tone over: " + c.safeToPut + " " + c.tone);
-  // the closed card bill counted by the runway itself (due before salary) must NOT be subtracted a second time
-  c = coachOf(swipes, { runway: runway(60000, { billsAhead: 23000, bills: [{ label: "Rent", amount: 15000 }, { label: "Card bill", amount: 8000 }] }), outstanding: outstandingUnpaid });
-  assert(c.safeToPut === 9000, "a card bill the runway already counted is not subtracted again (24,000 free either way): " + c.safeToPut);
-  c = coachOf(swipes, { runway: runway(40000, { billsAhead: 23000, bills: [{ label: "Rent", amount: 15000 }, { label: "Card bill", amount: 8000 }] }), outstanding: outstandingUnpaid });
-  assert(c.safeToPut === 4000, "...same with less money (40,000 - 23,000 - 7,000 - 6,000 = 4,000): " + c.safeToPut);
-  // a PAID closed bill reduces nothing
-  c = coachOf(swipes, { runway: runway(40000), outstanding: Object.assign({}, outstandingUnpaid, { isPaid: true }) });
-  assert(c.safeToPut === 9000, "a paid closed bill is not subtracted (40,000 - 15,000 - 7,000 - 6,000 = 12,000, capped at 9,000): " + c.safeToPut);
-  // 30% cap: never suggests going past it, even with huge money
-  c = coachOf([row(D(2026, 10, 22), 14000)], { runway: runway(900000) });
-  assert(c.safeToPut === 1000, "never past 30%: 15,000 - 14,000 = 1,000 even with 9 lakh in the bank: " + c.safeToPut);
-  c = coachOf([row(D(2026, 10, 22), 16000)], { runway: runway(900000) });
-  assert(c.safeToPut === -1000 && c.tone === "over" && c.utilisationWatch === true, "already past 30% -> negative, over: " + c.safeToPut);
-  // unknown: no balance checkpoint / no runway
-  c = coachOf(swipes, { runway: Object.assign(runway(0), { estimatedBalance: null }) });
-  assert(c.safeToPut === null && c.tone === "unknown", "no balance checkpoint -> null and tone unknown: " + c.safeToPut + " " + c.tone);
-  c = coachOf(swipes);
-  assert(c.safeToPut === null && c.tone === "unknown", "no runway at all -> unknown");
-  c = coachOf([row(D(2026, 10, 22), 16000)]);
-  assert(c.safeToPut === null && c.tone === "watch" && c.utilisationWatch === true, "unknown money but 30% already used -> watch (this part needs no balance)");
-  // salary day unknown -> a 30-day horizon is assumed (more cautious)
-  c = coachOf(swipes, { runway: runway(60000, { daysToSalary: null, salaryDate: null }), outstanding: outstandingUnpaid });
-  assert(c.safeToPut === 9000, "unknown salary day: 30 days of living costs (21,000) assumed; free = 10,000, capped at 9,000: " + c.safeToPut);
-  c = coachOf(swipes, { runway: runway(50000, { daysToSalary: null, salaryDate: null }), outstanding: outstandingUnpaid });
-  assert(c.safeToPut === 0, "...and with 50,000 free is exactly 0: " + c.safeToPut);
-  c = coachOf(swipes, { runway: runway(60000, { daysToSalary: null, salaryDate: null }), outstanding: outstandingUnpaid });
-  assert(c.limitUsedPct === 12, "limitUsedPct is the cycle spend as a % of the limit (6,000 / 50,000): " + c.limitUsedPct);
+  // The person: 60,000 usual income (a credit on 1 Oct), Rent 15,000 a month, goals 5,000 + 3,000, ordinary non-card living 20,000 a month
+  // (Jul/Aug/Sep). cardRoom = 60,000 - (15,000 + 5,000 + 3,000) - 20,000 = 17,000. 30% of the limit (50,000) = 15,000.
+  const income = function(amount, date){ return row(date || D(2026, 10, 1), amount, { type: "credit", mode: "upi", cat: "Income", cp: "Employer" }); };
+  const livingRows = function(perMonth){
+    return [D(2026, 7, 5), D(2026, 8, 10), D(2026, 9, 10)].map(function(d){ return row(d, perMonth, { mode: "upi", cp: "Grocer", cat: "Food" }); });
+  };
+  const SETTINGS = { monthlySaveGoal: 5000, monthlyInvestmentGoal: 3000, monthlyExpenses: 30000 };
+  const OBL = [{ label: "Rent", enoughHistory: true, avgAmount: 15000 }];
+  const swipes = [row(D(2026, 10, 22), 6000, { cp: "Shop A" })];                 // 6,000 swiped this cycle
+  const base = function(rows, extra){ return coachOf(rows, Object.assign({ settings: SETTINGS, obligations: OBL }, extra || {})); };
+  const hist = livingRows(20000).concat([income(60000)]);
+
+  // (1) a normal month: positive and calm
+  let c = base(hist.concat(swipes));
+  assert(c.monthlyIncome === 60000 && c.cardRoom === 17000, "income 60,000 and card room 17,000: " + c.monthlyIncome + " / " + c.cardRoom);
+  assert(c.safeToPut === 9000 && c.safeReason === "ok", "min(17,000 room, 15,000 cap) - 6,000 swiped = 9,000, reason ok: " + c.safeToPut + " " + c.safeReason);
+  assert(c.tone === "watch", "9,000 is under 20% of the limit (10,000): watch: " + c.tone);
+  c = base(livingRows(20000).concat([income(90000)], [row(D(2026, 10, 22), 1000)]));
+  assert(c.safeToPut === 14000 && c.tone === "ok" && c.safeReason === "ok", "lots of room: 15,000 cap - 1,000 = 14,000, tone ok: " + c.safeToPut + " " + c.tone);
+
+  // (2) the 30% cap: a huge income never raises it
+  c = base(livingRows(1000).concat([income(900000)]));
+  assert(c.safeToPut === 15000 && c.cardRoom > 800000, "never past 30% of the limit (15,000) however big the room: " + c.safeToPut);
+
+  // (3) swipes push it negative -> over_by_swipes
+  c = base(livingRows(32000).concat([income(60000)], swipes));         // cardRoom 60,000 - 23,000 - 32,000 = 5,000; swiped 6,000
+  assert(c.cardRoom === 5000 && c.safeToPut === -1000 && c.safeReason === "over_by_swipes" && c.tone === "over", "room 5,000 minus 6,000 swiped: -1,000, over_by_swipes, over: " + JSON.stringify([c.cardRoom, c.safeToPut, c.safeReason, c.tone]));
+  c = base(hist.concat([row(D(2026, 10, 22), 16000)]));
+  assert(c.safeToPut === -1000 && c.safeReason === "over_by_swipes" && c.utilisationWatch === true, "past the 30% cap by swiping 16,000: -1,000: " + c.safeToPut + " " + c.safeReason);
+
+  // (4) budget_full: the usual month leaves nothing for the card; zero swipes must NOT give an alarming negative number
+  c = base(livingRows(40000).concat([income(60000)]));                 // 60,000 - 23,000 - 40,000 = -3,000
+  assert(c.cardRoom === -3000 && c.safeToPut === 0 && c.safeReason === "budget_full" && c.cycleSpent === 0, "no room, nothing swiped: safe amount 0 (not negative), budget_full: " + JSON.stringify([c.cardRoom, c.safeToPut, c.safeReason]));
+  assert(c.tone === "watch", "...and the tone is a calm 'watch', not 'over': " + c.tone);
+  c = base(livingRows(40000).concat([income(60000), row(D(2026, 10, 22), 500)]));
+  assert(c.safeToPut === -500 && c.safeReason === "budget_full" && c.tone === "over", "no room and 500 swiped: -500 (only because of the swipe), still budget_full: " + c.safeToPut + " " + c.safeReason);
+
+  // (5) unknown when the inputs cannot be trusted
+  c = base(livingRows(20000).concat(swipes));
+  assert(c.safeToPut === null && c.tone === "unknown" && c.safeReason === "unknown" && c.monthlyIncome === null && c.cardRoom === null, "no income at all -> unknown: " + JSON.stringify([c.safeToPut, c.tone, c.safeReason]));
+  c = base(livingRows(20000).concat([income(60000, D(2026, 7, 20))]));      // 97 days ago: not 'usual' any more
+  assert(c.safeToPut === null && c.safeReason === "unknown", "an income older than 70 days does not count -> unknown");
+  c = base([income(60000, D(2026, 10, 12)), row(D(2026, 10, 13), 400, { mode: "upi" })]);
+  assert(c.safeToPut === null && c.safeReason === "unknown", "first row only 13 days old -> unknown: " + c.safeToPut);
+  c = base([income(60000, D(2026, 10, 11)), row(D(2026, 10, 13), 400, { mode: "upi" })]);
+  assert(c.safeToPut === null && c.safeReason === "unknown", "14 days of history but no closed month of real data: unknown, the Settings expenses default (30,000) is NOT used as a stand-in: " + c.safeToPut);
+  c = base([income(60000, D(2026, 10, 11))], { settings: { monthlySaveGoal: 1000, monthlyInvestmentGoal: 0, monthlyExpenses: 30000 } });
+  assert(c.safeToPut === null, "a friend with only default settings and no history -> unknown");
+  c = base([]);
+  assert(c.safeToPut === null && c.tone === "unknown" && c.safeReason === "unknown" && c.cardRoom === null && c.monthlyIncome === null, "a friend with no data at all sees no number: " + JSON.stringify([c.safeToPut, c.tone, c.safeReason]));
+  c = coachOf([], { settings: { monthlyExpenses: 30000 } });
+  assert(c.safeToPut === null && c.tone === "unknown", "...even if a typed-in Settings number exists");
+  c = coachOf([], { runway: { estimatedBalance: 500000, billsAhead: 0, bills: [], dailyPace: 0, daysToSalary: 5 } });
+  assert(c.safeToPut === null && c.tone === "unknown", "...and a typed bank balance alone never creates a number");
+
+  // (6) today's bank balance (stale or not) is irrelevant
+  const rw = function(balance, o){ return Object.assign({ estimatedBalance: balance, billsAhead: 15000, bills: [{ label: "Rent", amount: 15000 }], dailyPace: 700, daysToSalary: 10, salaryDate: "2026-11-04" }, o || {}); };
+  const a1 = base(hist.concat(swipes), { runway: rw(5000) }), a2 = base(hist.concat(swipes), { runway: rw(900000) }), a3 = base(hist.concat(swipes), { runway: rw(null, { askBalance: true }) }), a4 = base(hist.concat(swipes));
+  assert(a1.safeToPut === 9000 && a2.safeToPut === 9000 && a3.safeToPut === 9000 && a4.safeToPut === 9000, "5,000 / 9 lakh / stale / no balance all give the same 9,000: " + [a1, a2, a3, a4].map(function(x){ return x.safeToPut; }));
+
+  // (7) nothing counted twice: card swipes only once (cycleSpent); the non-card living leaves out card rows, bill payments and fixed events
+  const withCardHistory = hist.concat([row(D(2026, 9, 5), 30000, { cp: "Big Card Spend" }), row(D(2026, 8, 5), 4000, { cp: "Card Spend 2" })]);
+  c = base(withCardHistory.concat(swipes));
+  assert(c.cardRoom === 17000, "card swipes in earlier months do not change the non-card living: " + c.cardRoom);
+  const billPaid = withCardHistory.concat([row(D(2026, 9, 9), 30000, { mode: "upi", cp: "Some Bank", cat: "Bills" })]);   // exact size of the Sep card bill
+  c = base(billPaid, {});
+  assert(c.cardRoom === 17000, "a UPI payment equal to a card bill is a bill payment, not living: " + c.cardRoom);
+  const wording = hist.concat([row(D(2026, 9, 9), 7777, { mode: "upi", cp: "x", note: "credit card bill" })]);
+  c = base(wording, { isBillWording: function(m, cp, n){ return /credit card/i.test(String(cp) + " " + String(n)); } });
+  assert(c.cardRoom === 17000, "a payment worded as a credit card bill is left out: " + c.cardRoom);
+  const events = hist.concat([row(D(2026, 9, 3), 15000, { mode: "upi", cp: "Landlord", event: "Rent" })]);
+  c = base(events);
+  assert(c.cardRoom === 17000, "a Rent/EMI/SIP row is committed, not living (no double count): " + c.cardRoom);
+  const noSwipe = base(hist), oneSwipe = base(hist.concat([row(D(2026, 10, 23), 2500)]));
+  assert(noSwipe.safeToPut - oneSwipe.safeToPut === 2500, "a card swipe lowers the safe amount exactly once: " + noSwipe.safeToPut + " -> " + oneSwipe.safeToPut);
+  const dup = base(hist.concat(swipes), { obligations: OBL.concat([{ label: "Rent", enoughHistory: true, avgAmount: 15000 }, { label: "New", enoughHistory: false, avgAmount: 9999 }]) });
+  assert(dup.cardRoom === 17000, "an obligation listed twice counts once; one without enough history is ignored: " + dup.cardRoom);
+  const splitRow = row(D(2026, 9, 12), 5000, { mode: "upi", cp: "Dinner" }); while(splitRow.length < 21) splitRow.push(""); splitRow[20] = 3000;
+  const sb2 = pureSandbox(); sb2.txnMyAmount_ = function(r){ return (Number(r[5]) || 0) - (Number(r[20]) || 0); };
+  const cSplit = sb2.getCardCoach_({ txnData: [HEADER].concat(hist, [splitRow]), today: TODAY, limit: LIMIT, wantsLimitSetting: 0, outstanding: null, runway: null, obligations: OBL, settings: SETTINGS });
+  assert(cSplit.cardRoom === 17000 - Math.round(2000 / 3), "only the person's own share of a split counts as their living (2,000 of 5,000, averaged over 3 months): " + cSplit.cardRoom);
+
+  // (8) the average uses the last up-to-3 CLOSED calendar months with data (this month is not counted yet)
+  c = base(hist.concat([row(D(2026, 10, 3), 90000, { mode: "upi", cp: "Big one" })]));
+  assert(c.cardRoom === 17000, "this month's own spending is not part of the average: " + c.cardRoom);
+  c = base(livingRows(20000).slice(0, 2).concat([income(60000), row(D(2026, 6, 5), 50000, { mode: "upi", cp: "Too old" })]));
+  assert(c.cardRoom === 7000, "Sep has no rows, so Aug, Jul and Jun are averaged: (20,000 + 20,000 + 50,000) / 3 = 30,000 -> room 7,000: " + c.cardRoom);
+}
+
+console.log("\n--- A5c. Too-HIGH guards: partial first month, cash spend, one-off bonus ---");
+{
+  const income = function(amount, date){ return row(date || D(2026, 10, 1), amount, { type: "credit", mode: "upi", cat: "Income", cp: "Employer" }); };
+  const S = { monthlySaveGoal: 5000, monthlyInvestmentGoal: 3000 };
+  const mk = function(rows, extra){ return coachOf(rows, Object.assign({ settings: S, obligations: [{ label: "Rent", enoughHistory: true, avgAmount: 15000 }] }, extra || {})); };
+  const up = function(d, a){ return row(d, a, { mode: "upi", cp: "Grocer" }); };
+  // partial first month: first row on 20 Aug -> Aug is skipped (a part-month would look cheap); Sep + (Oct is the current month)
+  let c = mk([up(D(2026, 8, 20), 2000), up(D(2026, 9, 10), 20000), income(60000)]);
+  assert(c.cardRoom === 60000 - 23000 - 20000, "first row after day 7 of its month: that month is skipped, only September (20,000) is used: " + c.cardRoom);
+  c = mk([up(D(2026, 8, 7), 2000), up(D(2026, 9, 10), 20000), income(60000)]);
+  assert(c.cardRoom === 60000 - 23000 - 11000, "first row on day 7: that month counts, (2,000 + 20,000) / 2 = 11,000: " + c.cardRoom);
+  c = mk([up(D(2026, 9, 20), 2000), income(60000)]);
+  assert(c.safeToPut === null, "only a partial first month -> no usable month -> unknown");
+  // cash debits count as day-to-day spend; cash credits and lending words do not
+  const cash = function(d, type, amt, note){ return ["id", d, "10:00", type, amt, note || "chai", "Food"]; };
+  const CH = ["ID", "Date", "Time", "Type", "Amount", "Note", "Category"];
+  const base3 = [up(D(2026, 7, 5), 20000), up(D(2026, 8, 10), 20000), up(D(2026, 9, 10), 20000), income(60000)];
+  c = mk(base3, { cashData: [CH, cash(D(2026, 7, 12), "debit", 3000), cash(D(2026, 8, 12), "debit", 3000), cash(D(2026, 9, 12), "debit", 3000), cash(D(2026, 9, 13), "credit", 9999), cash(D(2026, 10, 3), "debit", 99999)] });
+  assert(c.cardRoom === 60000 - 23000 - 23000, "cash debits (3,000 a month) are living; cash credits and this month's cash are not: " + c.cardRoom);
+  c = mk(base3, { cashData: [CH] });
+  assert(c.cardRoom === 17000, "an empty cash sheet changes nothing: " + c.cardRoom);
+  // a one-off bonus can never become salary
+  c = mk(base3.slice(0, 3).concat([income(60000, D(2026, 10, 1)), income(150000, D(2026, 9, 28))]));
+  assert(c.monthlyIncome === 60000, "two Income credits (60,000 and a 150,000 bonus): the second-largest is used: " + c.monthlyIncome);
+  c = mk(base3.slice(0, 3).concat([income(60000, D(2026, 10, 1)), income(5000, D(2026, 9, 28))]));
+  assert(c.monthlyIncome === 5000, "salary paid in two parts is understated (second-largest) - the safe direction: " + c.monthlyIncome);
+  assert(mk(base3).monthlyIncome === 60000, "a single Income credit is used as is");
+}
+
+console.log("\n--- A5b. Month rollover: January looks at Dec, Nov, Oct ---");
+{
+  const NOW = D(2027, 1, 10);                              // cycle 19 Dec - 18 Jan, due 9 Feb
+  const rows = [
+    row(D(2026, 10, 5), 9000, { mode: "upi" }), row(D(2026, 11, 8), 12000, { mode: "upi" }), row(D(2026, 12, 8), 15000, { mode: "upi" }),
+    row(D(2027, 1, 3), 99000, { mode: "upi" }),               // this month: not in the average
+    row(D(2026, 12, 28), 70000, { type: "credit", mode: "upi", cat: "Income", cp: "Employer" }),
+    row(D(2027, 1, 5), 3000)                                   // a card swipe in the running cycle
+  ];
+  const c = P.getCardCoach_({ txnData: [HEADER].concat(rows), today: NOW, limit: LIMIT, wantsLimitSetting: 0, outstanding: null, runway: null, obligations: [], settings: { monthlySaveGoal: 1000, monthlyInvestmentGoal: 0, monthlyExpenses: 30000 } });
+  assert(c.monthlyIncome === 70000, "income from late December is found across the new year: " + c.monthlyIncome);
+  assert(c.cardRoom === 70000 - 1000 - 12000, "living = average of Oct, Nov, Dec (9,000 / 12,000 / 15,000 = 12,000): " + c.cardRoom);
+  assert(c.safeToPut === 15000 - 3000 && c.safeReason === "ok", "cap 15,000 - 3,000 swiped: " + c.safeToPut);
+  assert(c.safeUntil === "2027-02-09", "bill due 9 Feb: " + c.safeUntil);
 }
 
 console.log("\n--- A6. The closed bill and the plan around it ---");
@@ -208,23 +298,26 @@ console.log("\n--- A8. Any failure -> null ---");
   assert(P.getCardCoach_(null) === null && P.getCardCoach_({}) === null, "no input -> null");
   assert(P.getCardCoach_({ txnData: [HEADER, null], today: TODAY, limit: LIMIT }) === null, "a broken row -> null, no throw");
   assert(P.getCardCoach_({ txnData: [HEADER], today: TODAY, limit: 0 }) === null, "no limit -> null");
-  assert(P.getCardCoach_({ txnData: [HEADER], today: TODAY, limit: LIMIT, runway: { get estimatedBalance(){ throw new Error("boom"); } } }) === null, "a runway that explodes -> null");
+  assert(P.getCardCoach_({ txnData: [HEADER], today: TODAY, limit: LIMIT, outstanding: { total: 100, isPaid: false, isOverdue: false, daysUntilDue: 5, dueDate: D(2026, 11, 9) }, runway: { get estimatedBalance(){ throw new Error("boom"); } } }) === null, "a runway that explodes -> null");
 }
 
 console.log("\n--- B. The notification line ---");
 {
-  const coach = function(o){ return Object.assign({ safeToPut: 8200, tone: "ok", fixedMerchants: ["Netflix"] }, o || {}); };
+  const coach = function(o){ return Object.assign({ safeToPut: 8200, tone: "ok", safeReason: "ok", fixedMerchants: ["Netflix"] }, o || {}); };
+  const over = function(n){ return coach({ safeToPut: n, tone: "over", safeReason: "over_by_swipes" }); };
   const swipe = function(o){ o = o || {}; const r = row(D(2026, 10, 25), o.amount === undefined ? 1500 : o.amount, { cp: o.cp === undefined ? "Mall" : o.cp, mode: o.mode || "card 1264", type: o.type, event: o.event }); if(o.ref) r[6] = o.ref; return r; };
   assert(P.cardCoachPushLine_(coach(), swipe()) === "Safe left on card: ₹8,200.", "room left: 'Safe left on card: ₹8,200.'");
   assert(P.cardCoachPushLine_(coach({ safeToPut: 0 }), swipe()) === "Safe left on card: ₹0.", "exactly zero is still 'safe left' (₹0)");
-  assert(P.cardCoachPushLine_(coach({ safeToPut: -400 }), swipe({ amount: 1500 })) === "That is ₹400 past your safe amount; it comes out of next salary.", "this swipe pushed it 400 below zero");
-  assert(P.cardCoachPushLine_(coach({ safeToPut: -3000 }), swipe({ amount: 1500 })) === "That is ₹1,500 past your safe amount; it comes out of next salary.", "already over before: only THIS swipe's part is 'past' (1,500)");
+  assert(P.cardCoachPushLine_(over(-400), swipe({ amount: 1500 })) === "That is ₹400 past your safe amount; it comes out of next salary.", "this swipe pushed it 400 below zero");
+  assert(P.cardCoachPushLine_(over(-3000), swipe({ amount: 1500 })) === "That is ₹1,500 past your safe amount; it comes out of next salary.", "already over before: only THIS swipe's part is 'past' (1,500)");
   assert(P.cardCoachPushLine_(coach(), swipe({ amount: 199 })) === "" && P.cardCoachPushLine_(coach(), swipe({ amount: 200 })) !== "", "under Rs 200 stays silent; 200 gets a line");
   assert(P.cardCoachPushLine_(coach(), swipe({ cp: "NETFLIX 2" })) === "", "a recurring (fixed) merchant stays silent");
   assert(P.cardCoachPushLine_(coach(), swipe({ event: "EMI" })) === "", "a row already marked Rent/EMI/SIP stays silent");
   assert(P.cardCoachPushLine_(coach(), swipe({ mode: "upi" })) === "" && P.cardCoachPushLine_(coach(), swipe({ type: "credit" })) === "", "UPI and credits stay silent");
   assert(P.cardCoachPushLine_(coach({ safeToPut: null, tone: "unknown" }), swipe()) === "" && P.cardCoachPushLine_(null, swipe()) === "", "unknown money picture / no coach -> silent");
-  const line = P.cardCoachPushLine_(coach({ safeToPut: -400 }), swipe());
+  assert(P.cardCoachPushLine_(coach({ safeToPut: 0, tone: "watch", safeReason: "budget_full" }), swipe()) === "" && P.cardCoachPushLine_(coach({ safeToPut: -500, tone: "over", safeReason: "budget_full" }), swipe()) === "", "budget_full (the usual month leaves no room): no line either way, never the \"past your safe amount\" wording");
+  assert(P.cardCoachPushLine_(coach({ safeToPut: -400, safeReason: "ok" }), swipe()) === "" && P.cardCoachPushLine_(coach({ safeToPut: 400, safeReason: "over_by_swipes" }), swipe()) === "", "the \"past\" wording needs reason over_by_swipes AND a negative amount");
+  const line = P.cardCoachPushLine_(over(-400), swipe());
   assert(!/(should|shouldn't|guilty|bad|careful|stop|overspent|blame)/i.test(line), "calm wording, no guilt words: " + line);
 }
 
@@ -260,9 +353,17 @@ function world(rows, opts){
   return w;
 }
 
+// A person with a usual income and 3 earlier months of ordinary (non-card) spending, so the coach has a trustworthy monthly budget.
+function budgetHistory(){
+  return [
+    row(D(2026, 10, 1), 60000, { type: "credit", mode: "upi", cat: "Income", cp: "Employer" }),
+    row(D(2026, 7, 5), 10000, { mode: "upi", cp: "Grocer" }), row(D(2026, 8, 10), 10000, { mode: "upi", cp: "Grocer" }), row(D(2026, 9, 10), 10000, { mode: "upi", cp: "Grocer" })
+  ];
+}
+
 console.log("\n--- C. getCCAdvisorData carries `coach` and is otherwise unchanged ---");
 {
-  const rows = [row(inClosed0, 3000, { cp: "Shop A" }), row(inCurrent, 1200, { cp: "Shop B", tag: "Want" })];
+  const rows = budgetHistory().concat([row(inClosed0, 3000, { cp: "Shop A" }), row(inCurrent, 1200, { cp: "Shop B", tag: "Want" })]);
   const withCoach = world(rows, { checkpoint: 90000 });
   const a = withCoach.sb.getCCAdvisorData(withCoach.sheets.Transactions.getDataRange().getValues(), [[]], { fixedObligations: 0, invested: 0, totalDebit: 20000 }, 0);
   const noCoachFiles = FILES.filter(function(f){ return f !== "cardCoach.js"; });
@@ -273,7 +374,8 @@ console.log("\n--- C. getCCAdvisorData carries `coach` and is otherwise unchange
   const b = bare.sb.getCCAdvisorData(bare.sheets.Transactions.getDataRange().getValues(), [[]], { fixedObligations: 0, invested: 0, totalDebit: 20000 }, 0);
   assert(a.coach && a.coach.cycleSpent === 1200 && a.coach.split.want === 1200, "coach is present and counts this cycle's swipe: " + JSON.stringify(a.coach && a.coach.split));
   assert(a.coach.bill && a.coach.bill.amount === 3000, "and the closed bill (3,000)");
-  assert(typeof a.coach.safeToPut === "number", "with a balance checkpoint the safe amount is a number: " + a.coach.safeToPut);
+  assert(typeof a.coach.safeToPut === "number" && a.coach.safeReason === "ok" && a.coach.monthlyIncome === 60000, "with an income and history the safe amount is a number: " + a.coach.safeToPut + " " + a.coach.safeReason);
+  assert(a.coach.cardRoom === 60000 - 1000 - 10000 && a.coach.safeToPut === 15000 - 1200, "real settings flow in (save goal 1,000, living 10,000): room " + a.coach.cardRoom + ", safe " + a.coach.safeToPut);
   const strip = function(x){ const c = JSON.parse(JSON.stringify(x)); delete c.coach; return JSON.stringify(c); };
   if(strip(a) !== strip(b)){ const x = JSON.parse(strip(a)), y = JSON.parse(strip(b)); Object.keys(x).forEach(function(k){ if(JSON.stringify(x[k]) !== JSON.stringify(y[k])) console.log("DIFF key", k, JSON.stringify(x[k]).slice(0, 200), JSON.stringify(y[k]).slice(0, 200)); }); }
   assert(b.coach === null && strip(a) === strip(b), "everything else in the result is byte-identical to before");
@@ -294,12 +396,14 @@ console.log("\n--- D. The real notification built by the timer ---");
     w.sb.processNewTransactions();
     return w.pushes.filter(function(p){ return /New Transaction/.test(p.title); });
   };
-  const history = [row(inClosed0, 500, { cp: "Old Shop" })];
+  const history = budgetHistory().concat([row(inClosed0, 500, { cp: "Old Shop" })]);
   let pushes = run(history.concat([newRow(1500)]), { checkpoint: 120000 });
-  assert(pushes.length === 1 && /Safe left on card: ₹[\d,]+\./.test(pushes[0].body), "a card swipe's push carries the safe-left line: " + (pushes[0] && pushes[0].body.replace(/\n/g, " / ")));
+  assert(pushes.length === 1 && /Safe left on card: ₹13,500\./.test(pushes[0].body), "a card swipe's push carries the safe-left line: " + (pushes[0] && pushes[0].body.replace(/\n/g, " / ")));
   assert(pushes[0].body.split("\n").length === 2 || /Save as|Tap to save/.test(pushes[0].body), "one extra line only");
+  pushes = run([row(inClosed0, 500, { cp: "Old Shop" }), newRow(1500)], {});
+  assert(pushes.length === 1 && !/Safe left|past your safe/.test(pushes[0].body), "no usual income / history -> the push is exactly as before (no extra line)");
   pushes = run(history.concat([newRow(1500)]), {});
-  assert(pushes.length === 1 && !/Safe left|past your safe/.test(pushes[0].body), "no balance checkpoint -> the push is exactly as before (no extra line)");
+  assert(pushes.length === 1 && /Safe left on card: ₹13,500\./.test(pushes[0].body), "no bank balance checkpoint is needed any more: the push still carries the line");
   pushes = run(history.concat([newRow(150)]), { checkpoint: 120000 });
   assert(pushes.length === 1 && !/Safe left|past your safe/.test(pushes[0].body), "a tiny swipe (under Rs 200) -> no extra line");
   pushes = run(history.concat([newRow(1500, { mode: "upi" })]), { checkpoint: 120000 });
