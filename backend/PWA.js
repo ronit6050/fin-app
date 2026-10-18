@@ -170,6 +170,12 @@ function pwaDispatch_(data, verified){
     return jsonResponse({ ok:true, analysis: getMonthlyAnalysis(data.year, data.month) });
   }
 
+  if(data.action === "getAnalysisExtras"){
+    const extras = getAnalysisExtras(data.year, data.month);
+    if(extras && extras.ok === false) return jsonResponse(extras);
+    return jsonResponse({ ok:true, extras: extras });
+  }
+
   if(data.action === "getCCAdvisor"){
     return jsonResponse({ ok:true, cc: getCCAdvisorData() });
   }
@@ -1326,6 +1332,53 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
   };
 }
 
+// ---------------------------------------------------------------------
+// Analysis "detail" (added 2026-10-18, Analysis makeover): the raw material
+// for the Day-by-day chart, Top places, Your week and Biggest payments.
+// Accumulated inside getMonthlyAnalysis's own debit branch, so it follows
+// EXACTLY the same exclusion rules as the spend total (CC bill payments,
+// wallet top-ups, loans, Rent/EMI/SIP never get in). One accumulator for
+// "All" and one per Bank/Card/Wallet bucket.
+// ---------------------------------------------------------------------
+function analysisDetailNew_(){
+  return { daily: {}, merchants: {}, smallCount: 0, smallTotal: 0, top: [] };
+}
+var ANALYSIS_SMALL_PAYMENT_LIMIT_ = 100;   // "small things add up": payments under this
+function analysisDetailAdd_(acc, day, placeLabel, noteLabel, category, amount, dateStr){
+  acc.daily[day] = (acc.daily[day] || 0) + amount;
+  const place = (placeLabel || "").toString().trim();
+  if(place){
+    const key = place.toLowerCase();
+    if(!acc.merchants[key]) acc.merchants[key] = { name: place, amount: 0, count: 0 };
+    acc.merchants[key].amount += amount;
+    acc.merchants[key].count += 1;
+  }
+  if(amount > 0 && amount < ANALYSIS_SMALL_PAYMENT_LIMIT_){ acc.smallCount += 1; acc.smallTotal += amount; }
+  acc.top.push({ label: (noteLabel || place || category || "").toString(), category: category, amount: amount, date: dateStr });
+  if(acc.top.length > 40){ // keep memory small: only the biggest few ever matter
+    acc.top.sort(function(a, b){ return b.amount - a.amount; });
+    acc.top.length = 10;
+  }
+}
+function finalizeAnalysisDetail_(acc, year, month){
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const daily = [];
+  for(let day = 1; day <= daysInMonth; day++){ daily.push(Math.round((acc.daily[day] || 0) * 100) / 100); }
+  const places = Object.keys(acc.merchants).map(function(k){ return acc.merchants[k]; })
+    .sort(function(a, b){ return b.amount - a.amount; }).slice(0, 8)
+    .map(function(m){ return { name: m.name, amount: Math.round(m.amount * 100) / 100, count: m.count }; });
+  const biggest = acc.top.slice().sort(function(a, b){ return b.amount - a.amount; }).slice(0, 5);
+  return {
+    daysInMonth: daysInMonth,
+    daily: daily,
+    places: places,
+    smallCount: acc.smallCount,
+    smallTotal: Math.round(acc.smallTotal * 100) / 100,
+    smallLimit: ANALYSIS_SMALL_PAYMENT_LIMIT_,
+    biggest: biggest
+  };
+}
+
 // Works out which payment-mode bucket a Transactions row's Mode value
 // falls into, for the Analysis screen's All/Bank/Card/Wallet toggle
 // (added 2026-08-17). Same "card" test already used by
@@ -1358,14 +1411,15 @@ function freshModeBucket(){
     untaggedCount: 0,
     fixedObligations: 0,
     invested: 0,
-    incomeItems: []   // every credit counted in totalCredit, for the Analysis "what is in my income" panel
+    incomeItems: [],  // every credit counted in totalCredit, for the Analysis "what is in my income" panel
+    detail: analysisDetailNew_()   // day-by-day / places / biggest payments (added 2026-10-18)
   };
 }
 
 // Turns one bucket's raw accumulators into the same response shape
 // getMonthlyAnalysis already returns at the top level (categories,
 // needWantSaving, etc.) — used for bank/card/wallet in `byMode` below.
-function finalizeModeBucket(bucket){
+function finalizeModeBucket(bucket, year, month){
   const savings = bucket.totalCredit - bucket.totalDebit;
   const days = Object.keys(bucket.dailyTotals).length || 1;
   const avgDaily = Math.round(bucket.totalDebit / days);
@@ -1389,6 +1443,7 @@ function finalizeModeBucket(bucket){
     fixedObligations: bucket.fixedObligations,
     invested:         bucket.invested,
     incomeItems:      bucket.incomeItems.slice().sort(function(a, b){ return b.amount - a.amount; }),
+    detail:           finalizeAnalysisDetail_(bucket.detail, year, month),
     needWantSaving: {
       need:           bucket.typeTotals.Need,
       want:           bucket.typeTotals.Want,
@@ -1409,7 +1464,7 @@ function finalizeModeBucket(bucket){
 // Analysis screen's All/Bank/Card/Wallet toggle. Everything above this
 // note (the "all" numbers) is completely unchanged.
 // txnData/cashData are optional — see getCashData's comment, same reasoning.
-function getMonthlyAnalysis(year, month, txnData, cashData){
+function getMonthlyAnalysis(year, month, txnData, cashData, opts){
   const ss = dbSs_();
 
   txnData  = txnData  || ss.getSheetByName("Transactions").getDataRange().getValues();
@@ -1440,6 +1495,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   let fixedObligations = 0;
   let invested = 0;
   const incomeItems = []; // see freshModeBucket: lets the app show what makes up the Income figure
+  const detailAll = analysisDetailNew_(); // see analysisDetailNew_ (added 2026-10-18)
 
   // Bank/Card/Wallet buckets — Transactions rows only, Cash never
   // contributes (see function comment above).
@@ -1514,6 +1570,10 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
           date:   Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM")
         });
 
+        const detailDate = Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM");
+        analysisDetailAdd_(detailAll, day, counterparty || note, note || counterparty, category, amount, detailDate);
+        analysisDetailAdd_(modeBucket.detail, day, counterparty || note, note || counterparty, category, amount, detailDate);
+
         const savedType = (txnData[i][16] || "").toString().trim(); // column Q
         if(typeTotals.hasOwnProperty(savedType)){
           typeTotals[savedType] += amount;
@@ -1580,6 +1640,9 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
           date:   Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM")
         });
 
+        analysisDetailAdd_(detailAll, day, cashNote || "Cash", cashNote || "Cash Spend", category, amount,
+          Utilities.formatDate(d, Session.getScriptTimeZone(), "dd MMM"));
+
         const savedType = (cashData[i][10] || "").toString().trim(); // column K
         if(typeTotals.hasOwnProperty(savedType)){
           typeTotals[savedType] += amount;
@@ -1608,7 +1671,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   // something you DO on purpose, not whatever is left over after spending.
   let saved = 0;
   try{
-    const savSheet = ss.getSheetByName("Savings");
+    const savSheet = (opts && opts.skipSaved) ? null : ss.getSheetByName("Savings"); // the 6-month trend skips this read
     if(savSheet){
       // One shared rule (savingsGoals.js) so the Savings tab's "this month" can never disagree with this.
       saved = savingsMonthNet_(savSheet.getDataRange().getValues().slice(1), year, month);
@@ -1616,7 +1679,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
   }catch(savedErr){ saved = 0; }
   // The monthly saving goal from Settings, shown next to it ("Saved X of Y").
   let savingGoal = 0;
-  try{ if(typeof getSettings === "function") savingGoal = Number(getSettings().monthlySaveGoal) || 0; }catch(goalErr){ savingGoal = 0; }
+  try{ if(!(opts && opts.skipSaved) && typeof getSettings === "function") savingGoal = Number(getSettings().monthlySaveGoal) || 0; }catch(goalErr){ savingGoal = 0; }
 
   const categories = Object.entries(categoryTotals)
     .sort(function(a, b){ return b[1] - a[1]; })
@@ -1642,6 +1705,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
     saved:            saved,
     savingGoal:       savingGoal,
     incomeItems:      incomeItems.sort(function(a, b){ return b.amount - a.amount; }),
+    detail:           finalizeAnalysisDetail_(detailAll, year, month),
     needWantSaving: {
       need:           typeTotals.Need,
       want:           typeTotals.Want,
@@ -1656,9 +1720,9 @@ function getMonthlyAnalysis(year, month, txnData, cashData){
     // everything above, computed separately per payment-mode bucket.
     // Cash never appears here (see bucketKeyForMode's comment).
     byMode: {
-      bank:   finalizeModeBucket(modeBuckets.bank),
-      card:   finalizeModeBucket(modeBuckets.card),
-      wallet: finalizeModeBucket(modeBuckets.wallet)
+      bank:   finalizeModeBucket(modeBuckets.bank, year, month),
+      card:   finalizeModeBucket(modeBuckets.card, year, month),
+      wallet: finalizeModeBucket(modeBuckets.wallet, year, month)
     }
   };
 }

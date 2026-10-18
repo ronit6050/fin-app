@@ -128,6 +128,17 @@
       --bg-danger: #fcebeb;
       --bg-warning: #faeeda;
       --bg-success: #eaf3de;
+      /* Analysis makeover (2026-10-18): TEXT-safe status colours. --color-warning
+         (#f29900) and --color-success are bright fills/borders and only reach
+         about 2:1 and 4.2:1 as small text, so the new Analysis chips, insight
+         lines and plan labels read these three instead. Checked against the
+         card (#fff) and their --bg-* tint: good 4.75/5.43, warn 4.73/5.43,
+         bad 5.09/5.87. --an-warn-fill is the bar colour for weekend / spike
+         bars (3.38:1 on the chart track, enough for a non-text shape). */
+      --an-good-text: #177A33;
+      --an-warn-text: #9A5B00;
+      --an-bad-text:  #C0291F;
+      --an-warn-fill: #B86E00;
 
       /* Page vs. card vs. inset — three elevation steps. The page is a
          soft tint (not pure white) specifically so cards visibly sit ON
@@ -478,6 +489,13 @@
         --bg-danger: #2e1414;  --color-danger:  #F67979;
         --bg-warning: #2e2308; --color-warning: #D79309;
         --bg-success: #1b2408; --color-success: #97c459;
+        /* Analysis makeover text-safe status colours (see the light block):
+           good 8.7:1, warn 6.8:1, bad 6.6:1 on the dark card; the warn fill
+           is 5.9:1 on the chart track. */
+        --an-good-text: #97c459;
+        --an-warn-text: #D79309;
+        --an-bad-text:  #F67979;
+        --an-warn-fill: #D68F00;
 
         /* FIX 2026-08-12, round 4 — rounds 1-2 both made the mistake the
            user called out directly: "brighter" was implemented as "add
@@ -691,6 +709,11 @@
       --bg-danger: #2e1414;  --color-danger:  #F67979;
       --bg-warning: #2e2308; --color-warning: #D79309;
       --bg-success: #1b2408; --color-success: #97c459;
+      /* Analysis makeover text-safe status colours (mirror of the block above). */
+      --an-good-text: #97c459;
+      --an-warn-text: #D79309;
+      --an-bad-text:  #F67979;
+      --an-warn-fill: #D68F00;
 
       /* Same round-4 "genuinely vivid, not pastel" fix as the
          prefers-color-scheme dark block above — see that block's comment
@@ -1807,6 +1830,139 @@
     }
     .donut-arc {
       filter: var(--chart-glow-filter);
+    }
+
+    /* ---------- Analysis makeover (2026-10-18) ----------
+       The new cards under the Analysis hero: pace line, Smart read, Money
+       flow, Day by day, Against your plan, Top places, Your week, Last 6
+       months, Biggest payments. Same card shape as .chart-card (Home) and the
+       same bar / stack-bar / chip classes; colours are only existing tokens
+       plus the four --an-* status tokens defined with the other status
+       colours. Works in the old look and the New look (the New look only
+       tightens padding, see the data-look rule below). */
+    .an-card {
+      background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow-card);
+      min-width: 0;
+    }
+    .an-card[hidden] { display: none; }
+    :root[data-look="new"] .an-card { padding: var(--sp-4); margin-bottom: var(--sp-3); }
+    .an-card.an-in { animation: an-in 0.3s ease-out backwards; }
+    @keyframes an-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .an-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+    }
+    .an-head .an-sub { font-weight: 500; font-size: 0.72rem; color: var(--text-secondary); text-align: right; }
+    .an-note { font-size: 0.75rem; color: var(--text-secondary); margin: 8px 0 0; line-height: 1.4; }
+    .an-caption { font-size: 0.78rem; color: var(--text-secondary); margin: 8px 0 0; min-height: 1.3em; line-height: 1.4; }
+
+    /* Small status chips (also used on category rows). */
+    .an-chip {
+      display: inline-flex;
+      align-items: center;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      white-space: nowrap;
+      background: var(--surface-inset);
+      color: var(--text-secondary);
+    }
+    .an-chip.good, .an-chg.down { background: var(--bg-success); color: var(--an-good-text); }
+    .an-chip.warn { background: var(--bg-warning); color: var(--an-warn-text); }
+    .an-chip.bad,  .an-chg.up   { background: var(--bg-danger);  color: var(--an-bad-text); }
+    .an-chg { font-size: 0.68rem; font-weight: 700; padding: 2px 7px; border-radius: var(--radius-pill); white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
+
+    /* Pace block inside the blue hero card. */
+    .an-pace[hidden] { display: none; }
+    .an-proj { margin-top: 12px; }
+    .an-proj-top { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-on-hero-muted); }
+    .an-proj-top strong { color: var(--text-on-hero); font-weight: 700; }
+    .an-proj-bar { position: relative; height: 8px; border-radius: 6px; margin-top: 6px; background: color-mix(in srgb, var(--text-on-hero) 20%, transparent); }
+    .an-proj-ghost, .an-proj-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; }
+    .an-proj-ghost { background: color-mix(in srgb, var(--text-on-hero) 40%, transparent); }
+    .an-proj-fill { background: var(--text-on-hero); }
+    .an-proj-tick { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--text-on-hero); }
+
+    /* Smart read */
+    .an-insight { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; font-size: 0.85rem; line-height: 1.4; color: var(--text-primary); }
+    .an-insight:first-child { padding-top: 0; }
+    .an-insight:last-child { padding-bottom: 0; }
+    .an-insight + .an-insight { border-top: 0.5px solid var(--border-hairline); }
+    .an-ico { flex: none; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--surface-inset); color: var(--color-primary); }
+    .an-ico svg { width: 16px; height: 16px; display: block; }
+    .an-ico.good { background: var(--bg-success); color: var(--an-good-text); }
+    .an-ico.warn { background: var(--bg-warning); color: var(--an-warn-text); }
+    .an-insight > span:last-child { min-width: 0; overflow-wrap: anywhere; padding-top: 4px; }
+
+    /* Money flow */
+    .an-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 0.78rem; color: var(--text-secondary); }
+    .an-legend .an-li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+    .an-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+    .an-dot.empty { background: var(--chart-track-bg); border: 1px solid var(--text-muted); }
+
+    /* Day by day */
+    .an-daily-svg { display: block; width: 100%; height: 112px; overflow: visible; }
+    .an-bar { cursor: pointer; }
+    .an-bar .hit { fill: transparent; }
+    .an-bar .fill { fill: var(--color-primary); }
+    .an-bar.spike .fill { fill: var(--an-warn-fill); }
+    .an-bar.future .fill { fill: var(--chart-track-bg); }
+    .an-bar.sel .fill { stroke: var(--text-primary); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+    .an-bar:focus { outline: none; }
+    .an-bar:focus-visible .hit { fill: color-mix(in srgb, var(--color-primary) 14%, transparent); stroke: var(--color-primary); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+    .an-avg-line { stroke: var(--text-muted); stroke-width: 1px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+    .an-axis { position: relative; height: 16px; margin-top: 4px; font-size: 0.6875rem; color: var(--text-muted); }
+    .an-axis span { position: absolute; top: 0; transform: translateX(-50%); }
+
+    /* Plan rows */
+    .an-plan-row + .an-plan-row { margin-top: 12px; }
+    .an-plan-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; min-width: 0; font-size: 0.88rem; }
+    .an-plan-top .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text-primary); }
+    .an-plan-top .amt { flex: none; font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .an-card .category-bar-track { background: var(--chart-track-bg); }
+    .an-card .category-bar-fill { background: var(--color-primary); }
+    .an-card .category-bar-fill.warn { background: var(--an-warn-fill); }
+    .an-card .category-bar-fill.bad { background: var(--an-bad-text); }
+    .an-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; margin-top: 4px; cursor: pointer; }
+    .an-link:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 6px; }
+
+    /* Lists: top places, biggest payments */
+    .an-list-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; min-width: 0; }
+    .an-list-row:first-child { padding-top: 0; }
+    .an-list-row + .an-list-row { border-top: 0.5px solid var(--border-hairline); }
+    .an-list-main { flex: 1 1 auto; min-width: 0; }
+    .an-list-name { font-size: 0.88rem; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .an-list-sub { font-size: 0.72rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+    .an-list-amt { flex: none; font-size: 0.9rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .an-list-main .category-bar-track { margin-top: 6px; }
+
+    /* Column charts: Your week, Last 6 months */
+    .an-cols { display: flex; align-items: flex-end; gap: 6px; }
+    .an-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+    .an-col-plot { position: relative; width: 100%; height: 98px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+    .an-col-val { font-size: 0.6875rem; color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; margin-bottom: 3px; }
+    .an-col-bar { width: 100%; max-width: 34px; min-height: 3px; border-radius: 6px 6px 3px 3px; background: var(--color-primary); }
+    .an-col-bar.wk { background: var(--an-warn-fill); }
+    .an-col-bar.faded { opacity: 0.5; }
+    .an-col-tick { position: absolute; left: 50%; width: 26px; margin-left: -13px; height: 2px; border-radius: 1px; background: var(--text-primary); }
+    .an-col-lbl { font-size: 0.6875rem; color: var(--text-muted); margin-top: 6px; }
+    .an-col-lbl.sel { color: var(--text-primary); font-weight: 700; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .an-card.an-in { animation: none; }
     }
 
     /* ---------- Home charts (2026-08-11) ----------
@@ -4341,7 +4497,21 @@
             <div class="today-split" id="analysisSplit"></div>
             <div class="income-detail" id="analysisIncomeDetail" hidden></div>
             <div class="today-split" id="analysisFinancialEvents"></div>
+            <!-- Pace (2026-10-18): "less than last month at this point", per-day, and a
+                 "heading for" bar for the month in progress. Filled by renderAnalysisPace(). -->
+            <div class="an-pace" id="analysisPace" hidden></div>
           </div>
+
+          <!-- Analysis makeover (2026-10-18). Each card below stays hidden until the
+               data it needs is there (older saved copies and a failed "extras" call
+               just leave the card out). Section order top to bottom:
+               hero, Smart read, Money flow, Day by day, Against your plan,
+               Categories / Need-Want-Saving, Top places, Your week, Last 6 months,
+               Biggest payments. -->
+          <div class="an-card" id="analysisInsights" hidden></div>
+          <div class="an-card" id="analysisFlow" hidden></div>
+          <div class="an-card" id="analysisDaily" hidden></div>
+          <div class="an-card" id="analysisPlan" hidden></div>
 
           <!-- Sort-by toggle (2026-08-17) — picks which breakdown shows
                below: the plain category list, or the Need/Want/Saving/
@@ -4361,6 +4531,11 @@
             <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Need / Want / Saving / Investment</h3>
             <div id="analysisNeedWantSaving"></div>
           </div>
+
+          <div class="an-card" id="analysisPlaces" hidden></div>
+          <div class="an-card" id="analysisWeek" hidden></div>
+          <div class="an-card" id="analysisTrend" hidden></div>
+          <div class="an-card" id="analysisBiggest" hidden></div>
         </div>
       </section>
 
@@ -6209,8 +6384,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-18-02";
-    const APP_CHANGELOG = "Sign-in works again after Google removed the old sign-in key. Saving a savings goal and moving an old debt to a friend now use the faster server too. Every phone now uses the faster new server by default, so the app keeps working even when the old server is down.";
+    const APP_VERSION = "2026-10-18-03";
+    const APP_CHANGELOG = "Analysis has a new look. It now tells you how your month is going in a few plain lines, shows where your money went, a chart of each day, how you are doing against your plan, your top places, your week and the last 6 months. Each category also shows how it changed from last month.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -7548,7 +7723,7 @@
     // ---- New server (Firebase Cloud Functions), beta (2026-10-14) ----
     // Same backend code as Apps Script, running next to the database. Read-only actions only for now; see docs/features/cloud-functions.md.
     const NEW_SERVER_URL = "https://asia-south1-fin-app-76c40.cloudfunctions.net/api";
-    const NEW_SERVER_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
+    const NEW_SERVER_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getAnalysisExtras", "getCCAdvisor",
       "getDebts", "getCash", "getInvestments", "getInvestmentInstruments", "getSavingsGoals", "getTransactionHistory", "getPlannerData", "getSettings",
       "getPeople", "getPerson", "getIgnoredTransactions", "previewSavingsSplit", "reconcileStatement", "reconcileCreditCardStatement", "getAdminOverview", "getSmsFormats"];
     // The saving actions the new server accepts (must match WRITE_ACTIONS in functions/index.js; one it does not know just answers "fallback").
@@ -8005,8 +8180,37 @@
       return "bank";
     }
 
-    function demoFreshModeBucket() {
+    // Analysis "detail" (2026-10-18) — the day-by-day spend, top places, small payments and biggest
+    // payments the new Analysis cards read. Same shape and same spend rules as the real backend's
+    // `detail` block: pass each counted spend row through demoDetailAdd(), then demoDetailFinish().
+    const DEMO_SMALL_LIMIT = 100;
+    function demoDetailFresh(daysInMonth) {
+      const daily = [];
+      for (let i = 0; i < daysInMonth; i++) daily.push(0);
+      return { daysInMonth: daysInMonth, daily: daily, places: {}, smallCount: 0, smallTotal: 0, biggest: [] };
+    }
+    function demoDetailAdd(acc, date, amount, placeName, label, category) {
+      const day = date.getDate();
+      if (day >= 1 && day <= acc.daily.length) acc.daily[day - 1] += amount;
+      const key = placeName || label || "Other";
+      if (!acc.places[key]) acc.places[key] = { name: key, amount: 0, count: 0 };
+      acc.places[key].amount += amount; acc.places[key].count += 1;
+      if (amount < DEMO_SMALL_LIMIT) { acc.smallCount += 1; acc.smallTotal += amount; }
+      acc.biggest.push({ label: label || key, category: category || "Other", amount: amount, date: demoFmtDateShort(date) });
+    }
+    function demoDetailFinish(acc) {
       return {
+        daysInMonth: acc.daysInMonth,
+        daily: acc.daily.map(function (v) { return Math.round(v * 100) / 100; }),
+        places: Object.keys(acc.places).map(function (k) { return acc.places[k]; }).sort(function (a, b) { return b.amount - a.amount; }).slice(0, 8),
+        smallCount: acc.smallCount, smallTotal: Math.round(acc.smallTotal * 100) / 100, smallLimit: DEMO_SMALL_LIMIT,
+        biggest: acc.biggest.slice().sort(function (a, b) { return b.amount - a.amount; }).slice(0, 5)
+      };
+    }
+
+    function demoFreshModeBucket(daysInMonth) {
+      return {
+        detailAcc: demoDetailFresh(daysInMonth || 31),
         totalDebit: 0, totalCredit: 0, categoryTotals: {}, categoryTxns: {},
         dailyTotals: {}, topAmount: 0, topNote: "",
         typeTotals: { Need: 0, Want: 0, Saving: 0, Investment: 0 },
@@ -8029,18 +8233,150 @@
         totalDebit: bucket.totalDebit, totalCredit: bucket.totalCredit, savings: savings, avgDaily: avgDaily,
         topAmount: bucket.topAmount, topNote: bucket.topNote, categories: categories,
         fixedObligations: bucket.fixedObligations, invested: bucket.invested,
+        detail: demoDetailFinish(bucket.detailAcc),
         incomeItems: bucket.incomeItems.slice().sort(function (a, b) { return b.amount - a.amount; }),
         needWantSaving: { need: bucket.typeTotals.Need, want: bucket.typeTotals.Want, saving: bucket.typeTotals.Saving, investment: bucket.typeTotals.Investment, untagged: bucket.untaggedTotal, untaggedCount: bucket.untaggedCount, taggedTotal: taggedTotal }
       };
     }
 
+    // ---- Demo Mode, earlier months (2026-10-18) ----
+    // The pretend dataset only holds the CURRENT month, but the new Analysis cards compare with last month
+    // and draw a 6-month trend. So for any month BEFORE the current one, Demo Mode makes up a believable,
+    // always-the-same month (a small seeded random generator: same year+month = same numbers every time).
+    // Nothing here is real data, and it is only used for those earlier months.
+    function demoSeeded(seed) {
+      let s = seed >>> 0;
+      return function () {
+        s = (s + 0x6D2B79F5) >>> 0;
+        let t = s;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    const DEMO_PRETEND_CATS = [["Food", 0.30], ["Shopping", 0.19], ["Transport", 0.12], ["Bills", 0.15], ["Lifestyle", 0.10], ["Health", 0.05], ["Education", 0.04], ["Other", 0.05]];
+    const DEMO_PRETEND_UNNOTED = 15000;
+    const DEMO_PRETEND_PLACES =["Swiggy", "BigBasket", "Amazon", "Uber", "Airtel", "Zomato", "IndianOil", "Myntra"];
+    const DEMO_PRETEND_NOTES = { Food: ["Groceries", "Dinner order"], Shopping: ["New shoes", "Phone case"], Transport: ["Fuel", "Cab to office"], Bills: ["Electricity bill", "Mobile recharge"],
+      Lifestyle: ["Movie night", "Gym membership"], Health: ["Medicines", "Check-up"], Education: ["Online course", "Books"], Other: ["Train ticket", "Gift"] };
+    // Scales every money figure of an analysis-shaped object by f (for the Bank / Card / Wallet views).
+    function demoScaleSlice(base, f) {
+      const r = function (n) { return Math.round(n * f); };
+      const d = base.detail;
+      return {
+        totalDebit: r(base.totalDebit), totalCredit: r(base.totalCredit), savings: r(base.savings), avgDaily: r(base.avgDaily),
+        topAmount: r(base.topAmount), topNote: base.topNote,
+        categories: base.categories.map(function (c) {
+          return { category: c.category, amount: r(c.amount), topTransactions: c.topTransactions.map(function (t) { return { note: t.note, amount: r(t.amount), date: t.date }; }) };
+        }),
+        fixedObligations: r(base.fixedObligations), invested: r(base.invested),
+        detail: {
+          daysInMonth: d.daysInMonth, daily: d.daily.map(r),
+          places: d.places.map(function (p) { return { name: p.name, amount: r(p.amount), count: Math.max(1, Math.round(p.count * f)) }; }),
+          smallCount: Math.round(d.smallCount * f), smallTotal: r(d.smallTotal), smallLimit: d.smallLimit,
+          biggest: d.biggest.map(function (b) { return { label: b.label, category: b.category, amount: r(b.amount), date: b.date }; })
+        },
+        incomeItems: base.incomeItems.map(function (i) { return { label: i.label, amount: r(i.amount), date: i.date, source: i.source }; }),
+        needWantSaving: { need: r(base.needWantSaving.need), want: r(base.needWantSaving.want), saving: r(base.needWantSaving.saving), investment: r(base.needWantSaving.investment),
+          untagged: r(base.needWantSaving.untagged), untaggedCount: Math.round(base.needWantSaving.untaggedCount * f), taggedTotal: r(base.needWantSaving.taggedTotal) }
+      };
+    }
+    function demoPretendAnalysis(year, month) {
+      const rnd = demoSeeded(year * 12 + month);
+      const dim = new Date(year, month, 0).getDate();
+      const daily = [];
+      for (let d = 1; d <= dim; d++) {
+        const dow = new Date(year, month - 1, d).getDay();
+        let v = (450 + rnd() * 700) * ((dow === 0 || dow === 6) ? 1.7 : 1);
+        if (rnd() < 0.1) v = 0;
+        daily.push(Math.round(v / 10) * 10);
+      }
+      daily[2 + Math.floor(rnd() * Math.max(1, dim - 6))] += 3200 + Math.round(rnd() * 15) * 100;   // one big day
+      // The same monthly payment with no note yet that the current pretend month has (the 6th, under "Other").
+      daily[5] += DEMO_PRETEND_UNNOTED;
+      const total = daily.reduce(function (s, v) { return s + v; }, 0);
+      // Category amounts: the usual shares, nudged a little each month, then scaled to add up exactly.
+      const raw = DEMO_PRETEND_CATS.map(function (c) { return c[1] * (0.8 + rnd() * 0.4); });
+      const rawSum = raw.reduce(function (s, v) { return s + v; }, 0);
+      const amounts = raw.map(function (v) { return Math.round(v / rawSum * (total - DEMO_PRETEND_UNNOTED)); });
+      amounts[0] += (total - DEMO_PRETEND_UNNOTED) - amounts.reduce(function (s, v) { return s + v; }, 0);
+      amounts[DEMO_PRETEND_CATS.length - 1] += DEMO_PRETEND_UNNOTED;   // "Other" is last in the list
+      const mon = DEMO_MONTH_ABBR[month - 1];
+      const categories = DEMO_PRETEND_CATS.map(function (c, i) {
+        const notes = DEMO_PRETEND_NOTES[c[0]];
+        return { category: c[0], amount: amounts[i], topTransactions: [
+          { note: notes[0], amount: Math.round(amounts[i] * 0.38), date: demoPad2(5 + i) + " " + mon },
+          { note: notes[1], amount: Math.round(amounts[i] * 0.22), date: demoPad2(12 + i) + " " + mon } ] };
+      }).sort(function (a, b) { return b.amount - a.amount; });
+      const places = DEMO_PRETEND_PLACES.map(function (name, i) {
+        return { name: name, amount: Math.round(total * (0.16 - i * 0.015)), count: 2 + Math.floor(rnd() * 6) };
+      });
+      const biggest = [0, 1, 2, 3, 4].map(function (i) {
+        return { label: categories[i].topTransactions[0].note, category: categories[i].category, amount: categories[i].topTransactions[0].amount, date: categories[i].topTransactions[0].date };
+      }).sort(function (a, b) { return b.amount - a.amount; });
+      const income = 65000, fixed = 19000, invested = 9000, saved = 8000 + Math.round(rnd() * 4) * 1000;
+      const need = Math.round(total * 0.45), want = Math.round(total * 0.35), saving = Math.round(total * 0.08);
+      const base = {
+        totalDebit: total, totalCredit: income, savings: income - total, avgDaily: Math.round(total / dim),
+        topAmount: biggest[0].amount, topNote: biggest[0].label, categories: categories,
+        fixedObligations: fixed, invested: invested,
+        detail: { daysInMonth: dim, daily: daily, places: places, smallCount: 6 + Math.floor(rnd() * 8), smallTotal: 0, smallLimit: DEMO_SMALL_LIMIT, biggest: biggest },
+        incomeItems: [{ label: "Employer Pvt Ltd", amount: income, date: "01 " + mon, source: "bank" }],
+        needWantSaving: { need: need, want: want, saving: saving, investment: 0, untagged: total - need - want - saving, untaggedCount: 3, taggedTotal: need + want + saving }
+      };
+      base.detail.smallTotal = base.detail.smallCount * 55;
+      const out = demoScaleSlice(base, 1);
+      out.saved = saved; out.savingGoal = (demoState.settings && demoState.settings.monthlySaveGoal) || 0;
+      out.byMode = { bank: demoScaleSlice(base, 0.62), card: demoScaleSlice(base, 0.31), wallet: demoScaleSlice(base, 0.07) };
+      return out;
+    }
+    function demoMonthIsBeforeNow(year, month) {
+      const n = new Date();
+      return year * 12 + month < n.getFullYear() * 12 + (n.getMonth() + 1);
+    }
+    // getAnalysisExtras in Demo Mode: 6 months ending at the month asked for, last month's digest for each
+    // payment-mode view, and a few pretend plan targets set against this month's real category totals.
+    function demoComputeAnalysisExtras(year, month) {
+      const digest = function (a) {
+        const cats = {};
+        a.categories.forEach(function (c) { cats[c.category] = c.amount; });
+        return { spent: a.totalDebit, income: a.totalCredit, fixed: a.fixedObligations, invested: a.invested, categories: cats, daily: a.detail ? a.detail.daily : [] };
+      };
+      const shift = function (back) { const idx = year * 12 + (month - 1) - back; return { year: Math.floor(idx / 12), month: (idx % 12) + 1 }; };
+      const trend = [];
+      let prev = null;
+      for (let back = 5; back >= 0; back--) {
+        const ym = shift(back);
+        const a = demoComputeMonthlyAnalysis(ym.year, ym.month);
+        const dg = digest(a);
+        trend.push({ year: ym.year, month: ym.month, spent: dg.spent, income: dg.income, fixed: dg.fixed, invested: dg.invested,
+          byMode: { bank: a.byMode.bank.totalDebit, card: a.byMode.card.totalDebit, wallet: a.byMode.wallet.totalDebit } });
+        if (back === 1) {
+          prev = { all: dg, bank: digest(a.byMode.bank), card: digest(a.byMode.card), wallet: digest(a.byMode.wallet), year: ym.year, month: ym.month };
+        }
+      }
+      const cur = demoComputeMonthlyAnalysis(year, month);
+      let budgets = null;
+      if (cur.categories.length) {
+        // How much of each target is already used: 93% (a warning), 112% (over), then comfortably inside.
+        const factors = [0.93, 1.12, 0.62, 0.45, 0.8];
+        budgets = { month: year + "-" + demoPad2(month), categories: cur.categories.slice(0, 5).map(function (c, i) {
+          return { category: c.category, target: Math.max(100, Math.round(c.amount / factors[i] / 100) * 100), actual: c.amount };
+        }) };
+      }
+      return { year: year, month: month, trend: trend, prev: prev, budgets: budgets };
+    }
+
     function demoComputeMonthlyAnalysis(year, month) {
+      if (demoMonthIsBeforeNow(year, month)) return demoPretendAnalysis(year, month);
       let totalDebit = 0, totalCredit = 0, topAmount = 0, topNote = "";
       const categoryTotals = {}, categoryTxns = {}, dailyTotals = {};
       const typeTotals = { Need: 0, Want: 0, Saving: 0, Investment: 0 };
       let untaggedTotal = 0, untaggedCount = 0, fixedObligations = 0, invested = 0;
       const incomeItems = [];
-      const modeBuckets = { bank: demoFreshModeBucket(), card: demoFreshModeBucket(), wallet: demoFreshModeBucket() };
+      const dim = new Date(year, month, 0).getDate();
+      const allDetail = demoDetailFresh(dim);
+      const modeBuckets = { bank: demoFreshModeBucket(dim), card: demoFreshModeBucket(dim), wallet: demoFreshModeBucket(dim) };
 
       demoState.transactions.forEach(function (t) {
         if (t.date.getFullYear() !== year || (t.date.getMonth() + 1) !== month) return;
@@ -8071,6 +8407,8 @@
           else { untaggedTotal += t.amount; untaggedCount++; }
 
           // Mirror the same row into its Bank/Card/Wallet bucket.
+          demoDetailAdd(allDetail, t.date, t.amount, t.counterparty, t.note || t.counterparty, category);
+          demoDetailAdd(modeBucket.detailAcc, t.date, t.amount, t.counterparty, t.note || t.counterparty, category);
           modeBucket.totalDebit += t.amount;
           modeBucket.categoryTotals[category] = (modeBucket.categoryTotals[category] || 0) + t.amount;
           modeBucket.dailyTotals[day] = (modeBucket.dailyTotals[day] || 0) + t.amount;
@@ -8098,6 +8436,7 @@
           if (c.amount > topAmount) { topAmount = c.amount; topNote = category || "Cash Spend"; }
           if (!categoryTxns[category]) categoryTxns[category] = [];
           categoryTxns[category].push({ note: c.note || "Cash Spend", amount: c.amount, date: demoFmtDateShort(c.date) });
+          demoDetailAdd(allDetail, c.date, c.amount, "Cash", c.note || "Cash spend", category);   // Cash only ever shows in the All view
           const savedType = c.needWantSaving || "";
           if (typeTotals.hasOwnProperty(savedType)) typeTotals[savedType] += c.amount;
           else { untaggedTotal += c.amount; untaggedCount++; }
@@ -8126,6 +8465,7 @@
         totalDebit: totalDebit, totalCredit: totalCredit, savings: savings, avgDaily: avgDaily,
         topAmount: topAmount, topNote: topNote, categories: categories,
         fixedObligations: fixedObligations, invested: invested,
+        detail: demoDetailFinish(allDetail),
         saved: demoSaved, savingGoal: (demoState.settings && demoState.settings.monthlySaveGoal) || 0,
         incomeItems: incomeItems.sort(function (a, b) { return b.amount - a.amount; }),
         needWantSaving: { need: typeTotals.Need, want: typeTotals.Want, saving: typeTotals.Saving, investment: typeTotals.Investment, untagged: untaggedTotal, untaggedCount: untaggedCount, taggedTotal: taggedTotal },
@@ -9237,6 +9577,10 @@
           case "getMonthlyAnalysis": {
             const now = new Date();
             return { ok: true, analysis: demoComputeMonthlyAnalysis(data.year || now.getFullYear(), data.month || (now.getMonth() + 1)) };
+          }
+          case "getAnalysisExtras": {
+            const nowX = new Date();
+            return { ok: true, extras: demoComputeAnalysisExtras(Number(data.year) || nowX.getFullYear(), Number(data.month) || (nowX.getMonth() + 1)) };
           }
           case "getCCAdvisor": return { ok: true, cc: demoComputeCCAdvisor() };
           case "getDebts": return { ok: true, debts: demoComputeDebts() };
@@ -11836,6 +12180,9 @@
     // display choice, doesn't affect what data was fetched, so it never
     // needs to reset on month change the way analysisMode sometimes does.
     let analysisView = "category";
+    // The "extras" answer (getAnalysisExtras) for the month showing, or null until it arrives / if it fails.
+    let analysisExtras = null;
+    let analysisDailySel = 0; // the day (1-31) picked in the Day by day chart; 0 = none
     let analysisModeResetFor = null; // "year_month" of the last render — only reset analysisMode back to "All" when this actually changes (a real month switch), not on every render (a background refresh of the same month re-calls renderMonthlyAnalysis too, and shouldn't silently undo a toggle tap)
 
     // Round 6: reads the --chart-* tier, not --need-text/etc directly —
@@ -11978,6 +12325,417 @@
       `;
     }
 
+    // =========================================================
+    // ANALYSIS MAKEOVER (2026-10-18) - the thinking part.
+    // Everything between AN-LOGIC-START and AN-LOGIC-END is plain maths and
+    // wording: no DOM, no network, no globals from the page. That is what lets
+    // backend/tests/analysisInsightsFrontend.test.js load this exact block in
+    // Node and check every rule. Rule of thumb for all of it: a number is only
+    // ever shown if it came from the data; missing data hides the piece.
+    // =========================================================
+    // AN-LOGIC-START
+    const AN_MONTH_FULL  = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const AN_MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const AN_DAY_NAMES   = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const AN_DAY_INITIAL = ["M", "T", "W", "T", "F", "S", "S"];
+    // A "heading for" guess from a couple of days of spending would be silly (day 1 x 31),
+    // so projections wait until this many days of the month have passed.
+    const AN_MIN_DAYS_FOR_PACE = 5;
+
+    // Whole rupees show without decimals; anything with paise shows exactly 2 decimals
+    // (so "14,081.3" reads "14,081.30"). Also rounds away tiny floating-point leftovers.
+    function analysisRs(n) {
+      const v = Math.round((Number(n) || 0) * 100) / 100;
+      return Number.isInteger(v)
+        ? v.toLocaleString("en-IN")
+        : v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function anNum(v) { const n = Number(v); return isFinite(n) ? n : 0; }
+    // 1234 -> "1.2k", 12000 -> "12k", 150000 -> "1.5L" (lakh). Small chart labels only.
+    function anCompact(n) {
+      const v = Math.round(anNum(n));
+      const strip = function (x) { return String(Math.round(x * 10) / 10).replace(/\.0$/, ""); };
+      if (v >= 100000) return strip(v / 100000) + "L";
+      if (v >= 1000) return strip(v / 1000) + "k";
+      return String(v);
+    }
+    function anMonthName(m) { return AN_MONTH_FULL[m - 1] || ""; }
+    // "5 Oct"
+    function anDayLabel(day, month) { return day + " " + (AN_MONTH_SHORT[month - 1] || ""); }
+
+    // Where "today" sits inside the month being looked at.
+    //   day = how many days of the month have passed (today's date for the running month,
+    //   the whole month for a finished one, 0 for a month that has not started).
+    function anTodayInfo(year, month, nowDate) {
+      const n = nowDate || new Date();
+      const dim = new Date(year, month, 0).getDate();
+      const ny = n.getFullYear(), nm = n.getMonth() + 1;
+      const isCurrent = ny === year && nm === month;
+      const isFuture = year > ny || (year === ny && month > nm);
+      const day = isCurrent ? Math.min(n.getDate(), dim) : (isFuture ? 0 : dim);
+      return { year: year, month: month, daysInMonth: dim, day: day, isCurrent: isCurrent, isFuture: isFuture, daysLeft: isCurrent ? dim - day : 0 };
+    }
+    // A running month that still has days left: only "going up" comparisons are honest for it.
+    function anMonthStillRunning(today) { return !!(today && today.isCurrent && today.day < today.daysInMonth); }
+
+    // The new "detail" block of a getMonthlyAnalysis answer, or null when an older answer lacks it.
+    function anDetail(slice) {
+      const d = slice && slice.detail;
+      return d && Array.isArray(d.daily) ? d : null;
+    }
+    function anSumTo(arr, n) {
+      let s = 0;
+      if (!Array.isArray(arr)) return 0;
+      for (let i = 0; i < Math.min(n, arr.length); i++) s += anNum(arr[i]);
+      return s;
+    }
+    // Last month's digest for one payment-mode view, or null.
+    function anPrevDigest(extras, mode) {
+      const p = extras && extras.prev && extras.prev[mode || "all"];
+      return p && typeof p === "object" ? p : null;
+    }
+    // The name of "last month" (from the answer itself, else worked out from the month shown).
+    function anPrevMonthName(extras, today) {
+      const pm = extras && extras.prev && Number(extras.prev.month);
+      if (pm >= 1 && pm <= 12) return anMonthName(pm);
+      return anMonthName(today.month === 1 ? 12 : today.month - 1);
+    }
+    // What one trend month spent, for the chosen payment-mode view.
+    function anTrendSpent(item, mode) {
+      if (!item) return 0;
+      return mode === "all" || !mode ? anNum(item.spent) : anNum(item.byMode && item.byMode[mode]);
+    }
+    // "Usual month": the average of the OTHER trend months that had spending (needs at least 2).
+    function anUsual(extras, mode, today) {
+      const trend = extras && Array.isArray(extras.trend) ? extras.trend : [];
+      const vals = [];
+      trend.forEach(function (t) {
+        if (!t || (Number(t.year) === today.year && Number(t.month) === today.month)) return;
+        const v = anTrendSpent(t, mode);
+        if (v > 0) vals.push(v);
+      });
+      if (vals.length < 2) return null;
+      return Math.round(vals.reduce(function (a, b) { return a + b; }, 0) / vals.length);
+    }
+    // Plan targets saved in Planner for the month shown (All view only), biggest use first.
+    function anPlanModel(extras, mode, today) {
+      if (mode !== "all" || !extras || !extras.budgets || !Array.isArray(extras.budgets.categories)) return null;
+      const key = today.year + "-" + (today.month < 10 ? "0" : "") + today.month;
+      if (extras.budgets.month && extras.budgets.month !== key) return null;
+      const rows = [];
+      let totalTarget = 0, totalActual = 0;
+      extras.budgets.categories.forEach(function (c) {
+        if (!c || !c.category) return;
+        const target = anNum(c.target), actual = anNum(c.actual);
+        if (target <= 0) return;
+        const pct = Math.round(actual / target * 100);
+        const state = actual > target ? "over" : (pct >= 85 ? "warn" : "ok");
+        rows.push({ category: String(c.category), target: target, actual: actual, pct: pct, state: state, over: Math.max(0, Math.round((actual - target) * 100) / 100) });
+        totalTarget += target; totalActual += actual;
+      });
+      if (!rows.length) return null;
+      rows.sort(function (a, b) { return (b.actual / b.target) - (a.actual / a.target); });
+      return { rows: rows, totalTarget: totalTarget, totalActual: totalActual };
+    }
+
+    // Pace: how this month compares with last month at the same point, spend per day, and
+    // (running month only) where it is heading.
+    function anPace(slice, extras, mode, today) {
+      const spent = anNum(slice && slice.totalDebit);
+      const D = today.day;
+      if (D < 1 || spent <= 0) return null;
+      const out = { spent: spent, perDay: Math.round(spent / D), vs: null, projection: null };
+      const prev = anPrevDigest(extras, mode);
+      if (prev && Array.isArray(prev.daily)) {
+        const prevThru = anSumTo(prev.daily, D);
+        if (prevThru > 0) {
+          const diff = spent - prevThru;
+          const pct = Math.round(Math.abs(diff) / prevThru * 100);
+          out.vs = { pct: pct, dir: pct === 0 ? "same" : (diff < 0 ? "less" : "more"), name: anPrevMonthName(extras, today), atThisPoint: today.isCurrent };
+        }
+      }
+      if (today.isCurrent && D >= AN_MIN_DAYS_FOR_PACE) {
+        const P = Math.round(spent / D * today.daysInMonth);
+        let ref = null;
+        const plan = anPlanModel(extras, mode, today);
+        if (plan && plan.totalTarget > 0) ref = { kind: "plan", amount: Math.round(plan.totalTarget) };
+        else {
+          const usual = anUsual(extras, mode, today);
+          if (usual) ref = { kind: "usual", amount: usual };
+        }
+        out.projection = { amount: P, ref: ref };
+      }
+      return out;
+    }
+    function anPaceVsText(vs) {
+      if (!vs) return "";
+      const tail = vs.atThisPoint ? " at this point" : "";
+      if (vs.dir === "same") return "Same as " + vs.name + tail;
+      return vs.pct + "% " + vs.dir + " than " + vs.name + tail;
+    }
+
+    // Average spend per weekday (Mon..Sun) over the days that have passed.
+    function anWeekdayAverages(daily, year, month, D) {
+      const days = [];
+      for (let i = 0; i < 7; i++) days.push({ total: 0, count: 0, avg: 0 });
+      const arr = Array.isArray(daily) ? daily : [];
+      for (let d = 1; d <= D && d <= arr.length; d++) {
+        const idx = (new Date(year, month - 1, d).getDay() + 6) % 7;   // Monday = 0
+        days[idx].total += anNum(arr[d - 1]);
+        days[idx].count += 1;
+      }
+      days.forEach(function (x) { x.avg = x.count > 0 ? x.total / x.count : 0; });
+      return days;
+    }
+    function anBiggestWeekday(avgs) {
+      let best = -1, bestV = 0;
+      avgs.forEach(function (x, i) { if (x.avg > bestV) { bestV = x.avg; best = i; } });
+      return best;
+    }
+
+    // ---- Smart read: each rule returns one insight or null ----
+    function anRuleCategoryMove(slice, extras, mode, today) {
+      const prev = anPrevDigest(extras, mode);
+      if (!prev || !prev.categories || typeof prev.categories !== "object") return null;
+      const cur = {};
+      (Array.isArray(slice && slice.categories) ? slice.categories : []).forEach(function (c) { if (c && c.category) cur[c.category] = anNum(c.amount); });
+      const names = {};
+      Object.keys(cur).forEach(function (k) { names[k] = 1; });
+      Object.keys(prev.categories).forEach(function (k) { names[k] = 1; });
+      let best = null;
+      Object.keys(names).forEach(function (name) {
+        const p = anNum(prev.categories[name]);
+        const c = anNum(cur[name]);
+        if (p <= 0) return;
+        const delta = c - p;
+        if (Math.abs(delta) < 500 || Math.abs(delta) / p < 0.15) return;
+        if (delta < 0 && anMonthStillRunning(today)) return;   // the month is not over: "down" would just mean "not spent yet"
+        if (!best || Math.abs(delta) > Math.abs(best.delta)) best = { name: name, delta: delta };
+      });
+      if (!best) return null;
+      const up = best.delta > 0;
+      const word = up ? (anMonthStillRunning(today) ? "already up" : "up") : "down";
+      return { kind: "categoryMove", tone: up ? "warn" : "good", icon: up ? "up" : "down",
+        text: best.name + " is " + word + " ₹" + analysisRs(Math.abs(best.delta)) + " vs " + anPrevMonthName(extras, today) + "." };
+    }
+    function anRuleBudget(extras, mode, today) {
+      const plan = anPlanModel(extras, mode, today);
+      if (!plan) return null;
+      const top = plan.rows[0];
+      if (!top || top.pct < 85) return null;
+      if (top.state === "over") {
+        return { kind: "budget", tone: "warn", icon: "target", text: top.category + " is over its target by ₹" + analysisRs(top.over) + "." };
+      }
+      const remaining = top.target - top.actual;
+      if (today.isCurrent && today.daysLeft > 0 && remaining > 0) {
+        const perDay = Math.round(remaining / today.daysLeft);
+        return { kind: "budget", tone: "warn", icon: "target",
+          text: top.category + " is at " + top.pct + "% of its target with " + today.daysLeft + " day" + (today.daysLeft === 1 ? "" : "s") +
+                " left. Spend about ₹" + analysisRs(perDay) + " a day to stay inside." };
+      }
+      if (remaining <= 0) return { kind: "budget", tone: "warn", icon: "target", text: top.category + " has used all of its target." };
+      return { kind: "budget", tone: "warn", icon: "target", text: top.category + " used " + top.pct + "% of its target." };
+    }
+    function anRulePace(pace, extras, mode, today) {
+      if (!pace || !pace.projection) return null;
+      const usual = anUsual(extras, mode, today);
+      if (!usual) return null;
+      const P = pace.projection.amount;
+      const diff = P - usual;
+      if (Math.abs(diff) < Math.max(500, usual * 0.05)) return null;
+      const less = diff < 0;
+      return { kind: "pace", tone: less ? "good" : "warn", icon: less ? "down" : "up",
+        text: "On this pace you will spend about ₹" + analysisRs(P) + ", ₹" + analysisRs(Math.abs(diff)) + (less ? " less" : " more") + " than usual." };
+    }
+    function anRuleWeekend(slice, today) {
+      const d = anDetail(slice);
+      if (!d || today.day < 1) return null;
+      const avgs = anWeekdayAverages(d.daily, today.year, today.month, today.day);
+      let weTotal = 0, weCount = 0, wdTotal = 0, wdCount = 0;
+      avgs.forEach(function (x, i) {
+        if (i >= 5) { weTotal += x.total; weCount += x.count; } else { wdTotal += x.total; wdCount += x.count; }
+      });
+      if (weCount < 2 || wdCount < 1) return null;
+      const weAvg = weTotal / weCount, wdAvg = wdTotal / wdCount;
+      if (wdAvg <= 0) return null;
+      const ratio = weAvg / wdAvg;
+      if (ratio < 1.5) return null;
+      const big = anBiggestWeekday(avgs);
+      return { kind: "weekend", tone: "info", icon: "calendar",
+        text: "Weekends cost you " + (Math.round(ratio * 10) / 10).toFixed(1) + "x a weekday." + (big >= 0 ? " " + AN_DAY_NAMES[big] + " is your biggest day." : "") };
+    }
+    function anRuleWants(slice) {
+      const n = slice && slice.needWantSaving;
+      if (!n) return null;
+      const total = anNum(n.taggedTotal) + anNum(n.untagged) + anNum(slice.fixedObligations);
+      const want = anNum(n.want);
+      if (total <= 0 || want <= 0) return null;
+      const pct = Math.round(want / total * 100);
+      if (pct - 30 < 5) return null;
+      return { kind: "wants", tone: "warn", icon: "pie", text: "Wants are " + pct + "% of your spending, " + (pct - 30) + " points above the 30% guide." };
+    }
+    function anSpikeDay(slice, today) {
+      const d = anDetail(slice);
+      if (!d || today.day < 1) return null;
+      const D = today.day;
+      const avg = anSumTo(d.daily, D) / D;
+      if (avg <= 0) return null;
+      let bestDay = 0, bestV = 0;
+      for (let i = 0; i < Math.min(D, d.daily.length); i++) {
+        const v = anNum(d.daily[i]);
+        if (v > bestV) { bestV = v; bestDay = i + 1; }
+      }
+      if (bestV < avg * 3 || bestV < 1500) return null;
+      return { day: bestDay, amount: bestV };
+    }
+    function anRuleSpike(slice, today) {
+      const s = anSpikeDay(slice, today);
+      if (!s) return null;
+      return { kind: "spike", tone: "info", icon: "spark", text: anDayLabel(s.day, today.month) + " was your big day: ₹" + analysisRs(s.amount) + "." };
+    }
+    function anRuleSmall(slice) {
+      const d = anDetail(slice);
+      if (!d || anNum(d.smallCount) < 5) return null;
+      const limit = anNum(d.smallLimit) > 0 ? anNum(d.smallLimit) : 100;
+      return { kind: "small", tone: "info", icon: "coin", text: anNum(d.smallCount) + " small payments under ₹" + analysisRs(limit) + " added up to ₹" + analysisRs(d.smallTotal) + "." };
+    }
+
+    // 2 to 4 one-line reads, most useful first. Returns [] when nothing applies.
+    // Priority: budget, category move, pace, weekend, wants, spike, small payments.
+    function buildAnalysisInsights(slice, extras, mode, todayInfo) {
+      mode = mode || "all";
+      if (!slice || !todayInfo || todayInfo.day < 1) return [];
+      const pace = anPace(slice, extras, mode, todayInfo);
+      const picks = [
+        anRuleBudget(extras, mode, todayInfo),
+        anRuleCategoryMove(slice, extras, mode, todayInfo),
+        anRulePace(pace, extras, mode, todayInfo),
+        anRuleWeekend(slice, todayInfo),
+        anRuleWants(slice),
+        anRuleSpike(slice, todayInfo),
+        anRuleSmall(slice)
+      ];
+      return picks.filter(function (x) { return !!x; }).slice(0, 4);
+    }
+
+    // The little "+31%" / "-23%" on a category row, or null.
+    function anCatChange(cur, prev, today) {
+      cur = anNum(cur); prev = anNum(prev);
+      if (prev <= 0) return null;
+      const pct = Math.round((cur - prev) / prev * 100);
+      if (Math.abs(pct) < 5) return null;
+      if (pct < 0 && anMonthStillRunning(today)) return null;
+      return { pct: pct, dir: pct > 0 ? "up" : "down", text: (pct > 0 ? "+" : "-") + Math.abs(pct) + "%" };
+    }
+
+    // ---- Money flow (All view only) ----
+    function anFlowModel(a, mode) {
+      if ((mode || "all") !== "all" || !a || typeof a.saved !== "number") return null;
+      const income = anNum(a.totalCredit);
+      if (income <= 0) return null;
+      const spent = Math.max(0, anNum(a.totalDebit)), fixed = Math.max(0, anNum(a.fixedObligations)),
+            invested = Math.max(0, anNum(a.invested)), saved = anNum(a.saved);
+      const notUsed = Math.round((income - spent - fixed - invested - saved) * 100) / 100;
+      const parts = [
+        { key: "spent", label: "Spent", amount: spent },
+        { key: "fixed", label: "Rent and EMI", amount: fixed },
+        { key: "invested", label: "Invested", amount: invested },
+        { key: "saved", label: "Saved", amount: Math.max(0, saved) }
+      ];
+      const used = parts.reduce(function (s, p) { return s + p.amount; }, 0);
+      const barTotal = Math.max(income, used);
+      parts.forEach(function (p) {
+        p.pct = Math.round(p.amount / income * 100);
+        p.widthPct = p.amount / barTotal * 100;
+      });
+      return {
+        income: income, parts: parts, notUsed: notUsed,
+        left: notUsed > 0 ? { amount: notUsed, pct: Math.round(notUsed / income * 100) } : null,
+        usedFromEarlier: notUsed < 0 ? Math.abs(notUsed) : 0,
+        savingsRate: Math.min(100, Math.max(0, Math.round(Math.max(0, saved) / income * 100)))
+      };
+    }
+
+    // ---- Day by day ----
+    function anDailyModel(slice, today) {
+      const d = anDetail(slice);
+      if (!d || anNum(slice.totalDebit) <= 0 || today.day < 1) return null;
+      const dim = today.daysInMonth;
+      const D = today.day;
+      const avg = anSumTo(d.daily, D) / D;
+      let max = 0;
+      const bars = [];
+      for (let i = 0; i < dim; i++) {
+        const v = Math.max(0, anNum(d.daily[i]));
+        const future = today.isCurrent && (i + 1) > D;
+        bars.push({ day: i + 1, amount: v, future: future, spike: !future && avg > 0 && v >= avg * 2 && v >= 1000, label: anDayLabel(i + 1, today.month) });
+        if (!future && v > max) max = v;
+      }
+      if (max <= 0) return null;
+      return { bars: bars, avg: Math.round(avg), max: max, days: dim };
+    }
+
+    // ---- Your week ----
+    function anWeekModel(slice, today) {
+      const d = anDetail(slice);
+      if (!d || today.day < 7) return null;
+      const avgs = anWeekdayAverages(d.daily, today.year, today.month, today.day);
+      const big = anBiggestWeekday(avgs);
+      if (big < 0) return null;
+      let max = 0;
+      avgs.forEach(function (x) { if (x.avg > max) max = x.avg; });
+      return {
+        days: avgs.map(function (x, i) { return { name: AN_DAY_NAMES[i], initial: AN_DAY_INITIAL[i], avg: Math.round(x.avg), weekend: i >= 5, big: i === big }; }),
+        max: max, bigIndex: big,
+        caption: AN_DAY_NAMES[big] + " is your biggest day: about ₹" + analysisRs(Math.round(avgs[big].avg)) + " on average."
+      };
+    }
+
+    // ---- Top places / Biggest payments ----
+    function anPlacesModel(slice) {
+      const d = anDetail(slice);
+      if (!d || !Array.isArray(d.places)) return null;
+      const rows = d.places.filter(function (p) { return p && p.name && anNum(p.amount) > 0; }).slice(0, 5).map(function (p) {
+        const c = Math.round(anNum(p.count));
+        return { name: String(p.name), amount: anNum(p.amount), countText: c > 1 ? c + " payments" : "1 payment" };
+      });
+      if (!rows.length) return null;
+      const small = anNum(d.smallCount) >= 3
+        ? "Small things add up: " + anNum(d.smallCount) + " payments under ₹" + analysisRs(anNum(d.smallLimit) > 0 ? d.smallLimit : 100) + " = ₹" + analysisRs(d.smallTotal)
+        : "";
+      return { rows: rows, max: rows[0].amount, smallLine: small };
+    }
+    function anBiggestModel(slice) {
+      const d = anDetail(slice);
+      if (!d || !Array.isArray(d.biggest)) return null;
+      const rows = d.biggest.filter(function (b) { return b && anNum(b.amount) > 0; }).slice(0, 5).map(function (b) {
+        return { label: String(b.label || "Payment"), category: String(b.category || ""), amount: anNum(b.amount), date: String(b.date || "") };
+      });
+      return rows.length ? { rows: rows } : null;
+    }
+
+    // ---- Last 6 months ----
+    function anTrendModel(extras, mode, today, nowDate) {
+      const trend = extras && Array.isArray(extras.trend) ? extras.trend : null;
+      if (!trend) return null;
+      const n = nowDate || new Date();
+      const months = trend.filter(function (t) { return t && Number(t.month) >= 1 && Number(t.month) <= 12; }).map(function (t) {
+        return {
+          label: AN_MONTH_SHORT[Number(t.month) - 1],
+          spent: anTrendSpent(t, mode),
+          income: (mode || "all") === "all" ? anNum(t.income) : null,
+          sel: Number(t.year) === today.year && Number(t.month) === today.month,
+          inProgress: Number(t.year) === n.getFullYear() && Number(t.month) === n.getMonth() + 1
+        };
+      });
+      if (months.filter(function (m) { return m.spent > 0; }).length < 2) return null;
+      let max = 0;
+      months.forEach(function (m) { max = Math.max(max, m.spent, m.income || 0); });
+      if (max <= 0) return null;
+      return { months: months, max: max, usual: anUsual(extras, mode, today) };
+    }
+    // AN-LOGIC-END
+
     function loadMonthlyAnalysis() {
       monthLabelEl.textContent = MONTH_NAMES[analysisMonth - 1] + " " + analysisYear;
 
@@ -11985,12 +12743,19 @@
       const cacheKey = "analysis_" + analysisYear + "_" + analysisMonth;
       const cached = loadCache(cacheKey);
 
+      // The "compare with the past" half (trend, last month, plan targets) is a separate call
+      // that fills in extra cards when it arrives; see loadAnalysisExtras().
+      analysisExtras = null;
+      analysisDailySel = 0;
+
       if (cached) {
         renderMonthlyAnalysis(cached);
       } else {
         showSkeletonStatus(analysisStatusEl);
         analysisContentEl.style.display = "none";
       }
+
+      loadAnalysisExtras(analysisYear, analysisMonth);
 
       callAppsScript({
         action:  "getMonthlyAnalysis",
@@ -12015,6 +12780,291 @@
           if (cached) return;
           showLoadError(analysisStatusEl, "Couldn't load: " + err.message, loadMonthlyAnalysis);
         });
+    }
+
+    // ---- Analysis makeover: fetching the "extras" and drawing the new cards ----
+    // getAnalysisExtras = trend (6 months), last month's digest, plan targets. It is its own call so the
+    // main screen never waits for it: the main screen draws first, the extra cards appear when this
+    // lands, and if it fails (or the server is older) those cards simply stay hidden.
+    function loadAnalysisExtras(year, month) {
+      const key = "analysisx_" + year + "_" + month;
+      const cachedX = loadCache(key);
+      if (cachedX) applyAnalysisExtras(cachedX, year, month);
+      callAppsScript({ action: "getAnalysisExtras", idToken: currentUser.idToken, year: year, month: month })
+        .then(function (data) {
+          if (!data || !data.ok || !data.extras) return;       // silent: the extra cards just stay hidden
+          saveCache(key, data.extras);
+          applyAnalysisExtras(data.extras, year, month);
+        })
+        .catch(function () { /* silent */ });
+    }
+    function applyAnalysisExtras(extras, year, month) {
+      // A late answer for a month the user already left must not draw over the month now showing.
+      if (year !== analysisYear || month !== analysisMonth) return;
+      if (extras && extras.year != null && (Number(extras.year) !== year || Number(extras.month) !== month)) return;
+      analysisExtras = extras;
+      if (analysisLastData) renderAnalysisForModeInner();
+    }
+    function anCurrentExtras() {
+      return analysisExtras && Number(analysisExtras.year) === analysisYear && Number(analysisExtras.month) === analysisMonth ? analysisExtras : null;
+    }
+
+    // Hand-drawn line icons for the Smart read card (stroke = currentColor, so both themes work).
+    const AN_ICON_PATHS = {
+      up:       '<path d="M4 17l6-6 4 4 6-7"/><path d="M15 8h5v5"/>',
+      down:     '<path d="M4 7l6 6 4-4 6 7"/><path d="M15 16h5v-5"/>',
+      target:   '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/>',
+      calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+      pie:      '<path d="M11 4a8 8 0 1 0 9 9h-9z"/><path d="M14 3.2A8 8 0 0 1 20.8 10H14z"/>',
+      spark:    '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18"/>',
+      coin:     '<circle cx="12" cy="12" r="8"/><path d="M14.5 9.5h-3.5a1.6 1.6 0 0 0 0 3.2h2a1.6 1.6 0 0 1 0 3.2H9.5M12 7.5v2M12 16v1.5"/>'
+    };
+    function anIcon(key) {
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        (AN_ICON_PATHS[key] || AN_ICON_PATHS.spark) + '</svg>';
+    }
+
+    // Writes a card only when its content changed (so a quiet refresh never flickers) and hides it when empty.
+    function anSetCard(el, html) {
+      if (!el) return;
+      if (!html) {
+        el.hidden = true; el.innerHTML = ""; el._anHtml = "";
+        return;
+      }
+      const wasHidden = el.hidden;
+      if (el._anHtml === html && !wasHidden) return;
+      el._anHtml = html;
+      el.innerHTML = html;
+      el.hidden = false;
+      // A card that appears after the screen was already drawn (extras arriving, or a mode switch) fades in.
+      if (wasHidden && !FinPlay.isArmed("analysis")) {
+        el.classList.remove("an-in"); void el.offsetWidth; el.classList.add("an-in");
+      }
+    }
+    function anHead(title, sub) {
+      return '<div class="an-head"><span>' + escapeHtml(title) + '</span>' + (sub ? '<span class="an-sub">' + sub + '</span>' : '') + '</div>';
+    }
+
+    function renderAnalysisPace(a, today, extras) {
+      const el = document.getElementById("analysisPace");
+      if (!el) return;
+      const pace = anPace(a, extras, analysisMode, today);
+      if (!pace) { el.hidden = true; el.innerHTML = ""; return; }
+      const chips = [];
+      if (pace.vs) chips.push(anPaceVsText(pace.vs));
+      chips.push("₹" + analysisRs(pace.perDay) + " / day");
+      let html = '<div class="fe-pills">' + chips.map(function (c) { return '<span class="fe-pill">' + escapeHtml(c) + '</span>'; }).join("") + '</div>';
+      if (pace.projection) {
+        const pr = pace.projection;
+        const scale = Math.max(pr.amount, pr.ref ? pr.ref.amount : 0, pace.spent) || 1;
+        const refLabel = pr.ref ? (pr.ref.kind === "plan" ? "Plan" : "Usual") : "";
+        html += '<div class="an-proj"><div class="an-proj-top"><span>Heading for <strong>₹' + analysisRs(pr.amount) + '</strong></span>' +
+          (pr.ref ? '<span>' + refLabel + ' <strong>₹' + analysisRs(pr.ref.amount) + '</strong></span>' : '') + '</div>' +
+          '<div class="an-proj-bar" role="img" aria-label="Spent ₹' + analysisRs(pace.spent) + ' so far, heading for ₹' + analysisRs(pr.amount) + (pr.ref ? ", " + refLabel.toLowerCase() + " ₹" + analysisRs(pr.ref.amount) : "") + '">' +
+          '<div class="an-proj-ghost" style="width:' + (pr.amount / scale * 100).toFixed(1) + '%"></div>' +
+          '<div class="an-proj-fill" style="width:' + (pace.spent / scale * 100).toFixed(1) + '%"></div>' +
+          (pr.ref ? '<div class="an-proj-tick" style="left:' + (pr.ref.amount / scale * 100).toFixed(1) + '%"></div>' : '') +
+          '</div></div>';
+      }
+      el.innerHTML = html;
+      el.hidden = false;
+    }
+
+    function renderAnalysisInsights(a, today, extras) {
+      const list = buildAnalysisInsights(a, extras, analysisMode, today);
+      if (!list.length) { anSetCard(document.getElementById("analysisInsights"), ""); return; }
+      anSetCard(document.getElementById("analysisInsights"), anHead("Smart read") + '<div>' +
+        list.map(function (i) {
+          return '<div class="an-insight"><span class="an-ico ' + escapeHtml(i.tone) + '">' + anIcon(i.icon) + '</span><span>' + escapeHtml(i.text) + '</span></div>';
+        }).join("") + '</div>');
+    }
+
+    const AN_FLOW_COLORS = { spent: "var(--color-primary)", fixed: "var(--chart-education)", invested: "var(--chart-investment)", saved: "var(--chart-financial)" };
+    function renderAnalysisFlow(a) {
+      const m = anFlowModel(a, analysisMode);
+      if (!m) { anSetCard(document.getElementById("analysisFlow"), ""); return; }
+      const bar = m.parts.filter(function (p) { return p.amount > 0; }).map(function (p) {
+        return '<span style="width:' + p.widthPct.toFixed(2) + '%; background:' + AN_FLOW_COLORS[p.key] + ';"></span>';
+      }).join("");
+      const legend = m.parts.filter(function (p) { return p.amount > 0; }).map(function (p) {
+        return '<span class="an-li"><span class="an-dot" style="background:' + AN_FLOW_COLORS[p.key] + ';"></span>' + escapeHtml(p.label) + ' ₹' + analysisRs(p.amount) + ' (' + p.pct + '%)</span>';
+      }).join("") + (m.left ? '<span class="an-li"><span class="an-dot empty"></span>Left ₹' + analysisRs(m.left.amount) + ' (' + m.left.pct + '%)</span>' : '');
+      const summary = m.parts.map(function (p) { return p.label + " " + p.pct + " percent"; }).join(", ");
+      anSetCard(document.getElementById("analysisFlow"),
+        anHead("Where your money went", '<span class="an-chip' + (m.savingsRate > 0 ? " good" : "") + '">Savings rate ' + m.savingsRate + '%</span>') +
+        '<div class="stack-bar" role="img" aria-label="' + escapeHtml("Income ₹" + analysisRs(m.income) + ". " + summary) + '">' + bar + '</div>' +
+        '<div class="an-legend">' + legend + '</div>' +
+        (m.usedFromEarlier > 0 ? '<p class="an-note">Used ₹' + analysisRs(m.usedFromEarlier) + ' from earlier money.</p>' : ''));
+    }
+
+    function anDailyCaption(m, day) {
+      if (day >= 1 && m.bars[day - 1] && !m.bars[day - 1].future) {
+        const b = m.bars[day - 1];
+        return b.label + ": ₹" + analysisRs(b.amount);
+      }
+      return "Tap a bar to see that day. Average ₹" + analysisRs(m.avg) + " a day.";
+    }
+    function renderAnalysisDaily(a, today) {
+      const m = anDailyModel(a, today);
+      const el = document.getElementById("analysisDaily");
+      if (!m) { anSetCard(el, ""); return; }
+      const W = 300, H = 100, slot = W / m.days, bw = slot * 0.66;
+      let bars = "";
+      m.bars.forEach(function (b) {
+        const x = b.day * slot - slot + (slot - bw) / 2;
+        if (b.future) {
+          bars += '<g class="an-bar future" aria-hidden="true"><rect class="fill" x="' + x.toFixed(2) + '" y="96" width="' + bw.toFixed(2) + '" height="4" rx="1.5"/></g>';
+          return;
+        }
+        const h = b.amount > 0 ? Math.max(2, b.amount / m.max * 92) : 0;
+        bars += '<g class="an-bar' + (b.spike ? " spike" : "") + (analysisDailySel === b.day ? " sel" : "") + '" tabindex="0" role="button" data-day="' + b.day + '" aria-label="' + escapeHtml(b.label + ": ₹" + analysisRs(b.amount)) + '">' +
+          '<rect class="hit" x="' + (b.day * slot - slot).toFixed(2) + '" y="0" width="' + slot.toFixed(2) + '" height="' + H + '"/>' +
+          (h > 0 ? '<rect class="fill" x="' + x.toFixed(2) + '" y="' + (H - h).toFixed(2) + '" width="' + bw.toFixed(2) + '" height="' + h.toFixed(2) + '" rx="1.5"/>' : '') + '</g>';
+      });
+      const avgY = (H - m.avg / m.max * 92).toFixed(2);
+      let axis = "";
+      [1, 8, 15, 22, 29].forEach(function (d) {
+        if (d <= m.days) axis += '<span style="left:' + ((d - 0.5) / m.days * 100).toFixed(2) + '%">' + d + '</span>';
+      });
+      anSetCard(el,
+        anHead("Day by day", "Average ₹" + analysisRs(m.avg) + " a day") +
+        '<svg class="an-daily-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="group" aria-label="Spending for each day of the month. Use the bars to hear a day.">' +
+        bars + (m.avg > 0 ? '<line class="an-avg-line" x1="0" x2="' + W + '" y1="' + avgY + '" y2="' + avgY + '"/>' : '') + '</svg>' +
+        '<div class="an-axis" aria-hidden="true">' + axis + '</div>' +
+        '<p class="an-caption" aria-live="polite">' + escapeHtml(anDailyCaption(m, analysisDailySel)) + '</p>');
+      el._anDaily = m;
+    }
+    // One listener for the Day by day bars (the chart is rebuilt on every render): tap or Enter/Space picks a day,
+    // Left/Right arrows move between days.
+    (function () {
+      const el = document.getElementById("analysisDaily");
+      if (!el) return;
+      function pick(bar) {
+        const day = Number(bar.getAttribute("data-day"));
+        if (!day || !el._anDaily) return;
+        analysisDailySel = day;
+        el.querySelectorAll(".an-bar").forEach(function (g) { g.classList.toggle("sel", g === bar); });
+        const cap = el.querySelector(".an-caption");
+        if (cap) cap.textContent = anDailyCaption(el._anDaily, day);
+        el._anHtml = "";   // the drawn card now differs from the saved text; the next render redraws it
+      }
+      el.addEventListener("click", function (e) {
+        const bar = e.target.closest && e.target.closest(".an-bar[data-day]");
+        if (bar) pick(bar);
+      });
+      el.addEventListener("keydown", function (e) {
+        const bar = e.target.closest && e.target.closest(".an-bar[data-day]");
+        if (!bar) return;
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(bar); return; }
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          e.preventDefault();
+          const all = Array.prototype.slice.call(el.querySelectorAll(".an-bar[data-day]"));
+          const next = all[all.indexOf(bar) + (e.key === "ArrowRight" ? 1 : -1)];
+          if (next) { next.focus(); pick(next); }
+        }
+      });
+    })();
+
+    function renderAnalysisPlan(today, extras) {
+      const el = document.getElementById("analysisPlan");
+      const m = anPlanModel(extras, analysisMode, today);
+      if (!m) { anSetCard(el, ""); return; }
+      const rows = m.rows.map(function (r) {
+        const chip = r.state === "over" ? '<span class="an-chip bad">Over by ₹' + analysisRs(r.over) + '</span>'
+          : r.state === "warn" ? '<span class="an-chip warn">' + r.pct + '%</span>'
+          : '<span class="an-chip good">On track</span>';
+        const cls = r.state === "over" ? " bad" : (r.state === "warn" ? " warn" : "");
+        return '<div class="an-plan-row"><div class="an-plan-top"><span class="nm">' + escapeHtml(r.category) + '</span>' +
+          '<span class="amt">₹' + analysisRs(r.actual) + ' / ₹' + analysisRs(r.target) + '</span>' + chip + '</div>' +
+          '<div class="category-bar-track" role="img" aria-label="' + escapeHtml(r.category + " " + r.pct + " percent of target") + '"><div class="category-bar-fill' + cls + '" style="width:' + Math.min(100, Math.max(0, r.pct)) + '%"></div></div></div>';
+      }).join("");
+      anSetCard(el, anHead("Against your plan", "₹" + analysisRs(m.totalActual) + " of ₹" + analysisRs(m.totalTarget)) + rows +
+        '<span class="chart-link an-link" role="button" tabindex="0" data-an-go="planner">Change targets</span>');
+    }
+    (function () {
+      const el = document.getElementById("analysisPlan");
+      if (!el) return;
+      function go(e) {
+        const t = e.target.closest && e.target.closest("[data-an-go]");
+        if (t) goToScreen(t.getAttribute("data-an-go"));
+      }
+      el.addEventListener("click", go);
+      el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } });
+    })();
+
+    function renderAnalysisPlaces(a) {
+      const el = document.getElementById("analysisPlaces");
+      const m = anPlacesModel(a);
+      if (!m) { anSetCard(el, ""); return; }
+      anSetCard(el, anHead("Top places") + '<div>' + m.rows.map(function (r) {
+        return '<div class="an-list-row"><div class="an-list-main"><div class="an-list-name" title="' + escapeHtml(r.name) + '">' + escapeHtml(r.name) + '</div>' +
+          '<div class="an-list-sub">' + escapeHtml(r.countText) + '</div>' +
+          '<div class="category-bar-track"><div class="category-bar-fill" style="width:' + Math.max(3, Math.round(r.amount / m.max * 100)) + '%"></div></div></div>' +
+          '<div class="an-list-amt">₹' + analysisRs(r.amount) + '</div></div>';
+      }).join("") + '</div>' + (m.smallLine ? '<p class="an-note">' + escapeHtml(m.smallLine) + '</p>' : ''));
+    }
+
+    function renderAnalysisWeek(a, today) {
+      const el = document.getElementById("analysisWeek");
+      const m = anWeekModel(a, today);
+      if (!m) { anSetCard(el, ""); return; }
+      const cols = m.days.map(function (d) {
+        const h = d.avg > 0 ? Math.max(3, Math.round(d.avg / m.max * 76)) : 0;
+        return '<div class="an-col"><div class="an-col-plot"><span class="an-col-val">' + (d.avg > 0 ? anCompact(d.avg) : '') + '</span>' +
+          '<div class="an-col-bar' + (d.weekend ? ' wk' : '') + '" style="height:' + h + 'px' + (h ? '' : '; min-height:0') + '"></div></div>' +
+          '<span class="an-col-lbl' + (d.big ? ' sel' : '') + '">' + d.initial + '</span></div>';
+      }).join("");
+      anSetCard(el, anHead("Your week", "Average per day") +
+        '<div class="an-cols" role="img" aria-label="' + escapeHtml(m.caption) + '">' + cols + '</div>' +
+        '<p class="an-caption">' + escapeHtml(m.caption) + '</p>');
+    }
+
+    function renderAnalysisTrend(today, extras) {
+      const el = document.getElementById("analysisTrend");
+      const m = anTrendModel(extras, analysisMode, today);
+      if (!m) { anSetCard(el, ""); return; }
+      const cols = m.months.map(function (mo) {
+        const h = mo.spent > 0 ? Math.max(3, Math.round(mo.spent / m.max * 76)) : 0;
+        const tick = mo.income != null && mo.income > 0 ? '<span class="an-col-tick" style="bottom:' + Math.round(mo.income / m.max * 76) + 'px"></span>' : '';
+        return '<div class="an-col"><div class="an-col-plot"><span class="an-col-val">' + (mo.spent > 0 ? anCompact(mo.spent) : '') + '</span>' +
+          '<div class="an-col-bar' + (mo.inProgress ? ' faded' : '') + '" style="height:' + h + 'px' + (h ? '' : '; min-height:0') + '"></div>' + tick + '</div>' +
+          '<span class="an-col-lbl' + (mo.sel ? ' sel' : '') + '">' + escapeHtml(mo.label) + '</span></div>';
+      }).join("");
+      const aria = m.months.map(function (mo) { return mo.label + " ₹" + analysisRs(mo.spent); }).join(", ");
+      anSetCard(el, anHead("Last 6 months", analysisMode === "all" ? "Line = money in" : "") +
+        '<div class="an-cols" role="img" aria-label="' + escapeHtml("Spending by month: " + aria) + '">' + cols + '</div>' +
+        (m.usual ? '<p class="an-caption">Usual month: ₹' + analysisRs(m.usual) + '</p>' : ''));
+    }
+
+    function renderAnalysisBiggest(a) {
+      const el = document.getElementById("analysisBiggest");
+      const m = anBiggestModel(a);
+      if (!m) { anSetCard(el, ""); return; }
+      anSetCard(el, anHead("Biggest payments") + '<div>' + m.rows.map(function (r) {
+        return '<div class="an-list-row"><div class="an-list-main"><div class="an-list-name" title="' + escapeHtml(r.label) + '">' + escapeHtml(r.label) + '</div>' +
+          '<div class="an-list-sub">' + escapeHtml([r.category, r.date].filter(Boolean).join(" · ")) + '</div></div>' +
+          '<div class="an-list-amt">₹' + analysisRs(r.amount) + '</div></div>';
+      }).join("") + '</div>');
+    }
+
+    // Draws every new card for the slice the toggle points at. Cards whose data is missing hide themselves.
+    // Wrapped so that a problem in a new card can never stop the main screen from drawing.
+    function renderAnalysisExtraCards(a) {
+      try {
+        const today = anTodayInfo(analysisYear, analysisMonth);
+        const extras = anCurrentExtras();
+        renderAnalysisPace(a, today, extras);
+        renderAnalysisInsights(a, today, extras);
+        renderAnalysisFlow(a);
+        renderAnalysisDaily(a, today);
+        renderAnalysisPlan(today, extras);
+        renderAnalysisPlaces(a);
+        renderAnalysisWeek(a, today);
+        renderAnalysisTrend(today, extras);
+        renderAnalysisBiggest(a);
+      } catch (err) {
+        if (window.console) console.error("Analysis extra cards:", err);
+      }
     }
 
     // Picks which slice of a getMonthlyAnalysis response to render for a
@@ -12052,14 +13102,7 @@
     // right after a fresh/cached load.
     // New look: wraps the real renderer so the screen "plays" (fade up, count, bars grow) when it was
     // just opened or the month / payment mode changed, but not on a quiet background refresh.
-    // Whole rupees show without decimals; anything with paise shows exactly 2 decimals
-    // (so "14,081.3" reads "14,081.30"). Also rounds away tiny floating-point leftovers.
-    function analysisRs(n) {
-      const v = Math.round((Number(n) || 0) * 100) / 100;
-      return Number.isInteger(v)
-        ? v.toLocaleString("en-IN")
-        : v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
+    // (analysisRs now lives in the AN-LOGIC block above loadMonthlyAnalysis.)
     // "Saving" means money you PUT AWAY on purpose (logged on the Savings screen, cash or bank),
     // not whatever happens to be left over. The leftover is shown separately as "Not yet used".
     // Only meaningful for the All view and for data that carries `saved` (older cached copies do not).
@@ -12159,6 +13202,13 @@
 
       if (a.needWantSaving) renderNeedWantSavingChart(a.needWantSaving, a.fixedObligations, a.totalCredit);
 
+      // The makeover cards (pace line, Smart read, Money flow, Day by day, plan, places, week, trend, biggest).
+      renderAnalysisExtraCards(a);
+      const anToday = anTodayInfo(analysisYear, analysisMonth);
+      const anPrev = anPrevDigest(anCurrentExtras(), analysisMode);
+      const anPrevCats = anPrev && anPrev.categories && typeof anPrev.categories === "object" ? anPrev.categories : {};
+      const anPrevName = anPrevMonthName(anCurrentExtras(), anToday);
+
       // Both sections are rendered every time regardless of which one is
       // currently visible — updateAnalysisViewUI() below just shows/hides,
       // so whichever one you're looking at is always this same
@@ -12167,7 +13217,8 @@
 
       // New look: a quiet refresh with identical categories leaves the list (and any open row) alone,
       // so a count or bar that is mid-animation is not cut short.
-      const catSig = finLookOn() ? analysisMode + "|" + JSON.stringify(a.categories) + "|" + a.topAmount : "";
+      // (the sig also covers last month's numbers and today's date, so the "+31%" chips redraw when they arrive)
+      const catSig = finLookOn() ? analysisMode + "|" + JSON.stringify(a.categories) + "|" + a.topAmount + "|" + JSON.stringify(anPrevCats) + "|" + anToday.day : "";
       if (finLookOn() && !FinPlay.isArmed("analysis") && catSig === finAnalysisSig && analysisCategoriesEl.children.length) return;
       finAnalysisSig = catSig;
 
@@ -12195,11 +13246,19 @@
             }).join("")
           : `<p style="font-size:0.85rem; color:var(--text-secondary); margin:0;">No transactions found.</p>`;
 
+        // Small "+31%" / "-23%" vs last month (only when last month had this category and the change is 5% or more).
+        const chg = anCatChange(entry.amount, anPrevCats[entry.category], anToday);
+        const chgHtml = chg
+          ? '<span class="an-chg ' + chg.dir + '" title="' + escapeHtml(anMonthStillRunning(anToday) ? "Already " + Math.abs(chg.pct) + "% above all of " + anPrevName : Math.abs(chg.pct) + "% " + (chg.pct > 0 ? "more" : "less") + " than " + anPrevName) + '" aria-label="' +
+            escapeHtml((chg.pct > 0 ? "Up " : "Down ") + Math.abs(chg.pct) + " percent compared with " + anPrevName) + '">' + chg.text + '</span>'
+          : "";
+
         const row = document.createElement("div");
         row.className = "category-row";
         row.innerHTML = `
           <div class="category-top" style="cursor:pointer;">
             ${categoryBadgeHtml(entry.category)}
+            ${chgHtml}
             <span class="cat-amt">${finLookOn() ? finNum(entry.amount, "\u20b9") : "₹" + entry.amount.toLocaleString("en-IN")}</span>
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M6 9l6 6 6-6"/></svg>
           </div>
@@ -19105,6 +20164,7 @@
       historyMonth = historyMonthEl.value;
       loadHistory();
     });
+
 
   </script>
 

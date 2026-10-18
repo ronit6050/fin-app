@@ -13,7 +13,7 @@ const { createRuntime } = require("./runtime/shim");
 
 const ALLOWED_ORIGINS = ["https://ronit6050.github.io"];
 // The only actions this server answers (all read-only). Everything else is refused with fallback:true.
-const READ_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
+const READ_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getAnalysisExtras", "getCCAdvisor",
   "getDebts", "getCash", "getInvestments", "getInvestmentInstruments", "getSavingsGoals", "getTransactionHistory", "getPlannerData",
   "getSettings", "getPeople", "getPerson", "getIgnoredTransactions"];
 // SAVING actions (added 2026-10-14). Accepted ONLY while the owner has switched saving on (Apps Script: v2dbEnableFunctionWrites()),

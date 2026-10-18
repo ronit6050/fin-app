@@ -247,7 +247,7 @@ assertEqual(result.categories[0].amount, 1050, "All's Food category amount is 10
 
 // Shape check — every field the function returned before this change
 // must still be present, plus the new byMode key.
-const expectedTopLevelKeys = ["totalDebit","totalCredit","savings","avgDaily","topAmount","topNote","categories","fixedObligations","invested","saved","savingGoal","incomeItems","needWantSaving","byMode"];
+const expectedTopLevelKeys = ["totalDebit","totalCredit","savings","avgDaily","topAmount","topNote","categories","fixedObligations","invested","saved","savingGoal","incomeItems","detail","needWantSaving","byMode"];
 const actualTopLevelKeys = Object.keys(result);
 expectedTopLevelKeys.forEach(function(key){
   assert(actualTopLevelKeys.indexOf(key) !== -1, "result still has the '" + key + "' field");
@@ -259,7 +259,7 @@ assert(actualTopLevelKeys.length === expectedTopLevelKeys.length,
 // byMode shape check — each bucket has exactly the same field names as
 // the top level (minus byMode itself, since buckets don't nest further).
 // ---------------------------------------------------------------------
-const expectedBucketKeys = ["totalDebit","totalCredit","savings","avgDaily","topAmount","topNote","categories","fixedObligations","invested","incomeItems","needWantSaving"];
+const expectedBucketKeys = ["totalDebit","totalCredit","savings","avgDaily","topAmount","topNote","categories","fixedObligations","invested","incomeItems","detail","needWantSaving"];
 ["bank","card","wallet"].forEach(function(bucketName){
   const bucketKeys = Object.keys(result.byMode[bucketName]);
   expectedBucketKeys.forEach(function(key){

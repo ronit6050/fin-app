@@ -22,7 +22,7 @@
 // moveDebtToFriend (owner's Sheet), the statement-upload actions (the owner's Google Drive), anything not listed.
 var V2_FRIEND_FULL_ACTIONS_ = [
   "ping", "getMyAccess", "adminLog", "getMyIngestKey", "getPeople", "getPerson", "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry",
-  "getPending", "saveNote", "markNotATransaction", "getIgnoredTransactions", "restoreIgnoredTransaction", "getTodaySummary", "getMonthlyAnalysis", "getCCAdvisor",
+  "getPending", "saveNote", "markNotATransaction", "getIgnoredTransactions", "restoreIgnoredTransaction", "getTodaySummary", "getMonthlyAnalysis", "getAnalysisExtras", "getCCAdvisor",
   "getDebts", "addDebt", "settleDebt", "recordDebtPayment",
   "getSavingsGoals", "previewSavingsSplit", "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
   "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal",
