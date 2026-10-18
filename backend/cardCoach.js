@@ -248,16 +248,21 @@ function cardCoachBudget_(input, txnData, today, cycles, swipes){
 
   var settings = input.settings || {};
 
-  // Committed every month: each named Rent/EMI/SIP once, plus the savings and investment goals from Settings.
-  var committed = (Number(settings.monthlySaveGoal) || 0) + (Number(settings.monthlyInvestmentGoal) || 0);
+  // Committed every month: each named Rent/EMI once, the savings goal, and investments. Investments are counted ONCE: the monthly
+  // investment goal in Settings and the SIPs found in your history are the same money, so take the bigger of the two, never both
+  // (adding both made the budget look emptier than it is).
+  var committed = Number(settings.monthlySaveGoal) || 0;
+  var sipTotal = 0;
   var seen = {};
   (input.obligations || []).forEach(function(o){
     if(!o || !o.enoughHistory || !(Number(o.avgAmount) > 0)) return;
     var key = cardCoachNorm_(o.label);
     if(seen[key]) return;
     seen[key] = true;
-    committed += Number(o.avgAmount);
+    if(String(o.type || "").toLowerCase() === "investment") sipTotal += Number(o.avgAmount);
+    else committed += Number(o.avgAmount);
   });
+  committed += Math.max(sipTotal, Number(settings.monthlyInvestmentGoal) || 0);
 
   // No made-up fallback: with no usable closed month of REAL data the answer is "unknown" (Settings' monthlyExpenses default is a guess).
   var living = cardCoachNonCardLiving_(input, txnData, today, cycles, first);
