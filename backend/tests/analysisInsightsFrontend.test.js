@@ -11,7 +11,7 @@ const ctx = {};
 vm.createContext(ctx);
 const names = ["analysisRs", "anNum", "anCompact", "anMonthName", "anDayLabel", "anTodayInfo", "anMonthStillRunning", "anDetail", "anSumTo",
   "anPrevDigest", "anPrevMonthName", "anTrendSpent", "anUsual", "anPlanModel", "anPace", "anPaceVsText", "anWeekdayAverages", "anBiggestWeekday",
-  "buildAnalysisInsights", "anCatChange", "anFlowModel", "anDailyModel", "anWeekModel", "anPlacesModel", "anBiggestModel", "anTrendModel", "anSpikeDay"];
+  "buildAnalysisInsights", "anCatChange", "anFlowModel", "anDailyModel", "anWeekModel", "anPlacesModel", "anBiggestModel", "anTrendModel", "anSpikeDay", "anFinishedDays"];
 vm.runInContext(m[1] + "; " + names.map((n) => "this." + n + " = " + n).join("; "), ctx);
 const f = ctx;
 
@@ -288,7 +288,10 @@ let wm = f.anWeekModel(wkSlice(), T);
 eq([wm.days.map((d) => d.weekend), wm.days.map((d) => d.initial).join("")], [[false, false, false, false, false, true, true], "MTWTFSS"], "week: Mon..Sun, weekend flags");
 eq(wm.caption, "Saturday is your biggest day: about ₹2,400 on average.", "week caption");
 ok(f.anWeekModel(wkSlice(), f.anTodayInfo(2026, 10, new Date(2026, 9, 6))) === null, "week: under 7 elapsed days -> hidden");
-ok(f.anWeekModel(wkSlice(), f.anTodayInfo(2026, 10, new Date(2026, 9, 7))) !== null, "week: 7 days is enough");
+ok(f.anWeekModel(wkSlice(), f.anTodayInfo(2026, 10, new Date(2026, 9, 7))) === null, "week: today does not count, so 7th of the month is still too early");
+ok(f.anWeekModel(wkSlice(), f.anTodayInfo(2026, 10, new Date(2026, 9, 8))) !== null, "week: 7 FINISHED days is enough");
+ok(f.anFinishedDays(f.anTodayInfo(2026, 10, new Date(2026, 9, 18))) === 17, "finished days exclude today");
+ok(f.anFinishedDays(f.anTodayInfo(2026, 9, new Date(2026, 9, 18))) === 30, "a past month counts all its days");
 ok(f.anWeekModel(slice({ detail: undefined }), T) === null, "week: no detail -> hidden");
 ok(f.anWeekModel(slice({ detail: { daily: daily(31, 0) } }), T) === null, "week: all zero -> hidden");
 
@@ -349,7 +352,7 @@ const an = html.slice(html.indexOf("function renderAnalysisPace"), html.indexOf(
 ok(!/#[0-9a-fA-F]{3,6}\b/.test(an) && !/rgba?\(/.test(an), "no hard-coded colours in the new Analysis render code");
 const css = html.slice(html.indexOf("Analysis makeover (2026-10-18) ----------"), html.indexOf("Home charts (2026-08-11)"));
 ok(!/#[0-9a-fA-F]{3,6}\b/.test(css.replace(/\/\*[\s\S]*?\*\//g, "")), "no hard-coded colours in the new Analysis CSS");
-ok(/APP_VERSION = "2026-10-18-03"/.test(html), "APP_VERSION bumped");
+ok(/APP_VERSION = "2026-10-18-0[3-9]"/.test(html), "APP_VERSION bumped");
 ok(/prefers-reduced-motion: reduce\) \{\s*\.an-card\.an-in \{ animation: none; \}/.test(html), "new fade respects reduced motion");
 
 console.log((fail ? "FAILED" : "OK") + ": " + pass + " passed, " + fail + " failed");

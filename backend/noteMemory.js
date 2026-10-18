@@ -31,7 +31,14 @@ function getNoteMemorySheet(){
 // values when checking many transactions in a row (see getPendingTransactions
 // in PWA.js), same batching reasoning as getSuggestedType in needWantSaving.js.
 function getSuggestedNote(counterparty, amount, noteMemoryData){
-  if(!counterparty) return "";
+  return getSuggestedNoteInfo(counterparty, amount, noteMemoryData).note;
+}
+
+// Same rule as getSuggestedNote, but also says how many times that note was used
+// (the real count from NoteMemory) - lets Pending say "Same as the last N times".
+// Returns { note: "" , timesUsed: 0 } when nothing is confident enough.
+function getSuggestedNoteInfo(counterparty, amount, noteMemoryData){
+  if(!counterparty) return { note: "", timesUsed: 0 };
 
   const band = getAmountBand(amount);
   const data = noteMemoryData || (function(){
@@ -49,8 +56,8 @@ function getSuggestedNote(counterparty, amount, noteMemoryData){
     }
   }
 
-  if(best && best.timesUsed >= NOTE_CONFIDENCE_MIN_USES) return best.note;
-  return "";
+  if(best && best.timesUsed >= NOTE_CONFIDENCE_MIN_USES) return { note: best.note, timesUsed: best.timesUsed };
+  return { note: "", timesUsed: 0 };
 }
 
 // The top few remembered notes for this merchant, best first - used for the

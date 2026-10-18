@@ -446,6 +446,8 @@ function getDashboardData(){
     runway:       (typeof buildRunwayForDashboard_ === "function") ? buildRunwayForDashboard_(txnData, month, cc) : null,
     // The 5 newest real transactions for Home's "Latest" list (newest first)
     latest:       (typeof buildLatestForDashboard_ === "function") ? buildLatestForDashboard_(txnData) : [],
+    // Home makeover extras (added 2026-10-18); null if it could not be worked out
+    homeExtra:    buildHomeExtra_(now, today, month, txnData, cashData, ss),
 
     // Full data for every tab, so the PWA can seed each tab's own cache
     // from this one call — opening any of them afterward is then instant,
@@ -463,6 +465,127 @@ function getDashboardData(){
       noteWordModel: buildNoteTypeModel_(txnData)
     }
   };
+}
+
+// Home screen extras: todayCount, usualDay, last7, prevSamePoint, watch.
+// Reuses the numbers getTodaySummary/getMonthlyAnalysis already worked out (so every
+// exclusion rule is theirs, not copied). Any failure -> that piece is null/[] and, if
+// everything fails, the whole thing is null. Never throws.
+// "Today" = India date via Session.getScriptTimeZone() (Cloud Functions shim also says
+// Asia/Kolkata). The per-day split inside getMonthlyAnalysis uses Date#getDate() of the
+// server's own clock, same as the Analysis screen, so both always agree with each other.
+function buildHomeExtra_(now, today, month, txnData, cashData, ss){
+  try{
+    const tz = Session.getScriptTimeZone();
+    const ymd = Utilities.formatDate(now, tz, "yyyy-MM-dd").split("-").map(Number);
+    const ty = ymd[0], tm = ymd[1], td = ymd[2];
+
+    const monthCache = {};
+    monthCache[ty + "-" + tm] = (month && month.detail && month.detail.daily) ? month.detail.daily : null;
+    const dailyOf = function(y, m){
+      const k = y + "-" + m;
+      if(!monthCache.hasOwnProperty(k) || monthCache[k] === null){
+        let a = null;
+        try{ a = getMonthlyAnalysis(y, m, txnData, cashData, { skipSaved: true }).detail.daily; }catch(e){ a = null; }
+        monthCache[k] = a;
+      }
+      return monthCache[k];
+    };
+    // Spend on one calendar day (today uses getTodaySummary's own total).
+    const spendOn = function(utcMs){
+      const dt = new Date(utcMs);
+      const y = dt.getUTCFullYear(), m = dt.getUTCMonth() + 1, d = dt.getUTCDate();
+      if(y === ty && m === tm && d === td) return Number(today.total) || 0;
+      const arr = dailyOf(y, m);
+      if(!arr) throw new Error("no daily data");
+      return Number(arr[d - 1]) || 0;
+    };
+    const todayMs = Date.UTC(ty, tm - 1, td);
+    const DAY = 86400000;
+
+    const out = { todayCount: null, usualDay: null, last7: null, prevSamePoint: null, watch: [] };
+
+    try{ out.todayCount = (Number(today.transactionCount) || 0) + (Number(today.cashCount) || 0); }catch(e){}
+
+    try{
+      const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+      const arr = [];
+      for(let k = 6; k >= 0; k--){
+        const ms = todayMs - k * DAY;
+        const dt = new Date(ms);
+        arr.push({
+          label: names[dt.getUTCDay()],
+          date:  dt.getUTCFullYear() + "-" + String(dt.getUTCMonth() + 1).padStart(2, "0") + "-" + String(dt.getUTCDate()).padStart(2, "0"),
+          amount: Math.round(spendOn(ms) * 100) / 100
+        });
+      }
+      out.last7 = arr;
+    }catch(e){ out.last7 = null; }
+
+    try{
+      // earliest dated row anywhere (bank or cash) = how much history there is
+      let earliest = Infinity;
+      for(let i = 1; i < txnData.length; i++){
+        if(!txnData[i][0] || isEmptyTransactionRow_(txnData[i])) continue;
+        const t = new Date(txnData[i][0]).getTime();
+        if(!isNaN(t) && t < earliest) earliest = t;
+      }
+      for(let i = 1; i < cashData.length; i++){
+        if(!cashData[i][1]) continue;
+        const t = new Date(cashData[i][1]).getTime();
+        if(!isNaN(t) && t < earliest) earliest = t;
+      }
+      if(earliest !== Infinity){
+        const e = Utilities.formatDate(new Date(earliest), tz, "yyyy-MM-dd").split("-").map(Number);
+        const historyDays = Math.round((todayMs - Date.UTC(e[0], e[1] - 1, e[2])) / DAY);
+        if(historyDays >= 7){
+          let sum = 0;
+          for(let k = 1; k <= 28; k++) sum += spendOn(todayMs - k * DAY);
+          out.usualDay = Math.round(sum / 28 * 100) / 100;
+        }
+      }
+    }catch(e){ out.usualDay = null; }
+
+    try{
+      const py = tm === 1 ? ty - 1 : ty;
+      const pm = tm === 1 ? 12 : tm - 1;
+      const prev = dailyOf(py, pm);
+      if(prev){
+        let all = 0, upTo = 0;
+        for(let d = 1; d <= prev.length; d++){
+          all += Number(prev[d - 1]) || 0;
+          if(d <= td) upTo += Number(prev[d - 1]) || 0;
+        }
+        out.prevSamePoint = all > 0 ? Math.round(upTo * 100) / 100 : null;
+      }
+    }catch(e){ out.prevSamePoint = null; }
+
+    try{
+      const bsheet = ss ? ss.getSheetByName("Budgets") : null;   // not getBudgetsSheet_: that would create the sheet
+      if(bsheet){
+        const saved = getSavedBudgetsForMonth_(formatPlannerMonth_(ty, tm), bsheet.getDataRange().getValues());
+        const actualBy = {};
+        ((month && month.categories) || []).forEach(function(c){ actualBy[c.category] = Number(c.amount) || 0; });
+        const list = [];
+        Object.keys(saved).forEach(function(cat){
+          if(cat.charAt(0) === "_") return;   // pseudo-rows (income / fixed obligations)
+          const m = saved[cat];
+          const target = (m.hasOwnProperty("Need") || m.hasOwnProperty("Want"))
+            ? (Number(m.Need) || 0) + (Number(m.Want) || 0)
+            : (Number(m[""]) || 0);
+          if(!(target > 0)) return;
+          const actual = actualBy[cat] || 0;
+          if(actual / target >= 0.85) list.push({ category: cat, target: target, actual: actual });
+        });
+        list.sort(function(a, b){ return (b.actual / b.target) - (a.actual / a.target); });
+        out.watch = list.slice(0, 3);
+      }
+    }catch(e){ out.watch = []; }
+
+    return out;
+  }catch(err){
+    return null;
+  }
 }
 
 // Remembers your phone's push "address" so Apps Script knows where to
@@ -1923,6 +2046,7 @@ function getTodaySummary(txnData, cashData){
 
   let bankSpend = 0;
   let cashSpend = 0;
+  let cashCount = 0;
   let totalTxn  = 0;
   let categoryTotals = {};
 
@@ -1959,6 +2083,7 @@ function getTodaySummary(txnData, cashData){
       const amount   = Number(cashData[i][4]) || 0;
       const category = cashData[i][6] || "Other";
       cashSpend += amount;
+      cashCount++;
       categoryTotals[category] = (categoryTotals[category] || 0) + amount;
     }
   }
@@ -1972,6 +2097,7 @@ function getTodaySummary(txnData, cashData){
     cashSpend: cashSpend,
     total: bankSpend + cashSpend,
     transactionCount: totalTxn,
+    cashCount: cashCount,
     categories: categories
   };
 }
@@ -2004,6 +2130,8 @@ function getPendingTransactions(txnData){
   // Same "read once, outside the loop" pattern as the sheets above — see
   // investmentInstruments.js for what this is used for.
   const investInstrumentsData = getInvestmentInstrumentsSheet_().getDataRange().getValues();
+
+  let dupIndex = null;   // built lazily, see buildPendingDupIndex_
 
   for(let i = 1; i < data.length; i++){
     const processed = (data[i][15] || "").toString().trim(); // column P
@@ -2055,6 +2183,9 @@ function getPendingTransactions(txnData){
     const isNonSpendTransfer = txnType === "debit" &&
       (isCreditCardBillPayment(mode, counterparty, note, amount, data) || isWalletTopUp(counterparty, reference));
 
+    const noteInfo = getSuggestedNoteInfo(counterparty, amount, noteMemoryData);
+    const suggestedTypeValue = isNonSpendTransfer ? null : getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeVotesData, note);
+
     pending.push({
       row:               i + 1,
       fp:                rowFingerprint_(data[i]),   // stale-card safeguard, see rowFingerprint_
@@ -2073,7 +2204,7 @@ function getPendingTransactions(txnData){
       // this can never catch a lending transfer before you've written a
       // note — that's an inherent limit of asking before you've said
       // anything, not a regression. Passed through anyway for correctness.
-      suggestedType:     isNonSpendTransfer ? null : getSuggestedType(txnType, suggestedCategory, counterparty, amount, typeVotesData, note),
+      suggestedType:     suggestedTypeValue,
       // See isNonSpendTransfer comment above — the frontend uses this to
       // skip rendering the Need/Want/Saving toggle entirely for a CC
       // bill payment or wallet top-up, same as it already does for a
@@ -2082,7 +2213,7 @@ function getPendingTransactions(txnData){
       // Remembered note for this merchant+amount — empty string means
       // "nothing confident enough yet," and the PWA falls back to showing
       // the merchant name instead. See docs/features/note-memory.md.
-      suggestedNote:     getSuggestedNote(counterparty, amount, noteMemoryData),
+      suggestedNote:     noteInfo.note,
       // Rent/EMI/Investment suggestion — see docs/features/financial-events.md.
       // confident=true means "matched a remembered amount or note, safe
       // for a single-tap confirm"; confident=false means "just a soft
@@ -2106,9 +2237,106 @@ function getPendingTransactions(txnData){
       investmentInstrumentConfident: investSuggestion ? investSuggestion.confident : false,
       investmentInstrumentLooksNew:  !!(investSuggestion && investSuggestion.confident === false)
     });
+
+    // One-tap-confirm readiness + possible double-text detection (added 2026-10-18,
+    // Home/Pending makeover). Never allowed to break the list: any failure = not ready.
+    const item = pending[pending.length - 1];
+    item.duplicateOf = null;
+    item.ready = false;
+    item.readyWhy = "";
+    try{
+      if(!dupIndex) dupIndex = buildPendingDupIndex_(data);
+      item.duplicateOf = findPendingDuplicate_(data, i, dupIndex);
+      const r = computePendingReady_(item, noteInfo);
+      item.ready = r.ready;
+      item.readyWhy = r.why;
+    }catch(readyErr){ item.duplicateOf = null; item.ready = false; item.readyWhy = ""; }
   }
 
   return pending.reverse(); // newest first
+}
+
+// ---- Pending: "ready" (safe one-tap confirm) and "possible duplicate" ----
+// Minutes since 1970 (India clock as written in the sheet) for a Transactions row, or null.
+function pendingRowMinutes_(r){
+  const tz = Session.getScriptTimeZone();
+  let ymd = "";
+  if(r[0] && typeof r[0].getTime === "function" && !isNaN(r[0].getTime())) ymd = Utilities.formatDate(r[0], tz, "yyyy-MM-dd");
+  else ymd = String(r[0] || "").trim().slice(0, 10);
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if(!dm) return null;
+  let hm = "";
+  if(r[1] && typeof r[1].getTime === "function" && !isNaN(r[1].getTime())) hm = Utilities.formatDate(r[1], tz, "HH:mm");
+  else hm = String(r[1] || "").trim();
+  const tm = /(\d{1,2}):(\d{2})/.exec(hm);
+  if(!tm) return null;
+  return Math.floor(Date.UTC(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3])) / 60000) + Number(tm[1]) * 60 + Number(tm[2]);
+}
+
+// Groups real rows by type + amount so a duplicate check only looks at same-amount rows.
+function buildPendingDupIndex_(data){
+  const index = {};
+  for(let j = 1; j < data.length; j++){
+    const r = data[j];
+    if(String(r[15] || "").trim() === "IGNORED") continue;
+    if(isEmptyTransactionRow_(r)) continue;
+    const key = String(r[3] || "").trim().toLowerCase() + "|" + (Math.round((Number(r[5]) || 0) * 100));
+    (index[key] || (index[key] = [])).push(j);
+  }
+  return index;
+}
+
+// Another row with same type + amount + payee (or same mode+bank when there is no payee)
+// within 10 minutes? Returns { row, minutesApart } for the closest one, else null.
+function findPendingDuplicate_(data, i, index){
+  const r = data[i];
+  const key = String(r[3] || "").trim().toLowerCase() + "|" + (Math.round((Number(r[5]) || 0) * 100));
+  const list = index[key];
+  if(!list || list.length < 2) return null;
+  const norm = function(v){ return String(v === null || v === undefined ? "" : v).trim().toLowerCase().replace(/\s+/g, " "); };
+  const cp = norm(r[7]);
+  const t0 = pendingRowMinutes_(r);
+  if(t0 === null) return null;
+  let best = null;
+  for(let k = 0; k < list.length; k++){
+    const j = list[k];
+    if(j === i) continue;
+    const o = data[j];
+    const ocp = norm(o[7]);
+    if(cp || ocp){
+      if(cp !== ocp) continue;
+    }else if(norm(o[4]) !== norm(r[4]) || norm(o[2]) !== norm(r[2])){
+      continue;
+    }
+    const t1 = pendingRowMinutes_(o);
+    if(t1 === null) continue;
+    const apart = Math.abs(t1 - t0);
+    if(apart > 10) continue;
+    if(!best || apart < best.minutesApart) best = { row: j + 1, minutesApart: Math.round(apart) };
+  }
+  return best;
+}
+
+// Conservative: true only when a one-tap confirm is safe. See docs/features/home-pending-makeover.md.
+function computePendingReady_(t, noteInfo){
+  const no = { ready: false, why: "" };
+  if(t.duplicateOf) return no;
+  const cat = String(t.suggestedCategory || "").trim();
+  if(!t.suggestedNote || !cat || cat.toLowerCase() === "other") return no;
+  if(t.type === "debit"){
+    if(!(t.suggestedType || t.isNonSpendTransfer)) return no;
+    if(t.investmentInstrumentLooksNew) return no;
+    if(t.suggestedFinancialEvent){
+      if(!t.financialEventConfident) return no;
+      if((t.suggestedFinancialEvent === "EMI" || t.suggestedFinancialEvent === "Investment") && !t.suggestedFinancialEventName) return no;
+    }
+  }else if(t.type !== "credit"){
+    return no;
+  }
+  const n = noteInfo && Number(noteInfo.timesUsed);
+  const why = (n && n >= 2) ? ("Same as the last " + n + " times")
+    : (t.type === "debit" ? "Same note and type as last time" : "Same note as last time");
+  return { ready: true, why: why };
 }
 
 // Decides whether a brand-new transaction is safe to offer a one-tap

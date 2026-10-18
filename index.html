@@ -128,6 +128,7 @@
       --bg-danger: #fcebeb;
       --bg-warning: #faeeda;
       --bg-success: #eaf3de;
+      --danger-text: #a8201a;   /* readable red text on --bg-danger (6.3:1) */
       /* Analysis makeover (2026-10-18): TEXT-safe status colours. --color-warning
          (#f29900) and --color-success are bright fills/borders and only reach
          about 2:1 and 4.2:1 as small text, so the new Analysis chips, insight
@@ -489,6 +490,7 @@
         --bg-danger: #2e1414;  --color-danger:  #F67979;
         --bg-warning: #2e2308; --color-warning: #D79309;
         --bg-success: #1b2408; --color-success: #97c459;
+        --danger-text: #F67979;
         /* Analysis makeover text-safe status colours (see the light block):
            good 8.7:1, warn 6.8:1, bad 6.6:1 on the dark card; the warn fill
            is 5.9:1 on the chart track. */
@@ -709,6 +711,7 @@
       --bg-danger: #2e1414;  --color-danger:  #F67979;
       --bg-warning: #2e2308; --color-warning: #D79309;
       --bg-success: #1b2408; --color-success: #97c459;
+      --danger-text: #F67979;
       /* Analysis makeover text-safe status colours (mirror of the block above). */
       --an-good-text: #97c459;
       --an-warn-text: #D79309;
@@ -1113,6 +1116,62 @@
     }
     .runway-input::placeholder { color: var(--text-on-hero-muted); }
 
+    /* ---------- Home: one hero card + monthly pace + watch list (2026-10-18) ----------
+       The hero holds TWO halves: today's spend (big number, two small facts, a 7-day strip) and, below a thin line,
+       the existing "money lasts until" card. Everything inside uses the hero colour pair, so it works in both themes. */
+    .hm-today .hero-amount { margin: 2px 0 8px; }
+    .hm-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .hm-chip {
+      font-size: 0.78rem; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+      color: var(--text-on-hero); border: 1px solid color-mix(in srgb, var(--text-on-hero) 45%, transparent);
+    }
+    .hm-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .hm-bar { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+    .hm-bar-track { height: 44px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+    .hm-bar-track i {
+      display: block; width: 100%; max-width: 26px; min-height: 3px; border-radius: 4px 4px 2px 2px;
+      background: color-mix(in srgb, var(--text-on-hero) 62%, transparent);
+    }
+    .hm-bar.today .hm-bar-track i { background: var(--text-on-hero); }
+    .hm-bar span { font-size: 0.68rem; color: var(--text-on-hero-muted); }
+    .hm-bar.today span { font-weight: 700; color: var(--text-on-hero); }
+    .hm-runway { margin-top: 16px; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--text-on-hero) 30%, transparent); }
+    .hm-runway:empty { display: none; }
+    .hm-runway .hero-label { margin-bottom: 2px; }
+
+    .hm-need-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 2px 0 6px; }
+    .hm-need-text { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); min-width: 0; }
+    .hm-btn { width: auto; min-height: 44px; padding: 0 18px; margin: 0; font-size: 0.88rem; flex: none; }
+    .hm-bill { display: flex; align-items: center; gap: 8px; padding: 9px 0; font-size: 0.9rem; color: var(--text-primary); }
+    .hm-bill + .hm-bill, .hm-need-top + .hm-bill { border-top: 0.5px solid var(--border-hairline); }
+    .hm-bill.tappable { cursor: pointer; }
+    .hm-bill .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hm-bill .amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .hm-due {
+      flex: none; font-size: 0.72rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+      background: var(--surface-inset); color: var(--text-secondary);
+    }
+    .hm-due.soon { background: var(--want-bg); color: var(--want-text); }
+    .hm-due.late { background: var(--bg-danger); color: var(--danger-text); }
+
+    .hm-month { cursor: pointer; }
+    .hm-month-top { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
+    .hm-month-amt { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.5px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .hm-trend { font-size: 0.76rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+    .hm-trend.good { background: var(--need-bg); color: var(--need-text); }
+    .hm-trend.up { background: var(--want-bg); color: var(--want-text); }
+    .hm-track { height: 6px; border-radius: 3px; background: var(--surface-inset); margin: 10px 0 6px; overflow: hidden; }
+    .hm-track i { display: block; height: 100%; border-radius: 3px; background: var(--color-primary); }
+    .hm-month-line { display: flex; justify-content: space-between; gap: 10px; font-size: 0.8rem; color: var(--text-secondary); }
+    .hm-month-line b { color: var(--text-primary); font-weight: 600; }
+
+    .hm-watch-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; font-size: 0.9rem; color: var(--text-primary); cursor: pointer; }
+    .hm-watch-row + .hm-watch-row { border-top: 0.5px solid var(--border-hairline); }
+    .hm-watch-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hm-wchip { flex: none; font-size: 0.72rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+    .hm-wchip.warn { background: var(--want-bg); color: var(--want-text); }
+    .hm-wchip.over { background: var(--bg-danger); color: var(--danger-text); }
+
     /* ---------- Loading spinner ---------- */
     .spinner {
       display: inline-block;
@@ -1505,6 +1564,89 @@
       margin-top: 6px;
       color: var(--text-secondary);
     }
+
+    /* ---------- Pending makeover (2026-10-18): summary, filters, ready banner, compact cards ---------- */
+    .pc-summary {
+      background: var(--surface-card); border: 0.5px solid var(--border-hairline); border-radius: var(--radius-md);
+      padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow-card);
+    }
+    .pc-sum-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+    .pc-sum-count { flex: none; white-space: nowrap; font-size: 2.125rem; font-weight: 700; letter-spacing: -1px; line-height: 1.05; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .pc-sum-count small { font-size: 0.9rem; font-weight: 600; letter-spacing: 0; color: var(--text-secondary); margin-left: 6px; }
+    .pc-sum-money { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; line-height: 1.35; }
+    .pc-sum-money span { display: block; }
+    .pc-sum-bar { height: 6px; border-radius: 3px; background: var(--surface-inset); margin: 12px 0 8px; overflow: hidden; }
+    .pc-sum-bar i { display: block; height: 100%; border-radius: 3px; background: var(--color-success); transition: width 0.3s ease; }
+    .pc-sum-cap { font-size: 0.8rem; color: var(--text-secondary); }
+
+    .pc-filters { display: flex; gap: 6px; overflow-x: auto; margin: 0 -2px 12px; padding: 2px; scrollbar-width: none; }
+    .pc-filters::-webkit-scrollbar { display: none; }
+    .pc-fchip, .pc-fchip:hover {
+      flex: none; width: auto; min-height: 44px; padding: 0 9px; margin: 0; font-size: 0.82rem; font-weight: 600;
+      background-color: var(--surface-card); color: var(--text-secondary); border: 0.5px solid var(--border-hairline);
+    }
+    .pc-fchip b { font-weight: 700; margin-left: 4px; color: var(--text-primary); }
+    .pc-fchip[aria-pressed="true"], .pc-fchip[aria-pressed="true"]:hover { background-color: var(--button-fill); color: #fff; border-color: transparent; }
+    .pc-fchip[aria-pressed="true"] b { color: #fff; }
+
+    .pc-ready-banner {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+      background: var(--bg-success); color: var(--need-text); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 12px;
+      font-size: 0.9rem; font-weight: 600;
+    }
+    .pc-ready-btn, .pc-ready-btn:hover { width: auto; min-height: 44px; padding: 0 16px; margin: 0; font-size: 0.88rem; background-color: var(--need-text); color: var(--bg-success); }
+
+    .pc-review { background: var(--surface-card); border: 0.5px solid var(--border-hairline); border-radius: var(--radius-md); padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow-card); }
+    .pc-review h3 { margin: 0 0 4px; font-size: 1rem; color: var(--text-primary); }
+    .pc-rv-hint { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px; }
+    .pc-rv-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; min-height: 44px; border-top: 0.5px solid var(--border-hairline); cursor: pointer; }
+    .pc-rv-row input { flex: none; width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--color-primary); }
+    .pc-rv-main { flex: 1; min-width: 0; }
+    .pc-rv-line { display: flex; justify-content: space-between; gap: 10px; font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
+    .pc-rv-line span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pc-rv-save { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
+    .pc-rv-why { font-size: 0.76rem; color: var(--text-muted); margin-top: 2px; }
+    .pc-rv-skip { font-size: 0.76rem; color: var(--danger-text); margin-top: 2px; }
+    .pc-rv-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .pc-rv-done { font-size: 0.95rem; font-weight: 600; color: var(--need-text); padding: 6px 0; }
+
+    .pl-group-head { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin: 14px 4px 8px; }
+    .pl-group-head:first-child { margin-top: 2px; }
+    .pending-item.pc-filtered-out { display: none; }
+
+    /* Compact card: shows only the top part, the answer chips and the action row; Edit opens the whole form. */
+    .pending-item.pc-collapsed { display: flex; flex-direction: column; }
+    .pending-item.pc-collapsed > *:not(.pc-top):not(.pc-actions):not(.pc-menu):not(.pending-result):not(.inv-chip-field):not(.fe-field:not(.debt-field)) { display: none; }
+    .pending-item.pc-open > .pc-top, .pending-item.pc-open > .pc-actions, .pending-item.pc-open > .pc-menu { display: none; }
+    .pending-item.pc-collapsed > .pc-less-row { display: none; }
+    .pending-item.pc-open > .pc-less-row { display: block; margin: -6px 0 6px; }
+    .pending-item.pc-isdup > .pc-actions, .pending-item.pc-isdup > .pc-menu { display: none; }
+    .pending-item.pc-isdup { border: 1.5px dashed color-mix(in srgb, var(--text-muted) 70%, transparent); }
+    .pc-r1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+    .pc-name { font-weight: 700; font-size: 1rem; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pc-amt { flex: none; font-weight: 700; font-size: 1.1rem; letter-spacing: -0.3px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .pc-amt.in { color: var(--need-text); }
+    .pc-r2 { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+    .pc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .pc-chip { font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--surface-inset); color: var(--text-secondary); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pc-chip.t-need { background: var(--need-bg); color: var(--need-text); }
+    .pc-chip.t-want { background: var(--want-bg); color: var(--want-text); }
+    .pc-chip.t-saving { background: var(--saving-bg); color: var(--saving-text); }
+    .pc-chip.t-investment { background: var(--investment-bg); color: var(--investment-text); }
+    .pc-why { font-size: 0.78rem; color: var(--text-secondary); margin-top: 8px; }
+    .pc-dup-title { margin-top: 10px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--danger-text); }
+    .pc-dup-text { font-size: 0.88rem; color: var(--text-primary); margin-top: 2px; }
+    .pc-dup-actions, .pc-actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+    .pc-btn { width: auto; min-height: 44px; padding: 0 18px; margin: 0; font-size: 0.9rem; flex: none; }
+    .pc-btn.primary { flex: 1; }
+    .pc-btn.ghost, .pc-btn.ghost:hover { background-color: transparent; color: var(--text-primary); border: 1px solid color-mix(in srgb, var(--text-muted) 45%, transparent); }
+    .pc-btn.more { width: 44px; padding: 0; }
+    .pc-btn.more svg { width: 20px; height: 20px; }
+    .pc-menu { margin-top: 6px; display: flex; flex-direction: column; }
+    .pc-menu[hidden] { display: none !important; }
+    .pc-menu button, .pc-menu button:hover { width: 100%; min-height: 44px; margin: 0; padding: 0 4px; text-align: left; background-color: transparent; color: var(--text-primary); font-size: 0.9rem; font-weight: 600; border-top: 0.5px solid var(--border-hairline); border-radius: 0; }
+    .pc-menu button.danger, .pc-menu button.danger:hover { color: var(--danger-text); }
+    @media (prefers-reduced-motion: reduce) { .pc-sum-bar i { transition: none; } }
 
     /* Need / Want / Saving — three tappable buttons, at most one selected.
        Starts with none selected if we have no confident guess, otherwise
@@ -2298,6 +2440,20 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+
+
+    /* Analysis category drill-down (2026-10-18): ranked rows on a calm inset panel instead of a tinted block. */
+    .cat-top-panel { background: var(--surface-inset); border-radius: 12px; padding: 10px 12px 4px; border-top: 0; }
+    .cat-top-head { font-size: 0.74rem; font-weight: 600; letter-spacing: .02em; color: var(--text-secondary); margin: 0 0 6px; }
+    .cat-top-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-top: 0.5px solid var(--border-hairline); }
+    .cat-top-row:first-of-type { border-top: 0; }
+    .cat-top-rank { flex: 0 0 20px; height: 20px; border-radius: 50%; background: var(--surface-card); color: var(--text-secondary); font-size: 0.7rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
+    .cat-top-main { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr auto; column-gap: 8px; row-gap: 5px; }
+    .cat-top-note { font-size: 0.88rem; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .cat-top-date { font-size: 0.72rem; color: var(--text-secondary); align-self: center; }
+    .cat-top-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--border-hairline); overflow: hidden; display: block; }
+    .cat-top-bar i { display: block; height: 100%; border-radius: 2px; }
+    .cat-top-amt { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
 
     /* ---------- Category badge — icon + color chip, used wherever a
        category name is shown (replaces plain text) ---------- */
@@ -4373,10 +4529,17 @@
         <div id="homeContent" style="display:none">
 
           <!-- Run-out card (2026-10-17): filled in by renderRunway(). Falls back to "Spent today" if the backend sent nothing. -->
-          <div class="hero-card tactile" id="homeRunway"></div>
+          <!-- Hero (2026-10-18): top half = today's spend (renderHomeToday), bottom half = the run-out card (renderRunway). -->
+          <div class="hero-card tactile" id="homeRunway">
+            <div class="hm-today" id="homeToday"></div>
+            <div class="hm-runway" id="homeRunwayBody"></div>
+          </div>
           <div class="home-warn" id="homeRunwayWarn" style="display:none"></div>
 
           <div class="home-card" id="homeNeeds"></div>
+
+          <div class="home-card hm-month" id="homeMonth" data-goto-tab="analysis" role="button" tabindex="0" style="display:none"></div>
+          <div class="home-card" id="homeWatch" data-goto-tab="analysis" role="button" tabindex="0" style="display:none"></div>
 
           <div class="stat-grid">
             <div class="stat-card" data-widget="cc" data-goto-tab="cc">
@@ -4392,15 +4555,16 @@
           <!-- Kept (hidden) so the older code that fills these never hits a missing element -->
           <span id="homeCashBalance" hidden></span><span id="homePendingCount" hidden></span>
 
+          <div class="home-card">
+            <div class="stat-label">Latest</div>
+            <div id="homeLatest"></div>
+          </div>
+
+          <!-- Kept (the new "This month" card does not show where the money went), moved to the bottom -->
           <div class="chart-card">
             <div class="chart-head"><span>Where it's going — this month</span><span class="chart-link" data-goto-tab="analysis">Analysis &#8594;</span></div>
             <div class="stack-bar" id="homeCategoryStack"></div>
             <div class="chip-row" id="homeCategoryChips"></div>
-          </div>
-
-          <div class="home-card">
-            <div class="stat-label">Latest</div>
-            <div id="homeLatest"></div>
           </div>
           <!-- Old list element kept hidden; its code still runs harmlessly -->
           <div id="homeRecent" hidden></div><span id="homeRecentLabel" hidden></span>
@@ -4448,6 +4612,26 @@
           <div id="manualResult" class="pending-result"></div>
         </div>
 
+        <!-- Summary, filters and the "confirm the ready ones" banner (2026-10-18). Filled in by renderPendingChrome(). -->
+        <div class="pc-summary" id="pendingSummary" style="display:none">
+          <div class="pc-sum-top">
+            <div class="pc-sum-count"><span id="pcSumCount">0</span><small>to note</small></div>
+            <div class="pc-sum-money" id="pcSumMoney"></div>
+          </div>
+          <div class="pc-sum-bar" id="pcSumBar" role="progressbar" aria-label="Done today" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="pcSumFill" style="width:0%"></i></div>
+          <div class="pc-sum-cap" id="pcSumCap"></div>
+        </div>
+        <div class="pc-filters" id="pendingFilters" role="group" aria-label="Show payments" style="display:none">
+          <button type="button" class="pc-fchip" data-filter="all" aria-pressed="true">All<b>0</b></button>
+          <button type="button" class="pc-fchip" data-filter="ready" aria-pressed="false">Ready<b>0</b></button>
+          <button type="button" class="pc-fchip" data-filter="needs" aria-pressed="false">Needs you<b>0</b></button>
+          <button type="button" class="pc-fchip" data-filter="in" aria-pressed="false">Money in<b>0</b></button>
+        </div>
+        <div class="pc-ready-banner" id="pendingReadyBanner" style="display:none">
+          <span id="pcReadyText"></span>
+          <button type="button" class="pc-ready-btn" id="pcReadyBtn">Review and confirm</button>
+        </div>
+        <div class="pc-review" id="pendingReview" style="display:none"></div>
         <div class="pending-status" id="pendingStatus"></div>
         <div id="pendingInvestmentNotices"></div>
         <div id="pendingList">
@@ -6384,8 +6568,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-18-03";
-    const APP_CHANGELOG = "Analysis has a new look. It now tells you how your month is going in a few plain lines, shows where your money went, a chart of each day, how you are doing against your plan, your top places, your week and the last 6 months. Each category also shows how it changed from last month.";
+    const APP_VERSION = "2026-10-18-04";
+    const APP_CHANGELOG = "Home and Pending have a new look: today's spend with your last 7 days, how this month is going, a watch list, and Pending filters with one-tap confirm for ready payments. Analysis leaves today out of the week average and lists a category more neatly.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -8024,9 +8208,15 @@
         { d: 0, h: 19, cp: "Swiggy", amt: 355, sc: "Food", st: "Want", sn: "Dinner order" },
         { d: 2, h: 11, cp: "Flipkart", amt: 1299, sc: "Shopping", st: "Want", sn: "" },
         { d: 1, h: 20, cp: "BookMyShow", amt: 500, sc: "Lifestyle", st: "Want", sn: "Movie tickets" },
-        { d: 0, h: 8, cp: "Jio", amt: 399, sc: "Bills", st: "Need", sn: "Recharge" }
+        { d: 0, h: 8, cp: "Jio", amt: 399, sc: "Bills", st: "Need", sn: "Recharge" },
+        // New Pending cards (2026-10-18): an earlier copy of the Swiggy order (makes the 19:15 one a "possible duplicate"),
+        // a person payment that looks like an EMI (answer chips), and money coming in.
+        { d: 0, h: 19, mm: 8, cp: "Swiggy", amt: 355, sc: "Food", st: "Want", sn: "Dinner order" },
+        { d: 3, h: 10, mm: 5, cp: "Dad", amt: 4000, sc: "Financial", st: null, sn: "", fe: "EMI", feName: "Laptop EMI" },
+        { d: 1, h: 15, mm: 40, cp: "Rohan", amt: 350, sc: "Income", st: null, sn: "", kind: "credit" }
       ].forEach(function (p) {
-        addTxn({ date: demoDaysAgo(p.d, p.h, 15), type: "debit", amount: p.amt, counterparty: p.cp, note: "", category: "", suggestedCategory: p.sc, suggestedType: p.st, suggestedNote: p.sn });
+        addTxn({ date: demoDaysAgo(p.d, p.h, p.mm === undefined ? 15 : p.mm), type: p.kind === "credit" ? "credit" : "debit", amount: p.amt, counterparty: p.cp, note: "", category: "",
+          suggestedCategory: p.sc, suggestedType: p.st, suggestedNote: p.sn, sugFE: p.fe || null, sugFEName: p.feName || null });
       });
 
       t.sort(function (a, b) { return a.date - b.date; }); // oldest first, like a real appended sheet
@@ -8681,19 +8871,54 @@
     }
 
     function demoComputePending() {
-      return demoState.transactions
+      const sorted = demoState.transactions
         .filter(function (t) { return !t.note && !t.notATransaction; })
         .slice()
-        .sort(function (a, b) { return b.date - a.date; }) // newest first
-        .map(function (t) {
+        .sort(function (a, b) { return b.date - a.date; }); // newest first
+      return sorted.map(function (t) {
+          // 2026-10-18 extras, worked out the way the real backend describes them:
+          // a possible duplicate = same payee and amount within 60 minutes EARLIER; ready = a note, a category and a type are all guessed.
+          let duplicateOf = null;
+          sorted.forEach(function (o) {
+            if (duplicateOf || o === t || o.type !== "debit" || t.type !== "debit") return;
+            const mins = Math.round((t.date - o.date) / 60000);
+            if (o.counterparty === t.counterparty && o.amount === t.amount && mins > 0 && mins <= 60) duplicateOf = { row: o.row, minutesApart: mins };
+          });
+          const hasFE = !!t.sugFE;
+          const ready = t.type === "debit" && !duplicateOf && !hasFE && !!t.suggestedNote && !!t.suggestedType && !!t.suggestedCategory && t.suggestedCategory !== "Other";
           return {
             row: t.row, date: demoFmtDateLong(t.date), time: demoFmtTime(t.date), bank: t.bank, type: t.type, mode: t.mode,
             amount: t.amount, counterparty: t.counterparty, suggestedCategory: t.suggestedCategory || "Other",
             suggestedType: t.suggestedType || null, isNonSpendTransfer: false, suggestedNote: t.suggestedNote || "",
-            financialEvent: null, financialEventName: null, suggestedFinancialEvent: null, suggestedFinancialEventName: null,
-            financialEventConfident: false, suggestedInvestmentInstrument: null, investmentInstrumentConfident: false, investmentInstrumentLooksNew: false
+            financialEvent: null, financialEventName: null, suggestedFinancialEvent: t.sugFE || null, suggestedFinancialEventName: t.sugFEName || null,
+            financialEventConfident: false, suggestedInvestmentInstrument: null, investmentInstrumentConfident: false, investmentInstrumentLooksNew: false,
+            ready: ready, readyWhy: ready ? "You noted “" + t.suggestedNote + "” for " + t.counterparty + " the last 4 times" : "",
+            duplicateOf: duplicateOf
           };
         });
+    }
+
+    // Pretend numbers for the Home hero / "This month" / watch list (2026-10-18), shaped like the backend's homeExtra.
+    function demoComputeHomeExtra(month, today) {
+      const now = new Date();
+      const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const last7 = [];
+      for (let i = 6; i >= 0; i--) {
+        const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const iso = demoFmtISODate(day);
+        let amt = 0;
+        demoState.transactions.forEach(function (t) {
+          if (t.type === "debit" && !t.financialEvent && demoFmtISODate(t.date) === iso) amt += t.amount;
+        });
+        last7.push({ label: names[day.getDay()], date: iso, amount: Math.round(amt) });
+      }
+      const todayCount = demoState.transactions.filter(function (t) { return t.type === "debit" && demoFmtISODate(t.date) === demoFmtISODate(now); }).length;
+      const cats = (month.categories || []).slice().sort(function (a, b) { return b.amount - a.amount; }).slice(0, 3);
+      const ratios = [0.93, 1.18, 0.87];
+      const watch = cats.map(function (c, i) { return { category: c.category, target: Math.round(c.amount / ratios[i] / 100) * 100, actual: c.amount }; });
+      const others = last7.slice(0, 6).map(function (b) { return b.amount; }).filter(function (a) { return a > 0; });
+      const usual = others.length ? Math.round(others.reduce(function (a, b) { return a + b; }, 0) / others.length) : null;
+      return { todayCount: todayCount, usualDay: usual, last7: last7, prevSamePoint: Math.round(month.totalDebit * 1.14), watch: watch };
     }
 
     function demoComputeHistory(offset, limit, opts) {
@@ -9233,7 +9458,7 @@
       return {
         todaySpend: today.total, monthSpend: month.totalDebit, pendingCount: pending.length, cashBalance: cash.balance,
         ccUsagePct: cc.usagePct, debtsNet: debts.netPosition, recent: recent,
-        runway: demoComputeRunway(month), latest: demoComputeLatest(),
+        runway: demoComputeRunway(month), latest: demoComputeLatest(), homeExtra: demoComputeHomeExtra(month, today),
         full: { today: today, month: month, cash: cash, cc: cc, debts: debts, savingsGoals: savingsGoalsData, investments: investments, pending: pending }
       };
     }
@@ -10321,6 +10546,224 @@
       homeDebtsNetEl.textContent = (net >= 0 ? "+₹" : "-₹") + Math.abs(net).toLocaleString("en-IN");
     }
 
+    // =========================================================
+    // HOME + PENDING makeover logic (2026-10-18). Plain maths and wording only, no screen access, so it is
+    // unit-tested in Node (backend/tests/homePendingFrontend.test.js reads the block between the two markers).
+    // Rule for all of it: missing or odd data hides a piece, it never prints NaN / undefined.
+    // =========================================================
+    // HP-LOGIC-START
+    var HP_MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    var HP_MON3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    function hpNum(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+    function hpRs(n) { return "₹" + Math.round(Math.abs(hpNum(n))).toLocaleString("en-IN"); }
+    function hpPlural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+    function hpPrevMonthName(now) { return HP_MONTH_NAMES[(now.getMonth() + 11) % 12]; }
+    function hpDateKey(now) { return now.getFullYear() + "-" + ("0" + (now.getMonth() + 1)).slice(-2) + "-" + ("0" + now.getDate()).slice(-2); }
+
+    // "19:42" -> "7:42 pm". Anything that is not a time gives "".
+    function hpTime12(t) {
+      var m = /^(\d{1,2}):(\d{2})/.exec(String(t == null ? "" : t).trim());
+      if (!m) return "";
+      var h = Number(m[1]), mi = Number(m[2]);
+      if (h > 23 || mi > 59) return "";
+      var ap = h >= 12 ? "pm" : "am";
+      h = h % 12; if (h === 0) h = 12;
+      return h + ":" + m[2] + " " + ap;
+    }
+    // The payment mode in plain words ("card 8132" -> "Card", "neft" -> "Bank transfer").
+    function hpModeLabel(mode) {
+      var m = String(mode == null ? "" : mode).trim().toLowerCase();
+      if (!m || m === "other") return "";
+      if (m.indexOf("card") === 0) return "Card";
+      if (m === "upi") return "UPI";
+      if (m === "wallet") return "Wallet";
+      if (m === "atm") return "ATM";
+      if (/^(neft|imps|rtgs|netbanking|net banking|transfer)$/.test(m)) return "Bank transfer";
+      return m.charAt(0).toUpperCase() + m.slice(1);
+    }
+    // "17 Oct 2026" -> a local Date (midnight), or null.
+    function hpParseDate(s) {
+      var m = /^(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*\s+(\d{4})$/.exec(String(s == null ? "" : s).trim());
+      if (!m) return null;
+      var mi = HP_MON3.indexOf(m[2].toLowerCase());
+      if (mi < 0) return null;
+      var d = new Date(Number(m[3]), mi, Number(m[1]));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    function hpShortDate(s) {
+      var d = hpParseDate(s);
+      return d ? d.getDate() + " " + HP_MON3[d.getMonth()].charAt(0).toUpperCase() + HP_MON3[d.getMonth()].slice(1) : "";
+    }
+    function hpDaysAgo(s, now) {
+      var d = hpParseDate(s);
+      if (!d) return null;
+      var t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return Math.round((t - d) / 86400000);
+    }
+    // Which heading a card sits under.
+    function hpDayGroup(dateStr, now) {
+      var n = hpDaysAgo(dateStr, now);
+      if (n === null) return "Earlier";
+      if (n <= 0) return "Today";
+      if (n === 1) return "Yesterday";
+      return "Earlier";
+    }
+
+    function hpIsDup(t) { return !!(t && t.duplicateOf && typeof t.duplicateOf === "object"); }
+    function hpIsReady(t) { return !!(t && t.ready === true && !hpIsDup(t)); }
+    function hpMatches(t, filter) {
+      if (!t) return true;
+      if (filter === "ready") return hpIsReady(t);
+      if (filter === "needs") return !hpIsReady(t) && t.type !== "credit";
+      if (filter === "in") return t.type === "credit";
+      return true;
+    }
+    function hpCounts(list) {
+      list = Array.isArray(list) ? list : [];
+      var c = { all: list.length, ready: 0, needs: 0, money: 0, readyKnown: false };
+      list.forEach(function (t) {
+        if (t && typeof t.ready === "boolean") c.readyKnown = true;
+        if (hpMatches(t, "ready")) c.ready++;
+        if (hpMatches(t, "needs")) c.needs++;
+        if (hpMatches(t, "in")) c.money++;
+      });
+      return c;
+    }
+    // Numbers for the Pending summary card.
+    function hpSummary(list, doneToday, now) {
+      list = Array.isArray(list) ? list : [];
+      var waiting = 0, moneyIn = 0, oldest = null;
+      list.forEach(function (t) {
+        if (!t) return;
+        var a = hpNum(t.amount);
+        if (t.type === "credit") moneyIn += a; else waiting += a;
+        var age = hpDaysAgo(t.date, now);
+        if (age !== null && (oldest === null || age > oldest)) oldest = age;
+      });
+      var done = Math.max(0, Math.floor(hpNum(doneToday)));
+      var total = done + list.length;
+      var parts = [done + " done today"];
+      if (oldest !== null && oldest >= 1) parts.push("oldest is " + hpPlural(oldest, "day", "days") + " old");
+      return {
+        count: list.length, waiting: waiting, moneyIn: moneyIn, done: done,
+        pct: total > 0 ? Math.round(done / total * 100) : 0,
+        moneyText: hpRs(waiting) + " waiting" + (moneyIn > 0 ? " · " + hpRs(moneyIn) + " money in" : ""),
+        moneyParts: moneyIn > 0 ? [hpRs(waiting) + " waiting", hpRs(moneyIn) + " money in"] : [hpRs(waiting) + " waiting"],
+        caption: parts.join(" · ")
+      };
+    }
+    // The green "Confirm N ready ones" banner: only with 2 or more ready cards.
+    function hpReadyBanner(list) {
+      var n = (Array.isArray(list) ? list : []).filter(hpIsReady).length;
+      return n >= 2 ? { show: true, count: n, text: n + " payments look ready to confirm" } : { show: false, count: n, text: "" };
+    }
+    // "Done today" counter kept in the phone's storage. store = localStorage-like. Resets on a new local date.
+    function hpDoneRead(store, key, dayKey) {
+      try {
+        var raw = store.getItem(key);
+        if (!raw) return 0;
+        var o = JSON.parse(raw);
+        if (!o || o.d !== dayKey) return 0;
+        var n = Number(o.n);
+        return isFinite(n) && n > 0 ? Math.floor(n) : 0;
+      } catch (e) { return 0; }
+    }
+    function hpDoneBump(store, key, dayKey, delta) {
+      var n = Math.max(0, hpDoneRead(store, key, dayKey) + (delta === undefined ? 1 : delta));
+      try { store.setItem(key, JSON.stringify({ d: dayKey, n: n })); } catch (e) { /* private mode: the counter just stays at what it was */ }
+      return n;
+    }
+    // A newer copy of a card from the server: take its ready / duplicate flags (a "Keep both" answer is respected).
+    function hpAdoptFlags(t, fresh, keepBoth) {
+      if (!t || !fresh) return;
+      t.ready = fresh.ready;
+      t.readyWhy = fresh.readyWhy;
+      if (!keepBoth) t.duplicateOf = fresh.duplicateOf;
+    }
+    // An amount as written on a card: whole rupees plain, paise shown only when there are some.
+    function hpMoney(n) {
+      var v = Math.abs(hpNum(n));
+      var whole = Math.round(v * 100) % 100 === 0;
+      return "₹" + v.toLocaleString("en-IN", whole ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function hpDupText(name, mins) {
+      var who = String(name || "this payment");
+      var m = Math.round(hpNum(mins));
+      var when = m <= 0 ? "at almost the same time" : (m === 1 ? "1 minute apart" : (m < 120 ? m + " minutes apart" : Math.round(m / 60) + " hours apart"));
+      return who + ": same amount, " + when;
+    }
+
+    // ---- Home ----
+    function hpNeedsLabel(n) { return hpPlural(Math.max(0, Math.floor(hpNum(n))), "payment", "payments") + " to note"; }
+    // The two small facts under "Spent today". Each is hidden when its data is missing.
+    function hpTodayChips(today, usualDay, count) {
+      var out = [];
+      var u = usualDay === null || usualDay === undefined || usualDay === "" ? NaN : Number(usualDay);
+      if (isFinite(u)) {
+        var diff = Math.round(hpNum(today) - u);
+        if (Math.abs(diff) >= 50) out.push(hpRs(diff) + (diff < 0 ? " below" : " above") + " your usual day");
+      }
+      if (count !== null && count !== undefined && count !== "" && isFinite(Number(count))) {
+        var n = Math.max(0, Math.floor(Number(count)));
+        out.push(n === 0 ? "No payments yet today" : hpPlural(n, "payment", "payments"));
+      }
+      return out;
+    }
+    // 7 bars, oldest first, the last one is today. Bad data gives no bars.
+    function hpBars(last7) {
+      if (!Array.isArray(last7) || last7.length < 2) return [];
+      var vals = last7.map(function (b) { return Math.max(0, hpNum(b && b.amount)); });
+      var max = Math.max.apply(null, vals);
+      return last7.map(function (b, i) {
+        var label = String((b && b.label) || "").slice(0, 3);
+        var isToday = i === last7.length - 1;
+        return {
+          label: label, isToday: isToday, amount: vals[i],
+          pct: max > 0 ? Math.max(6, Math.round(vals[i] / max * 100)) : 6,
+          aria: (label || "Day") + " " + hpRs(vals[i]) + (isToday ? ", today" : "")
+        };
+      });
+    }
+    // "Heading for": this month's total at the same pace. Never before day 5.
+    function hpPace(spent, day, daysInMonth) {
+      spent = hpNum(spent);
+      if (!(day >= 5) || !(daysInMonth >= day) || !(spent > 0)) return null;
+      return Math.round(spent / day * daysInMonth);
+    }
+    // "12% less than September at this point". Hidden with no last-month figure or a change under 3%.
+    function hpMonthChip(spent, prev, prevName) {
+      var p = prev === null || prev === undefined || prev === "" ? NaN : Number(prev);
+      if (!isFinite(p) || p <= 0) return null;
+      var pct = (hpNum(spent) - p) / p * 100;
+      if (Math.abs(pct) < 3) return null;
+      return { text: Math.round(Math.abs(pct)) + "% " + (pct < 0 ? "less" : "more") + " than " + prevName + " at this point", tone: pct < 0 ? "good" : "up" };
+    }
+    // Watch list rows: 85% to 99% = "N% used", over target = "over ₹X". Most used first, at most 3.
+    function hpWatchRows(watch) {
+      if (!Array.isArray(watch)) return [];
+      var rows = [];
+      watch.forEach(function (w) {
+        if (!w || !w.category) return;
+        var target = hpNum(w.target), actual = hpNum(w.actual);
+        if (!(target > 0)) return;
+        var ratio = actual / target;
+        if (ratio < 0.85) return;
+        if (actual > target) rows.push({ category: String(w.category), ratio: ratio, text: "over " + hpRs(actual - target), tone: "over" });
+        else rows.push({ category: String(w.category), ratio: ratio, text: Math.floor(ratio * 100) + "% used", tone: "warn" });
+      });
+      rows.sort(function (a, b) { return b.ratio - a.ratio; });
+      return rows.slice(0, 3);
+    }
+    // A bill's "due" chip. soon = within 3 days (warning colour), late = overdue.
+    function hpDueChip(days) {
+      if (days === null || days === undefined || !isFinite(Number(days))) return { text: "", tone: "" };
+      var n = Number(days);
+      if (n < 0) return { text: "overdue", tone: "late" };
+      if (n === 0) return { text: "due today", tone: "soon" };
+      return { text: "in " + hpPlural(n, "day", "days"), tone: n <= 3 ? "soon" : "" };
+    }
+    // HP-LOGIC-END
+
     function renderDashboard(d) {
       homeStatusEl.textContent = "";
       homeContentEl.style.display = "block";
@@ -10347,8 +10790,11 @@
       renderHomeRecentList(homeRecentMode);
       renderHomeCharts(dashboardFull);
       healHomeData(d);
+      renderHomeToday(d);
       renderRunway(d);
       renderHomeNeeds(d);
+      renderHomeMonth(d);
+      renderHomeWatch(d);
       renderHomeLatest(d);
 
       if (finLookOn()) {
@@ -10414,13 +10860,14 @@
 
     function renderRunway(d) {
       runwayLastDashboard = d;
-      const el = document.getElementById("homeRunway");
+      // Since 2026-10-18 this fills the BOTTOM half of the Home hero card (the top half is renderHomeToday).
+      const el = document.getElementById("homeRunwayBody");
       const warn = document.getElementById("homeRunwayWarn");
       const r = d.runway;
       warn.style.display = "none";
 
-      if (!r) {   // backend sent nothing: the old, simple card
-        el.innerHTML = '<div class="hero-label">Spent today</div><div class="hero-amount">' + inr(d.todaySpend) + '</div><div class="hero-sub">' + inr(d.monthSpend) + ' this month</div>';
+      if (!r) {   // backend sent nothing: the hero shows only today's spend
+        el.innerHTML = "";
         return;
       }
 
@@ -10482,7 +10929,7 @@
       el.innerHTML = '<div class="hero-label">At your current pace</div><div class="runway-title">' + title + '</div><div class="hero-sub">' + sub + '</div>' + bar +
         '<div class="runway-facts">' +
           '<span>Balance ' + inr(r.estimatedBalance) + '</span><span>Bills ahead -' + inr(r.billsAhead) + '</span>' +
-          '<span>Spending ' + inr(r.dailyPace) + '/day</span><span>Spent today ' + inr(d.todaySpend) + '</span>' +
+          '<span>Spending ' + inr(r.dailyPace) + '/day</span>' + (r.salaryDate ? '<span>Salary ' + runwayShortDate(r.salaryDate) + '</span>' : '<span>' + (r.bills && r.bills.length ? r.bills.length : 0) + ' bills coming</span>') +
         '</div>' +
         '<div class="runway-foot">Balance confirmed ' + (age <= 0 ? "today" : age + (age === 1 ? " day ago" : " days ago")) + ' · <a id="runwayUpdate">Update</a></div>';
       el.querySelector("#runwayUpdate").addEventListener("click", function () { runwayEditing = true; renderRunway(d); });
@@ -10497,23 +10944,86 @@
 
     function renderHomeNeeds(d) {
       const el = document.getElementById("homeNeeds");
-      const rows = [];
-      if (d.pendingCount > 0) rows.push({ text: d.pendingCount + (d.pendingCount === 1 ? " transaction" : " transactions") + " to note", go: "pending" });
+      const n = Number(d.pendingCount) || 0;
       const bills = (d.runway && d.runway.bills ? d.runway.bills : []).slice().sort(function (a, b) {
         return (a.daysUntil === null ? 999 : a.daysUntil) - (b.daysUntil === null ? 999 : b.daysUntil);
       });
-      bills.forEach(function (b) { rows.push({ text: escapeHtml(b.label) + runwayDueText(b.daysUntil), amt: inr(b.amount), go: b.label === "Card bill" ? "cc" : null }); });
-      if (rows.length === 0) {
+      if (n <= 0 && bills.length === 0) {
         el.innerHTML = '<div class="stat-label">Needs you</div><div class="home-row"><span>Nothing waiting. You\'re all caught up.</span></div>';
         return;
       }
-      el.innerHTML = '<div class="stat-label">Needs you</div>' + rows.map(function (r, i) {
-        return '<div class="home-row' + (r.go ? ' tappable' : '') + '" data-i="' + i + '"><span>' + r.text + '</span><span class="amt">' + (r.amt || "") + '</span></div>';
-      }).join("");
-      el.querySelectorAll(".home-row.tappable").forEach(function (row) {
-        row.addEventListener("click", function () { goToScreen(rows[Number(row.dataset.i)].go); });
+      // Payments to note: a clear action row with a button. Bills: rows with a due chip (soon = warning colour).
+      let html = '<div class="stat-label">Needs you</div>';
+      if (n > 0) {
+        html += '<div class="hm-need-top"><span class="hm-need-text">' + escapeHtml(hpNeedsLabel(n)) + '</span>' +
+          '<button type="button" class="hm-btn" id="homeClearBtn">Clear them</button></div>';
+      }
+      bills.forEach(function (b, i) {
+        const chip = hpDueChip(b.daysUntil);
+        html += '<div class="hm-bill' + (b.label === "Card bill" ? ' tappable' : '') + '" data-i="' + i + '"><span class="nm">' + escapeHtml(b.label) + '</span>' +
+          (chip.text ? '<span class="hm-due ' + chip.tone + '">' + escapeHtml(chip.text) + '</span>' : '') +
+          '<span class="amt">' + inr(b.amount) + '</span></div>';
+      });
+      el.innerHTML = html;
+      const clearBtn = el.querySelector("#homeClearBtn");
+      if (clearBtn) clearBtn.addEventListener("click", function () { goToScreen("pending"); });
+      el.querySelectorAll(".hm-bill.tappable").forEach(function (row) {
+        row.addEventListener("click", function () { goToScreen("cc"); });
       });
     }
+
+    // ---- Home hero, top half: "Spent today" + two small facts + a 7-day strip (2026-10-18) ----
+    function renderHomeToday(d) {
+      const el = document.getElementById("homeToday");
+      const x = d.homeExtra && typeof d.homeExtra === "object" ? d.homeExtra : null;
+      const today = Number(d.todaySpend) || 0;
+      let html = '<div class="hero-label">Spent today</div><div class="hero-amount">' + inr(today) + '</div>';
+      const chips = x ? hpTodayChips(today, x.usualDay, x.todayCount) : [];
+      if (chips.length) html += '<div class="hm-chips">' + chips.map(function (c) { return '<span class="hm-chip">' + escapeHtml(c) + '</span>'; }).join("") + '</div>';
+      const bars = x ? hpBars(x.last7) : [];
+      if (bars.length) {
+        html += '<div class="hm-bars" role="group" aria-label="Spending over the last 7 days">' + bars.map(function (b) {
+          return '<div class="hm-bar' + (b.isToday ? ' today' : '') + '" role="img" aria-label="' + escapeHtml(b.aria) + '"><div class="hm-bar-track"><i style="height:' + b.pct + '%"></i></div><span>' + escapeHtml(b.label) + '</span></div>';
+        }).join("") + '</div>';
+      } else if (!chips.length && d.monthSpend !== undefined) {
+        html += '<div class="hero-sub">' + inr(d.monthSpend) + ' this month</div>';
+      }
+      el.innerHTML = html;
+    }
+
+    // ---- "This month": spent so far, how it compares to last month at this point, and the pace (2026-10-18) ----
+    function renderHomeMonth(d) {
+      const el = document.getElementById("homeMonth");
+      if (d.monthSpend === undefined || d.monthSpend === null) { el.style.display = "none"; return; }
+      const now = new Date();
+      const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const spent = Number(d.monthSpend) || 0;
+      const x = d.homeExtra && typeof d.homeExtra === "object" ? d.homeExtra : null;
+      const chip = x ? hpMonthChip(spent, x.prevSamePoint, hpPrevMonthName(now)) : null;
+      const pace = hpPace(spent, now.getDate(), dim);
+      let html = '<div class="stat-label">This month</div><div class="hm-month-top"><span class="hm-month-amt">' + inr(spent) + '</span>' +
+        (chip ? '<span class="hm-trend ' + chip.tone + '">' + escapeHtml(chip.text) + '</span>' : '') + '</div>';
+      html += '<div class="hm-track" aria-hidden="true"><i style="width:' + Math.round(now.getDate() / dim * 100) + '%"></i></div>' +
+        '<div class="hm-month-line"><span>Day ' + now.getDate() + ' of ' + dim + '</span>' + (pace !== null ? '<span>Heading for <b>' + inr(pace) + '</b></span>' : '') + '</div>';
+      el.innerHTML = html;
+      el.style.display = "";
+      el.setAttribute("aria-label", "This month, " + inr(spent) + " spent. Open Analysis.");
+    }
+
+    // ---- "Watch list": categories close to or over their plan (2026-10-18) ----
+    function renderHomeWatch(d) {
+      const el = document.getElementById("homeWatch");
+      const rows = hpWatchRows(d.homeExtra && d.homeExtra.watch);
+      if (!rows.length) { el.style.display = "none"; el.innerHTML = ""; return; }
+      el.innerHTML = '<div class="stat-label">Watch list</div>' + rows.map(function (r) {
+        return '<div class="hm-watch-row"><span class="nm">' + escapeHtml(r.category) + '</span><span class="hm-wchip ' + r.tone + '">' + escapeHtml(r.text) + '</span></div>';
+      }).join("");
+      el.style.display = "";
+      el.setAttribute("aria-label", "Watch list, " + rows.length + (rows.length === 1 ? " category" : " categories") + ". Open Analysis.");
+    }
+    ["homeMonth", "homeWatch"].forEach(function (id) {
+      document.getElementById(id).addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goToScreen("analysis"); } });
+    });
 
     function renderHomeLatest(d) {
       const el = document.getElementById("homeLatest");
@@ -10626,6 +11136,7 @@
     // app (Debts "None — you're clean!", Home "Nothing here", etc.) —
     // was plain text here before, the odd one out. 2026-08-11.
     function showPendingCaughtUp() {
+      renderPendingChrome();   // nothing waiting: hides the summary, filters and banner
       pendingStatusEl.innerHTML = '<div class="empty-state"><span class="empty-icon">✅</span><p>All caught up — nothing pending.</p></div>';
     }
 
@@ -10668,7 +11179,13 @@
       // never to remove or replace one. Removals still come from the direct checks.
       if (!opts.addOnly) allPending = allPending.filter(function (t) {
         const fresh = freshByRow[t.row];
-        if (fresh && (!fresh.fp || fresh.fp === t.fp)) return true;
+        if (fresh && (!fresh.fp || fresh.fp === t.fp)) {
+          // Same payment: pick up its newest "ready" / "possible duplicate" flags (2026-10-18) and redraw the compact card.
+          hpAdoptFlags(t, fresh, pendingKeepBoth.has(t.row + "|" + t.fp));
+          const liveCard = pendingListEl.querySelector('[data-row="' + t.row + '"]');
+          if (liveCard && liveCard._pcRefresh) liveCard._pcRefresh();
+          return true;
+        }
         if (fresh) replacedRows.add(t.row);
         knownRows.delete(t.row);
         const card = pendingListEl.querySelector('[data-row="' + t.row + '"]');
@@ -10795,6 +11312,8 @@
 
     // Keeps the "Showing X of Y" text and the Show More button in sync
     function updatePendingStatusText() {
+      renderPendingChrome();
+      applyPendingView();
       if (allPending.length === 0) {
         showPendingCaughtUp();
         showMoreButtonEl.style.display = "none";
@@ -10805,6 +11324,181 @@
     }
 
     showMoreButtonEl.addEventListener("click", showNextBatch);
+
+    // =========================================================
+    // PENDING makeover (2026-10-18): summary card, filter chips, "confirm the ready ones", day headings.
+    // All numbers come from hp* functions (tested); this part only draws them and wires the buttons.
+    // =========================================================
+    let pendingFilter = "all";               // remembered for the session only
+    const pendingKeepBoth = new Set();       // "row|fp" of cards where "Keep both" was tapped this session
+    const pendingEls = {
+      summary: document.getElementById("pendingSummary"), filters: document.getElementById("pendingFilters"),
+      banner: document.getElementById("pendingReadyBanner"), review: document.getElementById("pendingReview")
+    };
+
+    function pendingDoneKey() {
+      return "finPendingDone:" + (demoMode ? "demo" : ((currentUser && currentUser.email) ? String(currentUser.email).toLowerCase() : "me"));
+    }
+    // Demo Mode keeps its counter in memory only (a fresh demo always starts at zero and never touches the real counter).
+    const pendingDemoStore = (function () { const d = {}; return { getItem: function (k) { return k in d ? d[k] : null; }, setItem: function (k, v) { d[k] = String(v); } }; })();
+    function pendingDoneStore() { return demoMode ? pendingDemoStore : localStorage; }
+    function pendingDoneToday() {
+      try { return hpDoneRead(pendingDoneStore(), pendingDoneKey(), hpDateKey(new Date())); } catch (e) { return 0; }
+    }
+    // +1 when a card leaves the list because the person answered it; -1 if that save fails and the card comes back.
+    function pendingDoneBump(delta) {
+      try { hpDoneBump(pendingDoneStore(), pendingDoneKey(), hpDateKey(new Date()), delta); } catch (e) { /* counter is a nicety only */ }
+    }
+
+    function renderPendingChrome() {
+      if (!allPending.length) {
+        pendingEls.summary.style.display = "none"; pendingEls.filters.style.display = "none";
+        pendingEls.banner.style.display = "none"; pendingEls.review.style.display = "none";
+        return;
+      }
+      const s = hpSummary(allPending, pendingDoneToday(), new Date());
+      const counts = hpCounts(allPending);
+      pendingEls.summary.style.display = "";
+      document.getElementById("pcSumCount").textContent = s.count;
+      document.getElementById("pcSumMoney").innerHTML = s.moneyParts.map(function (t) { return "<span>" + escapeHtml(t) + "</span>"; }).join("");
+      document.getElementById("pcSumFill").style.width = s.pct + "%";
+      document.getElementById("pcSumBar").setAttribute("aria-valuenow", String(s.pct));
+      document.getElementById("pcSumCap").textContent = s.caption;
+
+      // No card carries a "ready" answer (an older saved copy): the Ready chip and the banner stay hidden.
+      if (!counts.readyKnown && pendingFilter === "ready") pendingFilter = "all";
+      pendingEls.filters.style.display = "flex";
+      const countFor = { all: counts.all, ready: counts.ready, needs: counts.needs, in: counts.money };
+      pendingEls.filters.querySelectorAll(".pc-fchip").forEach(function (b) {
+        const f = b.dataset.filter;
+        b.style.display = (f === "ready" && !counts.readyKnown) ? "none" : "";
+        b.querySelector("b").textContent = countFor[f];
+        b.setAttribute("aria-pressed", f === pendingFilter ? "true" : "false");
+      });
+      const banner = hpReadyBanner(allPending);
+      pendingEls.banner.style.display = banner.show ? "flex" : "none";
+      if (banner.show) {
+        document.getElementById("pcReadyText").textContent = banner.text;
+        document.getElementById("pcReadyBtn").textContent = "Review and confirm";
+      }
+    }
+
+    // Hides cards the chosen chip leaves out, and puts TODAY / YESTERDAY / EARLIER headings between the rest.
+    function applyPendingView() {
+      Array.prototype.forEach.call(pendingListEl.querySelectorAll(":scope > .pl-group-head, :scope > .pc-filter-empty"), function (n) { n.remove(); });
+      const cards = pendingListEl.querySelectorAll(":scope > .pending-item");
+      if (!cards.length) return;
+      const byRow = {};
+      allPending.forEach(function (t) { byRow[t.row] = t; });
+      let lastGroup = null, head = null, inGroup = 0, visible = 0;
+      function closeHead() { if (head) head.textContent = head.dataset.label + " · " + inGroup; }
+      Array.prototype.forEach.call(cards, function (card) {
+        const show = hpMatches(byRow[card.dataset.row], pendingFilter);   // a card we do not know about stays visible
+        card.classList.toggle("pc-filtered-out", !show);
+        if (!show) return;
+        visible++;
+        const g = card.dataset.group || "Earlier";
+        if (g !== lastGroup) {
+          closeHead();
+          head = document.createElement("div");
+          head.className = "pl-group-head";
+          head.dataset.label = g;
+          pendingListEl.insertBefore(head, card);
+          lastGroup = g; inGroup = 0;
+        }
+        inGroup++;
+      });
+      closeHead();
+      if (visible === 0 && allPending.length) {
+        const e = document.createElement("div");
+        e.className = "empty-state pc-filter-empty";
+        e.innerHTML = '<p>Nothing in this group right now.</p>';
+        pendingListEl.appendChild(e);
+      }
+    }
+
+    pendingEls.filters.addEventListener("click", function (e) {
+      const b = e.target.closest(".pc-fchip");
+      if (!b) return;
+      pendingFilter = b.dataset.filter;
+      updatePendingStatusText();
+    });
+
+    // A card for this payment: the one on screen, or (for a payment further down the list) a hidden one built the same way,
+    // so confirming it goes through exactly the same Save code.
+    function pendingCardFor(txn) {
+      const live = pendingListEl.querySelector('[data-row="' + txn.row + '"]');
+      if (live && !live.dataset.finWaiting) return live;
+      return buildPendingItem(txn);
+    }
+
+    function closePendingReview() { pendingEls.review.style.display = "none"; pendingEls.review.innerHTML = ""; }
+
+    function openPendingReview() {
+      const items = allPending.filter(hpIsReady);
+      if (items.length < 2) { closePendingReview(); return; }
+      const rows = items.map(function (txn) {
+        const card = pendingCardFor(txn);
+        const chk = card._finSwipe.check();
+        return { txn: txn, card: card, chk: chk, v: card._pcValues() };
+      });
+      const el = pendingEls.review;
+      el.innerHTML = '<h3>Confirm these payments</h3><div class="pc-rv-hint">Nothing is saved until you tap the button at the bottom. Untick any you want to check yourself.</div>' +
+        rows.map(function (r, i) {
+          const who = r.txn.counterparty || r.txn.bank || "Payment";
+          const bits = [r.v.note ? "“" + r.v.note + "”" : "", r.v.category, r.v.type].filter(Boolean).join(" · ");
+          return '<label class="pc-rv-row"><input type="checkbox" data-i="' + i + '"' + (r.chk.ok ? ' checked' : ' disabled') + '>' +
+            '<span class="pc-rv-main"><span class="pc-rv-line"><span>' + escapeHtml(who) + '</span><span>' + (r.txn.type === "credit" ? "+" : "-") + hpMoney(r.txn.amount) + '</span></span>' +
+            '<span class="pc-rv-save" style="display:block">Will save: ' + escapeHtml(bits || "as it is") + '</span>' +
+            (r.chk.ok ? (r.txn.readyWhy ? '<span class="pc-rv-why" style="display:block">' + escapeHtml(r.txn.readyWhy) + '</span>' : '')
+                      : '<span class="pc-rv-skip" style="display:block">Needs details first: ' + escapeHtml(r.chk.hint) + '</span>') +
+            '</span></label>';
+        }).join("") +
+        '<div class="pc-rv-actions"><button type="button" class="pc-btn primary" id="pcRvGo"></button><button type="button" class="pc-btn ghost" id="pcRvCancel">Cancel</button></div>';
+      el.style.display = "";
+      const goBtn = el.querySelector("#pcRvGo");
+      function checkedRows() {
+        return Array.prototype.filter.call(el.querySelectorAll("input[type=checkbox]"), function (c) { return c.checked; })
+          .map(function (c) { return rows[Number(c.dataset.i)]; });
+      }
+      function updateGo() {
+        const n = checkedRows().length;
+        goBtn.textContent = n ? "Confirm selected (" + n + ")" : "Confirm selected";
+        goBtn.disabled = n === 0;
+      }
+      el.onchange = updateGo;     // assigned (not added), so opening the panel again never stacks listeners
+      updateGo();
+      el.querySelector("#pcRvCancel").addEventListener("click", closePendingReview);
+      goBtn.addEventListener("click", function () {
+        const sel = checkedRows();
+        if (!sel.length) return;
+        goBtn.disabled = true;
+        el.querySelector("#pcRvCancel").disabled = true;
+        let sent = 0, skipped = 0;
+        // One by one, a short gap apart, each through the card's own Save button (optimistic removal, fingerprint check,
+        // learning, and the card coming back with a message if the save fails).
+        (function step(i) {
+          if (i >= sel.length) {
+            el.innerHTML = '<div class="pc-rv-done" role="status">' + sent + (sent === 1 ? " payment" : " payments") + ' confirmed' +
+              (skipped ? ' · ' + skipped + ' still need a look' : '') + '</div>';
+            setTimeout(function () { if (el.querySelector(".pc-rv-done")) closePendingReview(); }, 4000);
+            return;
+          }
+          const r = sel[i];
+          const idx = allPending.indexOf(r.txn);
+          if (idx === -1 || r.card.dataset.finWaiting) { skipped++; step(i + 1); return; }
+          const hiddenCard = !pendingListEl.contains(r.card);
+          const compensate = hiddenCard && idx >= shownCount;
+          if (compensate) shownCount++;      // Save subtracts one; this keeps "shown" honest for a card that was never drawn
+          r.card.querySelector(".save-btn").click();
+          if (allPending.indexOf(r.txn) === -1) { sent++; }
+          else { skipped++; if (compensate) shownCount = Math.max(0, shownCount - 1); }
+          setTimeout(function () { step(i + 1); }, 250);
+        })(0);
+      });
+      try { el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) { /* fine */ }
+    }
+    document.getElementById("pcReadyBtn").addEventListener("click", openPendingReview);
 
     // Builds one transaction "card": details + a note field + category + Save button
     // ---------------------------------------------------------
@@ -11020,6 +11714,8 @@
       ` : "";
 
       card.innerHTML = `
+        <div class="pc-less-row"><button type="button" class="link-btn pc-less">Show less</button></div>
+        <div class="pc-top"></div>
         ${newLook ? finPendingHeadHtml(txn, suggested) : ""}
         <div class="pending-top">
           <span class="pending-amount">₹${txn.amount.toLocaleString("en-IN")}</span>
@@ -11043,6 +11739,16 @@
         ${splitHtml}
         <button type="button" class="save-btn">Save</button>
         <button type="button" class="not-txn-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="8.5"/><path d="M6.5 17.5l11-11"/></svg><span class="btn-label">Not a transaction</span></button>
+        <div class="pc-actions">
+          <button type="button" class="pc-btn primary pc-confirm">Confirm</button>
+          <button type="button" class="pc-btn ghost pc-edit">Edit</button>
+          <button type="button" class="pc-btn ghost more pc-more" aria-label="More choices" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></button>
+        </div>
+        <div class="pc-menu" hidden>
+          <button type="button" class="pc-m-split">Split with a friend</button>
+          <button type="button" class="pc-m-mark">Mark as EMI, Rent, SIP or Saving</button>
+          <button type="button" class="pc-m-not danger">Not a transaction</button>
+        </div>
         <div class="pending-result"></div>
       `;
 
@@ -11414,6 +12120,7 @@
         updatePendingStatusText();
         saveCache("pending", allPending);
         card.remove();
+        pendingDoneBump(1);     // counts toward "done today" on the Pending summary
 
         const savedFinancialEvent       = financialEvent.type;
         const savedFinancialEventName   = financialEvent.name;
@@ -11477,6 +12184,7 @@
                 // reconcile re-sorted it), so its row number now points at a
                 // DIFFERENT transaction. The backend refused and wrote nothing.
                 // Don't put this stale card back - reload the real list.
+                pendingDoneBump(-1);
                 showPendingNotice(data.error);
                 loadPendingTransactions();
                 return;
@@ -11534,6 +12242,7 @@
           });
 
         function restoreAfterFailedSave(message) {
+          pendingDoneBump(-1);
           allPending.unshift(txn);
           shownCount++;
           updatePendingStatusText();
@@ -11589,6 +12298,7 @@
         updatePendingStatusText();
         saveCache("pending", allPending);
         card.remove();
+        pendingDoneBump(1);
 
         callAppsScript({ action: "markNotATransaction", idToken: currentUser.idToken, row: txn.row, fp: txn.fp })
           .then(function (data) {
@@ -11604,6 +12314,7 @@
                 : "Removed. If that was a mistake, tap Undo (or find it under Removed items below).",
                 data.archiveRow ? { label: "Undo", onClick: function (noticeEl) { restoreRemovedItem(data.archiveRow, data.fp, noticeEl); } } : null);
             } else if (data.stale) {
+              pendingDoneBump(-1);
               showPendingNotice(data.error);   // see the stale-card note on Pending's Save
               loadPendingTransactions();
             } else {
@@ -11615,6 +12326,7 @@
           });
 
         function restoreAfterNotTxnFailure(message) {
+          pendingDoneBump(-1);
           allPending.unshift(txn);
           shownCount++;
           updatePendingStatusText();
@@ -11625,6 +12337,130 @@
           pendingListEl.insertBefore(card, pendingListEl.firstChild);
         }
       }, looksLikeRealPayment ? "Looks like a real payment — tap again to remove" : undefined);
+
+      // ---------- Compact card (2026-10-18) ----------
+      // The card starts as a short summary (who, how much, when, what will be saved). Edit / Add details opens the
+      // WHOLE existing form below it, untouched. Confirm presses the very same Save button, so optimistic removal,
+      // the fingerprint check, learning and the failure message all behave exactly as before.
+      card.dataset.group = hpDayGroup(txn.date, new Date());
+      const pcTop = card.querySelector(".pc-top");
+      const pcMenu = card.querySelector(".pc-menu");
+      const pcConfirm = card.querySelector(".pc-confirm");
+      const pcMore = card.querySelector(".pc-more");
+      const pcSplitLink = card.querySelector(".split-link");
+      const pcMarkLink = card.querySelector(".mark-link");
+
+      // What would be saved right now, in plain words (also used by the "Confirm N ready ones" list).
+      function pcValues() {
+        let category = "";
+        const isEvent = !!(financialEvent.type || markedCcBill);
+        if (financialEvent.type) category = financialEvent.type === "Investment" ? ("Investment" + (financialEvent.name ? ": " + financialEvent.name : "")) : (financialEvent.name || financialEvent.type);
+        else if (markedCcBill) category = "Card bill";
+        else if (categoryField && categoryField.style.display !== "none" && categorySelect.value) category = categorySelect.value;
+        const typeVisible = !!(typeFieldEl && typeFieldEl.style.display !== "none");
+        let type = "";
+        if (typeSource === "unsure") type = "Not sure"; else if (selectedType && typeVisible) type = selectedType;
+        return { note: noteInput.value.trim(), category: category, isEvent: isEvent, type: type, investment: investmentInstrument.name || "" };
+      }
+      card._pcValues = pcValues;
+
+      function renderCompact() {
+        const credit = txn.type === "credit";
+        const dup = hpIsDup(txn);
+        card.classList.toggle("pc-isdup", dup);
+        const name = txn.counterparty || txn.bank || "Payment";
+        const sub = [card.dataset.group === "Today" ? "" : hpShortDate(txn.date), hpTime12(txn.time), hpModeLabel(txn.mode), txn.bank].filter(Boolean).join(" · ");
+        let h = '<div class="pc-r1"><span class="pc-name">' + escapeHtml(name) + '</span><span class="pc-amt' + (credit ? " in" : "") + '">' +
+          (credit ? "+" : "-") + hpMoney(txn.amount) + '</span></div><div class="pc-r2">' + escapeHtml(sub) + '</div>';
+        if (dup) {
+          h += '<div class="pc-dup-title">Possible duplicate</div><div class="pc-dup-text">' + escapeHtml(hpDupText(name, txn.duplicateOf.minutesApart)) + '</div>' +
+            '<div class="pc-dup-actions"><button type="button" class="pc-btn ghost pc-keep">Keep both</button>' +
+            '<button type="button" class="pc-btn pc-dup-remove"><span class="btn-label">Remove this one</span></button></div>';
+        } else {
+          const v = pcValues();
+          const chips = [];
+          if (v.note) chips.push('<span class="pc-chip">“' + escapeHtml(v.note) + '”</span>');
+          if (v.category) {
+            const st = !v.isEvent && CATEGORY_STYLES[v.category];
+            chips.push(st ? '<span class="pc-chip" style="background:var(--cat-' + st.css + '-bg); color:var(--cat-' + st.css + '-text);">' + escapeHtml(v.category) + '</span>'
+                          : '<span class="pc-chip">' + escapeHtml(v.category) + '</span>');
+          }
+          if (v.type) chips.push('<span class="pc-chip ' + ({ Need: "t-need", Want: "t-want", Saving: "t-saving" }[v.type] || "") + '">' + escapeHtml(v.type) + '</span>');
+          if (v.investment) chips.push('<span class="pc-chip t-investment">Invest: ' + escapeHtml(v.investment) + '</span>');
+          if (chips.length) h += '<div class="pc-chips">' + chips.join("") + '</div>';
+          if (hpIsReady(txn) && txn.readyWhy) h += '<div class="pc-why">' + escapeHtml(txn.readyWhy) + '</div>';
+        }
+        pcTop.innerHTML = h;
+        pcConfirm.textContent = hpIsReady(txn) ? "Confirm" : "Add details";
+        if (dup) {
+          pcTop.querySelector(".pc-keep").addEventListener("click", function () {
+            txn.duplicateOf = null;
+            pendingKeepBoth.add(txn.row + "|" + txn.fp);
+            renderCompact();
+            updatePendingStatusText();
+          });
+          // "Remove this one" is the normal "Not a transaction" path (two taps, then the 4-second-style Undo notice).
+          bindConfirmAction(pcTop.querySelector(".pc-dup-remove"), function () { notTxnButton.click(); notTxnButton.click(); }, "Tap again to remove");
+        }
+      }
+      function pcExpand() {
+        card.classList.remove("pc-collapsed");
+        card.classList.add("pc-open");
+        pcMenu.hidden = true;
+        pcMore.setAttribute("aria-expanded", "false");
+      }
+      function pcCollapse() {
+        card.classList.remove("pc-open");
+        card.classList.add("pc-collapsed");
+        renderCompact();
+      }
+      card._pcRefresh = function () { if (card.classList.contains("pc-collapsed")) renderCompact(); else pcConfirm.textContent = hpIsReady(txn) ? "Confirm" : "Add details"; };
+
+      pcConfirm.addEventListener("click", function () {
+        if (!hpIsReady(txn)) { pcExpand(); return; }
+        const chk = card._finSwipe.check();
+        const debtOpen = debtField.style.display !== "none";    // "who was this with?" needs an answer first
+        if (!chk.ok || debtOpen) {
+          pcExpand();
+          resultEl.style.color = "var(--text-secondary)";
+          resultEl.textContent = chk.ok ? "Choose who this was with, then tap Save." : chk.hint;
+          return;
+        }
+        saveButton.click();
+      });
+      card.querySelector(".pc-edit").addEventListener("click", pcExpand);
+      card.querySelector(".pc-less").addEventListener("click", pcCollapse);
+      pcMore.addEventListener("click", function () {
+        pcMenu.hidden = !pcMenu.hidden;
+        pcMore.setAttribute("aria-expanded", pcMenu.hidden ? "false" : "true");
+      });
+      const pcMSplit = card.querySelector(".pc-m-split"), pcMMark = card.querySelector(".pc-m-mark");
+      if (!pcSplitLink) pcMSplit.hidden = true;
+      if (!pcMarkLink) pcMMark.hidden = true;
+      pcMSplit.addEventListener("click", function () { pcExpand(); if (pcSplitLink) pcSplitLink.click(); });
+      pcMMark.addEventListener("click", function () { pcExpand(); if (pcMarkLink) pcMarkLink.click(); });
+      // Opens the full card and taps the normal "Not a transaction" button once, so it asks "tap again" right there.
+      card.querySelector(".pc-m-not").addEventListener("click", function () { pcExpand(); notTxnButton.click(); });
+
+      // Keep the summary chips in step with anything changed inside the card (a chip tapped, a refreshed suggestion).
+      function pcSchedule(e) {
+        if (e && e.target && e.target.closest && e.target.closest(".pc-top, .pc-actions, .pc-menu")) return;
+        setTimeout(function () { if (card.classList.contains("pc-collapsed")) renderCompact(); }, 0);
+      }
+      ["input", "change", "click"].forEach(function (ev) { card.addEventListener(ev, pcSchedule); });
+
+      // A duplicate card cannot be swipe-confirmed until the person has looked at it.
+      const pcBaseCheck = card._finSwipe.check;
+      card._finSwipe.check = function () {
+        if (hpIsDup(txn)) return { ok: false, hint: "Check the possible duplicate first." };
+        // "Who was this with?" (a lending-style note) must be answered by the person: no one-tap, swipe or bulk save skips it.
+        if (debtField && debtField.style.display !== "none") return { ok: false, hint: "Choose who this was with first." };
+        return pcBaseCheck();
+      };
+
+      // A message the app could not fully read needs the person's answers, so that card starts open.
+      card.classList.add(card.querySelector(".help-field") ? "pc-open" : "pc-collapsed");
+      renderCompact();
 
       return card;
     }
@@ -12487,6 +13323,11 @@
       days.forEach(function (x) { x.avg = x.count > 0 ? x.total / x.count : 0; });
       return days;
     }
+    // Days that are completely over. Today is still being spent, so counting it as a full day would
+    // drag its weekday's average down (a Sunday with no spend yet read as 83). Finished months: all days.
+    function anFinishedDays(today) {
+      return today && today.isCurrent ? Math.max(0, today.day - 1) : (today ? today.day : 0);
+    }
     function anBiggestWeekday(avgs) {
       let best = -1, bestV = 0;
       avgs.forEach(function (x, i) { if (x.avg > bestV) { bestV = x.avg; best = i; } });
@@ -12550,7 +13391,7 @@
     function anRuleWeekend(slice, today) {
       const d = anDetail(slice);
       if (!d || today.day < 1) return null;
-      const avgs = anWeekdayAverages(d.daily, today.year, today.month, today.day);
+      const avgs = anWeekdayAverages(d.daily, today.year, today.month, anFinishedDays(today));
       let weTotal = 0, weCount = 0, wdTotal = 0, wdCount = 0;
       avgs.forEach(function (x, i) {
         if (i >= 5) { weTotal += x.total; weCount += x.count; } else { wdTotal += x.total; wdCount += x.count; }
@@ -12678,8 +13519,9 @@
     // ---- Your week ----
     function anWeekModel(slice, today) {
       const d = anDetail(slice);
-      if (!d || today.day < 7) return null;
-      const avgs = anWeekdayAverages(d.daily, today.year, today.month, today.day);
+      const finished = anFinishedDays(today);
+      if (!d || finished < 7) return null;
+      const avgs = anWeekdayAverages(d.daily, today.year, today.month, finished);
       const big = anBiggestWeekday(avgs);
       if (big < 0) return null;
       let max = 0;
@@ -13235,12 +14077,21 @@
         const percentOfMax = maxAmount > 0 ? Math.round((entry.amount / maxAmount) * 100) : 0;
 
         const topTxns = entry.topTransactions || [];
+        // Ranked rows: a number, the note with its date underneath, the amount, and a thin bar showing
+        // how big this payment is inside the category.
+        const topMax = topTxns.length ? Math.max.apply(null, topTxns.map(function (t) { return t.amount || 0; })) : 0;
         const detailHtml = topTxns.length > 0
-          ? topTxns.map(function (tx) {
+          ? topTxns.map(function (tx, ti) {
+              const w = topMax > 0 ? Math.max(4, Math.round((tx.amount / topMax) * 100)) : 0;
               return `
-                <div class="category-txn-line">
-                  <span>${escapeHtml(tx.note) || "(no note)"} · ${tx.date}</span>
-                  <span>₹${tx.amount.toLocaleString("en-IN")}</span>
+                <div class="cat-top-row">
+                  <span class="cat-top-rank">${ti + 1}</span>
+                  <span class="cat-top-main">
+                    <span class="cat-top-note">${escapeHtml(tx.note) || "(no note)"}</span>
+                    <span class="cat-top-date">${escapeHtml(tx.date)}</span>
+                    <span class="cat-top-bar"><i style="width:${w}%; background:${categoryBarColor(entry.category)};"></i></span>
+                  </span>
+                  <span class="cat-top-amt">₹${tx.amount.toLocaleString("en-IN")}</span>
                 </div>
               `;
             }).join("")
@@ -13265,8 +14116,8 @@
           <div class="category-bar-track">
             <div class="category-bar-fill chart-glow-fill" style="width:${percentOfMax}%; background:${categoryBarColor(entry.category)}; color:${categoryBarColor(entry.category)};"></div>
           </div>
-          <div class="category-detail" style="display:none; background:${categoryBadgeBg(entry.category)};">
-            <p style="font-size:0.78rem; color:var(--text-secondary); margin:10px 0 6px;">Top ${topTxns.length} in ${entry.category}</p>
+          <div class="category-detail cat-top-panel" style="display:none;">
+            <p class="cat-top-head">Biggest ${topTxns.length} in ${escapeHtml(entry.category)}</p>
             ${detailHtml}
           </div>
         `;
