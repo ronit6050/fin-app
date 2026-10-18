@@ -65,7 +65,7 @@ console.log("\n--- 2. Saving switched ON ---");
   state.writesOn = true; state.calls = [];
   ["saveNote", "markNotATransaction", "addDebt", "settleDebt", "recordDebtPayment", "addCashEntry", "updateCashEntry", "addManualTransaction",
    "logInvestment", "saveSavingsAuto", "withdrawSavings", "updateSettings", "saveBudgets", "registerPushToken", "createSplit",
-   "recordSplitPayment", "undoSplitEntry", "addFriend", "refreshViews"].forEach(function(a){
+   "recordSplitPayment", "undoSplitEntry", "addFriend", "refreshViews", "moveDebtToFriend"].forEach(function(a){
     const r = post({ action: a, idToken: "x" });
     assert(r.json.ok === true && r.json.echoed === a, a + " is saved through the backend code");
   });
@@ -77,7 +77,7 @@ console.log("\n--- 3. Always stays on Apps Script ---");
 {
   state.writesOn = true; state.calls = [];
   ["ingestSms", "smsIn",
-   "moveDebtToFriend", "removeFriendAccess", "somethingMadeUp"].forEach(function(a){
+   "removeFriendAccess", "somethingMadeUp"].forEach(function(a){
     const r = post({ action: a, idToken: "x" });
     assert(r.json.ok === false && r.json.fallback === true, a + " -> fallback even with saving on");
   });

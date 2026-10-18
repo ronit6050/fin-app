@@ -23,7 +23,7 @@ const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransac
   "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal",
   "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
   "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "saveRunwayBalance", "registerPushToken",
-  "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "refreshViews",
+  "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "moveDebtToFriend", "refreshViews",
   "insertReconciledTransactions", "fixCreditCardTransactionMode",                  // Reconcile's saves (owner only, enforced by the backend)
   "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey",   // the Access screen's changes (owner only; the switches live in the shared database)
   "adminLog", "resolveAdminProblem"];   // admin counters (2026-10-16): the app's own usage/error report (counts only) and the owner's "resolved" tap; never repeated if unanswered
