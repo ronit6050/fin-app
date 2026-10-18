@@ -90,3 +90,36 @@ assert(r.estimatedBalance === 0, "balance never below zero");
 ctx.dbProps_ = function(){ return { setProperty: function(k, v){ ctx._saved = ctx._saved || {}; ctx._saved[k] = v; } }; };
 assert(!ctx.saveRunwayBalance(null).ok && !ctx.saveRunwayBalance("").ok && !ctx.saveRunwayBalance(-5).ok, "null, empty and negative amounts are refused");
 assert(ctx.saveRunwayBalance("21400").ok && ctx._saved.RUNWAY_BALANCE === "21400", "a real amount is saved");
+
+// 11. (2026-10-18) The card bill follows the same "due before salary" rule as the other bills. ALL DATA INVENTED.
+{
+  const t18 = new Date(2026, 9, 18), n18 = new Date(2026, 9, 18, 12, 0);
+  const base = { txnData: [header], today: t18, now: n18, checkpoint: { amount: 2400, atMs: n18.getTime() - 1000 }, monthSpend: 14400, monthlyExpensesSetting: 30000, obligations: [] };
+  // salary on the 4th = 17 days away; pace = 14400 / 18 = 800 a day
+  let c = ctx.computeRunway_(Object.assign({}, base, { ccBillAhead: 8500, ccDaysUntil: 22, salaryDaySetting: 4 }));
+  assert(c.daysToSalary === 17 && c.dailyPace === 800, "setup: salary in 17 days, pace 800");
+  assert(c.billsAhead === 0 && c.bills.length === 0, "a card bill due in 22 days (after the salary in 17) is NOT held against today's balance");
+  assert(c.daysLeft === 3 && c.runOutDate === "2026-10-21", "so the money lasts 3 days: 2400 / 800 (got " + c.runOutDate + ")");
+  assert(c.shortByDays === 14 && c.maxPerDay === 141, "14 days short of salary, at most 141 a day (got " + c.maxPerDay + ")");
+
+  c = ctx.computeRunway_(Object.assign({}, base, { ccBillAhead: 8500, ccDaysUntil: 10, salaryDaySetting: 4 }));
+  assert(c.billsAhead === 8500 && c.bills[0].label === "Card bill", "a card bill due in 10 days (before the salary) IS counted");
+  assert(c.daysLeft === 0 && c.runOutDate === "2026-10-18", "and then the money does run out today");
+
+  c = ctx.computeRunway_(Object.assign({}, base, { ccBillAhead: 8500, ccDaysUntil: 17, salaryDaySetting: 4 }));
+  assert(c.billsAhead === 8500, "due exactly on salary day is still counted (the salary may arrive too late in the day)");
+
+  c = ctx.computeRunway_(Object.assign({}, base, { ccBillAhead: 8500, ccDaysUntil: -3, salaryDaySetting: 4 }));
+  assert(c.billsAhead === 8500, "an overdue card bill is counted");
+
+  c = ctx.computeRunway_(Object.assign({}, base, { ccBillAhead: 8500, ccDaysUntil: null, salaryDaySetting: 4 }));
+  assert(c.billsAhead === 8500, "a card bill with no known due date is counted (safe side)");
+
+  c = ctx.computeRunway_(Object.assign({}, base, { ccBillAhead: 8500, ccDaysUntil: 22, salaryDaySetting: 0 }));
+  assert(c.daysToSalary === null && c.billsAhead === 8500, "salary day unknown: the card bill is counted exactly as before");
+
+  // the other bills behave exactly as before alongside it
+  c = ctx.computeRunway_(Object.assign({}, base, { ccBillAhead: 8500, ccDaysUntil: 22, salaryDaySetting: 4,
+    obligations: [{ label: "SIP", enoughHistory: true, alreadyThisMonth: false, daysUntil: 5, avgAmount: 1000 }] }));
+  assert(c.billsAhead === 1000 && c.bills.length === 1 && c.bills[0].label === "SIP", "a SIP due before salary is still counted, the later card bill is not");
+}

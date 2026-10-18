@@ -132,7 +132,12 @@ function computeRunway_(input){
   // Bills still ahead (stop at salary day, or 35 days if the salary day is unknown).
   var horizon = daysToSalary !== null ? daysToSalary : 35;
   var bills = [];
-  if(input.ccBillAhead > 0) bills.push({ label: "Card bill", amount: Math.round(input.ccBillAhead), daysUntil: input.ccDaysUntil === undefined ? null : input.ccDaysUntil });
+  // The card bill follows the same "due before salary" rule as the other bills (2026-10-18): a bill that falls due AFTER the next
+  // salary is paid out of that salary, so it must not be held against the balance you have now. Unchanged when the salary day is
+  // unknown (daysToSalary null) or the bill's due date is unknown (always counted then, the safe side).
+  var ccDays = input.ccDaysUntil;
+  var ccDueAfterSalary = daysToSalary !== null && typeof ccDays === "number" && ccDays > daysToSalary;
+  if(input.ccBillAhead > 0 && !ccDueAfterSalary) bills.push({ label: "Card bill", amount: Math.round(input.ccBillAhead), daysUntil: input.ccDaysUntil === undefined ? null : input.ccDaysUntil });
   (input.obligations || []).forEach(function(o){
     if(!o.enoughHistory || o.alreadyThisMonth) return;
     if(o.daysUntil > horizon) return;
