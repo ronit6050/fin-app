@@ -330,4 +330,81 @@ function makeToday(year, month, day){ // month is 1-based here for readability
   assert(Object.keys(store).length === 0, "the manual dry-run helper never writes the \"already reminded\" Script Property");
 })();
 
+// ---------------------------------------------------------------------
+// Test 99 (2026-10-18) - an INVESTMENT is a coming bill only if it was paid
+// recently, and its amount is the LATEST payment, not an average. Before this,
+// two investments last paid six months earlier were still counted as bills
+// due next month. ALL DATA INVENTED (this repo is public).
+// ---------------------------------------------------------------------
+(function testInvestmentRecencyAndLatestAmount(){
+  const { sandbox } = loadSandbox();
+  const today = makeToday(2026, 10, 19);
+  const status = function(feRows, txnRows){
+    return sandbox.computeObligationStatuses_([FE_HEADER].concat(feRows), [TXN_HEADER].concat(txnRows), today);
+  };
+  const byName = function(list, name){ return list.filter(function(x){ return x.name === name; })[0]; };
+
+  // A. last paid about six months ago: not a coming bill at all
+  let r = status([financialEventsRow("Investment", 5000, "Old Gold Fund")], [
+    mkTxnRow("2026-03-02", 5000, "Investment", "Old Gold Fund"),
+    mkTxnRow("2026-04-03", 5000, "Investment", "Old Gold Fund"),
+    mkTxnRow("2026-04-08", 5000, "Investment", "Old Gold Fund")
+  ]);
+  let o = byName(r, "Old Gold Fund");
+  assert(o && o.enoughHistory === false && o.stale === true, "an investment last paid six months ago is NOT predicted (marked stale)");
+
+  // B. paid monthly up to last month: still a coming bill, amount = the latest payment, not the average
+  r = status([financialEventsRow("Investment", 1000, "Monthly Fund")], [
+    mkTxnRow("2026-08-03", 1000, "Investment", "Monthly Fund"),
+    mkTxnRow("2026-09-03", 1000, "Investment", "Monthly Fund"),
+    mkTxnRow("2026-10-03", 1500, "Investment", "Monthly Fund")
+  ]);
+  o = byName(r, "Monthly Fund");
+  assert(o && o.enoughHistory === true && o.stale === undefined, "a regular investment paid last month is still predicted");
+  assert(o.avgAmount === 1500, "its amount is the LATEST payment (1500), not the average (1167): " + o.avgAmount);
+  assert(o.typicalDay === 3, "the usual day is still worked out the same way: " + o.typicalDay);
+
+  // C. a wallet top-up shaped like the real case: one real top-up and one tiny test, both old
+  r = status([financialEventsRow("Investment", 2900, "Wallet top up")], [
+    mkTxnRow("2026-04-04", 2900, "Investment", "Wallet top up"),
+    mkTxnRow("2026-04-06", 90, "Investment", "Wallet top up")
+  ]);
+  o = byName(r, "Wallet top up");
+  assert(o && o.enoughHistory === false, "old one-off top-ups (an average of a real one and a tiny test) are not a bill");
+
+  // D. the 75-day edge: 75 days ago still counts, 76 days ago does not
+  const ago = function(days){ const d = new Date(today.getTime() - days * 86400000); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  r = status([financialEventsRow("Investment", 700, "Edge Fund")], [
+    mkTxnRow(ago(105), 700, "Investment", "Edge Fund"),
+    mkTxnRow(ago(75), 700, "Investment", "Edge Fund")
+  ]);
+  assert(byName(r, "Edge Fund").enoughHistory === true, "last paid exactly 75 days ago: still counted");
+  r = status([financialEventsRow("Investment", 700, "Edge Fund")], [
+    mkTxnRow(ago(106), 700, "Investment", "Edge Fund"),
+    mkTxnRow(ago(76), 700, "Investment", "Edge Fund")
+  ]);
+  assert(byName(r, "Edge Fund").enoughHistory === false, "last paid 76 days ago: no longer counted");
+
+  // E. Rent and EMI are untouched by this rule: old history is still predicted, EMI still uses the average
+  r = status([financialEventsRow("Rent", 10000, ""), financialEventsRow("EMI", 4000, "Phone EMI")], [
+    mkTxnRow("2025-11-05", 10000, "Rent", ""),
+    mkTxnRow("2025-12-05", 10000, "Rent", ""),
+    mkTxnRow("2025-11-10", 1000, "EMI", "Phone EMI"),
+    mkTxnRow("2025-12-10", 3000, "EMI", "Phone EMI")
+  ]);
+  assert(byName(r, "") && byName(r, "").enoughHistory === true, "Rent with months-old history is still predicted (rule is for investments only)");
+  o = byName(r, "Phone EMI");
+  assert(o.enoughHistory === true && o.avgAmount === 2000, "EMI still uses the average of its payments: " + o.avgAmount);
+
+  // F. a paused investment is skipped completely (even with fresh payments)
+  r = status([
+    financialEventsRow("Investment", 2000, "Paused Fund"),
+    ["InvestmentPaused", "", "", new Date(), "Paused Fund"]
+  ], [
+    mkTxnRow("2026-09-03", 2000, "Investment", "Paused Fund"),
+    mkTxnRow("2026-10-03", 2000, "Investment", "Paused Fund")
+  ]);
+  assert(byName(r, "Paused Fund") === undefined, "a paused investment gives no prediction at all");
+})();
+
 console.log("\nDone.");

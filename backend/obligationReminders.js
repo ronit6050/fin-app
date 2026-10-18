@@ -149,6 +149,11 @@ function obligationPropertyKey_(type, name){
 //     alreadyThisMonth, expectedDate, daysUntil, shouldRemindToday }
 //     — shouldRemindToday is true only when daysUntil === 3 AND it
 //     hasn't already happened this month.
+// An INVESTMENT only counts as a coming bill if it was paid within this many days (about 2.5 months: a monthly SIP that
+// was skipped once still counts, a payment last made in April does not). Added 2026-10-18: two investments last paid six
+// months earlier were still shown as bills due next month, which made the Home card say "money runs out today".
+var OBLIGATION_INVESTMENT_MAX_AGE_DAYS_ = 75;
+
 function computeObligationStatuses_(financialEventsData, txnData, today){
   var obligations = getDistinctObligations_(financialEventsData);
 
@@ -182,6 +187,18 @@ function computeObligationStatuses_(financialEventsData, txnData, today){
 
     var daysUntil = Math.round((candidate - today) / 86400000);
     var avgAmount = history.reduce(function(s, h){ return s + h.amount; }, 0) / history.length;
+
+    // Investments only (Rent and EMI behave exactly as before): a payment that has not happened for a while is not
+    // "coming", and the amount is what was paid LAST time (an average of a real top-up and a Rs 100 test is no bill).
+    if(ob.type === "Investment"){
+      var latest = history[0];
+      history.forEach(function(h){ if(h.date.getTime() >= latest.date.getTime()) latest = h; });   // newest date; the later row wins a tie
+      var ageDays = (today.getTime() - latest.date.getTime()) / 86400000;
+      if(!(ageDays <= OBLIGATION_INVESTMENT_MAX_AGE_DAYS_)){
+        return { label: ob.label, type: ob.type, name: ob.name, enoughHistory: false, stale: true };
+      }
+      avgAmount = latest.amount;
+    }
 
     return {
       label: ob.label,
