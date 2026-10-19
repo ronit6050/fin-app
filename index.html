@@ -2480,6 +2480,15 @@
        section. Deliberately reuses .category-bar-track/.category-bar-fill
        (Track view) and the existing Need/Want/Saving/Investment color
        tokens (Set view) rather than inventing a new bar or palette. */
+    .planner-pace-wrap { position: relative; margin-top: 12px; }
+    .planner-pace-mark { position: absolute; top: -3px; width: 2px; height: 18px; background: var(--text-on-hero); border-radius: 1px; }
+    .planner-map-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; gap: 2px; margin: 10px 0; }
+    .planner-map-bar > i { display: block; height: 14px; min-width: 3px; }
+    .planner-map-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 0.8rem; color: var(--text-secondary); }
+    .planner-map-legend b { color: var(--text-primary); font-weight: 600; }
+    .planner-map-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .planner-nudge { padding: 10px 12px; border-radius: 12px; background: var(--bg-warning, rgba(255,180,0,0.15)); color: var(--text-primary); font-size: 0.85rem; margin-bottom: 8px; }
+    .planner-setup-btn { margin-top: 12px; }
     .planner-overview-card {
       background: var(--surface-card);
       border: 0.5px solid var(--border-hairline);
@@ -5684,6 +5693,10 @@
                between Set targets (editable income + planned %) and Track
                progress (actual spend vs. target). See
                docs/features/planner.md's "Overview" section. -->
+          <!-- Planner makeover (2026-10-19): safe-to-spend card + money map,
+               built in JS from the same getPlannerData response
+               (plannerComputePlan), no extra backend call. -->
+          <div id="plannerPlanCard"></div>
           <div id="plannerOverviewCard" class="planner-overview-card"></div>
 
           <div class="view-toggle" id="plannerViewToggle" style="margin-bottom:14px;">
@@ -5715,6 +5728,7 @@
                 <div class="category-bar-fill" id="plannerTrackBar" style="width:0%"></div>
               </div>
             </div>
+            <div id="plannerNudges"></div>
             <div id="plannerTrackList"></div>
           </div>
         </div>
@@ -6783,8 +6797,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-19-05";
-    const APP_CHANGELOG = "Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-10-19-06";
+    const APP_CHANGELOG = "New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -21171,7 +21185,158 @@
       return row;
     }
 
+    // ---------------------------------------------------------
+    // Planner makeover (2026-10-19). Pure function: works only from the
+    // getPlannerData response (p) and a date, so it also works in Demo Mode
+    // and is tested in Node (backend/tests/plannerPlan.test.js).
+    // "Budget" = every category's target (saved, else suggested), so it always
+    // matches the numbers on the Set targets list. "Spent" = real spend so far.
+    // ---------------------------------------------------------
+    function plannerComputePlan(p, now) {
+      const key = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+      const isCurrent = p.month === key;
+      const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const day = now.getDate();
+      let budget = 0, spent = 0, anySaved = false;
+      p.categories.forEach(function (c) {
+        const src = c.saved || c.suggested;
+        if (c.saved) anySaved = true;
+        budget += (src && src.total) || 0;
+        spent += (c.actual && c.actual.total) || 0;
+      });
+      const left = budget - spent;
+      const daysLeft = Math.max(1, dim - day + 1);
+      const paceSpent = isCurrent ? budget * day / dim : budget;
+      let status = "ok";
+      if (budget > 0 && spent > budget) status = "over";
+      else if (isCurrent && budget > 0 && spent > paceSpent) status = "near";
+
+      // Nudges: a category already over its target, or on pace to end well over it.
+      const nudges = [];
+      if (isCurrent && day >= 5) {
+        p.categories.forEach(function (c) {
+          const src = c.saved || c.suggested;
+          const target = (src && src.total) || 0;
+          const actual = (c.actual && c.actual.total) || 0;
+          if (target <= 0) return;
+          if (actual > target) {
+            nudges.push({ category: c.category, kind: "over", amount: Math.round(actual - target), target: Math.round(target), size: actual - target });
+          } else {
+            const projected = actual / day * dim;
+            if (projected > target * 1.1) nudges.push({ category: c.category, kind: "pace", amount: Math.round(projected), target: Math.round(target), size: projected - target });
+          }
+        });
+        nudges.sort(function (a, b) { return b.size - a.size; });
+      }
+
+      // Money map: where this month's income goes.
+      const o = p.overview || { income: {}, targets: {} };
+      const income = (o.income.saved !== null && o.income.saved !== undefined) ? o.income.saved : (o.income.actual || 0);
+      const t = o.targets || {};
+      const parts = [
+        { key: "fixed", label: "Rent and EMI", amount: t.fixedObligations || 0, color: "var(--chart-other)" },
+        { key: "save",  label: "Saved and invested", amount: t.savingsInvestment || 0, color: "var(--chart-saving)" },
+        { key: "needs", label: "Needs", amount: t.needs || 0, color: "var(--chart-need)" },
+        { key: "wants", label: "Wants", amount: t.wants || 0, color: "var(--chart-want)" }
+      ];
+      const planned = parts.reduce(function (s, x) { return s + x.amount; }, 0);
+      const free = income - planned;
+      return {
+        isCurrent: isCurrent, anySaved: anySaved, budget: Math.round(budget), spent: Math.round(spent),
+        left: Math.round(left), daysLeft: daysLeft, perDay: Math.round(Math.max(0, left) / daysLeft),
+        paceSpent: Math.round(paceSpent), paceFraction: isCurrent ? day / dim : 1, status: status,
+        nudges: nudges.slice(0, 3), map: { income: Math.round(income), parts: parts, planned: Math.round(planned), free: Math.round(free) }
+      };
+    }
+
+    function plannerInr(n) { return "₹" + Math.round(n).toLocaleString("en-IN"); }
+
+    function renderPlannerPlan(p) {
+      const card = document.getElementById("plannerPlanCard");
+      const nudgeEl = document.getElementById("plannerNudges");
+      if (!card || !p) return;
+      const pl = plannerComputePlan(p, new Date());
+      let html = "";
+
+      // 1) Safe-to-spend card
+      if (pl.budget <= 0) {
+        html += `<div class="today-total-box"><div class="today-total-label">Month plan</div><div class="today-split">No targets yet. One tap fills in a plan from your own spending.</div><button type="button" class="planner-setup-btn" data-planner-setup="1">Set up this month in one tap</button></div>`;
+      } else {
+        let big, label, sub, note = "";
+        if (pl.isCurrent) {
+          label = pl.left >= 0 ? "You can still spend" : "Over your plan by";
+          big = plannerInr(Math.abs(pl.left));
+          sub = pl.left >= 0 ? `about <b>${plannerInr(pl.perDay)} a day</b> for the next ${pl.daysLeft} day${pl.daysLeft === 1 ? "" : "s"}` : `spent ${plannerInr(pl.spent)} of ${plannerInr(pl.budget)}`;
+          if (pl.status === "ok") note = `On track. You are ${plannerInr(pl.paceSpent - pl.spent)} under the pace line.`;
+          else if (pl.status === "near") note = `${plannerInr(pl.spent - pl.paceSpent)} above the pace line. Slow down a little.`;
+        } else {
+          label = "Spent that month";
+          big = plannerInr(pl.spent);
+          sub = `of ${plannerInr(pl.budget)} planned`;
+        }
+        const pct = Math.min(100, Math.round(pl.spent / pl.budget * 100));
+        const barColor = pl.status === "over" ? "var(--color-danger)" : (pl.status === "near" ? "var(--color-warning)" : "var(--text-on-hero)");
+        html += `<div class="today-total-box">
+          <div class="today-total-label">${label}</div>
+          <div class="today-total-amount">${big}</div>
+          <div class="today-split">${sub}</div>
+          <div class="planner-pace-wrap">
+            <div class="category-bar-track" style="background:rgba(255,255,255,0.15);"><div class="category-bar-fill" style="width:${pct}%; background:${barColor};"></div></div>
+            ${pl.isCurrent ? `<div class="planner-pace-mark" style="left:${Math.round(pl.paceFraction * 100)}%"></div>` : ""}
+          </div>
+          <div class="today-split" style="margin-top:6px;">spent ${plannerInr(pl.spent)} of ${plannerInr(pl.budget)}${pl.isCurrent ? " &middot; line = today's pace" : ""}</div>
+          ${note ? `<div class="today-split" style="margin-top:8px;">${note}</div>` : ""}
+          ${!pl.anySaved ? `<div class="today-split" style="margin-top:8px;">These are suggested targets. <a href="#" data-planner-setup="1" style="color:inherit;text-decoration:underline;">Lock them in with one tap</a></div>` : ""}
+        </div>`;
+      }
+
+      // 2) Money map
+      const m = pl.map;
+      if (m.income > 0 || m.planned > 0) {
+        const base = Math.max(m.income, m.planned);
+        const segs = m.parts.filter(function (x) { return x.amount > 0; });
+        const bar = segs.map(function (x) { return `<i style="flex:${x.amount}; background:${x.color}"></i>`; }).join("")
+          + (m.free > 0 ? `<i style="flex:${m.free}; background:var(--chart-track-bg)"></i>` : "");
+        const legend = segs.map(function (x) { return `<span><span class="planner-map-dot" style="background:${x.color}"></span>${x.label} <b>${plannerInr(x.amount)}</b></span>`; }).join("")
+          + (m.free >= 0 ? `<span><span class="planner-map-dot" style="background:var(--chart-track-bg); border:1px solid var(--border)"></span>Free <b>${plannerInr(m.free)}</b></span>`
+                         : `<span style="color:var(--color-danger)">Planned ${plannerInr(-m.free)} more than you earn</span>`);
+        html += `<div class="planner-cat-card" style="margin-top:12px;">
+          <div class="planner-cat-head"><b>Where your ${plannerInr(m.income)} goes</b></div>
+          <div class="planner-map-bar">${bar || ""}</div>
+          <div class="planner-map-legend">${legend}</div>
+          ${m.income <= 0 ? `<p class="planner-suggestion-note">No income yet this month. Type your expected income in the box below to see what is free.</p>` : ""}
+        </div>`;
+      }
+      card.innerHTML = html + `<div style="height:12px"></div>`;
+      card.querySelectorAll("[data-planner-setup]").forEach(function (el) {
+        el.addEventListener("click", function (ev) { ev.preventDefault(); plannerOneTapSetup(); });
+      });
+
+      // 3) Nudges (shown in Track progress)
+      if (nudgeEl) {
+        nudgeEl.innerHTML = pl.nudges.map(function (n) {
+          return n.kind === "over"
+            ? `<div class="planner-nudge"><b>${escapeHtml(n.category)}</b> is ${plannerInr(n.amount)} over its ${plannerInr(n.target)} limit. Raise the limit in Set targets, or cut back for the rest of the month.</div>`
+            : `<div class="planner-nudge"><b>${escapeHtml(n.category)}</b> is on pace to reach ${plannerInr(n.amount)} against a ${plannerInr(n.target)} limit. A small slowdown now avoids going over.</div>`;
+        }).join("");
+      }
+    }
+
+    // One tap: the Set targets inputs already hold saved-or-suggested numbers,
+    // so saving them as they are locks in the whole suggested plan. Then show Track.
+    function plannerOneTapSetup() {
+      if (!plannerLastData) return;
+      plannerView = "set";
+      updatePlannerViewUI();
+      renderPlannerOverview(plannerLastData); // makes sure the income / fixed boxes exist before Save reads them
+      plannerSaveButtonEl.click();
+      plannerView = "track";
+      updatePlannerViewUI();
+      renderPlannerOverview(plannerLastData);
+    }
+
     function renderPlannerTrack(p) {
+      renderPlannerPlan(p);
       let totalTarget = 0, totalActual = 0, anySaved = false, anySpend = false;
       p.categories.forEach(function (c) {
         if (c.saved) { totalTarget += c.saved.total; anySaved = true; }

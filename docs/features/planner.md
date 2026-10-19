@@ -721,3 +721,13 @@ Extends the Overview card above with a 4th row for Fixed obligations
   track only.
 - Whether Planner should show anywhere on Home/Analysis, beyond its own
   More-menu screen — not built this pass, no design decision made.
+
+## Makeover (2026-10-19) — frontend only, no backend change
+
+Why: the owner never used Planner because it opened as a form of 9 category boxes with no clear "so what". Now the top of the screen answers one question: **how much can I still spend?**
+- **Safe-to-spend card** (hero): budget = every category's target (saved, else suggested); left = budget - real spend; per day = left / days left (today included); a marker shows today's pace line; "On track / above the pace line / over".
+- **Money map**: one bar of income split into Rent+EMI, Saved+invested, Needs, Wants, Free (income - planned). Card swipes are not added again, so the card bill is not a separate slice (it would double count).
+- **One tap setup**: "Set up this month in one tap" saves the suggested numbers as the plan (reuses the Save plan button).
+- **Nudges** (Track view, day 5 onward): a category already over its limit, or on pace to end more than 10% over (spend so far / days passed x days in month). Top 3.
+- All of it comes from `plannerComputePlan(p, now)` in `index.html`, a pure function over the existing `getPlannerData` response, so Demo Mode works too. Test: `backend/tests/plannerPlan.test.js` (12 checks).
+- Not built yet: push alerts for nudges, "over 3 months in a row" nudge (needs saved plans from past months), copy last month's plan, Home card.
