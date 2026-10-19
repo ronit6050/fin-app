@@ -20,14 +20,28 @@
 
 var RUNWAY_STALE_DAYS_ = 7;
 
+// The moment a row happened, as a real instant. Always worked out in INDIA time, never the machine's own clock: the new server
+// runs on UTC, and using setHours()/toString() there stamped a 10:00 IST payment as the PREVIOUS day, so it looked older than
+// the morning balance update and was never subtracted (found 2026-10-19).
+var RUNWAY_IST_OFFSET_MIN_ = 330;
 function runwayRowTime_(row){
   var raw = row[0];
   if(!raw) return null;
   var d = new Date(raw);
   if(isNaN(d.getTime())) return null;
-  var t = (row[1] || "").toString().match(/(\d{1,2}):(\d{2})/);
-  if(t) d.setHours(Number(t[1]), Number(t[2]), 0, 0);
-  return d;
+  // India calendar date of the date cell (shift by +5:30, then read it with the UTC getters).
+  var ist = new Date(d.getTime() + RUNWAY_IST_OFFSET_MIN_ * 60000);
+  var y = ist.getUTCFullYear(), mo = ist.getUTCMonth(), day = ist.getUTCDate();
+  var hh = ist.getUTCHours(), mm = ist.getUTCMinutes();     // used only when the row has no separate time
+  var timeCell = row[1], txt = "";
+  if(timeCell && Object.prototype.toString.call(timeCell) === "[object Date]"){
+    // a time-only cell: read its wall-clock text in India time (works on any machine clock)
+    if(typeof Utilities !== "undefined" && Utilities.formatDate) txt = Utilities.formatDate(timeCell, "Asia/Kolkata", "HH:mm");
+    else { var ti = new Date(timeCell.getTime() + RUNWAY_IST_OFFSET_MIN_ * 60000); txt = ti.getUTCHours() + ":" + ti.getUTCMinutes(); }
+  } else txt = (timeCell || "").toString();
+  var t = txt.match(/(\d{1,2}):(\d{2})/);
+  if(t){ hh = Number(t[1]); mm = Number(t[2]); }
+  return new Date(Date.UTC(y, mo, day, hh, mm, 0, 0) - RUNWAY_IST_OFFSET_MIN_ * 60000);
 }
 
 // Money that really moved in the bank after the checkpoint moment.

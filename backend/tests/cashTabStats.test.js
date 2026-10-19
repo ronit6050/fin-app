@@ -30,5 +30,15 @@ const sameMonth = d2.getMonth() === now.getMonth();
 assert(c.stats.monthIn === 1000, "month received = 1000");
 if (sameMonth) { assert(c.stats.monthSpent === 200, "month spent = 200"); assert(c.stats.topCategory === "Food" && c.stats.topCategoryAmt === 140, "top category Food 140"); }
 assert(c.balance === 1000 - 200 - 70, "balance still counts every row");
+console.log("--- Delete ---");
+const del0 = w.sb.deleteCashEntry(2, "credit", 1000);   // row 2 = the ATM credit
+assert(del0.ok === true, "delete works");
+const c2 = w.sb.getCashData();
+assert(c2.balance === c.balance - 1000, "balance drops by the removed credit");
+assert(!c2.recent.some((e) => e.row === 2), "removed row is gone from the list");
+assert(w.sb.deleteCashEntry(2, "credit", 1000).ok === false, "deleting it twice is refused");
+assert(w.sb.deleteCashEntry(3, "debit", 999).stale === true, "wrong amount is refused (stale card)");
+assert(w.sb.deleteCashEntry(3, "debit", 100).ok === true, "right amount works");
+assert(w.sb.deleteCashEntry(0, "debit", 1).ok === false, "bad row refused");
 console.log(failures() ? "\nFAILED" : "\nAll good");
 process.exit(failures() ? 1 : 0);

@@ -318,6 +318,10 @@ function pwaDispatch_(data, verified){
     return jsonResponse(addCashEntryFromApp(data.type, data.amount, data.note, data.category, data.needWantSaving));
   }
 
+  if(data.action === "deleteCashEntry"){
+    return jsonResponse(deleteCashEntry(data.row, data.type, data.amount));
+  }
+
   if(data.action === "updateCashEntry"){
     return jsonResponse(updateCashEntry(data.row, data.type, data.amount, data.note, data.category, data.needWantSaving));
   }
@@ -637,6 +641,8 @@ function getCashData(cashData){
     const rawDate  = data[i][1];
     const needWantSaving = (data[i][10] || "").toString().trim() || null; // column K
 
+    if(!type && !amount) continue; // an entry removed from the app (emptied row)
+
     if(type === "debit")  balance -= amount;
     if(type === "credit") balance += amount;
 
@@ -767,6 +773,30 @@ function updateCashEntry(row, type, amount, note, category, needWantSaving){
     return { ok: true, typeRequested: !!needWantSaving, typeSaved: !!typeToSave };
   }catch(err){
     return { ok: false, error: err.toString() };
+  }
+}
+
+// Removes a cash entry (2026-10-19). The row is EMPTIED in place, never deleted:
+// deleting a Sheet row would shift every row below it, and a card still open on
+// another screen would then save onto the wrong entry (same reason spam-marking
+// clears in place). Every Cash reader already ignores a row with no date/type/amount.
+// The app also sends the entry's type and amount; if the row no longer holds that
+// entry (it moved or was already removed) nothing is touched.
+function deleteCashEntry(row, type, amount){
+  try{
+    const sheet = dbSs_().getSheetByName("Cash");
+    if(!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()){
+      return { ok:false, error:"Invalid row." };
+    }
+    const cur = sheet.getRange(row, 1, 1, 11).getValues()[0];
+    const curType = (cur[3] || "").toString().toLowerCase();
+    if(!curType || curType !== (type || "").toString().toLowerCase() || Number(cur[4]) !== Number(amount)){
+      return { ok:false, stale:true, error:"That entry has changed. Pull to refresh and try again." };
+    }
+    for(let c = 1; c <= 11; c++) sheet.getRange(row, c).setValue("");
+    return { ok:true };
+  }catch(err){
+    return { ok:false, error: err.toString() };
   }
 }
 

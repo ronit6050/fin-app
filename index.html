@@ -1139,6 +1139,49 @@
     .hm-runway:empty { display: none; }
     .hm-runway .hero-label { margin-bottom: 2px; }
 
+    /* ---------- Spent today card + category ring (2026-10-19) ----------
+       Colour rule: green = at or under a usual day, amber = up to 30% over, red = more than that. Same tokens the rest of
+       the app already uses for Need / Want / danger, so both themes work with no new colours. */
+    #homeRunway:has(.hm-runway:empty) { display: none; }
+    #homeRunway .hm-runway { margin-top: 0; padding-top: 0; border-top: 0; }
+    .hm-today-card { padding: 16px; --ht-tone: var(--color-primary); }
+    .hm-today-card.good { --ht-tone: var(--chart-need); }
+    .hm-today-card.warn { --ht-tone: var(--chart-want); }
+    .hm-today-card.over { --ht-tone: var(--color-danger); }
+    .ht-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .ht-amount { font-size: 2.1rem; font-weight: 700; letter-spacing: -1px; line-height: 1.15; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .ht-pill { font-size: 0.76rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; white-space: nowrap; margin-top: 2px; }
+    .ht-pill.good { background: var(--need-bg); color: var(--need-text); }
+    .ht-pill.warn { background: var(--want-bg); color: var(--want-text); }
+    .ht-pill.over { background: var(--bg-danger); color: var(--danger-text); }
+    .ht-track { position: relative; height: 8px; border-radius: 4px; background: var(--chart-track-bg); margin: 14px 0 6px; }
+    .ht-track i { display: block; height: 100%; border-radius: 4px; background: var(--ht-tone); }
+    .ht-mark { position: absolute; top: -4px; width: 2px; height: 16px; margin-left: -1px; border-radius: 1px; background: var(--text-secondary); }
+    .ht-scale { display: flex; justify-content: space-between; gap: 10px; font-size: 0.74rem; color: var(--text-muted); }
+    .ht-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .ht-chip { font-size: 0.78rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; }
+    .ht-chip.muted { background: var(--surface-inset); color: var(--text-secondary); }
+    .ht-week { margin-top: 14px; padding-top: 12px; border-top: 0.5px solid var(--border-hairline); }
+    .ht-week-head { display: flex; justify-content: space-between; font-size: 0.76rem; color: var(--text-secondary); margin-bottom: 8px; }
+    .hm-today-card .hm-bar-track i { background: color-mix(in srgb, var(--color-primary) 30%, var(--chart-track-bg)); }
+    .hm-today-card .hm-bar.today .hm-bar-track i { background: var(--ht-tone); }
+    .hm-today-card .hm-bar span { color: var(--text-muted); }
+    .hm-today-card .hm-bar.today span { color: var(--text-primary); font-weight: 700; }
+
+    .hc-wrap { display: flex; align-items: center; gap: 16px; margin: 12px 0 8px; }
+    .hc-ring { flex: none; width: 120px; height: 120px; }
+    .hc-side { flex: 1; min-width: 0; }
+    .hc-big { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin-top: 2px; }
+    .hc-row { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; font-size: 0.9rem; color: var(--text-primary); }
+    .hc-row .nm { display: flex; justify-content: space-between; gap: 8px; }
+    .hc-row .nm b { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .hc-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .hc-bar { height: 5px; border-radius: 3px; background: var(--chart-track-bg); margin-top: 4px; }
+    .hc-bar i { display: block; height: 100%; border-radius: 3px; }
+    .hc-pct { font-size: 0.78rem; color: var(--text-secondary); min-width: 32px; text-align: right; }
+    .hc-more { text-align: center; font-size: 0.78rem; color: var(--text-muted); padding-top: 4px; }
+
+
     .hm-need-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 2px 0 6px; }
     .hm-need-text { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); min-width: 0; }
     .hm-btn { width: auto; min-height: 44px; padding: 0 18px; margin: 0; font-size: 0.88rem; flex: none; }
@@ -1864,6 +1907,7 @@
     .cash-row-amt { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .cash-row-amt.in { color: var(--color-success, #15803D); }
     .cash-edit-wrap { padding: 0 0 10px; }
+    button.cash-edit-delete-btn, button.cash-edit-delete-btn:hover { margin-top: 8px; color: var(--color-danger); background: transparent; border: 0.5px solid var(--color-danger); }
     .cash-edit-wrap .pending-item { margin: 0; box-shadow: none; }
     /* The old Type / Amount / Category boxes and Save button stay (the save code reads them) but the keypad and chips drive them. */
     .cash-hide, .cash-legacy-toggle { display: none !important; }
@@ -4650,10 +4694,12 @@
           <!-- Run-out card (2026-10-17): filled in by renderRunway(). Falls back to "Spent today" if the backend sent nothing. -->
           <!-- Hero (2026-10-18): top half = today's spend (renderHomeToday), bottom half = the run-out card (renderRunway). -->
           <div class="hero-card tactile" id="homeRunway">
-            <div class="hm-today" id="homeToday"></div>
             <div class="hm-runway" id="homeRunwayBody"></div>
           </div>
           <div class="home-warn" id="homeRunwayWarn" style="display:none"></div>
+
+          <!-- Spent today (2026-10-19): its own card, coloured by how today compares with a usual day. Filled by renderHomeToday(). -->
+          <div class="home-card hm-today-card" id="homeToday"></div>
 
           <div class="home-card" id="homeNeeds"></div>
 
@@ -4685,8 +4731,7 @@
           <!-- Kept (the new "This month" card does not show where the money went), moved to the bottom -->
           <div class="chart-card">
             <div class="chart-head"><span>Where it's going — this month</span><span class="chart-link" data-goto-tab="analysis">Analysis &#8594;</span></div>
-            <div class="stack-bar" id="homeCategoryStack"></div>
-            <div class="chip-row" id="homeCategoryChips"></div>
+            <div id="homeCategoryRing"></div>
           </div>
           <!-- Old list element kept hidden; its code still runs harmlessly -->
           <div id="homeRecent" hidden></div><span id="homeRecentLabel" hidden></span>
@@ -6738,8 +6783,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-19-04";
-    const APP_CHANGELOG = "History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-10-19-05";
+    const APP_CHANGELOG = "Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -8092,7 +8137,7 @@
     const NEW_SERVER_WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
       "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
-      "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "saveRunwayBalance", "registerPushToken",
+      "addCashEntry", "addManualTransaction", "updateCashEntry", "deleteCashEntry", "updateSettings", "saveBudgets", "saveRunwayBalance", "registerPushToken",
       "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "moveDebtToFriend", "updateSavingsGoal", "insertReconciledTransactions", "fixCreditCardTransactionMode",
       "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey", "adminLog", "resolveAdminProblem"];
     let newServerStatus = "";     // shown in Settings: what the last request used and how long it took
@@ -8852,6 +8897,7 @@
       let balance = 0, todaySpend = 0;
       const recent = [];
       demoState.cash.forEach(function (e, idx) {
+        if (!e.type) return;   // removed entry
         if (e.type === "debit") balance -= e.amount; else if (e.type === "credit") balance += e.amount;
         if (e.date.toDateString() === todayStr && e.type === "debit") todaySpend += e.amount;
         recent.push({ row: idx + 2, iso: e.date.getFullYear() + "-" + String(e.date.getMonth() + 1).padStart(2, "0") + "-" + String(e.date.getDate()).padStart(2, "0"), date: demoFmtDateShort(e.date), type: e.type, amount: e.amount, note: e.note, category: e.category, needWantSaving: e.needWantSaving || null });
@@ -9983,6 +10029,12 @@
       demoState.cash.push({ date: new Date(), type: type, amount: Number(amount), note: note || "", category: category || "", needWantSaving: needWantSaving || "" });
       return { ok: true };
     }
+    function demoDeleteCashEntry(row) {
+      const e = demoState.cash[row - 2];
+      if (!e) return { ok: false, error: "Invalid row." };
+      e.type = ""; e.amount = 0;   // emptied in place, like the real one, so later row numbers stay put
+      return { ok: true };
+    }
     function demoUpdateCashEntry(row, type, amount, note, category, needWantSaving) {
       const e = demoState.cash[row - 2];
       if (!e) return { ok: false, error: "Invalid row." };
@@ -10057,6 +10109,7 @@
           case "updateInvestment": return demoUpdateInvestment(data.row, data.instrumentName, data.amount);
           case "getCash": return { ok: true, cash: demoComputeCashData() };
           case "addCashEntry": return demoAddCashEntry(data.type, data.amount, data.note, data.category, data.needWantSaving);
+          case "deleteCashEntry": return demoDeleteCashEntry(data.row);
           case "updateCashEntry": return demoUpdateCashEntry(data.row, data.type, data.amount, data.note, data.category, data.needWantSaving);
           case "registerPushToken": return { ok: true }; // no-op — never worth registering a real push token while pretending
           case "getDashboard": return { ok: true, dashboard: demoComputeDashboard() };
@@ -10438,7 +10491,7 @@
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry",
       "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal", "setPrioritySavingsGoal", "markSavingsGoalDone",
       "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
-      "addCashEntry", "addManualTransaction", "updateCashEntry", "insertReconciledTransactions",
+      "addCashEntry", "addManualTransaction", "updateCashEntry", "deleteCashEntry", "insertReconciledTransactions",
       "fixCreditCardTransactionMode", "updateSettings", "saveBudgets", "saveRunwayBalance"
     ];
     const FAST_STALE_MS = 40 * 60 * 1000;   // the backend refreshes at least every 30 minutes
@@ -11460,16 +11513,42 @@
       const el = document.getElementById("homeToday");
       const x = d.homeExtra && typeof d.homeExtra === "object" ? d.homeExtra : null;
       const today = Number(d.todaySpend) || 0;
-      let html = '<div class="hero-label">Spent today</div><div class="hero-amount">' + inr(today) + '</div>';
-      const chips = x ? hpTodayChips(today, x.usualDay, x.todayCount) : [];
-      if (chips.length) html += '<div class="hm-chips">' + chips.map(function (c) { return '<span class="hm-chip">' + escapeHtml(c) + '</span>'; }).join("") + '</div>';
+      const usualRaw = x && x.usualDay !== null && x.usualDay !== undefined && x.usualDay !== "" ? Number(x.usualDay) : NaN;
+      const usual = isFinite(usualRaw) && usualRaw > 0 ? usualRaw : null;
+      const ratio = usual ? today / usual : null;
+      const tone = ratio === null ? "" : (ratio <= 1 ? "good" : (ratio <= 1.3 ? "warn" : "over"));
+      el.className = "home-card hm-today-card" + (tone ? " " + tone : "");
+
+      let html = '<div class="ht-top"><div><div class="stat-label">Spent today</div><div class="ht-amount">' + inr(today) + '</div></div>';
+      if (ratio !== null) html += '<span class="ht-pill ' + tone + '">' + (today <= 0 ? "Nothing yet" : (ratio >= 2 ? (Math.round(ratio * 10) / 10) + "x a usual day" : Math.round(ratio * 100) + "% of a usual day")) + '</span>';
+      html += '</div>';
+
+      if (usual) {
+        const ref = Math.max(usual * 1.5, today);   // the bar's full width
+        html += '<div class="ht-track" aria-hidden="true"><i style="width:' + Math.min(100, today / ref * 100).toFixed(1) + '%"></i>' +
+          '<span class="ht-mark" style="left:' + (usual / ref * 100).toFixed(1) + '%"></span></div>' +
+          '<div class="ht-scale"><span>' + inr(today) + ' so far</span><span>usual ' + inr(usual) + '</span></div>';
+      }
+
+      // What today's money went on (top two) + how many payments
+      const cats = (d.full && d.full.today && Array.isArray(d.full.today.categories) ? d.full.today.categories : []).filter(function (c) { return Number(c.amount) > 0; }).slice(0, 2);
+      const count = x && x.todayCount !== null && x.todayCount !== undefined ? Number(x.todayCount) : null;
+      let chips = cats.map(function (c) {
+        const st = CATEGORY_STYLES[c.category] || CATEGORY_STYLES.Other;
+        const iconPath = CATEGORY_ICON_PATHS[c.category] || CATEGORY_ICON_PATHS.Other;
+        return '<span class="ht-chip" style="background:var(--cat-' + st.css + '-bg); color:var(--cat-' + st.css + '-text);">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">' + iconPath + '</svg>' +
+          escapeHtml(c.category) + ' ' + inr(c.amount) + '</span>';
+      }).join("");
+      if (count !== null && isFinite(count)) chips += '<span class="ht-chip muted">' + (count <= 0 ? "No payments yet today" : hpPlural(Math.floor(count), "payment", "payments")) + '</span>';
+      if (chips) html += '<div class="ht-chips">' + chips + '</div>';
+
       const bars = x ? hpBars(x.last7) : [];
       if (bars.length) {
-        html += '<div class="hm-bars" role="group" aria-label="Spending over the last 7 days">' + bars.map(function (b) {
-          return '<div class="hm-bar' + (b.isToday ? ' today' : '') + '" role="img" aria-label="' + escapeHtml(b.aria) + '"><div class="hm-bar-track"><i style="height:' + b.pct + '%"></i></div><span>' + escapeHtml(b.label) + '</span></div>';
-        }).join("") + '</div>';
-      } else if (!chips.length && d.monthSpend !== undefined) {
-        html += '<div class="hero-sub">' + inr(d.monthSpend) + ' this month</div>';
+        html += '<div class="ht-week"><div class="ht-week-head"><span>Last 7 days</span>' + (usual ? '<span>avg ' + inr(usual) + '</span>' : '') + '</div>' +
+          '<div class="hm-bars" role="group" aria-label="Spending over the last 7 days">' + bars.map(function (b) {
+            return '<div class="hm-bar' + (b.isToday ? ' today' : '') + '" role="img" aria-label="' + escapeHtml(b.aria) + '"><div class="hm-bar-track"><i style="height:' + b.pct + '%"></i></div><span>' + escapeHtml(b.label) + '</span></div>';
+          }).join("") + '</div></div>';
       }
       el.innerHTML = html;
     }
@@ -11528,8 +11607,7 @@
     // (full.month.categories / full.month.needWantSaving, the same
     // numbers Analysis's own charts are built from), so this needed no
     // new backend call.
-    const homeCategoryStackEl = document.getElementById("homeCategoryStack");
-    const homeCategoryChipsEl = document.getElementById("homeCategoryChips");
+    const homeCategoryRingEl  = document.getElementById("homeCategoryRing");
     const homeNwsStackEl      = document.getElementById("homeNwsStack");   // null now (card removed); renderHomeCharts checks
     const homeNwsNoteEl       = document.getElementById("homeNwsNote");
 
@@ -11541,32 +11619,35 @@
       const catTotal = cats.reduce(function (sum, c) { return sum + c.amount; }, 0);
 
       if (catTotal <= 0 || cats.length === 0) {
-        homeCategoryStackEl.style.display = "none";
-        homeCategoryChipsEl.innerHTML = '<span class="mini-chip muted">Nothing spent yet this month.</span>';
+        homeCategoryRingEl.innerHTML = '<span class="mini-chip muted">Nothing spent yet this month.</span>';
       } else {
-        homeCategoryStackEl.style.display = "flex";
-        homeCategoryStackEl.innerHTML = cats.map(function (c) {
-          const pct = Math.round((c.amount / catTotal) * 100);
+        // Donut: one arc per category in its own colour, the month's total in the middle, a ranked top 3 underneath (2026-10-19)
+        const C = 2 * Math.PI * 44;
+        let offset = 0;
+        const arcs = cats.map(function (c) {
+          const len = c.amount / catTotal * C;
+          const dash = Math.max(0, len - 1.5);   // a hair of gap between neighbours
+          const arc = '<circle cx="60" cy="60" r="44" fill="none" stroke-width="16" style="stroke:' + categoryBarColor(c.category) + '" stroke-dasharray="' +
+            dash.toFixed(2) + ' ' + (C - dash).toFixed(2) + '" stroke-dashoffset="' + (-offset).toFixed(2) + '" transform="rotate(-90 60 60)"/>';
+          offset += len;
+          return arc;
+        }).join("");
+        const topCat = cats[0];
+        const perDay = catTotal / Math.max(1, new Date().getDate());
+        let html = '<div class="hc-wrap"><svg class="hc-ring" viewBox="0 0 120 120" role="img" aria-label="Spending by category this month"><title>Spending by category this month</title>' +
+          '<circle cx="60" cy="60" r="44" fill="none" stroke-width="16" style="stroke:var(--chart-track-bg)"/>' + arcs +
+          '<text x="60" y="56" text-anchor="middle" font-size="11" style="fill:var(--text-muted)">Spent</text>' +
+          '<text x="60" y="74" text-anchor="middle" font-size="14" font-weight="700" style="fill:var(--text-primary)">' + inr(catTotal) + '</text></svg>' +
+          '<div class="hc-side"><div class="stat-label">Biggest</div><div class="hc-big">' + escapeHtml(topCat.category) + ' · ' + Math.round(topCat.amount / catTotal * 100) + '%</div>' +
+          '<div class="hero-sub" style="color:var(--text-secondary); margin-top:6px;">' + inr(perDay) + ' a day on average</div></div></div>';
+        html += cats.slice(0, 3).map(function (c) {
+          const pct = Math.round(c.amount / catTotal * 100);
           const color = categoryBarColor(c.category);
-          // class="chart-glow-fill" + the matching `color:` (on top of
-          // `background:`) is what lets the round-3 dark-mode glow pick
-          // up this exact color via currentColor — see the CSS comment
-          // on .chart-glow-fill for why it's not just applied globally.
-          return `<span class="chart-glow-fill" style="width:${pct}%; background:${color}; color:${color};"></span>`;
+          return '<div class="hc-row"><span class="hc-dot" style="background:' + color + '"></span><div><div class="nm"><span>' + escapeHtml(c.category) + '</span><b>' + inr(c.amount) +
+            '</b></div><div class="hc-bar"><i style="width:' + pct + '%; background:' + color + '"></i></div></div><span class="hc-pct">' + pct + '%</span></div>';
         }).join("");
-
-        const top = cats.slice(0, 2);
-        const rest = cats.slice(2);
-        let chipsHtml = top.map(function (c) {
-          const style = CATEGORY_STYLES[c.category] || CATEGORY_STYLES.Other;
-          const iconPath = CATEGORY_ICON_PATHS[c.category] || CATEGORY_ICON_PATHS.Other;
-          const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">' + iconPath + '</svg>';
-          return `<span class="mini-chip" style="background:var(--cat-${style.css}-bg); color:var(--cat-${style.css}-text);">${icon}${escapeHtml(c.category)} ₹${c.amount.toLocaleString("en-IN")}</span>`;
-        }).join("");
-        if (rest.length > 0) {
-          chipsHtml += `<span class="mini-chip muted">+${rest.length} more</span>`;
-        }
-        homeCategoryChipsEl.innerHTML = chipsHtml;
+        if (cats.length > 3) html += '<div class="hc-more">+' + (cats.length - 3) + ' more ' + (cats.length - 3 === 1 ? "category" : "categories") + '</div>';
+        homeCategoryRingEl.innerHTML = html;
       }
 
       if (!homeNwsStackEl) return;   // the snapshot card was removed from Home in the 2026-10-17 makeover
@@ -19169,6 +19250,7 @@
         </div>
         ${typeToggleHtml}
         <button type="button" class="cash-edit-save-btn">Save</button>
+        <button type="button" class="cash-edit-delete-btn">Delete entry</button>
         <div class="pending-result"></div>
       `;
 
@@ -19193,6 +19275,45 @@
       const categorySelect  = card.querySelector(".cash-edit-category");
       const saveButton      = card.querySelector(".cash-edit-save-btn");
       const resultEl        = card.querySelector(".pending-result");
+
+      // Delete (2026-10-19): tap once to arm ("Tap again to delete"), tap again to remove. The entry disappears at once and
+      // the balance/month card move; if the server can't remove it, everything is put back with a message.
+      const deleteButton = card.querySelector(".cash-edit-delete-btn");
+      let deleteArmed = false;
+      deleteButton.addEventListener("click", function () {
+        if (!entry.row) return;
+        if (!deleteArmed) {
+          deleteArmed = true;
+          deleteButton.textContent = "Tap again to delete";
+          setTimeout(function () { deleteArmed = false; deleteButton.textContent = "Delete entry"; }, 4000);
+          return;
+        }
+        deleteButton.disabled = true;
+        const snap = cashData ? cloneCashData() : null;
+        if (cashData) {
+          const amt = Number(entry.amount) || 0;
+          cashData.balance += entry.type === "debit" ? amt : -amt;
+          if (cashData.stats) {
+            const isThisMonth = cashEntryDate(entry).getMonth() === new Date().getMonth();
+            if (entry.type === "debit" && isThisMonth) cashData.stats.monthSpent = Math.max(0, cashData.stats.monthSpent - amt);
+            if (entry.type === "credit" && isThisMonth) cashData.stats.monthIn = Math.max(0, cashData.stats.monthIn - amt);
+          }
+          cashData.recent = cashData.recent.filter(function (e) { return e.row !== entry.row; });
+          saveCache("cash", cashData);
+          cashOpenRow = null;
+          renderCash(cashData);
+        }
+        function putBack(msg) {
+          if (snap) { cashData = snap; saveCache("cash", cashData); renderCash(cashData); }
+          if (typeof FinToast !== "undefined") FinToast.show({ text: msg, ms: 4000 }); else alert(msg);
+        }
+        callAppsScript({ action: "deleteCashEntry", idToken: currentUser.idToken, row: entry.row, type: entry.type, amount: entry.amount })
+          .then(function (data) {
+            if (!data.ok) { putBack(data.error || "Couldn't delete. Try again."); return; }
+            refreshCashQuiet();
+          })
+          .catch(function () { putBack("Couldn't delete (check your connection). The entry is still there."); });
+      });
 
       // A just-added optimistic entry (see saveCashButtonEl's handler)
       // doesn't have a real row number yet — editing it before the

@@ -22,7 +22,7 @@ const READ_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getT
 const WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
   "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal", "updateSavingsGoal",
   "setPrioritySavingsGoal", "markSavingsGoalDone", "purchaseSavingsGoal", "addInvestmentInstrument", "logInvestment", "updateInvestment", "saveInvestmentHolding", "recordInvestmentSale", "deleteInvestmentEntry", "startInvestmentsFresh", "removeInvestmentHolding",
-  "addCashEntry", "addManualTransaction", "updateCashEntry", "updateSettings", "saveBudgets", "saveRunwayBalance", "registerPushToken",
+  "addCashEntry", "addManualTransaction", "updateCashEntry", "deleteCashEntry", "updateSettings", "saveBudgets", "saveRunwayBalance", "registerPushToken",
   "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "moveDebtToFriend", "refreshViews",
   "insertReconciledTransactions", "fixCreditCardTransactionMode",                  // Reconcile's saves (owner only, enforced by the backend)
   "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey",   // the Access screen's changes (owner only; the switches live in the shared database)
