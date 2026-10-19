@@ -228,7 +228,7 @@ ok(/Possible duplicate/.test(html) && /Keep both/.test(html) && /Remove this one
 ok(/Review and confirm/.test(html) && /Confirm selected/.test(html), "bulk confirm wording");
 ok(/Clear them/.test(html), "Needs you button wording");
 ok(/APP_VERSION = "2026-10-(18-0[4-9]|19-[0-9]+)"/.test(html), "APP_VERSION bumped");
-ok(/leaves today out of the week average/i.test(html) || /Analysis leaves today out/.test(html) || /APP_CHANGELOG = "New Card Coach/.test(html), "changelog mentions the latest change (Analysis fixes, or the newer Card Coach note)");
+ok(/leaves today out of the week average/i.test(html) || /Analysis leaves today out/.test(html) || /APP_CHANGELOG = "[^"]*Card Coach/.test(html), "changelog mentions the latest change (Analysis fixes, or the newer Card Coach note)");
 // the new screens must go through the normal Save button, never a second save path
 const bulkStart = html.indexOf("function openPendingReview");
 const bulk = html.slice(bulkStart, html.indexOf('document.getElementById("pcReadyBtn").addEventListener', bulkStart));

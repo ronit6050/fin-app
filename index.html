@@ -1820,6 +1820,66 @@
       margin-top: 4px;
     }
 
+    /* ---------- Cash tab makeover (2026-10-19) ---------- */
+    .cash-hero-tiles { display: flex; gap: 8px; margin-top: 12px; }
+    .cash-hero-tile { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 12px; background: color-mix(in srgb, var(--text-on-hero) 14%, transparent); }
+    .cash-tile-label { font-size: 0.72rem; color: var(--text-on-hero-muted); }
+    .cash-tile-value { font-size: 1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .cash-actions { display: flex; gap: 8px; margin-bottom: 14px; }
+    button.cash-action, button.cash-action:hover {
+      flex: 1; width: auto; min-height: 44px; padding: 10px 6px; font-size: 0.9rem;
+      color: var(--text-primary); background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline); border-radius: 14px; box-shadow: var(--shadow-card);
+    }
+    button.cash-action.cash-action-main, button.cash-action.cash-action-main:hover { color: #fff; background: var(--button-fill); border-color: transparent; }
+    button.cash-action:hover { background: var(--surface-inset); }
+    .cash-section-label { font-size: 0.75rem; color: var(--text-secondary); margin: 2px 2px 6px; }
+    .cash-quick, .cash-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+    .cash-quick { margin-bottom: 14px; }
+    .cash-quick::-webkit-scrollbar, .cash-chips::-webkit-scrollbar { display: none; }
+    button.cash-chip, button.cash-chip:hover {
+      flex: none; width: auto; padding: 7px 12px; font-size: 0.8rem; font-weight: 500; white-space: nowrap;
+      color: var(--text-primary); background: var(--surface-card);
+      border: 0.5px solid var(--border-hairline); border-radius: 999px; box-shadow: none;
+    }
+    button.cash-chip:hover { background: var(--surface-inset); }
+    button.cash-chip.active, button.cash-chip.active:hover { color: #fff; background: var(--button-fill); border-color: transparent; }
+    .cash-chips { margin: 4px 0 12px; }
+    .cash-month-card { background: var(--surface-card); border: 0.5px solid var(--border-hairline); border-radius: 16px; padding: 12px 14px; margin-bottom: 14px; box-shadow: var(--shadow-card); }
+    .cash-month-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .cash-month-top b { font-weight: 600; }
+    .cash-muted { color: var(--text-secondary); font-size: 0.78rem; }
+    .cash-bars { display: flex; align-items: flex-end; gap: 6px; height: 48px; margin: 10px 0 6px; }
+    .cash-bars span { flex: 1; min-height: 3px; border-radius: 4px; background: color-mix(in srgb, var(--color-primary) 30%, transparent); }
+    .cash-bars span.today { background: var(--color-primary); }
+    .cash-day { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin: 14px 2px 6px; }
+    .cash-day-card { background: var(--surface-card); border: 0.5px solid var(--border-hairline); border-radius: 16px; padding: 2px 12px; box-shadow: var(--shadow-card); }
+    .cash-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 0.5px solid var(--border-hairline); cursor: pointer; }
+    .cash-row:first-child { border-top: 0; }
+    .cash-row-ic { width: 34px; height: 34px; border-radius: 11px; flex: none; display: flex; align-items: center; justify-content: center; }
+    .cash-row-ic svg { width: 18px; height: 18px; }
+    .cash-row-main { flex: 1; min-width: 0; }
+    .cash-row-note { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cash-row-sub { color: var(--text-secondary); font-size: 0.75rem; }
+    .cash-row-amt { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .cash-row-amt.in { color: var(--color-success, #15803D); }
+    .cash-edit-wrap { padding: 0 0 10px; }
+    .cash-edit-wrap .pending-item { margin: 0; box-shadow: none; }
+    /* The old Type / Amount / Category boxes and Save button stay (the save code reads them) but the keypad and chips drive them. */
+    .cash-hide, .cash-legacy-toggle { display: none !important; }
+    .cash-seg { display: flex; padding: 3px; margin-bottom: 12px; background: var(--surface-inset); border-radius: 999px; }
+    button.cash-seg-btn, button.cash-seg-btn:hover { flex: 1; width: auto; padding: 8px; font-size: 0.9rem; color: var(--text-secondary); background: transparent; border-radius: 999px; box-shadow: none; }
+    button.cash-seg-btn.active, button.cash-seg-btn.active:hover { color: #fff; background: var(--button-fill); }
+    .cash-amt-display { text-align: center; font-size: 2.4rem; font-weight: 600; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+    .cash-amt-after { text-align: center; color: var(--text-secondary); font-size: 0.8rem; min-height: 1.2em; margin-bottom: 8px; }
+    .cash-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+    .cash-keypad button, .cash-keypad button:hover {
+      width: auto; padding: 14px 0; font-size: 1.15rem; font-weight: 600; color: var(--text-primary);
+      background: var(--surface-card); border: 0.5px solid var(--border-hairline); border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    }
+    .cash-keypad button:active { background: var(--surface-inset); }
+    .cash-keypad button.cash-key-ok, .cash-keypad button.cash-key-ok:hover { color: #fff; background: var(--button-fill); border-color: transparent; }
+
     /* Fixed obligations / Invested — shown as small pills on the hero
        surface instead of plain joined text, so they read as distinct,
        tappable-looking facts rather than a run-on sentence. */
@@ -5234,22 +5294,44 @@
         </div>
         <div id="cashContent" style="display:none">
 
-          <div class="today-total-box">
-            <div class="today-total-label">Cash Balance</div>
+          <div class="today-total-box cash-hero">
+            <div class="today-total-label">In your wallet</div>
             <div class="today-total-amount" id="cashBalanceAmount">₹0</div>
-            <div class="today-split" id="cashTodaySpend"></div>
+            <div class="cash-hero-tiles">
+              <div class="cash-hero-tile"><div class="cash-tile-label">Spent today</div><div class="cash-tile-value" id="cashTodaySpend">₹0</div></div>
+              <div class="cash-hero-tile"><div class="cash-tile-label">Lasts about</div><div class="cash-tile-value" id="cashRunway">—</div></div>
+            </div>
           </div>
 
-          <button type="button" id="addCashToggleButton">+ Log Cash</button>
+          <div class="cash-actions">
+            <button type="button" class="cash-action cash-action-main" data-cash-action="debit">Spent</button>
+            <button type="button" class="cash-action" data-cash-action="credit">Received</button>
+            <button type="button" class="cash-action" data-cash-action="atm">ATM</button>
+          </div>
+
+          <div id="cashQuickWrap" style="display:none">
+            <div class="cash-section-label">Tap to log again</div>
+            <div class="cash-quick" id="cashQuick"></div>
+          </div>
+
+          <div class="cash-month-card" id="cashMonthCard"></div>
+
+          <button type="button" id="addCashToggleButton" class="cash-legacy-toggle">+ Log Cash</button>
           <div id="addCashForm" style="display:none; margin-top:12px;">
-            <div class="field">
+            <div class="cash-seg" id="cashSeg" role="tablist">
+              <button type="button" class="cash-seg-btn active" data-cash-type="debit">Spent</button>
+              <button type="button" class="cash-seg-btn" data-cash-type="credit">Received</button>
+            </div>
+            <div class="cash-amt-display" id="cashAmtDisplay" aria-live="polite">₹0</div>
+            <div class="cash-amt-after" id="cashAmtAfter"></div>
+            <div class="field cash-hide">
               <label>Type</label>
               <select id="cashTypeInput">
                 <option value="debit">Spent</option>
                 <option value="credit">Received</option>
               </select>
             </div>
-            <div class="field">
+            <div class="field cash-hide">
               <label>Amount (₹)</label>
               <input type="number" id="cashAmountInput" min="0" step="1" placeholder="0">
             </div>
@@ -5257,10 +5339,11 @@
               <label>Note</label>
               <input type="text" id="cashNoteInput" placeholder="e.g. tea, auto, Rahul returned">
             </div>
-            <div class="field">
+            <div class="field cash-hide">
               <label>Category (for spend)</label>
               <select id="cashCategoryInput"></select>
             </div>
+            <div class="cash-chips" id="cashCatChips"></div>
             <div class="field type-field" id="cashTypeField">
               <label>Type</label>
               <div class="type-toggle">
@@ -5270,11 +5353,18 @@
                 <button type="button" class="type-btn" data-type="Investment">Investment</button>
               </div>
             </div>
-            <button type="button" id="saveCashButton">Save</button>
+            <div class="cash-keypad" id="cashKeypad">
+              <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
+              <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button>
+              <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
+              <button type="button" data-k="back" aria-label="Delete last digit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M21 5H9l-6 7 6 7h12z"/><path d="M17 9.5l-5 5M12 9.5l5 5"/></svg></button>
+              <button type="button" data-k="0">0</button>
+              <button type="button" data-k="ok" class="cash-key-ok" aria-label="Save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+            </div>
+            <button type="button" id="saveCashButton" class="cash-hide">Save</button>
             <div id="cashResult" class="pending-result"></div>
           </div>
 
-          <h3 style="font-size:0.95rem; margin:20px 0 8px 0;">Recent</h3>
           <div id="cashRecent"></div>
         </div>
       </div>
@@ -6652,8 +6742,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-19-01";
-    const APP_CHANGELOG = "New Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-10-19-02";
+    const APP_CHANGELOG = "New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -8768,9 +8858,9 @@
       demoState.cash.forEach(function (e, idx) {
         if (e.type === "debit") balance -= e.amount; else if (e.type === "credit") balance += e.amount;
         if (e.date.toDateString() === todayStr && e.type === "debit") todaySpend += e.amount;
-        recent.push({ row: idx + 2, date: demoFmtDateShort(e.date), type: e.type, amount: e.amount, note: e.note, category: e.category, needWantSaving: e.needWantSaving || null });
+        recent.push({ row: idx + 2, iso: e.date.getFullYear() + "-" + String(e.date.getMonth() + 1).padStart(2, "0") + "-" + String(e.date.getDate()).padStart(2, "0"), date: demoFmtDateShort(e.date), type: e.type, amount: e.amount, note: e.note, category: e.category, needWantSaving: e.needWantSaving || null });
       });
-      return { balance: balance, todaySpend: todaySpend, recent: recent.slice().reverse().slice(0, 10) };
+      return { balance: balance, todaySpend: todaySpend, recent: recent.slice().reverse().slice(0, 60) };
     }
 
     function demoComputeDebts() {
@@ -18958,6 +19048,16 @@
     const cashResultEl        = document.getElementById("cashResult");
     const cashRecentEl        = document.getElementById("cashRecent");
     const cashTypeFieldEl     = document.getElementById("cashTypeField");
+    const cashRunwayEl        = document.getElementById("cashRunway");
+    const cashMonthCardEl     = document.getElementById("cashMonthCard");
+    const cashQuickWrapEl     = document.getElementById("cashQuickWrap");
+    const cashQuickEl         = document.getElementById("cashQuick");
+    const cashSegEl           = document.getElementById("cashSeg");
+    const cashAmtDisplayEl    = document.getElementById("cashAmtDisplay");
+    const cashAmtAfterEl      = document.getElementById("cashAmtAfter");
+    const cashCatChipsEl      = document.getElementById("cashCatChips");
+    const cashKeypadEl        = document.getElementById("cashKeypad");
+    let cashOpenRow = null;     // the row whose edit card is open, kept open across the quiet background refresh
 
     // Last loaded getCash() result, kept around (added 2026-08-12 for
     // optimistic Save/Add — see the "Optimistic everywhere" changes) so
@@ -19252,17 +19352,230 @@
       cashContentEl.style.display = "block";
 
       finMoneyInto(cashBalanceAmountEl, c.balance);
-      cashTodaySpendEl.textContent = "Spent today: ₹" + c.todaySpend.toLocaleString("en-IN");
+      cashTodaySpendEl.textContent = "₹" + c.todaySpend.toLocaleString("en-IN");
+
+      const stats = cashStatsOf(c);
+      cashRunwayEl.textContent = (c.balance > 0 && stats.avgDaily > 0) ? (Math.floor(c.balance / stats.avgDaily) + " days") : "—";
+      renderCashMonthCard(stats);
+      renderCashQuick(c);
 
       cashRecentEl.innerHTML = "";
       if (c.recent.length === 0) {
         cashRecentEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">💵</span><p>No cash entries yet.</p></div>";
-      } else {
-        c.recent.forEach(function (entry) {
-          cashRecentEl.appendChild(buildCashRecentItem(entry));
+        return;
+      }
+
+      // Group the list by day: Today, Yesterday, then dated headings. Tapping a row opens the usual edit card under it.
+      let groupCard = null, lastKey = null;
+      c.recent.forEach(function (entry) {
+        const d = cashEntryDate(entry);
+        const key = d.toDateString();
+        if (key !== lastKey) {
+          lastKey = key;
+          const head = document.createElement("div");
+          head.className = "cash-day";
+          head.textContent = cashDayLabel(d);
+          cashRecentEl.appendChild(head);
+          groupCard = document.createElement("div");
+          groupCard.className = "cash-day-card";
+          cashRecentEl.appendChild(groupCard);
+        }
+        groupCard.appendChild(buildCashRow(entry));
+      });
+    }
+
+    // ---- Cash tab makeover helpers (2026-10-19) ----
+    // A date for one entry. The new server sends `iso` (yyyy-mm-dd); an older one only sends "dd Mon" (or our own "Today"
+    // for an entry just added), so fall back to that, assuming this year (last year if that would be in the future).
+    function cashEntryDate(e) {
+      const now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      if (e.iso) { const p = e.iso.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+      if (!e.date || e.date === "Today") return midnight;
+      const parsed = new Date(e.date + " " + now.getFullYear());
+      if (isNaN(parsed)) return midnight;
+      if (parsed > midnight) parsed.setFullYear(now.getFullYear() - 1);
+      return parsed;
+    }
+    function cashDayLabel(d) {
+      const now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const diff = Math.round((midnight - d) / 86400000);
+      if (diff === 0) return "Today";
+      if (diff === 1) return "Yesterday";
+      return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+    }
+    // Month totals, last 7 days and the 30-day average. The server works these out over every row; if it is an older
+    // server that does not, work them out from the entries we have.
+    function cashStatsOf(c) {
+      if (c.stats) return c.stats;
+      const now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const s = { monthSpent: 0, monthIn: 0, last7: [0, 0, 0, 0, 0, 0, 0], topCategory: "", topCategoryAmt: 0, avgDaily: 0 };
+      const byCat = {};
+      let spend30 = 0;
+      c.recent.forEach(function (e) {
+        const d = cashEntryDate(e);
+        const ago = Math.round((midnight - d) / 86400000);
+        const sameMonth = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+        if (e.type === "debit") {
+          if (sameMonth) { s.monthSpent += e.amount; byCat[e.category || "Other"] = (byCat[e.category || "Other"] || 0) + e.amount; }
+          if (ago >= 0 && ago <= 6) s.last7[6 - ago] += e.amount;
+          if (ago >= 0 && ago <= 29) spend30 += e.amount;
+        } else if (e.type === "credit" && sameMonth) { s.monthIn += e.amount; }
+      });
+      Object.keys(byCat).forEach(function (k) { if (byCat[k] > s.topCategoryAmt) { s.topCategory = k; s.topCategoryAmt = byCat[k]; } });
+      s.avgDaily = Math.round(spend30 / 30);
+      return s;
+    }
+    function renderCashMonthCard(s) {
+      const inr = function (n) { return "₹" + Math.round(n).toLocaleString("en-IN"); };
+      const max = Math.max.apply(null, s.last7.concat([1]));
+      const bars = s.last7.map(function (v, i) {
+        return "<span class=\"" + (i === 6 ? "today" : "") + "\" style=\"height:" + Math.max(6, Math.round(v / max * 100)) + "%\" title=\"" + inr(v) + "\"></span>";
+      }).join("");
+      cashMonthCardEl.innerHTML =
+        "<div class=\"cash-month-top\"><b>" + new Date().toLocaleDateString("en-IN", { month: "long" }) + "</b>" +
+        "<span class=\"cash-muted\">Spent " + inr(s.monthSpent) + " · In " + inr(s.monthIn) + "</span></div>" +
+        "<div class=\"cash-bars\">" + bars + "</div>" +
+        "<div class=\"cash-month-top cash-muted\"><span>Last 7 days</span><span>" +
+        (s.topCategory ? "Most on " + escapeHtml(s.topCategory) : "No spending yet") + "</span></div>";
+    }
+    // "Tap to log again": the notes you use most often (with the amount and category you used last time).
+    function renderCashQuick(c) {
+      const seen = {};
+      const list = [];
+      c.recent.forEach(function (e) {
+        const note = (e.note || "").trim();
+        if (e.type !== "debit" || !note) return;
+        const k = note.toLowerCase();
+        if (!seen[k]) { seen[k] = { e: e, n: 0 }; list.push(seen[k]); }
+        seen[k].n++;
+      });
+      list.sort(function (a, b) { return b.n - a.n; });
+      const top = list.slice(0, 5);
+      cashQuickWrapEl.style.display = top.length ? "" : "none";
+      cashQuickEl.innerHTML = "";
+      top.forEach(function (it) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "cash-chip";
+        b.textContent = it.e.note + " ₹" + it.e.amount.toLocaleString("en-IN");
+        b.addEventListener("click", function () {
+          openCashSheet({ type: "debit", amount: it.e.amount, note: it.e.note, category: it.e.category, nws: it.e.needWantSaving });
         });
+        cashQuickEl.appendChild(b);
+      });
+    }
+    // One compact row; tapping it opens the full edit card (the same one the list always had) just under it.
+    function buildCashRow(entry) {
+      const wrapper = document.createElement("div");
+      const isIn = entry.type === "credit";
+      const catName = entry.category || "Other";
+      const style = CATEGORY_STYLES[catName] || CATEGORY_STYLES.Other;
+      const iconPath = isIn ? "<path d=\"M17 7L7 17M7 9v8h8\"/>" : (CATEGORY_ICON_PATHS[catName] || CATEGORY_ICON_PATHS.Other);
+      const bg = isIn ? "var(--cat-income-bg)" : "var(--cat-" + style.css + "-bg)";
+      const fg = isIn ? "var(--cat-income-text)" : "var(--cat-" + style.css + "-text)";
+      const sub = isIn ? "Received" : (escapeHtml(catName) + (entry.needWantSaving ? " · " + escapeHtml(entry.needWantSaving) : ""));
+      const row = document.createElement("div");
+      row.className = "cash-row";
+      row.setAttribute("role", "button");
+      row.tabIndex = 0;
+      row.innerHTML =
+        "<div class=\"cash-row-ic\" style=\"background:" + bg + ";color:" + fg + "\">" + SVG_ICON_OPEN + iconPath + "</svg></div>" +
+        "<div class=\"cash-row-main\"><div class=\"cash-row-note\">" + escapeHtml(entry.note || (isIn ? "Cash received" : "Cash spent")) + "</div><div class=\"cash-row-sub\">" + sub + "</div></div>" +
+        "<div class=\"cash-row-amt" + (isIn ? " in" : "") + "\">" + (isIn ? "+" : "−") + "₹" + entry.amount.toLocaleString("en-IN") + "</div>";
+      wrapper.appendChild(row);
+
+      function toggle() {
+        const open = wrapper.querySelector(".cash-edit-wrap");
+        if (open) { open.remove(); cashOpenRow = null; return; }
+        const w = document.createElement("div");
+        w.className = "cash-edit-wrap";
+        w.appendChild(buildCashRecentItem(entry));
+        wrapper.appendChild(w);
+        cashOpenRow = entry.row || null;
+      }
+      row.addEventListener("click", toggle);
+      row.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); toggle(); } });
+      if (entry.row && entry.row === cashOpenRow) toggle();
+      return wrapper;
+    }
+
+    // ---- The add sheet: Spent/Received switch, big amount, keypad, category chips ----
+    function cashSyncDisplay() {
+      const amt = Number(cashAmountInputEl.value) || 0;
+      cashAmtDisplayEl.textContent = "₹" + amt.toLocaleString("en-IN");
+      if (cashData && amt > 0) {
+        const after = cashData.balance + (cashTypeInputEl.value === "debit" ? -amt : amt);
+        cashAmtAfterEl.textContent = "Balance after: " + (after < 0 ? "−" : "") + "₹" + Math.abs(after).toLocaleString("en-IN");
+      } else {
+        cashAmtAfterEl.textContent = "";
       }
     }
+    function cashSyncChips() {
+      cashCatChipsEl.style.display = cashTypeInputEl.value === "debit" ? "" : "none";
+      cashCatChipsEl.querySelectorAll(".cash-chip").forEach(function (b) {
+        b.classList.toggle("active", b.dataset.cat === cashCategoryInputEl.value);
+      });
+      cashSegEl.querySelectorAll(".cash-seg-btn").forEach(function (b) {
+        b.classList.toggle("active", b.dataset.cashType === cashTypeInputEl.value);
+      });
+    }
+    function openCashSheet(p) {
+      p = p || {};
+      cashTypeInputEl.value = p.type === "credit" ? "credit" : "debit";
+      cashTypeInputEl.dispatchEvent(new Event("change"));       // the existing Need/Want show/hide listens for this
+      cashAmountInputEl.value = p.amount ? String(p.amount) : "";
+      cashNoteInputEl.value = p.note || "";
+      cashCategoryInputEl.value = p.category && CATEGORY_OPTIONS.indexOf(p.category) !== -1 ? p.category : CATEGORY_OPTIONS[0];
+      cashNoteInputEl.dispatchEvent(new Event("input"));
+      cashResultEl.textContent = "";
+      selectedCashType = null;
+      cashTypeButtons.forEach(function (b) { b.classList.remove("active"); });
+      if (p.nws && cashTypeInputEl.value === "debit") {
+        selectedCashType = p.nws;
+        cashTypeButtons.forEach(function (b) { b.classList.toggle("active", b.dataset.type === p.nws); });
+      }
+      cashSyncChips();
+      cashSyncDisplay();
+      if (addCashFormEl.style.display === "none") addCashToggleButtonEl.click();
+    }
+    cashCatChipsEl.innerHTML = CATEGORY_OPTIONS.map(function (cat) {
+      return "<button type=\"button\" class=\"cash-chip\" data-cat=\"" + cat + "\">" + cat + "</button>";
+    }).join("");
+    cashCatChipsEl.addEventListener("click", function (ev) {
+      const b = ev.target.closest(".cash-chip");
+      if (!b) return;
+      cashCategoryInputEl.value = b.dataset.cat;
+      cashSyncChips();
+    });
+    cashSegEl.addEventListener("click", function (ev) {
+      const b = ev.target.closest(".cash-seg-btn");
+      if (!b) return;
+      cashTypeInputEl.value = b.dataset.cashType;
+      cashTypeInputEl.dispatchEvent(new Event("change"));
+      cashSyncChips();
+      cashSyncDisplay();
+    });
+    cashKeypadEl.addEventListener("click", function (ev) {
+      const b = ev.target.closest("button[data-k]");
+      if (!b) return;
+      const k = b.dataset.k;
+      let v = cashAmountInputEl.value || "";
+      if (k === "ok") { saveCashButtonEl.click(); return; }       // the old Save button is hidden but still does the saving
+      if (k === "back") v = v.slice(0, -1);
+      else if (v.length < 7) v = (v === "0") ? k : v + k;
+      cashAmountInputEl.value = v;
+      cashSyncDisplay();
+    });
+    document.querySelectorAll("#view-cash .cash-action").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const a = btn.dataset.cashAction;
+        if (a === "atm") openCashSheet({ type: "credit", note: "ATM withdrawal", category: "Other" });
+        else openCashSheet({ type: a });
+      });
+    });
 
     // Optimistic add (2026-08-12) — the entry appears in the Recent list
     // and the balance/today's-spend move immediately, instead of waiting
@@ -19295,8 +19608,14 @@
         } else {
           cashData.balance += amount;
         }
+        if (cashData.stats) {
+          // keep the month card moving too (the quiet refresh settles the exact numbers a moment later)
+          if (type === "debit") { cashData.stats.monthSpent += amount; cashData.stats.last7[6] += amount; }
+          else { cashData.stats.monthIn += amount; }
+        }
         cashData.recent.unshift({
           row: null, // not known until the real save confirms — see comment above
+          iso: manualTodayString(),
           date: "Today",
           type: type,
           amount: amount,
@@ -19333,6 +19652,7 @@
             addCashFormEl.style.display = "block";
             cashAmountInputEl.value = amount;
             cashNoteInputEl.value = note;
+            cashSyncDisplay();
             cashResultEl.textContent = "Couldn't save (" + data.error + ") — check your connection and try again.";
           }
         })
@@ -19341,6 +19661,7 @@
           addCashFormEl.style.display = "block";
           cashAmountInputEl.value = amount;
           cashNoteInputEl.value = note;
+          cashSyncDisplay();
           cashResultEl.textContent = "Couldn't save (" + err.message + ") — check your connection and try again.";
         });
     });

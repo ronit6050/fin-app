@@ -615,6 +615,20 @@ function getCashData(cashData){
   let todaySpend = 0;
   let recent     = [];
 
+  // Cash tab makeover (2026-10-19): month totals, the last 7 days, the top
+  // category and a 30-day daily average, worked out over ALL rows (not just
+  // the 60 shown), so the summary card is right even on a busy month.
+  const tz        = Session.getScriptTimeZone();
+  const nowMs     = Date.now();
+  const monthKey  = today.slice(0, 7);
+  const dayKey    = function(ms){ return Utilities.formatDate(new Date(ms), tz, "yyyy-MM-dd"); };
+  const last7Keys = [];
+  for(let k = 6; k >= 0; k--) last7Keys.push(dayKey(nowMs - k * 86400000));
+  const last7     = [0, 0, 0, 0, 0, 0, 0];
+  let monthSpent = 0, monthIn = 0, spend30 = 0;
+  const monthByCat = {};
+  const cutoff30  = dayKey(nowMs - 29 * 86400000);
+
   for(let i = 1; i < data.length; i++){
     const type     = (data[i][3] || "").toString().toLowerCase();
     const amount   = Number(data[i][4]) || 0;
@@ -629,10 +643,25 @@ function getCashData(cashData){
     if(rawDate){
       const d = Utilities.formatDate(new Date(rawDate), Session.getScriptTimeZone(), "yyyy-MM-dd");
       if(d === today && type === "debit") todaySpend += amount;
+
+      if(d.slice(0, 7) === monthKey){
+        if(type === "debit"){
+          monthSpent += amount;
+          const cn = category || "Other";
+          monthByCat[cn] = (monthByCat[cn] || 0) + amount;
+        }
+        if(type === "credit") monthIn += amount;
+      }
+      if(type === "debit"){
+        const at = last7Keys.indexOf(d);
+        if(at !== -1) last7[at] += amount;
+        if(d >= cutoff30) spend30 += amount;
+      }
     }
 
     recent.push({
       row:            i + 1,
+      iso:            rawDate ? Utilities.formatDate(new Date(rawDate), Session.getScriptTimeZone(), "yyyy-MM-dd") : "",
       date:           rawDate ? Utilities.formatDate(new Date(rawDate), Session.getScriptTimeZone(), "dd MMM") : "",
       type:           type,
       amount:         amount,
@@ -642,9 +671,21 @@ function getCashData(cashData){
     });
   }
 
-  recent = recent.reverse().slice(0, 10); // newest first, last 10 only
+  recent = recent.reverse().slice(0, 60); // newest first, last 60 (was 10 before the 2026-10-19 Cash makeover, which groups them by day)
 
-  return { balance: balance, todaySpend: todaySpend, recent: recent };
+  let topCategory = "", topCategoryAmt = 0;
+  Object.keys(monthByCat).forEach(function(cn){
+    if(monthByCat[cn] > topCategoryAmt){ topCategory = cn; topCategoryAmt = monthByCat[cn]; }
+  });
+
+  return {
+    balance: balance, todaySpend: todaySpend, recent: recent,
+    stats: {
+      monthSpent: monthSpent, monthIn: monthIn, last7: last7,
+      topCategory: topCategory, topCategoryAmt: topCategoryAmt,
+      avgDaily: Math.round(spend30 / 30)
+    }
+  };
 }
 
 // Writes one cash entry directly (structured fields, not free-text parsing
