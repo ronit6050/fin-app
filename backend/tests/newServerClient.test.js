@@ -33,6 +33,7 @@ function makeApp(setting, behaviour, opts){
   const sandbox = {
     console: console, JSON: JSON, Error: Error, Promise: Promise, Date: Date,
     demoMode: !!opts.demo,
+    withFreshToken: function(){ return Promise.resolve(); }, googleTokenMsLeft: function(){ return 1e12; }, refreshGoogleTokenQuietly: function(){ return Promise.resolve(false); },   // sign-in renewal (tested separately)
     adminWatch: function(){},       // the admin report's passive watcher (tested separately in adminStats.test.js); it never changes a request
     demoHandleRequest: function(){ log.demo++; return Promise.resolve({ ok: true, demo: true }); },
     localStorage: { getItem: function(k){ return k === "newServer" ? setting : null; } },

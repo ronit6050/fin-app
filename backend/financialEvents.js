@@ -130,6 +130,37 @@ function payeeFitsNamedEvent_(type, name, counterparty, financialEventsData){
   return !sawAnyRecordedPayee;
 }
 
+// How much does the payee tell us about a NAMED event? (added 2026-10-19)
+//   0 = a payee was recorded for this name and this payment's payee shares nothing with it: NOT the same thing.
+//   1 = we cannot judge (this payment has no payee, e.g. a wallet or cash-like entry, or the event never recorded one).
+//   2 = this payment's payee shares a meaningful word with a recorded payee: same thing.
+// Why: at strength 1 only the AMOUNT is left as evidence, and the loose amount rule (within Rs.50 or 5%) made an "Internet Bill"
+// of about Rs.490 and a small "wallet top up" suggest themselves on every ordinary food, fuel and snack payment of a similar size.
+function payeeMatchStrength_(type, name, counterparty, financialEventsData){
+  var incoming = payeeWords_(counterparty);
+  if(incoming.length === 0) return 1;
+  var sawAnyRecordedPayee = false;
+  for(var i = 1; i < financialEventsData.length; i++){
+    if(financialEventsData[i][0] !== type) continue;
+    if((financialEventsData[i][4] || "").toString() !== name) continue;
+    var known = payeeWords_(financialEventsData[i][2]);
+    if(known.length === 0) continue;
+    sawAnyRecordedPayee = true;
+    for(var k = 0; k < known.length; k++){
+      if(incoming.indexOf(known[k]) !== -1) return 2;
+    }
+    if(payeesSameWhenSquashed_(counterparty, financialEventsData[i][2])) return 2;
+  }
+  return sawAnyRecordedPayee ? 0 : 1;
+}
+
+// A strict amount check, for when the amount is the only clue: within Rs.2 or 1%.
+function amountsMatchTight_(a, b){
+  a = Number(a) || 0;
+  b = Number(b) || 0;
+  return Math.abs(a - b) <= Math.max(2, a * 0.01);
+}
+
 // Tries every previously-confirmed named event of this Type, amount
 // first (works for anything at a genuinely fixed amount), then note-
 // text (works when the amount varies, as long as the name's
@@ -161,7 +192,11 @@ function matchRecurringNamedEvent(type, amount, note, financialEventsData, count
     var name = (financialEventsData[i][4] || "").toString();
     if(!name || seenNames[name] || pausedNames[name]) continue;
     if(amountsMatch(financialEventsData[i][1], amount)){
-      if(counterparty !== undefined && !payeeFitsNamedEvent_(type, name, counterparty, financialEventsData)) continue;
+      if(counterparty !== undefined){
+        var strength = payeeMatchStrength_(type, name, counterparty, financialEventsData);
+        if(strength === 0) continue;                                                        // a different payee
+        if(strength === 1 && !amountsMatchTight_(financialEventsData[i][1], amount)) continue;   // amount is the only clue: it must be close
+      }
       return { name: name };
     }
   }
