@@ -83,6 +83,7 @@ details{margin-top:8px} summary{cursor:pointer;color:var(--accent);font-size:14p
     <h2>People</h2><div id="people" class="card"></div>
     <h2>Screens used (last 2 weeks)</h2><div id="features" class="card"></div>
     <h2>Problems (last 7 days)</h2><div id="problems" class="card"></div>
+    <h2>Problem review (checked every 3 days)</h2><div id="review" class="card"></div>
     <p class="sub" style="margin-top:22px">Scores start from the day recording began and only count what people have actually seen and checked. See "How this is calculated" for the exact rules.</p>
   </div>
 </div>
@@ -166,6 +167,26 @@ details{margin-top:8px} summary{cursor:pointer;color:var(--accent);font-size:14p
     renderPeople(d.people);
     renderFeatures(d.features);
     renderProblems(d.problems, d.problemsTruncated);
+    renderReview(d.review);
+  }
+
+  // The 3-day review: what was found, what got fixed, what is still open. Text only (never HTML).
+  function renderReview(rv) {
+    var box = $("review"); clear(box);
+    if (!rv || !rv.runAtMs) { box.appendChild(el("div", "empty", "No review has run yet.")); return; }
+    var head = el("div", "row");
+    var t = el("div", "grow", "Last checked " + ago(rv.runAtMs) + ": " + rv.found + " found, " + rv.fixed + " fixed, " + rv.notFixed + " not fixed" + (rv.watching ? ", " + rv.watching + " being watched" : "") + ".");
+    t.appendChild(el("small", "", "Next check due " + new Date(rv.nextDueMs).toLocaleDateString()));
+    head.appendChild(t); box.appendChild(head);
+    (rv.items || []).forEach(function (it) {
+      var r = el("div", "row");
+      var x = el("div", "grow"); x.appendChild(document.createTextNode(it.msg));
+      x.appendChild(el("small", "", (it.screen || "") + (it.count ? ", " + it.count + (it.count === 1 ? " time" : " times") : "") + (it.note ? " - " + it.note : "")));
+      r.appendChild(x);
+      var label = it.status === "fixed" ? "Fixed" : it.status === "watching" ? "Watching" : "Not fixed";
+      r.appendChild(el("span", "pill " + (it.status === "fixed" ? "ok" : it.status === "watching" ? "warn" : "bad"), label));
+      box.appendChild(r);
+    });
   }
 
   function renderTiles(t) {

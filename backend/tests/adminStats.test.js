@@ -330,6 +330,7 @@ console.log("\n--- 9. The phone-side reporter (code taken from index.html) ---")
       demoMode: !!demo, currentUser: { idToken: "tok" }, APP_VERSION: "2026-10-16-01",
       navigator: { userAgent: "Mozilla FinAppNativeAndroid" }, document: { addEventListener: function(){}, visibilityState: "visible" },
       window: { addEventListener: function(){} }, setInterval: function(){}, setTimeout: function(){},
+      withFreshToken: function(){ return Promise.resolve(); }, googleTokenMsLeft: function(){ return 1e12; }, refreshGoogleTokenQuietly: function(){ return Promise.resolve(false); },
       callAppsScriptInner: function(p){ sent.push(p); return Promise.resolve(p.reply === undefined ? { ok: true } : p.reply); } };
     vm.createContext(sb2);
     vm.runInContext(code + "\nthis.__t = { call: callAppsScript, flush: adminFlush, seen: adminSeen, screen: adminTrackScreen, err: adminTrackError };", sb2);
@@ -344,6 +345,9 @@ console.log("\n--- 9. The phone-side reporter (code taken from index.html) ---")
     await x.t.call({ action: "adminLog", reply: { ok: false, error: "nope" } });
     await new Promise(function(r){ setImmediate(r); });
     assert(x.t.seen.errors.length === 1 && x.t.seen.errors[0].msg === "Couldn't save" && x.t.seen.errors[0].screen === "saveNote", "a failed answer is recorded; a 'stale' refresh and the report's own failures are not");
+    await x.t.call({ action: "getPending", reply: { ok: false, error: "Not signed in properly." } });
+    await new Promise(function(r){ setImmediate(r); });
+    assert(x.t.seen.errors.length === 1, "an expired sign-in is expected (the app renews it), so it is not reported as a problem");
     assert(x.t.seen.actions.saveNote === 2, "the save was counted twice (counts only)");
     x.t.err("app", "page", "ResizeObserver loop completed with undelivered notifications");
     x.t.err("app", "page", "Script error.");
@@ -351,7 +355,7 @@ console.log("\n--- 9. The phone-side reporter (code taken from index.html) ---")
     x.t.screen("history"); x.t.screen("history"); x.t.screen("cash");
     assert(x.t.seen.screens.history === 2 && x.t.seen.screens.cash === 1, "screen opens are counted");
     x.sent.length = 0;
-    x.t.flush();
+    x.t.flush(); await new Promise(function(r){ setImmediate(r); });   // the request now waits one tick for the sign-in check
     assert(x.sent.length === 1 && x.sent[0].action === "adminLog" && x.sent[0].version === "2026-10-16-01" && x.sent[0].platform === "android" && x.sent[0].idToken === "tok", "one small report is sent with version and platform");
     assert(Object.keys(x.t.seen.screens).length === 0 && x.t.seen.errors.length === 0, "and the counters start again from zero");
     x.sent.length = 0; x.t.flush();

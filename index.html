@@ -6797,8 +6797,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-19-07";
-    const APP_CHANGELOG = "New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-10-19-08";
+    const APP_CHANGELOG = "The app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -7086,6 +7086,112 @@
       setupPushNotifications();
     }
 
+    // ---- Keeping the Google sign-in proof fresh (2026-10-19) ----
+    // The proof ("idToken") is only valid for about an hour. Before this, the app kept sending the old one and the server answered
+    // "Not signed in properly.", which showed up as repeated problems in the admin console. Now: every request first checks how long
+    // the proof has left and, if it is nearly over, quietly asks Google for a new one (no tap needed when Google remembers you).
+    let googleInitDone = false;
+    let silentRefreshPromise = null;
+    let silentRefreshResolve = null;
+    let restoreFailTimer = null;
+
+    // Called by Google whenever a credential arrives (button, One Tap, or our quiet refresh).
+    function onGoogleCredential(response) {
+      if (restoreFailTimer) { clearTimeout(restoreFailTimer); restoreFailTimer = null; }
+      // Already signed in as the same person: just swap in the new proof, don't rebuild the screens.
+      if (currentUser && acceptFreshCredential(response.credential)) {
+        if (silentRefreshResolve) silentRefreshResolve(true);
+        return;
+      }
+      handleCredentialResponse(response);
+    }
+
+    function ensureGoogleInit() {
+      if (googleInitDone) return;
+      googleInitDone = true;
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        auto_select: true,   // lets the quiet refresh work without a tap
+        callback: onGoogleCredential
+      });
+    }
+
+    // Milliseconds until a proof runs out (negative = already expired). Unreadable proofs count as "plenty" so we never block on a guess.
+    function googleTokenMsLeft(idToken) {
+      try {
+        const part = String(idToken).split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        const exp = JSON.parse(atob(part)).exp;
+        return exp ? exp * 1000 - Date.now() : 1e12;
+      } catch (e) { return 1e12; }
+    }
+
+    function acceptFreshCredential(credential) {
+      try {
+        const part = credential.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        const p = JSON.parse(atob(part));
+        if (!currentUser || String(p.email).toLowerCase() !== String(currentUser.email).toLowerCase()) return false;
+        currentUser.idToken = credential;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser));
+        syncAuthTokenForServiceWorker(currentUser);
+        return true;
+      } catch (e) { return false; }
+    }
+
+    // Asks Google quietly for a new proof. Resolves true if currentUser.idToken was renewed, false if not (then nothing changes).
+    function refreshGoogleTokenQuietly() {
+      if (isNativeAndroidApp || demoMode || !currentUser) return Promise.resolve(false);
+      if (silentRefreshPromise) return silentRefreshPromise;
+      silentRefreshPromise = new Promise(function (resolve) {
+        let timer = null;
+        const finish = function (ok) {
+          if (timer) clearTimeout(timer);
+          silentRefreshResolve = null;
+          silentRefreshPromise = null;
+          resolve(ok);
+        };
+        silentRefreshResolve = finish;
+        timer = setTimeout(function () { finish(false); }, 6000);
+        whenGoogleSignInReady(function () {
+          try {
+            ensureGoogleInit();
+            google.accounts.id.prompt(function (n) {
+              if (n && ((n.isNotDisplayed && n.isNotDisplayed()) || (n.isSkippedMoment && n.isSkippedMoment()))) finish(false);
+            });
+          } catch (e) { finish(false); }
+        }, function () { finish(false); });
+      });
+      return silentRefreshPromise;
+    }
+
+    // Page opened with an already-expired remembered proof: try a quiet renewal, else show the sign-in button.
+    function restoreWithFreshToken() {
+      const fail = function () {
+        if (restoreFailTimer) { clearTimeout(restoreFailTimer); restoreFailTimer = null; }
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* fine */ }
+        showSignedOutUI();
+      };
+      restoreFailTimer = setTimeout(fail, 6000);
+      whenGoogleSignInReady(function () {
+        try {
+          ensureGoogleInit();
+          google.accounts.id.prompt(function (n) {
+            if (n && ((n.isNotDisplayed && n.isNotDisplayed()) || (n.isSkippedMoment && n.isSkippedMoment()))) fail();
+          });
+        } catch (e) { fail(); }
+      }, fail);
+    }
+
+    // Before sending a request: swap in the newest proof, or renew it if it is about to run out.
+    function withFreshToken(payload) {
+      if (!payload || !payload.idToken || !currentUser || demoMode) return Promise.resolve();
+      if (payload.idToken !== currentUser.idToken && googleTokenMsLeft(currentUser.idToken) > 60000) {
+        payload.idToken = currentUser.idToken;   // the caller grabbed an older copy
+        return Promise.resolve();
+      }
+      if (googleTokenMsLeft(payload.idToken) > 120000) return Promise.resolve();
+      return refreshGoogleTokenQuietly().then(function (ok) { if (ok && currentUser) payload.idToken = currentUser.idToken; });
+    }
+
     // Waits until Google's sign-in script has actually finished loading and defined
     // itself before touching it - "load" firing doesn't reliably guarantee this by
     // itself. Gives up after ~5 seconds rather than retrying forever, since inside an
@@ -7135,10 +7241,7 @@
     window.addEventListener("load", function () {
       if (isNativeAndroidApp) return;
       whenGoogleSignInReady(function () {
-        google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: handleCredentialResponse
-        });
+        ensureGoogleInit();
 
         google.accounts.id.renderButton(signInBox, {
           theme: "outline",
@@ -7161,6 +7264,12 @@
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
           const savedUser = JSON.parse(saved);
+          // The remembered proof lasts only ~1 hour. If it already ran out, don't send a burst of requests that are sure to be
+          // refused ("not signed in properly"): ask Google quietly for a new one first, and only show the button if that fails.
+          if (savedUser && savedUser.idToken && !isNativeAndroidApp && googleTokenMsLeft(savedUser.idToken) <= 0) {
+            restoreWithFreshToken();
+            return;
+          }
           if (savedUser.email && savedUser.idToken && savedUser.email.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
             currentUser = savedUser;        // a friend's remembered sign-in: splits only
             startFriendMode();
@@ -8093,7 +8202,8 @@
         if (a) adminSeen.actions[a] = (adminSeen.actions[a] || 0) + 1;
         const screenOf = String(payload.action || "");
         promise.then(function (d) {
-          if (d && d.ok === false && !d.stale && d.error) adminTrackError("server", screenOf, d.error);
+          // An expired sign-in is expected (the app renews it or shows the sign-in button), not a problem worth reporting.
+          if (d && d.ok === false && !d.stale && d.error && d.error !== "Not signed in properly.") adminTrackError("server", screenOf, d.error);
         }, function (err) {
           adminTrackError("network", screenOf, err && err.message ? err.message : "request failed");
         });
@@ -8106,7 +8216,24 @@
     setTimeout(adminFlush, 30 * 1000);
 
     function callAppsScript(payload) {
-      const promise = callAppsScriptInner(payload);
+      // Make sure the sign-in proof is fresh first (see "Keeping the Google sign-in proof fresh"). If the server still says
+      // "Not signed in properly." (it did nothing, so repeating is safe), renew once and try again.
+      let retried = false;
+      const attempt = function () {
+        return callAppsScriptInner(payload).then(function (data) {
+          if (!retried && data && data.ok === false && data.error === "Not signed in properly." && payload.idToken
+            && currentUser && googleTokenMsLeft(payload.idToken) < 300000) {
+            retried = true;
+            return refreshGoogleTokenQuietly().then(function (ok) {
+              if (!ok || !currentUser) return data;
+              payload.idToken = currentUser.idToken;
+              return attempt();
+            });
+          }
+          return data;
+        });
+      };
+      const promise = withFreshToken(payload).then(attempt);
       adminWatch(payload, promise);
       return promise;
     }

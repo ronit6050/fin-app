@@ -225,7 +225,10 @@ function adminDashboard_(){
   var timer = {};
   try{ var t = fsGetPathMeta_("_system/timer"); timer = t ? t.fields : {}; }catch(ignoreT){}
   var tickAge = adminNum_(timer.tickAtMs) ? now - adminNum_(timer.tickAtMs) : null;
-  return { ok: true, generatedMs: now, tiles: { people: people.length, activeToday: activeToday, errorsToday: errorsToday, smsThisWeek: smsToday,
+  // The latest "every 3 days" problem review (written by tools/admin_review.py; plain text only). Missing = never run yet.
+  var review = null;
+  try{ var rv = fsGetPathMeta_("adminReview/latest"); if(rv && rv.fields && rv.fields.json) review = JSON.parse(rv.fields.json); }catch(ignoreReview){}
+  return { ok: true, generatedMs: now, review: review, tiles: { people: people.length, activeToday: activeToday, errorsToday: errorsToday, smsThisWeek: smsToday,
       dbReadsPct: overview.usage ? overview.usage.readsPct : 0, dbWritesPct: overview.usage ? overview.usage.writesPct : 0,
       timerOk: tickAge !== null && tickAge < 12 * 60000 && adminNum_(timer.failCount) === 0, timerAgeMs: tickAge },
     people: rows, features: featureList, problems: problems, problemsTruncated: problemsTruncated, understanding: understanding };
