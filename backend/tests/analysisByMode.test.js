@@ -233,7 +233,7 @@ assertEqual(result.totalCredit, 50200, "All totalCredit = 50000 (Salary) + 200 (
 assertEqual(result.savings, 50200 - 2350, "All savings = totalCredit - totalDebit");
 assertEqual(result.topAmount, 1000, "All topAmount is the 1000 Electricity row (bigger than every other counted debit)");
 assertEqual(result.topNote, "Electricity", "All topNote matches the 1000 row's note");
-assertEqual(result.avgDaily, Math.round(2350 / 5), "All avgDaily divides by 5 distinct spend days (5,6,7,8,9)");
+assertEqual(result.avgDaily, Math.round(2350 / 31), "All avgDaily divides by every day of a finished month (August = 31), not just the 5 spend days");
 assertEqual(result.needWantSaving.need, 1400, "All needWantSaving.need = Tea(100)+Cab(300)+Electricity(1000)");
 assertEqual(result.needWantSaving.want, 950, "All needWantSaving.want = Pizza(500)+Burger(200)+Cash Snacks(250)");
 assertEqual(result.needWantSaving.saving, 0, "All needWantSaving.saving is 0 — no Saving-tagged rows in this fixture");
@@ -275,3 +275,11 @@ const expectedBucketKeys = ["totalDebit","totalCredit","savings","avgDaily","top
 });
 
 console.log("\nDone.");
+
+// ---- Average per day divides by days passed (2026-10-19) ----
+{
+  const now = new Date();
+  assertEqual(sandbox.analysisDaysCounted_(2026, 2), 28, "a finished month counts all its days (Feb 2026 = 28)");
+  assertEqual(sandbox.analysisDaysCounted_(now.getFullYear(), now.getMonth() + 1), now.getDate(), "this month counts the days passed so far (today's date)");
+  assertEqual(sandbox.analysisDaysCounted_(now.getFullYear() + 1, 1), 1, "a future month never divides by zero");
+}

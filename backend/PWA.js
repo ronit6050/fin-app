@@ -1543,12 +1543,23 @@ function freshModeBucket(){
   };
 }
 
+// How many days to divide the month's spend by for "average per day" (2026-10-19). It used to be the number of
+// days that had any spending, which made the average too high (a quiet week was ignored). Now it is every day
+// that has passed: today's date number for the current month, the whole month for a finished one, 1 for a future one.
+function analysisDaysCounted_(year, month){
+  const now = new Date();
+  const nowYear = now.getFullYear(), nowMonth = now.getMonth() + 1;
+  if(year === nowYear && month === nowMonth) return Math.max(1, now.getDate());
+  if(year > nowYear || (year === nowYear && month > nowMonth)) return 1;
+  return new Date(year, month, 0).getDate();
+}
+
 // Turns one bucket's raw accumulators into the same response shape
 // getMonthlyAnalysis already returns at the top level (categories,
 // needWantSaving, etc.) — used for bank/card/wallet in `byMode` below.
 function finalizeModeBucket(bucket, year, month){
   const savings = bucket.totalCredit - bucket.totalDebit;
-  const days = Object.keys(bucket.dailyTotals).length || 1;
+  const days = analysisDaysCounted_(year, month);
   const avgDaily = Math.round(bucket.totalDebit / days);
   const categories = Object.entries(bucket.categoryTotals)
     .sort(function(a, b){ return b[1] - a[1]; })
@@ -1790,7 +1801,7 @@ function getMonthlyAnalysis(year, month, txnData, cashData, opts){
   }
 
   const savings = totalCredit - totalDebit;
-  const days    = Object.keys(dailyTotals).length || 1;
+  const days    = analysisDaysCounted_(year, month);
   const avgDaily = Math.round(totalDebit / days);
 
   // What you actually set aside this month (added 2026-10-17): the net of the Savings screen's

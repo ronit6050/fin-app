@@ -6652,8 +6652,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-18-06";
-    const APP_CHANGELOG = "New Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card.";
+    const APP_VERSION = "2026-10-19-01";
+    const APP_CHANGELOG = "New Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -7344,7 +7344,10 @@
     // label instead of "Looks like X again," since this isn't a fresh
     // suggestion, it's what was actually saved.
     const NAMEABLE_FE_TYPES = ["EMI", "Investment"];
-    function buildFinancialEventHtml(feType, feName, confident, alreadyConfirmed) {
+    // manualBill (2026-10-19): History offers "Is this a fixed bill?" on a payment the app had no guess for
+    // (e.g. a mess subscription). It is saved as an EMI with the name you type, so it leaves the daily
+    // average, shows under Fixed obligations and gets the usual "due soon" reminder.
+    function buildFinancialEventHtml(feType, feName, confident, alreadyConfirmed, manualBill) {
       if (!feType) return "";
 
       if (NAMEABLE_FE_TYPES.includes(feType) && !feName) {
@@ -7367,15 +7370,20 @@
             </div>
           `;
         }
-        const prompt = { question: "This looks like an EMI — which one?", placeholder: "Name this EMI (e.g. Laptop EMI)", confirmLabel: "Mark as this EMI" };
+        const prompt = manualBill
+          ? { question: "Is this a fixed bill or subscription (like a mess)? Name it to keep it out of your daily average.", placeholder: "Name it (e.g. Mess subscription)", confirmLabel: "Mark as fixed bill" }
+          : { question: "This looks like an EMI — which one?", placeholder: "Name this EMI (e.g. Laptop EMI)", confirmLabel: "Mark as this EMI" };
+        // The manual version sits folded away behind a small link so it doesn't add a question to every History card.
         return `
           <div class="field fe-field">
+            ${manualBill ? '<details><summary class="link-btn" style="cursor:pointer;">Mark as a fixed bill or subscription…</summary>' : ""}
             <label>${prompt.question}</label>
             <input type="text" class="fe-emi-name-input" data-fe-type="${feType}" placeholder="${prompt.placeholder}">
             <div class="type-toggle">
               <button type="button" class="fe-emi-confirm-btn fe-btn">${prompt.confirmLabel}</button>
-              <button type="button" class="fe-btn" data-fe="">No, regular spend</button>
+              ${manualBill ? "" : '<button type="button" class="fe-btn" data-fe="">No, regular spend</button>'}
             </div>
+            ${manualBill ? "</details>" : ""}
           </div>
         `;
       }
@@ -12060,6 +12068,7 @@
               <button type="button" class="fe-btn mark-opt" data-mark="Rent">Rent</button>
               <button type="button" class="fe-btn mark-opt" data-mark="SIP">SIP</button>
               <button type="button" class="fe-btn mark-opt" data-mark="Saving">Saving</button>
+              <button type="button" class="fe-btn mark-opt" data-mark="BILL">Fixed bill</button>
               <button type="button" class="fe-btn mark-opt" data-mark="CCBILL">Card bill</button>
             </div>
             <div class="mark-name" style="display:none; margin-top:8px;"></div>
@@ -12407,9 +12416,12 @@
               return;
             }
             markNameEl.style.display = "block";
-            if (kind === "EMI") {
-              markNameEl.innerHTML = '<input type="text" class="mark-emi-name" placeholder="Name this EMI (e.g. Laptop EMI)">' +
-                '<button type="button" class="fe-btn mark-confirm" style="margin-top:8px;">Mark as this EMI</button>';
+            if (kind === "EMI" || kind === "BILL") {
+              // "Fixed bill" (2026-10-19, e.g. a mess subscription) is stored as an EMI with your name for it:
+              // out of the daily average, under Fixed obligations, with the usual reminder before it is due.
+              const isBill = kind === "BILL";
+              markNameEl.innerHTML = '<input type="text" class="mark-emi-name" placeholder="' + (isBill ? "Name it (e.g. Mess subscription)" : "Name this EMI (e.g. Laptop EMI)") + '">' +
+                '<button type="button" class="fe-btn mark-confirm" style="margin-top:8px;">' + (isBill ? "Mark as this fixed bill" : "Mark as this EMI") + '</button>';
               markNameEl.querySelector(".mark-confirm").addEventListener("click", function () {
                 const typed = markNameEl.querySelector(".mark-emi-name").value.trim();
                 if (!typed) { markNameEl.querySelector(".mark-emi-name").focus(); return; }
@@ -20926,7 +20938,9 @@
       // docs/features/financial-events.md.
       const feHtml = txn.financialEvent
         ? buildFinancialEventHtml(txn.financialEvent, txn.financialEventName, true, true)
-        : buildFinancialEventHtml(txn.suggestedFinancialEvent, txn.suggestedFinancialEventName, txn.financialEventConfident, false);
+        : (txn.suggestedFinancialEvent
+          ? buildFinancialEventHtml(txn.suggestedFinancialEvent, txn.suggestedFinancialEventName, txn.financialEventConfident, false)
+          : (showTypeToggle ? buildFinancialEventHtml("EMI", null, false, false, true) : ""));
 
       // Note-based investment detection — see the matching comment in
       // buildPendingItem. History always has a real note already, so

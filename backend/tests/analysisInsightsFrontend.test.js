@@ -352,7 +352,7 @@ const an = html.slice(html.indexOf("function renderAnalysisPace"), html.indexOf(
 ok(!/#[0-9a-fA-F]{3,6}\b/.test(an) && !/rgba?\(/.test(an), "no hard-coded colours in the new Analysis render code");
 const css = html.slice(html.indexOf("Analysis makeover (2026-10-18) ----------"), html.indexOf("Home charts (2026-08-11)"));
 ok(!/#[0-9a-fA-F]{3,6}\b/.test(css.replace(/\/\*[\s\S]*?\*\//g, "")), "no hard-coded colours in the new Analysis CSS");
-ok(/APP_VERSION = "2026-10-18-0[3-9]"/.test(html), "APP_VERSION bumped");
+ok(/APP_VERSION = "2026-10-(18-0[3-9]|19-[0-9]+)"/.test(html), "APP_VERSION bumped");
 ok(/prefers-reduced-motion: reduce\) \{\s*\.an-card\.an-in \{ animation: none; \}/.test(html), "new fade respects reduced motion");
 
 console.log((fail ? "FAILED" : "OK") + ": " + pass + " passed, " + fail + " failed");

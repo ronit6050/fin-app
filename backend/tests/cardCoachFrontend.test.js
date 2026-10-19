@@ -213,7 +213,7 @@ ok(/function renderHomeCoach/.test(html) && /renderHomeCoach\(d\)/.test(html), "
 ok(/renderCCCoach\(cc\)/.test(html), "card sections are drawn from renderCCAdvisor");
 ok(/function demoComputeCoach/.test(html) && /coach: demoComputeCoach\(/.test(html), "Demo Mode builds a coach");
 ok(/cardWantsLimit: 4000, cardReminder: true/.test(html), "Demo settings carry the new fields");
-ok(/APP_VERSION = "2026-10-18-0[5-9]"/.test(html), "APP_VERSION bumped");
+ok(/APP_VERSION = "2026-10-(18-0[5-9]|19-[0-9]+)"/.test(html), "APP_VERSION bumped");
 ok(/APP_CHANGELOG = "New Card Coach/.test(html), "changelog mentions Card Coach");
 // hand-written colours: none in the new CSS
 const css = (html.match(/Card Coach \(2026-10-18\): Home card[\s\S]*?prefers-reduced-motion: reduce\) \{[\s\S]*?\}\r?\n    \}/) || [""])[0];
