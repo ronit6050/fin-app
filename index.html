@@ -8209,7 +8209,11 @@
         });
       } catch (e) { /* never matters to the app */ }
     }
-    window.addEventListener("error", function (ev) { adminTrackError("app", "page", ev && ev.message ? ev.message : "script error"); });
+    // The report cleaner removes numbers, so a line number would be lost: name the function the error came from instead.
+    function adminWhere(err) {
+      try { const m = String(err && err.stack || "").match(/at\s+(?:async\s+)?([A-Za-z_$][\w$.]*)\s*\(/); return m ? " in " + m[1] : ""; } catch (e) { return ""; }
+    }
+    window.addEventListener("error", function (ev) { adminTrackError("app", "page", (ev && ev.message ? ev.message : "script error") + adminWhere(ev && ev.error)); });
     window.addEventListener("unhandledrejection", function (ev) { adminTrackError("app", "page", ev && ev.reason && ev.reason.message ? ev.reason.message : "unhandled rejection"); });
     document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") adminFlush(); });
     setInterval(adminFlush, 5 * 60 * 1000);
@@ -11469,7 +11473,7 @@
       renderHomeToday(d);
       renderRunway(d);
       renderHomeNeeds(d);
-      try { renderHomeCoach(d); } catch (e) { document.getElementById("homeCoach").style.display = "none"; }   // never let the coach card break Home
+      try { renderHomeCoach(d); } catch (e) { const hc = document.getElementById("homeCoach"); if (hc) hc.style.display = "none"; }   // never let the coach card break Home
       renderHomeMonth(d);
       renderHomeWatch(d);
       renderHomeLatest(d);
