@@ -5720,7 +5720,7 @@
           <!-- "Track progress" — hero card (real spend vs. total target)
                plus one rollup bar per category. -->
           <div id="plannerTrackView" style="display:none">
-            <div class="today-total-box">
+            <div class="today-total-box" style="display:none"><!-- replaced by the safe-to-spend card (2026-10-19); kept so old render code still has its elements -->
               <div class="today-total-label">Spent this month</div>
               <div class="today-total-amount" id="plannerTrackAmount">₹0</div>
               <div class="today-split" id="plannerTrackMeta"></div>
@@ -6797,7 +6797,7 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-19-06";
+    const APP_VERSION = "2026-10-19-07";
     const APP_CHANGELOG = "New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
@@ -21150,6 +21150,11 @@
       const color = plannerBarColor(status, categoryBarColor(c.category));
       const ofText = target > 0 ? ` <span class="planner-track-of">of ₹${Math.round(target).toLocaleString("en-IN")}</span>` : "";
       const noTargetNote = (!c.saved) ? `<p class="planner-track-of" style="margin:6px 0 0;">No target set yet — see Set targets.</p>` : "";
+      // Envelope wording (2026-10-19): say what is LEFT, not just what was spent.
+      const leftAmt = target - actual;
+      const envText = target <= 0 ? "" : (leftAmt >= 0
+        ? `<span style="color:${status === "near" ? "var(--color-warning)" : "var(--text-secondary)"}">₹${Math.round(leftAmt).toLocaleString("en-IN")} left</span>`
+        : `<span style="color:var(--color-danger)">₹${Math.round(-leftAmt).toLocaleString("en-IN")} over</span>`);
 
       let extraHtml = "";
       if (c.split) {
@@ -21173,12 +21178,12 @@
       row.innerHTML = `
         <div class="category-top">
           ${categoryBadgeHtml(c.category)}
-          <span class="cat-amt">₹${Math.round(actual).toLocaleString("en-IN")}${ofText}</span>
+          <span class="cat-amt">${envText || "₹" + Math.round(actual).toLocaleString("en-IN")}</span>
         </div>
         <div class="category-bar-track">
           <div class="category-bar-fill chart-glow-fill" style="width:${pct}%; background:${color}; color:${color};"></div>
         </div>
-        ${plannerOverWarnHtml(status, c.category, actual, target)}
+        <p class="planner-track-of" style="margin:6px 0 0;">Spent ₹${Math.round(actual).toLocaleString("en-IN")}${target > 0 ? " of ₹" + Math.round(target).toLocaleString("en-IN") : ""}</p>
         ${noTargetNote}
         ${extraHtml}
       `;
