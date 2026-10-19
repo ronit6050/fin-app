@@ -2588,6 +2588,9 @@
        Colors come only from existing tokens, so both themes work. The active
        chip is the page's inverse (text color as fill) like the hero card idea. */
     .hist-bar { margin-bottom: 10px; }
+    /* History under Pending (2026-10-19) */
+    .pending-history { margin-top: 28px; padding-top: 4px; }
+    .pending-history .ph-title { margin-bottom: 10px; }
     .hist-bar input[type="search"] { width: 100%; margin-bottom: 8px; }
     .hist-bar select { width: 100%; margin-top: 2px; }
     .hist-chips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 4px; -webkit-overflow-scrolling: touch; }
@@ -4761,6 +4764,20 @@
         <button type="button" id="showMoreButton" style="display:none">Show more</button>
         <button type="button" class="removed-toggle" id="removedToggle">Removed items — bring one back</button>
         <div id="removedList" style="display:none"></div>
+        <!-- Past payments (2026-10-19): History now lives right under Pending, so one tab shows what needs a note
+             AND everything already noted. Same ids and code as the old History screen. -->
+        <div id="view-history" class="pending-history">
+          <h2 class="section-title ph-title">Past payments</h2>
+          <div class="hist-bar">
+            <input type="search" id="historySearch" placeholder="Search note, payee or amount" autocomplete="off" aria-label="Search past payments">
+            <div id="historyChips" class="hist-chips" role="group" aria-label="Filter past payments"></div>
+            <select id="historyMonth" aria-label="Jump to a month"><option value="">All months</option></select>
+          </div>
+          <div id="historySummary"></div>
+          <div id="historyStatus" class="pending-status"></div>
+          <div id="historyList"></div>
+          <button type="button" id="historyShowMore" style="display:none">Show more</button>
+        </div>
       </section>
 
       <!-- ===== TAB: Monthly Analysis ===== -->
@@ -4861,10 +4878,6 @@
             <button type="button" class="more-menu-item tactile" data-target="cash">
               <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><circle cx="12" cy="12" r="2.7"/></svg></span>
               <span>Cash</span>
-            </button>
-            <button type="button" class="more-menu-item tactile" data-target="history">
-              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
-              <span>History</span>
             </button>
             <button type="button" class="more-menu-item tactile" data-target="investments">
               <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg></span>
@@ -5593,23 +5606,6 @@
           </p>
           <button type="button" class="secondary" id="viewDemoModeButton" style="margin-top:8px;">View Demo Mode</button>
         </div>
-      </div>
-
-      <!-- ===== SUB-SCREEN: History (edit past transactions) ===== -->
-      <div id="view-history" style="display:none">
-        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
-        <h2 class="section-title">History</h2>
-        <!-- Search + filters (2026-10-14): find a payment without scrolling.
-             The chips and the month list are filled in from each answer's counts/months. -->
-        <div class="hist-bar">
-          <input type="search" id="historySearch" placeholder="Search note, payee or amount" autocomplete="off" aria-label="Search History">
-          <div id="historyChips" class="hist-chips" role="group" aria-label="Filter History"></div>
-          <select id="historyMonth" aria-label="Jump to a month"><option value="">All months</option></select>
-        </div>
-        <div id="historySummary"></div>
-        <div id="historyStatus" class="pending-status"></div>
-        <div id="historyList"></div>
-        <button type="button" id="historyShowMore" style="display:none">Show more</button>
       </div>
 
       <!-- ===== SUB-SCREEN: Planner (2026-08-18) ===== -->
@@ -6742,8 +6738,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-19-02";
-    const APP_CHANGELOG = "New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-10-19-04";
+    const APP_CHANGELOG = "History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -13176,7 +13172,6 @@
       cash:        document.getElementById("view-cash"),
       reconcile:   document.getElementById("view-reconcile"),
       settings:    document.getElementById("view-settings"),
-      history:     document.getElementById("view-history"),
       planner:     document.getElementById("view-planner"),
       access:      document.getElementById("view-access")
     };
@@ -13184,6 +13179,7 @@
     // Only load a screen's data the first time it's opened, not every time.
     // Home and Pending load on sign-in already (not lazily), since Home is
     // the landing screen and Pending needs to be ready for notifications.
+    let historyLoadedAt = 0;
     const tabLoaded = { home: true, pending: true, today: false, analysis: false, cc: false, debts: false, savings: false, investments: false, cash: false, settings: false, history: false, planner: false };
 
     // Switches between the 4 primary tabs
@@ -13306,6 +13302,13 @@
         loadMonthlyAnalysis();
       }
 
+      // Past payments live under Pending now: load them the first time, then refresh when stale (new saves show up).
+      if (tabName === "pending" && currentUser && (!tabLoaded.history || Date.now() - historyLoadedAt > 20000)) {
+        tabLoaded.history = true;
+        historyLoadedAt = Date.now();
+        loadHistory();
+      }
+
       if (tabName === "more") {
         showMoreMenu(); // always reset to the menu grid when tapping "More" itself
       } else {
@@ -13369,10 +13372,6 @@
       if (name === "settings" && !tabLoaded.settings) {
         tabLoaded.settings = true;
         loadSettings();
-      }
-      if (name === "history" && !tabLoaded.history) {
-        tabLoaded.history = true;
-        loadHistory();
       }
       if (name === "planner" && !tabLoaded.planner) {
         tabLoaded.planner = true;
