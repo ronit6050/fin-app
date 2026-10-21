@@ -6797,7 +6797,7 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-19-08";
+    const APP_VERSION = "2026-10-21-01";
     const APP_CHANGELOG = "The app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
@@ -11607,7 +11607,19 @@
           '<div class="runway-ends"><span>Today</span><span>Salary ' + runwayShortDate(r.salaryDate) + '</span></div>';
       }
       const age = r.checkpointAgeDays;
-      el.innerHTML = '<div class="hero-label">At your current pace</div><div class="runway-title">' + title + '</div><div class="hero-sub">' + sub + '</div>' + bar +
+      // Safe to spend until the next salary (2026-10-21): what is left after the bills that fall due before salary,
+      // and that spread evenly over the days until salary. Same numbers the backend already uses for maxPerDay.
+      let safeBlock = "";
+      if (r.salaryDate && r.daysToSalary > 0) {
+        const safeTotal = Math.max(0, Math.round((Number(r.estimatedBalance) || 0) - (Number(r.billsAhead) || 0)));
+        const safeDay = Math.floor(safeTotal / r.daysToSalary);
+        safeBlock = '<div class="runway-facts" style="display:block;">' +
+          '<div class="hero-label">Safe to spend till salary</div>' +
+          '<div class="runway-title">' + inr(safeTotal) + '</div>' +
+          '<div class="hero-sub">about ' + inr(safeDay) + ' a day for ' + r.daysToSalary + (r.daysToSalary === 1 ? ' day' : ' days') +
+          ' (after ' + inr(r.billsAhead) + ' of bills due before salary)</div></div>';
+      }
+      el.innerHTML = '<div class="hero-label">At your current pace</div><div class="runway-title">' + title + '</div><div class="hero-sub">' + sub + '</div>' + bar + safeBlock +
         '<div class="runway-facts">' +
           '<span>Balance ' + inr(r.estimatedBalance) + '</span><span>Bills ahead -' + inr(r.billsAhead) + '</span>' +
           '<span>Spending ' + inr(r.dailyPace) + '/day</span>' + (r.salaryDate ? '<span>Salary ' + runwayShortDate(r.salaryDate) + '</span>' : '<span>' + (r.bills && r.bills.length ? r.bills.length : 0) + ' bills coming</span>') +
