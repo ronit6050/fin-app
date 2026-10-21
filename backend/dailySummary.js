@@ -81,8 +81,14 @@ function dailySummaryRun_(){
       if(!token) return;                                              // no phone registered: nothing to send to
       var msg = v2dbRun_(email, function(){
         if(String(dbProps_().getProperty("SETTING_DAILY_SUMMARY_OFF") || "") === "1") return null;     // this person switched it off
-        return dailySummaryBuild_();
-      }, { prefetch: ["Transactions", "Cash", "_Props"] });
+        // Short on purpose (2026-10-21): against today's limit when one is known, else just "You spent ₹X today".
+        try{
+          var short_ = (typeof dailyNudgeEveningBuild_ === "function") ? dailyNudgeEveningBuild_() : null;
+          if(short_) return short_;
+        }catch(ignoreNudge){}
+        var full = dailySummaryBuild_();
+        return { title: full.title, body: full.pending > 0 ? full.pending + (full.pending === 1 ? " payment needs" : " payments need") + " a note" : "Nothing needs a note" };
+      }, { prefetch: ["Transactions", "Cash", "FinancialEvents", "_Props"] });
       if(!msg) return;
       sendPushToToken_(token, msg.title, msg.body, { kind: "summary" });
       sent++;

@@ -62,7 +62,9 @@ function timerHeartbeatFresh_(){
 
 // The four daily jobs: key, India-time hour/minute after which the first tick runs it.
 var TIMER_DAILY_JOBS_ = [
+  { key: "morning",     hour: 8,  minute: 0  },     // added 2026-10-21: short "today's limit" nudge (dailyNudges.js)
   { key: "obligations", hour: 8,  minute: 30 },
+  { key: "midday",      hour: 13, minute: 0  },     // added 2026-10-21: short "left today" nudge (dailyNudges.js)
   { key: "debts",       hour: 9,  minute: 0  },
   { key: "cardbill",    hour: 9,  minute: 15 },     // added 2026-10-18: "card bill due in 3 days" reminder (cardCoach.js), once per bill per person
   { key: "health",      hour: 9,  minute: 30 },
@@ -70,6 +72,8 @@ var TIMER_DAILY_JOBS_ = [
 ];
 
 function timerDailyRunner_(key){
+  if(key === "morning") return (typeof dailyNudgeMorningRun_ === "function") ? dailyNudgeMorningRun_ : null;
+  if(key === "midday") return (typeof dailyNudgeMiddayRun_ === "function") ? dailyNudgeMiddayRun_ : null;
   if(key === "obligations") return checkUpcomingObligations;
   if(key === "debts") return checkDebtDueDates;
   if(key === "cardbill") return (typeof cardBillReminderRun_ === "function") ? cardBillReminderRun_ : null;
