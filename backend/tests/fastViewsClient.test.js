@@ -89,7 +89,6 @@ function makeApp(o){
     demoMode: !!o.demoMode,
     currentUser: { email: "ronitnadar9@gmail.com", idToken: "google-proof" },
     ALLOWED_EMAIL: "ronitnadar9@gmail.com",
-    APPS_SCRIPT_URL: "https://script.example/exec",
     Date: { now: function(){ return clock.now; }, parse: Date.parse },
     setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout,
     Number: Number, JSON: JSON, Math: Math, isFinite: isFinite,
@@ -106,11 +105,11 @@ function makeApp(o){
       log.network.push(payload.action);
       return Promise.resolve({ ok: true, dashboard: { full: { pending: [] }, from: "network" } });
     },
-    // New server (2026-10-14): only used for the rebuild when "Reads and saves" is on
-    newServerSaves: function(){ return !!o.newServerSaves; },
+    // The new server is the only server (2026-10-22): the rebuild is always asked of it
     callNewServer: function(payload){
-      log.newServer.push(payload.action);
-      return o.newServerFails ? Promise.reject(new Error("fallback")) : Promise.resolve({ ok: true, published: true, builtAt: clock.now });
+      log.newServer.push(payload.action); log.fetches.push(payload.action);
+      if(o.newServerFails) return Promise.reject(new Error("fallback"));
+      return Promise.resolve(o.refreshResponse ? o.refreshResponse(payload) : { ok: true, published: true, builtAt: clock.now });
     },
     fetch: function(url, init){
       const body = JSON.parse(init.body); log.fetches.push(body.action);
@@ -263,7 +262,7 @@ console.log("\n--- 7. Failed saves cost nothing; failed rebuilds fall back safel
   const c = makeApp();
   c.api.loadDashboard(); await tick(); await tick();
   c.fb.push(copy(c.clock));
-  c.sb.fetch = function(){ return Promise.reject(new Error("offline")); };
+  c.sb.callNewServer = function(){ return Promise.reject(new Error("offline")); };
   c.api.fastWriteStarted(); c.api.fastWriteFinished(true);
   c.clock.advance(1600); await tick(); await tick();
   assert(c.log.network.join() === "getDashboard", "rebuild request fails (offline): falls back, no crash");
@@ -306,11 +305,11 @@ console.log("\n--- 11. REVIEW FIX: two rebuilds overlapping do not release the h
 {
   let release1 = null, calls = 0;
   const a = makeApp({ refreshResponse: function(body){ return null; } });
-  a.sb.fetch = function(url, init){
+  a.sb.callNewServer = function(payload){
     calls++;
     const me = calls;
     return new Promise(function(resolve){
-      const reply = { json: function(){ return Promise.resolve({ ok: true, published: true, builtAt: a.clock.now + me }); } };
+      const reply = { ok: true, published: true, builtAt: a.clock.now + me };
       if(me === 1) release1 = function(){ resolve(reply); }; else release2 = function(){ resolve(reply); };
     });
   };
@@ -345,27 +344,21 @@ console.log("\n--- 12. REVIEW FIX: a save that began before the listener was wat
   assert(a.api.getState().inFlight === 0, "the later save's own finish brings it back to zero");
 }
 
-console.log("\n--- 7b. Rebuild on the new server when 'Reads and saves' is on (2026-10-14) ---");
+console.log("\n--- 7b. The rebuild always goes to the new server (the only server since 2026-10-22) ---");
 {
-  const a = makeApp({ newServerSaves: true });
+  const a = makeApp();
   a.api.loadDashboard(); await tick(); await tick();
   a.fb.push(copy(a.clock));
   a.api.fastWriteStarted(); a.clock.advance(200); a.api.fastWriteFinished(true);
   a.clock.advance(1700); await tick(); await tick();
-  assert(a.log.newServer.join() === "refreshViews" && a.log.fetches.length === 0, "the rebuild goes to the new server (Apps Script not asked)");
+  assert(a.log.newServer.join() === "refreshViews" && a.log.fetches.join() === "refreshViews", "the rebuild goes to the new server (nothing else is asked)");
   assert(a.api.getState().min > 0 && a.api.getState().running === 0, "and the fresh copy is remembered exactly as before");
-  const b = makeApp({ newServerSaves: true, newServerFails: true });
+  const b = makeApp({ newServerFails: true });
   b.api.loadDashboard(); await tick(); await tick();
   b.fb.push(copy(b.clock));
   b.api.fastWriteStarted(); b.clock.advance(200); b.api.fastWriteFinished(true);
   b.clock.advance(1700); await tick(); await tick(); await tick();
-  assert(b.log.newServer.join() === "refreshViews" && b.log.fetches.join() === "refreshViews", "if the new server fails the rebuild is simply asked of Apps Script");
-  const c = makeApp();
-  c.api.loadDashboard(); await tick(); await tick();
-  c.fb.push(copy(c.clock));
-  c.api.fastWriteStarted(); c.clock.advance(200); c.api.fastWriteFinished(true);
-  c.clock.advance(1700); await tick(); await tick();
-  assert(c.log.newServer.length === 0 && c.log.fetches.join() === "refreshViews", "with the new switch off it is exactly as before (Apps Script only)");
+  assert(b.log.newServer.join() === "refreshViews" && b.api.getState().running === 0, "if the new server fails the rebuild just counts as failed (no other server is asked)");
 }
 
 console.log("\n--- 8. Sign-out stops everything ---");

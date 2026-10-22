@@ -5551,18 +5551,8 @@
               <option value="off">Off - always ask the server directly</option>
             </select>
           </div>
-          <div class="field" style="margin:14px 0 0 0;">
-            <label>New server (beta)</label>
-            <select id="settingsNewServer">
-              <option value="off">Off - Apps Script only</option>
-              <option value="on">Reads only - screens come from the new fast server</option>
-              <option value="all">Reads and saves - saving also uses the new server</option>
-            </select>
-          </div>
-          <p class="pending-status" id="settingsNewServerStatus" style="margin-top:6px;">
-            Our own Firebase server, next to the database. Reads: if anything is wrong the app quietly uses the old server instead.
-            Saves (only works once the owner has switched it on): if the new server says it did nothing, the old server does it; if
-            there is no answer at all the app does NOT try again by itself, so nothing is ever saved twice.
+          <p class="pending-status" id="settingsNewServerStatus" style="margin-top:14px;">
+            Everything runs on our own Firebase server, next to the database.
           </p>
           <div style="margin-top:10px;">
             <button type="button" id="settingsPushTestBtn">Send a test notification (new server)</button>
@@ -6797,8 +6787,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-21-01";
-    const APP_CHANGELOG = "The app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-10-22-01";
+    const APP_CHANGELOG = "Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -6870,9 +6860,6 @@
     // on Google's own server before it ever touches your Sheet. That check
     // can't be bypassed from the browser no matter what this file says.
     const ALLOWED_EMAIL = "ronitnadar9@gmail.com";
-
-    // The web address of your Apps Script backend (the "/exec" link).
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v/exec";
 
     // ---------------------------------------------------------
     // FIREBASE (for real background push notifications, Stage 8)
@@ -8250,29 +8237,31 @@
       // answers; see the FAST VIEWS block near loadDashboard().
       const isWrite = FAST_WRITE_ACTIONS.indexOf(payload.action) !== -1;
       const counted = isWrite ? fastWriteStarted() : false;
-      // New server (Firebase Cloud Functions), beta: ONLY when switched on in Settings, ONLY for the read-only screens, and ANY
-      // problem (network, timeout, not ready for this person, an error answer) quietly falls back to the Apps Script server below.
-      if (newServerEnabled() && NEW_SERVER_ACTIONS.indexOf(payload.action) !== -1) {
-        return callNewServer(payload).catch(function () { return callAppsScriptDirect(payload, isWrite, counted); });
-      }
-      // SAVING on the new server (2026-10-14): only when "Reads and saves" is picked in Settings. Saves are different from reads:
-      // we may only ask Apps Script to do it again when the new server SAYS it did nothing (fallback). If we simply got no answer
-      // (network drop, timeout) it may or may not have saved, so repeating it could save it twice: the normal "couldn't save"
-      // handling of each screen takes over instead.
-      if (newServerSaves() && NEW_SERVER_WRITE_ACTIONS.indexOf(payload.action) !== -1) {
+      // Everything goes to the new server (Firebase Cloud Functions, next to the database). The Apps Script fallback was removed on
+      // 2026-10-22 (Google deleted its sign-in link, so it can no longer be approved). A SAVE is never repeated: if the server says it
+      // did nothing (busy) we show a clear "nothing was saved" message; if there was simply no answer it may or may not have saved, so
+      // the screen's own "couldn't save" handling takes over.
+      const SAVE_BUSY = "The server is busy, so nothing was saved. Try again in a moment.";
+      const READ_BUSY = "The server did not answer. Try again in a moment.";
+      if (NEW_SERVER_WRITE_ACTIONS.indexOf(payload.action) !== -1) {
         return callNewServerWrite(payload).then(function (data) {
           if (isWrite) fastWriteFinished(!!(data && data.ok), counted);
           return data;
         }, function (err) {
-          if (err && err.message === "fallback") return callAppsScriptDirect(payload, isWrite, counted);
           if (isWrite) fastWriteFinished(false, counted);
-          throw err;
+          throw (err && err.message === "fallback") ? new Error(SAVE_BUSY) : err;
         });
       }
-      return callAppsScriptDirect(payload, isWrite, counted);
+      return callNewServer(payload).then(function (data) {
+        if (isWrite) fastWriteFinished(!!(data && data.ok), counted);
+        return data;
+      }, function (err) {
+        if (isWrite) fastWriteFinished(false, counted);
+        throw (err && err.message === "fallback") ? new Error(READ_BUSY) : err;
+      });
     }
 
-    // ---- New server (Firebase Cloud Functions), beta (2026-10-14) ----
+    // ---- New server (Firebase Cloud Functions), the only server since 2026-10-22 ----
     // Same backend code as Apps Script, running next to the database. Read-only actions only for now; see docs/features/cloud-functions.md.
     const NEW_SERVER_URL = "https://asia-south1-fin-app-76c40.cloudfunctions.net/api";
     const NEW_SERVER_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getAnalysisExtras", "getCCAdvisor",
@@ -8286,13 +8275,9 @@
       "addFriend", "createSplit", "recordSplitPayment", "undoSplitEntry", "moveDebtToFriend", "updateSavingsGoal", "insertReconciledTransactions", "fixCreditCardTransactionMode",
       "setFriendFullApp", "setFriendScreen", "teachBank", "forgetBank", "getMyIngestKey", "adminLog", "resolveAdminProblem"];
     let newServerStatus = "";     // shown in Settings: what the last request used and how long it took
-    // localStorage "newServer": "on" = read screens from the new server; "all" = reads AND saves (2026-10-14).
-    function newServerEnabled() {
-      try { return localStorage.getItem("newServer") !== "off" && !demoMode; } catch (e) { return !demoMode; }   // default ON (2026-10-17): the old Apps Script server can refuse everyone
-    }
-    function newServerSaves() {
-      try { const v = localStorage.getItem("newServer"); return (v === null || v === "all") && !demoMode; } catch (e) { return !demoMode; }   // default reads AND saves; "on" = reads only, "off" = old server
-    }
+    // The new server is the only server now (2026-10-22), so these two are always true. The Settings "New server" picker was removed.
+    function newServerEnabled() { return true; }
+    function newServerSaves() { return true; }
     // One SAVE sent to the new server. Resolves with the answer; rejects with Error("fallback") ONLY when the server says it did
     // nothing; any other problem rejects with a different error (we cannot know whether it saved, so never repeat it elsewhere). The wait (70 s) must stay longer than the function's timeoutSeconds (60 s): otherwise the phone could give up on a save that still completes.
     function callNewServerWrite(payload) {
@@ -8306,21 +8291,21 @@
         signal: controller ? controller.signal : undefined
       }).then(function (response) {
         // HTTP 429 = Google turned the request away because every server slot was busy: it NEVER reached our code, so nothing was saved
-        // and it is safe to ask Apps Script instead.
+        // (so the caller shows "nothing was saved").
         if (response.status === 429) throw new Error("fallback");
         return response.json();
       })
         .then(function (data) {
           if (timer) clearTimeout(timer);
           if (data && data.fallback === true) {
-            newServerStatus = "save fell back to Apps Script (" + payload.action + ")";
+            newServerStatus = "save not done, server busy (" + payload.action + ")";
             throw new Error("fallback");
           }
           newServerStatus = "new server saved in " + (Date.now() - started) + " ms (" + payload.action + ")";
           return data;
         }, function (err) {
           if (timer) clearTimeout(timer);
-          if (err && err.message === "fallback") { newServerStatus = "save fell back to Apps Script, server busy (" + payload.action + ")"; throw err; }
+          if (err && err.message === "fallback") { newServerStatus = "save not done, server busy (" + payload.action + ")"; throw err; }
           newServerStatus = "no answer for the save (" + payload.action + "), not repeated";
           throw new Error("no answer from the server");
         });
@@ -8339,31 +8324,14 @@
           if (timer) clearTimeout(timer);
           // "fallback" = this person/action is not ready on the new server; an unreadable answer is treated the same way
           if (!data || data.fallback === true || (data.ok === false && data.error === "Couldn't complete that. Nothing was saved; try again in a moment.")) {
-            newServerStatus = "fell back to Apps Script (" + payload.action + ")";
+            newServerStatus = "no good answer (" + payload.action + ")";
             throw new Error("fallback");
           }
           newServerStatus = "new server " + (Date.now() - started) + " ms (" + payload.action + ")";
           return data;
         }, function (err) {
           if (timer) clearTimeout(timer);
-          newServerStatus = "fell back to Apps Script (" + payload.action + ")";
-          throw err;
-        });
-    }
-
-    function callAppsScriptDirect(payload, isWrite, counted) {
-      return fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        // text/plain avoids the browser's extra "permission check" request
-        // (a CORS preflight) that Apps Script doesn't handle well.
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify(payload)
-      }).then(function (response) { return response.json(); })
-        .then(function (data) {
-          if (isWrite) fastWriteFinished(!!(data && data.ok), counted);
-          return data;
-        }, function (err) {
-          if (isWrite) fastWriteFinished(false, counted);
+          newServerStatus = "no good answer (" + payload.action + ")";
           throw err;
         });
     }
@@ -10815,12 +10783,8 @@
         init.signal = controller.signal;
         abortTimer = setTimeout(function () { controller.abort(); }, 20000);
       }
-      // Rebuilding the Home copy is safe to repeat, so with "Reads and saves" on it is tried on the new server first (right next to
-      // the database, so right after a save it is quicker) and falls back to Apps Script on ANY problem.
-      const viaApps = function () { return fetch(APPS_SCRIPT_URL, init).then(function (response) { return response.json(); }); };
-      (newServerSaves()
-        ? callNewServer({ action: "refreshViews", idToken: currentUser.idToken }).catch(viaApps)
-        : viaApps())
+      // Rebuilding the Home copy is safe to repeat; it runs on the new server (the only server since 2026-10-22).
+      callNewServer({ action: "refreshViews", idToken: currentUser.idToken })
         .then(function (res) {
           if (abortTimer) clearTimeout(abortTimer);
           const good = !!(res && res.ok && res.published && res.builtAt);
@@ -20548,16 +20512,19 @@
 
       Promise.all([textExtraction, rowsExtraction]).then(function (parts) {
         const statementText = parts[0], sheetRows = parts[1];
-        const needsBase64 = !statementText && !sheetRows; // only when neither could be read on the phone (e.g. a scanned PDF: the server's OCR fallback)
-        return (needsBase64 ? readFileAsBase64(file) : Promise.resolve(null)).then(function (base64) {
-          return callAppsScript({
-            action:        reconStatementType === "creditCard" ? "reconcileCreditCardStatement" : "reconcileStatement",
-            idToken:       currentUser.idToken,
-            fileBase64:    base64,
-            fileName:      file.name,
-            statementText: statementText || undefined,
-            rows:          sheetRows || undefined
-          });
+        // The server only accepts a statement the phone has already read (rows, or a card PDF's text). Since the old Apps Script
+        // route (the only one that could OCR a scanned PDF) was retired on 2026-10-22, a file the phone cannot read is stopped HERE
+        // with a clear reason, instead of a misleading "server did not answer" (retrying can never help).
+        if (!statementText && !sheetRows) {
+          throw new Error("this file could not be read on your phone. Please upload the statement your bank sends as a spreadsheet (.xls or .xlsx)" +
+            (reconStatementType === "creditCard" ? ", or the credit card statement PDF downloaded straight from your bank (not a scan or a photo)." : "."));
+        }
+        return callAppsScript({
+          action:        reconStatementType === "creditCard" ? "reconcileCreditCardStatement" : "reconcileStatement",
+          idToken:       currentUser.idToken,
+          fileName:      file.name,
+          statementText: statementText || undefined,
+          rows:          sheetRows || undefined
         });
       })
         .then(function (data) {
@@ -20634,14 +20601,6 @@
       finRenderScreensUsed();
     });
 
-    // New server (beta) switch (local to this phone, takes effect immediately) + what the last request used.
-    const settingsNewServerEl = document.getElementById("settingsNewServer");
-    try { const v = localStorage.getItem("newServer"); settingsNewServerEl.value = v === "off" ? "off" : (v === "on" ? "on" : "all"); } catch (e) { /* default: reads and saves */ }
-    settingsNewServerEl.addEventListener("change", function () {
-      try {
-        localStorage.setItem("newServer", settingsNewServerEl.value);   // "all", "on" or "off" (off is remembered on purpose; unset now means "all")
-      } catch (e) { /* ignore */ }
-    });
     // "Send a test notification (new server)": asks the NEW server (no fallback, on purpose: the point is to prove IT can send) to send one
     // notification to this phone, and says what Google's push service answered. Owner only on the server side.
     (function () {

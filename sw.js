@@ -28,9 +28,8 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Same URL as APPS_SCRIPT_URL in index.html — kept in sync manually,
-// see that file's own comment on this constant if it ever changes.
-const SW_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v/exec";
+// The new server (Firebase Cloud Functions). Apps Script is no longer used (2026-10-22). Same address as NEW_SERVER_URL in index.html.
+const SW_SERVER_URL = "https://asia-south1-fin-app-76c40.cloudfunctions.net/api";
 
 // Fires when a push arrives while the app is closed/in the background.
 // This is what makes the notification actually appear on your phone.
@@ -119,7 +118,7 @@ function confirmFromNotification(data) {
       });
     }
 
-    return fetch(SW_APPS_SCRIPT_URL, {
+    return fetch(SW_SERVER_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
       body: JSON.stringify({

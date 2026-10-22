@@ -92,7 +92,6 @@ details{margin-top:8px} summary{cursor:pointer;color:var(--accent);font-size:14p
   "use strict";
   var GOOGLE_CLIENT_ID = "921605499750-2oo6c0qnhr0ha617l4btu8vrlpqem0fv.apps.googleusercontent.com";
   var NEW_SERVER_URL = "https://asia-south1-fin-app-76c40.cloudfunctions.net/api";
-  var APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3Hzmi_XNM_TRyz16sZrUWqIOjrBOfHAcyJheYLVi6YrRK1jhaYC38-CwxeqCU_n_v/exec";
   var idToken = "";
 
   function $(id) { return document.getElementById(id); }
@@ -115,16 +114,13 @@ details{margin-top:8px} summary{cursor:pointer;color:var(--accent);font-size:14p
   }
   function tone(score) { return score >= 0.9 ? "good" : score >= 0.75 ? "warn" : "bad"; }
 
-  // ---- talking to the server: new server first, Apps Script as the fallback ----
+  // ---- talking to the server: the new server only (Apps Script was retired 2026-10-22) ----
   function post(url, body) {
     return fetch(url, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
   }
   function call(action, extra) {
     var body = Object.assign({ action: action, idToken: idToken }, extra || {});
-    return post(NEW_SERVER_URL, body).then(function (d) {
-      if (d && d.fallback === true) throw new Error("fallback");
-      return d;
-    }).catch(function () { return post(APPS_SCRIPT_URL, body); });
+    return post(NEW_SERVER_URL, body);
   }
 
   // ---- sign in ----
