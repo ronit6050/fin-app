@@ -131,6 +131,7 @@ function loadSandbox(learnedSpamRows){
 
   const src = fs.readFileSync(path.join(__dirname, "..", "Code.js"), "utf8");
   vm.runInContext(src, sandbox, { filename: "Code.js" });
+  vm.runInContext("SMS_READER_RETIRED_ = false;", sandbox);   // the real reader is retired in production; tests exercise its code
 
   sandbox.__txRows = txRows;
   sandbox.__logged = logged;
@@ -362,6 +363,7 @@ function lastLogStatus(sandbox){
   };
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox, { filename: "Code.js" });
+  vm.runInContext("SMS_READER_RETIRED_ = false;", sandbox);   // the real reader is retired in production; tests exercise its code
 
   let threw = false;
   let matched;

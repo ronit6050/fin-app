@@ -29,7 +29,7 @@ NEW_ACTIONS.forEach((a) => {
 ok(/id="investmentsNew"/.test(html) && /class="iv-old"/.test(html), "the new container and the kept older markup both exist");
 ok(/if \(finLookOn\(\) && inv\.overview\) \{[\s\S]{0,200}renderInvestmentsNew\(inv\)/.test(html), "renderInvestments draws the new screen only with the New look AND an overview");
 ok(/investmentsContentEl\.classList\.remove\("iv-newon"\)/.test(html), "without them the older screen is used");
-ok(/ivLeave\(\);/.test(html) && /ivLookChanged\(\);/.test(html), "leaving the screen and flipping the switch are handled");
+ok(/ivLeave\(\);/.test(html), "leaving the screen is handled (the New look is always on now)");
 ok(/ivOpenName && subViews\.investments\.style\.display !== "none"/.test(html), "the phone's Back button closes a holding page first");
 ok(/APP_VERSION = "2026-10-[0-9]+-[0-9]+"/.test(html), "version string is in the expected format");
 ok(/INVESTMENT_CATEGORIES/.test(read("backend/investmentInstruments.js")) && /"InvestmentInstruments": \["Name", "Category", "SipAmount", "SipDay", "SipActive"\]/.test(read("backend/v2route.js")), "a new person's empty tabs have the new columns");

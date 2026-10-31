@@ -259,11 +259,14 @@ function makeToday(year, month, day){ // month is 1-based here for readability
     FE_HEADER,
     financialEventsRow("EMI", 2500, "Phone EMI")
   ];
+  // When "today + 3 days" falls in NEXT month (the last days of a month), the first past occurrence would land in the current month, which the
+  // reminder deliberately ignores: start one month further back so the test does not depend on the date it runs.
+  const shift = typicalDate.getMonth() !== realToday.getMonth() ? 1 : 0;
   const txnData = [
     TXN_HEADER,
-    mkTxnRow(iso(monthsAgo(typicalDate, 1)), 2500, "EMI", "Phone EMI"),
-    mkTxnRow(iso(monthsAgo(typicalDate, 2)), 2500, "EMI", "Phone EMI"),
-    mkTxnRow(iso(monthsAgo(typicalDate, 3)), 2500, "EMI", "Phone EMI")
+    mkTxnRow(iso(monthsAgo(typicalDate, 1 + shift)), 2500, "EMI", "Phone EMI"),
+    mkTxnRow(iso(monthsAgo(typicalDate, 2 + shift)), 2500, "EMI", "Phone EMI"),
+    mkTxnRow(iso(monthsAgo(typicalDate, 3 + shift)), 2500, "EMI", "Phone EMI")
   ];
 
   // Fake the two sheets checkUpcomingObligations() reads directly.

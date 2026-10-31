@@ -159,7 +159,17 @@ function forwardPersonalSms(key, tx, sms, sender, timestamp){
   }
 }
 
+// RETIRED 2026-10-31: the app now saves bank SMS only through the new server (Firebase Cloud Functions). Anything written here lands in the
+// old Google Sheet, which nothing reads any more, so a "saved" answer from here would silently lose the message. Answering "not ok" instead makes a
+// phone that still points here keep the message and retry on the new server. The parsing code below is kept (and tested) only as a reference;
+// tests switch the guard off with SMS_READER_RETIRED_ = false.
+var SMS_READER_RETIRED_ = true;
+
 function doPost(e){
+
+  if(SMS_READER_RETIRED_){
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, retired: true, error: "This address is retired. Update the app." }));
+  }
 
   PERSONAL_MODE = !!(e && e.parameter && e.parameter.key);
   const personalKey = PERSONAL_MODE ? String(e.parameter.key) : "";

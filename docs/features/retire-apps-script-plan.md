@@ -1,4 +1,4 @@
-# Retiring Apps Script (plan, written 2026-10-22, nothing deployed)
+# Retiring Apps Script (plan written 2026-10-22; code part DONE 2026-10-31)
 
 ## Why now
 2026-10-22: the Apps Script alert/copy timer (`processNewTransactions`) had failed silently since 18 Oct and a Rs 40 payment never alerted. Re-approving
@@ -25,3 +25,10 @@ new server ("direct (new server) ... SAVED").
 - A phone with no saved key now retries instead of using the old route: the app saves the key when the owner/friend signs in; open the app once after updating.
 - Battery/background limits must stay Unrestricted on every phone that reads SMS (add this to the onboarding text).
 - Rollback for step 1: reinstall the previous APK (`local-data/apk/`).
+
+## Status 2026-10-31
+1-3 done earlier (Android app built and installed, web app on the new server only). Done today (see `docs/PROJECT_STATUS.md`):
+- **4** Old SMS reader switched off in code: `doPost` answers `ok:false, retired:true`. (Redeploy of that project: `clasp push` + `clasp deploy -i AKfycbxCwph4...`.)
+- **5/6 (first part)** `main.js` `doPost` answers "retired"; Telegram bot files and ~30 editor-only helpers deleted. NOT done (kept deliberately, they steer the live server): the Firestore switches and step-aside logic, the old-door inbox copy (`v2owner.js`), the editor rollback functions.
+- **7** Raw statement files: accepted as "upload a normal bank statement" (the phone reads spreadsheet/PDF text itself; a scanned PDF shows a clear message).
+**Owner's chore (cannot be done from here):** in the Apps Script editor > Triggers, delete the remaining time triggers (`processNewTransactions` and the four daily ones). With Google's sign-in client deleted they cannot run anyway, but deleting them removes the noise.

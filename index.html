@@ -17,13 +17,11 @@
       if (saved === "light" || saved === "dark") {
         document.documentElement.setAttribute("data-theme", saved);
       }
-      // "New look (preview)" switch (UI/UX makeover, 2026-10-17). Local to
-      // this phone, off unless Settings > Appearance turns it on. Every new
-      // look rule is written as :root[data-look="new"] ..., so with the
-      // switch off the app is byte-for-byte how it was.
-      if (localStorage.getItem("lookPreview") === "on") {
-        document.documentElement.setAttribute("data-look", "new");
-      }
+      // The new look is the only look (2026-10-31). The old "New look (preview)"
+      // switch is gone; every new-look rule is still written as
+      // :root[data-look="new"] ..., so this attribute must always be set.
+      document.documentElement.setAttribute("data-look", "new");
+      try { localStorage.removeItem("lookPreview"); } catch (e) { /* ignore */ }
     })();
   </script>
 
@@ -5569,14 +5567,6 @@
               <option value="dark">Dark</option>
             </select>
           </div>
-          <div class="field" style="margin-bottom:0; margin-top:12px;">
-            <label>New look (preview)</label>
-            <select id="settingsLookPreview">
-              <option value="off">Off</option>
-              <option value="on">On</option>
-            </select>
-            <div style="font-size:0.75rem; margin-top:4px; color:var(--text-muted);">Try the app makeover as it is built. Only this phone; switch it off any time.</div>
-          </div>
         </div>
 
         <!-- New look only: which screens this phone shows, and the welcome tour again. -->
@@ -5893,7 +5883,7 @@
     // does anything when the "New look (preview)" switch is on
     // (html[data-look="new"]); with it off none of it is ever called.
     // =========================================================
-    function finLookOn() { return document.documentElement.dataset.look === "new"; }
+    function finLookOn() { return true; }   // the new look is the only look (2026-10-31)
     // Savings screen state (declared this early so menu / look-switch code can reset it safely): the goal or
     // bucket whose page is open (null = the overview), and a fingerprint of what is drawn.
     let svOpenBucket = null, svLastSig = "";
@@ -6051,7 +6041,8 @@
         planner:     { root: "plannerContent",     counts: ["#plannerTrackAmount", "#plannerRunningTotal", "#plannerOverviewCard [data-role=\"amt\"]", "#plannerOverviewCard .planner-track-row-top .cat-amt", "#plannerTrackList .planner-track-row-top .cat-amt"], lists: ["#plannerSetList", "#plannerTrackList"], bars: true },
         access:      { root: "accessContent",      counts: ["#accessTotal"], lists: ["#accessList"] },
         reconcile:   { root: "view-reconcile" },
-        settings:    { root: "view-settings" }
+        settings:    { root: "view-settings" },
+        export:      { root: "view-export" }
       };
       function arm(name) { if (finLookOn()) armed[name] = true; }
       function isArmed(name) { return !!armed[name]; }
@@ -6461,8 +6452,7 @@
     const FIN_SWITCHES = [
       { id: "settingsDailySummary", on: "on", off: "off" },
       { id: "settingsFastViews",    on: "on", off: "off" },
-      { id: "settingsCardReminder", on: "on", off: "off" },
-      { id: "settingsLookPreview", on: "on", off: "off" }
+      { id: "settingsCardReminder", on: "on", off: "off" }
     ];
     function finSyncSwitches() {
       if (!finLookOn()) return;
@@ -6835,8 +6825,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-31-01";
-    const APP_CHANGELOG = "New: More > Export data downloads your payments, cash and debts as Excel, PDF or CSV. Before that: Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-10-31-02";
+    const APP_CHANGELOG = "The new look is now the only look (the preview switch in Settings is gone). Before that: More > Export data downloads your payments, cash and debts as Excel, PDF or CSV. Before that: Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -17960,11 +17950,6 @@
       if (o) o.style.display = "block";
       if (g) g.style.display = "none";
     }
-    // The New look switch was flipped: draw the screen in whichever look is now on.
-    function svLookChanged() {
-      svLeave();
-      if (savingsData) renderSavingsGoals(savingsData);
-    }
 
     // ---- Taps (one listener; the screen is redrawn often) ----
     document.getElementById("savingsNew").addEventListener("click", function (ev) {
@@ -19026,11 +19011,6 @@
       if (ivViewEl) ivViewEl.classList.remove("iv-detail-open");
       if (ivMainEl) ivMainEl.style.display = "block";
       if (ivDetailEl) ivDetailEl.style.display = "none";
-    }
-    // The New look switch was flipped: draw the screen in whichever look is now on.
-    function ivLookChanged() {
-      ivLeave();
-      if (investmentsData) renderInvestments(investmentsData);
     }
 
     // ---- Talking to the server ----
@@ -20853,29 +20833,6 @@
         localStorage.setItem("themePreference", choice);
         document.documentElement.setAttribute("data-theme", choice);
       }
-    });
-
-    // New look (preview) switch — local to this phone, instant, no Save.
-    const settingsLookEl = document.getElementById("settingsLookPreview");
-    try { settingsLookEl.value = localStorage.getItem("lookPreview") === "on" ? "on" : "off"; } catch (e) { /* default Off */ }
-    settingsLookEl.addEventListener("change", function () {
-      finCloseSheet(true);   // never leave the add sheet open across a look change
-      try {
-        if (settingsLookEl.value === "on") {
-          localStorage.setItem("lookPreview", "on");
-          document.documentElement.setAttribute("data-look", "new");
-        } else {
-          localStorage.removeItem("lookPreview");
-          document.documentElement.removeAttribute("data-look");
-        }
-      } catch (e) { /* ignore */ }
-      finApplyLabels();      // "Money" in the new look, "Advisors" in the old
-      svLookChanged();       // Savings: draw whichever look is now on
-      ivLookChanged();       // Investments: same
-      finSyncSwitches();
-      finOnbClose();
-      applyHiddenScreens(hiddenScreens);   // this phone's "what I use" choices only count in the new look
-      finRenderScreensUsed();
     });
 
     // "Send a test notification (new server)": asks the NEW server (no fallback, on purpose: the point is to prove IT can send) to send one

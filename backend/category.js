@@ -494,25 +494,3 @@ function getCategory(note, memory){
   return result.category;
 }
 
-
-/* ===============================
-   TEST
-=============================== */
-function testSmartCategory(){
-  const tests = [
-    {note:"swiggy order", counterparty:"SWIGGY INSTAMART", amount:340, mode:"upi"},
-    {note:"monthly rent", counterparty:"NADAR RONIT", amount:11000, mode:"upi"},
-    {note:"recharge", counterparty:"AIRTEL PAYMENTS", amount:299, mode:"upi"},
-    {note:"lent money", counterparty:"RAJ KUMAR", amount:500, mode:"upi"},
-    {note:"netflix subscription", counterparty:"NETFLIX", amount:649, mode:"card"}
-  ];
-
-  let results = "🧪 Smart Category Test\n\n";
-
-  tests.forEach(t => {
-    const r = getSmartCategory(t.note, t.counterparty, t.amount, t.mode, null);
-    results += `• ${t.counterparty}: ${r.category}/${r.subcategory} (${r.confidence}% via ${r.source})\n`;
-  });
-
-  sendMessage(results);
-}

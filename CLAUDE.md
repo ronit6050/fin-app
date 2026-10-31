@@ -5,7 +5,10 @@
 > long history (it is long: newer facts are in PROJECT_STATUS.md, which wins if they disagree). If the owner asks "what's the plan / what have we
 > done / what is left", answer from PROJECT_STATUS.md.
 >
-> **Latest (2026-10-15): the new server is LIVE.** The same backend code now also runs on Firebase Cloud Functions (Mumbai) and handles the owner's screens, saves, bank SMS, the 5-minute alert timer, the four daily jobs and Reconcile; Apps Script remains as an automatic fallback and for the Access screen / global switches until it is retired (after 3 clean days). Billing is no longer blocked. Full details, switches and rollbacks: PROJECT_STATUS.md and docs/features/cloud-functions.md (Steps 1-6).
+> **Latest (2026-10-31): Apps Script is retired in code, the New look is the only look, the server runs on India time.** Details: top of section 3 in
+> PROJECT_STATUS.md and docs/features/retire-apps-script-plan.md (Status 2026-10-31). Owner chore left: delete the old Apps Script time triggers in its editor.
+>
+> **Earlier (2026-10-15): the new server is LIVE.** The same backend code now also runs on Firebase Cloud Functions (Mumbai) and handles the owner's screens, saves, bank SMS, the 5-minute alert timer, the four daily jobs and Reconcile; Apps Script remains as an automatic fallback and for the Access screen / global switches until it is retired (after 3 clean days). Billing is no longer blocked. Full details, switches and rollbacks: PROJECT_STATUS.md and docs/features/cloud-functions.md (Steps 1-6).
 >
 > **Earlier (2026-10-14 evening):** History now has search, filter chips (Needs attention / Rent / EMI / Investment / Credits / Split), a month picker and short tap-to-open rows; "No, regular spend" is remembered in Transactions column V. Live (backend `@352`). Details in PROJECT_STATUS.md and docs/features/history.md.
 >

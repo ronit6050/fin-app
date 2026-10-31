@@ -5,6 +5,11 @@
 // the READ-ONLY screens, plus (since 2026-10-14, only while the owner switches it on) the everyday SAVE actions. Anything else, or a
 // problem with a read, gets a "fallback" answer and the app asks Apps Script instead, so nothing can break. See docs/features/cloud-functions.md.
 
+// India time for every Date in the backend code (added 2026-10-31). The backend was written for Apps Script, whose clock is set to India time, so
+// getDate()/getMonth()/getDay() on a date mean the INDIA day. Cloud Functions runs in UTC, where a payment made after midnight India time (before
+// 5:30 am) lands on the previous day/month in those calls, e.g. on the 1st of a month. Setting TZ before any Date is used fixes this everywhere.
+process.env.TZ = "Asia/Kolkata";
+
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const path = require("node:path");

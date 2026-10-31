@@ -107,13 +107,6 @@ function sendTodayCash(){
 }
 
 /* ===============================
-   TEST
-=============================== */
-function testCash(){
-  sendCashBalance();
-}
-
-/* ===============================
    DAILY CASH CHECK-IN
    Runs every day at 8pm
 =============================== */

@@ -140,4 +140,12 @@ console.log("\n--- 7. Saving on the new server: switch, shared lock, push (added
   assert(!threw, "a push problem never breaks a save");
 }
 
+// ---- India time: the server must see India days even though Cloud Functions runs in UTC (added 2026-10-31) ----
+{
+  const { execFileSync } = require("node:child_process");
+  const out = execFileSync(process.execPath, ["-e", "require('./index.js'); console.log(new Date('2026-05-11T18:30:00Z').getDate() + ',' + new Date('2026-10-31T19:00:00Z').getMonth())"],
+    { cwd: require("node:path").join(__dirname, ".."), env: Object.assign({}, process.env, { TZ: "UTC" }) }).toString().trim();
+  assert(out === "12,10", "a payment at 00:00 India time on 12 May is the 12th (not the 11th), and 31 Oct 19:00 UTC is already November (month 10) in India; got " + out);
+}
+
 console.log(failures === 0 ? "\nALL OK" : "\n" + failures + " FAILED");

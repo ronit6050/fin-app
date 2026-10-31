@@ -1,6 +1,6 @@
 ﻿# Project status: what we have, what is done, what is next (plain words)
 
-**Last updated: 2026-10-17 (India time).** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
+**Last updated: 2026-10-31 (India time).** Read this first in any new chat. `CLAUDE.md` is the long history; THIS file is the short, current picture.
 If this file and `CLAUDE.md` disagree, this file is newer.
 
 ---
@@ -18,7 +18,7 @@ Google Cloud; the app also stops using Firestore at 90% of the free daily limit)
 | Piece | What it is | Where |
 |---|---|---|
 | The app screens | One web page, hosted free on GitHub Pages | `index.html` -> https://ronit6050.github.io/fin-app/ (push to `main` = live) |
-| The "brain" (two copies of the SAME code) | **New server: Firebase Cloud Functions** (`api` + scheduled `tick`, Mumbai) AND the old Google Apps Script web app, code in `backend/*.js` | function URL `https://asia-south1-fin-app-76c40.cloudfunctions.net/api`; Apps Script pinned deployment `AKfycbz3Hzmi_XNM_...` (currently **@363**) |
+| The "brain" (two copies of the SAME code) | **New server: Firebase Cloud Functions** (`api` + scheduled `tick`, Mumbai) AND the old Google Apps Script web app, code in `backend/*.js` | function URL `https://asia-south1-fin-app-76c40.cloudfunctions.net/api`; Apps Script is retired (pinned deployment `AKfycbz3Hzmi_XNM_...` @388 is only kept as an empty answer) |
 | The SMS reader (old way) | Separate Apps Script project | `sms-parser-backend/Code.js`, deployment `AKfycbxCwph4...` (**@20**) |
 | The data | **Firestore** (Mumbai, `asia-south1`, project `fin-app-76c40`, Blaze plan) | one private folder per person: `users/<email>/...` |
 | The old data | Google Sheet | still gets rows from the old SMS path + a backup; no longer what the app reads |
@@ -30,6 +30,12 @@ Who is switched on: the owner is on the Firestore copy (since 2026-10-13 ~09:30)
 Vaidehi has the **full app** (since 2026-10-13 10:41) on her own private data.
 
 ## 3. What has been DONE (newest first, one line each)
+
+**2026-10-31: Apps Script RETIRED in code, the New look is the ONLY look, India-time fix on the server, housekeeping (see the "Latest" box below for what is live).**
+- **Apps Script retired.** Since 2026-10-22 the web app, the Android app (APK `FinApp-2026-10-22-retry-new-server-only.apk`), the notification button and the admin page talk ONLY to the new server (Firebase Cloud Functions). Today: `backend/main.js` `doPost` answers `{ok:false, retired:true}` and never touches the Sheet; the old SMS reader (`sms-parser-backend/Code.js`) does the same (`SMS_READER_RETIRED_ = true`, so a phone that still points there keeps its message and retries on the new server instead of "saving" into a Sheet nobody reads); the old Telegram bot code (`handlers.js`, `Analysis.js`, `Summary.js`, `AIAdvisor.js`, most of `telegram.js`, the statement processors in `Credit Card.js`) and 30+ editor-only helper functions are deleted (~2,200 lines). Tests: `backend/tests/appsScriptRetired.test.js`, `sms-parser-backend/tests/retired2026-10-31.test.js`. **Left in place on purpose** (they change how the live server behaves, so removing them needs its own careful pass): the Firestore switches and the "step aside while the new server is alive" logic (`flags.js`, `v2route.js`, `fnTimer.js`, `transactions.js`), the old-door inbox copy (`v2owner.js`), and the editor rollback functions. They are harmless now: nothing can reach Apps Script.
+- **New look is the only look.** The "New look (preview)" switch is gone from Settings; `index.html` always sets `data-look="new"` and `finLookOn()` returns true. The old-look CSS and the `if (finLookOn())` branches are still in the file (harmless dead weight; removing them is a later clean-up). App `2026-10-31-02`.
+- **Server now runs on India time** (`process.env.TZ = "Asia/Kolkata"` at the top of `functions/index.js`). The backend was written for Apps Script (India clock); Cloud Functions runs UTC, so `getDate()`/`getMonth()` could put a payment made before 5:30 am on the 1st into the previous day/month. This closes the "month bucketing on the new server" question left open on 2026-10-17. Test in `functions/tests/shim.test.js`.
+- **Tests**: stale tests fixed (hard-coded versions, a date-dependent Savings test and EMI-reminder test that failed near month end, the removed switch); every backend, functions and sms-parser test file passes.
 
 **2026-10-18: Analysis tab makeover BUILT, reviewed, NOT deployed (not committed).** New cards: pace, Smart read, Money flow, Day by day, Against your plan, vs-last-month chips, Top places, Your week, Last 6 months, Biggest payments. New read action `getAnalysisExtras`; `getMonthlyAnalysis` gained `detail`. App `2026-10-18-03`. Details: `docs/features/analysis-makeover.md`. To ship: `clasp push`+`clasp deploy`, `firebase deploy --only functions`, then `git push`. Known cosmetic: hero "Avg/day" (days with spending) differs from the new "per day" figures (days elapsed).
 
@@ -135,6 +141,9 @@ presses "Start over from scratch" once and re-enters his holdings. "Worth now"/g
 5. Cost: the Rs 300 limit stays **alerts only** (owner's decision). Watch Cloud Billing and the Access screen's usage for the first days (expect a few hundred extra writes a day from the counter and the tick).
 
 **Agreed order after the cutover (owner, 2026-10-16):** (1) a proper **admin web panel** (usage, errors, last-seen per user; design is proposed and approved BEFORE building), (2) the **UI/UX pass including first-run onboarding** (welcome cards, bank choice, SMS-permission explainer, setup questions that flip the screen switches; a mockup was shown, build it with the UI/UX pass), (3) turn the PWA into a **complete real app**.
+
+**Onboarding new users (2026-10-19): analysis written, owner is thinking it over, nothing built.** Scenarios (SMS yes/no, card or not, bank, several accounts) and a proposed flow are in `docs/features/onboarding-plan.md`. Smallest first fix if chosen: neutral defaults for new users (no owner limit/18th cycle).
+**Owner decision 2026-10-26: SMS reading stays for the owner and Vaidehi only; new friends get the app without SMS.** Phased roadmap (no-SMS mode, trimmed welcome, 2-3 friend pilot, invite link, statement habit, and the "gate" before SMS is ever offered to others): `docs/features/friends-rollout-roadmap.md`. Plan only, nothing built.
 
 **Ideas (not built, not promised):** **Home-screen widget (PARKED by the owner 2026-10-17 until the proper native app exists):** Android-only (the web app cannot make widgets); a small "Today" widget (spent today + payments needing a note) and a medium "Overview" widget (today, this month, Saved vs goal, a + add button), fed by the existing background dashboard prefetch (DashboardPrefetchWorker) so no new server cost; show "updated HH:MM"; optional "Hide amounts" privacy switch. Needs Kotlin + a new APK. **shared app knowledge** across banks and users (see `docs/AGENT_BACKLOG.md`, needs discussion); a "Mark as..." link in History to reopen a declined Rent/EMI suggestion; treat unclear messages from promotional senders ending in `-P` as junk; a "card last 4 digits" box for manual card entries; a Split button on the
 notification itself (Android allows only 3 buttons); suggest "settle" from a matching SMS; owner approval for splits friends create; delete a friend; Play Store / privacy-law homework before going public (READ_SMS policy, India's DPDP Act); warn when a statement has more than 5,000 rows (the phone reader stops there).

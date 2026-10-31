@@ -45,6 +45,7 @@ function runOld(){
   };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "..", "sms-parser-backend", "Code.js"), "utf8"), sandbox, { filename: "Code.js" });
+  vm.runInContext("SMS_READER_RETIRED_ = false;", sandbox);   // the real reader is retired in production; this replay compares its code with the new path
   events.forEach(function(e){
     sandbox.doPost({ parameter: { sms: e.sms, sender: e.sender, timestamp: String(e.ts) }, postData: { contents: "" } });
   });

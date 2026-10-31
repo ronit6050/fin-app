@@ -119,9 +119,3 @@ function getFirebaseAccessToken(){
     return null;
   }
 }
-
-// Quick manual test — run this directly from the Apps Script editor
-// to confirm everything works, without waiting for a real transaction.
-function testPushNotification(){
-  sendPushNotification("🔔 Test Notification", "If you see this, push notifications are working!");
-}

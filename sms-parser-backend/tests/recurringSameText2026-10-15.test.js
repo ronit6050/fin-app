@@ -93,6 +93,7 @@ function loadSandbox(seedRows){
 
   const src = fs.readFileSync(path.join(__dirname, "..", "Code.js"), "utf8");
   vm.runInContext(src, sandbox, { filename: "Code.js" });
+  vm.runInContext("SMS_READER_RETIRED_ = false;", sandbox);   // the real reader is retired in production; tests exercise its code
 
   sandbox.__rows = rows;
   sandbox.__logged = logged;

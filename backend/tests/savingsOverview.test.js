@@ -193,7 +193,7 @@ console.log("\n--- 9. Payment-type rows are written and undone ---");
 
 console.log("\n--- 10. Goals with / without a target date ---");
 {
-  const future = new Date(NOW.getFullYear(), NOW.getMonth() + 5, NOW.getDate() > 28 ? 28 : NOW.getDate());
+  const future = NOW.getDate() > 28 ? new Date(NOW.getFullYear(), NOW.getMonth() + 6, 28) : new Date(NOW.getFullYear(), NOW.getMonth() + 5, NOW.getDate());   // 5 whole months from today whatever today is
   const w = world([
     [mDate(1, 5), 4000, "manual", "x", "Phone"],
     [mDate(1, 6), 10000, "manual", "y", "Bike"],
