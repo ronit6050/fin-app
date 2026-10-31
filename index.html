@@ -4977,6 +4977,10 @@
               <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-7"/><path d="M12 20V8"/><path d="M19 20v-5"/><path d="M3 10.5h18" stroke-dasharray="2.6 2.6"/></svg></span>
               <span>Planner</span>
             </button>
+            <button type="button" class="more-menu-item tactile" data-target="export">
+              <span class="more-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"/></svg></span>
+              <span>Export data</span>
+            </button>
           </div>
         </div>
 
@@ -5468,6 +5472,50 @@
 
         <div id="reconStatus" class="pending-status" style="display:none"></div>
         <div id="reconResults" style="margin-top:12px;"></div>
+      </div>
+
+      <!-- ===== SUB-SCREEN: Export data (2026-10-31): download your data as Excel, CSV or PDF. Built on the phone from the
+             screens' own actions, nothing is stored anywhere. See docs/features/export-data.md ===== -->
+      <div id="view-export" style="display:none">
+        <button type="button" class="back-to-more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Back</button>
+        <h2 class="section-title">Export data</h2>
+        <p class="pending-status">Download your data as a file. It is made on this phone and goes nowhere else.</p>
+
+        <div class="field">
+          <label>What to include</label>
+          <label style="display:block; margin:6px 0;"><input type="checkbox" id="expSecTxn" checked> Payments (all noted payments)</label>
+          <label style="display:block; margin:6px 0;"><input type="checkbox" id="expSecCash"> Cash entries (latest 60)</label>
+          <label style="display:block; margin:6px 0;"><input type="checkbox" id="expSecDebts"> Open debts and splits</label>
+        </div>
+
+        <div class="field">
+          <label for="expRange">Period (for payments and cash)</label>
+          <select id="expRange">
+            <option value="thisMonth">This month</option>
+            <option value="lastMonth">Last month</option>
+            <option value="last3">Last 3 months</option>
+            <option value="fy">This financial year (Apr to Mar)</option>
+            <option value="all" selected>All time</option>
+            <option value="custom">Custom dates</option>
+          </select>
+        </div>
+        <div class="field" id="expCustomRow" style="display:none;">
+          <label for="expFrom">From</label><input type="date" id="expFrom">
+          <label for="expTo" style="margin-top:8px;">To</label><input type="date" id="expTo">
+        </div>
+
+        <div class="field">
+          <label for="expFormat">File type</label>
+          <select id="expFormat">
+            <option value="xlsx">Excel (.xlsx)</option>
+            <option value="pdf">PDF report (.pdf)</option>
+            <option value="csv">CSV (.csv)</option>
+          </select>
+        </div>
+
+        <button type="button" id="expGoBtn">Download</button>
+        <div id="expStatus" class="pending-status" style="margin-top:10px;"></div>
+        <p class="pending-status" style="margin-top:14px;">Note: totals here are plain sums of the rows. Card-bill payments and wallet top-ups are listed but left out of the summary. The Analysis screen also leaves out loans and Rent/EMI/SIP, so its numbers can differ. "My share" removes the part a friend owes you on a split.</p>
       </div>
 
       <!-- ===== SUB-SCREEN: Access (owner only, 2026-10-13): who can use the app, who has the full app ===== -->
@@ -6787,8 +6835,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-22-01";
-    const APP_CHANGELOG = "Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-10-31-01";
+    const APP_CHANGELOG = "New: More > Export data downloads your payments, cash and debts as Excel, PDF or CSV. Before that: Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -13375,7 +13423,8 @@
       reconcile:   document.getElementById("view-reconcile"),
       settings:    document.getElementById("view-settings"),
       planner:     document.getElementById("view-planner"),
-      access:      document.getElementById("view-access")
+      access:      document.getElementById("view-access"),
+      export:      document.getElementById("view-export")
     };
 
     // Only load a screen's data the first time it's opened, not every time.
@@ -20024,6 +20073,234 @@
 
       return pageTexts.join("\n");
     }
+
+    // ---------------------------------------------------------
+    // EXPORT DATA (2026-10-31): More > Export data. Asks the server for the same data the History / Cash / Debts screens use,
+    // then builds an Excel, CSV or PDF file ON THE PHONE (SheetJS and jsPDF are loaded only when needed). Nothing is stored.
+    // Doc: docs/features/export-data.md
+    // ---------------------------------------------------------
+    (function () {
+      const MONTHS = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+      const pad2 = function (n) { return (n < 10 ? "0" : "") + n; };
+      const isoOf = function (d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); };
+      // "05 Oct 2026" -> "2026-10-05"; anything unreadable -> ""
+      function isoFromHistoryDate(s) {
+        const m = /^(\d{1,2}) ([A-Za-z]{3}) (\d{4})$/.exec((s || "").toString().trim());
+        if (!m || !MONTHS[m[2]]) return "";
+        return m[3] + "-" + pad2(MONTHS[m[2]]) + "-" + pad2(Number(m[1]));
+      }
+      // Text that starts with = + - @ could be run as a formula when opened in Excel: put a quote in front.
+      function safeText(v) {
+        const s = (v === null || v === undefined) ? "" : String(v);
+        return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+      }
+      function r2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+      // The chosen period as {from, to} ISO dates ("" = no limit).
+      function exportRange() {
+        const v = document.getElementById("expRange").value;
+        const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+        const first = function (yy, mm) { return isoOf(new Date(yy, mm, 1)); };
+        const last = function (yy, mm) { return isoOf(new Date(yy, mm + 1, 0)); };
+        if (v === "thisMonth") return { from: first(y, m), to: last(y, m) };
+        if (v === "lastMonth") return { from: first(y, m - 1), to: last(y, m - 1) };
+        if (v === "last3") return { from: first(y, m - 2), to: last(y, m) };
+        if (v === "fy") { const sy = m >= 3 ? y : y - 1; return { from: sy + "-04-01", to: (sy + 1) + "-03-31" }; }
+        if (v === "custom") return { from: document.getElementById("expFrom").value || "", to: document.getElementById("expTo").value || "" };
+        return { from: "", to: "" };
+      }
+      function inRange(iso, rg) {
+        if (!iso) return !rg.from && !rg.to;   // a row with no readable date only shows up when no period is chosen
+        return (!rg.from || iso >= rg.from) && (!rg.to || iso <= rg.to);
+      }
+
+      // ---- gathering the rows ----
+      async function gatherTransactions(rg) {
+        const d = await callAppsScript({ action: "getTransactionHistory", idToken: currentUser.idToken, offset: 0, limit: 100000 });
+        if (!d || !d.ok) throw new Error((d && d.error) || "Could not load your payments.");
+        const rows = [];
+        (d.transactions || d.items || []).forEach(function (t) {
+          const iso = isoFromHistoryDate(t.date);
+          if (!inRange(iso, rg)) return;
+          const isDebit = t.type === "debit";
+          const share = Number(t.friendShare) > 0 ? Number(t.friendShare) : 0;
+          const tag = t.financialEvent ? (t.financialEvent + (t.financialEventName ? ": " + t.financialEventName : "")) : (t.suggestedType || "");
+          rows.push({
+            iso: iso, time: t.time || "", kind: isDebit ? "Spent" : "Received", amount: r2(t.amount),
+            mine: r2(isDebit ? (Number(t.amount) || 0) - share : (Number(t.amount) || 0)),
+            category: t.category || "", note: t.note || "", payee: t.counterparty || "", mode: t.mode || "", bank: t.bank || "",
+            reference: t.reference || "", tag: t.isNonSpendTransfer ? "Card bill / wallet top-up (not counted in summary)" : tag,
+            skip: !!t.isNonSpendTransfer   // left out of the Summary totals, same as the Analysis screen does
+          });
+        });
+        rows.sort(function (a, b) { return a.iso < b.iso ? -1 : (a.iso > b.iso ? 1 : (a.time < b.time ? -1 : 1)); });
+        return rows;
+      }
+      async function gatherCash(rg) {
+        const d = await callAppsScript({ action: "getCash", idToken: currentUser.idToken });
+        if (!d || !d.ok) throw new Error((d && d.error) || "Could not load your cash entries.");
+        const rows = [];
+        ((d.cash && d.cash.recent) || []).forEach(function (c) {
+          if (!inRange(c.iso || "", rg)) return;
+          rows.push({ iso: c.iso || "", kind: c.type === "credit" ? "Received" : "Spent", amount: r2(c.amount), category: c.category || "", note: c.note || "", tag: c.needWantSaving || "" });
+        });
+        rows.sort(function (a, b) { return a.iso < b.iso ? -1 : 1; });
+        return rows;
+      }
+      async function gatherDebts() {
+        const d = await callAppsScript({ action: "getDebts", idToken: currentUser.idToken });
+        if (!d || !d.ok) throw new Error((d && d.error) || "Could not load your debts.");
+        const list = (d.debts && d.debts.debts) || [];
+        return list.map(function (x) {
+          const t = (x.type || "").toUpperCase();
+          return { person: x.person || "", kind: t === "BORROWED" ? "You owe" : (t === "SPLIT" ? "Split (they owe you)" : "They owe you"), amount: r2(x.amount), note: x.note || "", due: x.dueDate || "" };
+        });
+      }
+
+      // ---- turning rows into a table per section ----
+      // Each section: { title, head:[...], rows:[[...]], moneyCols:[indexes], note }
+      function buildSections(txn, cash, debts, rg) {
+        const out = [];
+        const label = (rg.from || rg.to) ? ((rg.from || "start") + " to " + (rg.to || "today")) : "all time";
+        if (txn) {
+          const spent = txn.filter(function (r) { return r.kind === "Spent" && !r.skip; });
+          const recv = txn.filter(function (r) { return r.kind === "Received"; });
+          const sum = function (a, k) { return r2(a.reduce(function (s, r) { return s + r[k]; }, 0)); };
+          const byCat = {};
+          spent.forEach(function (r) { const c = r.category || "Other"; byCat[c] = r2((byCat[c] || 0) + r.mine); });
+          const catRows = Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; }).map(function (c) { return [c, byCat[c]]; });
+          out.push({ title: "Summary", head: ["Item", "Amount (Rs)"], moneyCols: [1],
+            rows: [["Period", label], ["Payments counted", String(txn.length)], ["Spent (full amounts)", sum(spent, "amount")], ["Spent (my share only)", sum(spent, "mine")], ["Received", sum(recv, "amount")]].concat([["", ""], ["My-share spend by category", ""]], catRows) });
+          out.push({ title: "Payments", head: ["Date", "Time", "Type", "Amount (Rs)", "My share (Rs)", "Category", "Note", "Payee", "Mode", "Bank", "Reference", "Tag"], moneyCols: [3, 4],
+            rows: txn.map(function (r) { return [r.iso, r.time, r.kind, r.amount, r.mine, r.category, r.note, r.payee, r.mode, r.bank, r.reference, r.tag]; }) });
+        }
+        if (cash) {
+          out.push({ title: "Cash", head: ["Date", "Type", "Amount (Rs)", "Category", "Note", "Tag"], moneyCols: [2],
+            rows: cash.map(function (r) { return [r.iso, r.kind, r.amount, r.category, r.note, r.tag]; }), note: "Latest 60 cash entries only." });
+        }
+        if (debts) {
+          out.push({ title: "Open debts", head: ["Person", "Direction", "Amount (Rs)", "Note", "Due"], moneyCols: [2],
+            rows: debts.map(function (r) { return [r.person, r.kind, r.amount, r.note, r.due]; }) });
+        }
+        return out;
+      }
+
+      // ---- file builders ----
+      function stamp() { return isoOf(new Date()); }
+      function saveBlob(blob, name) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = name;
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 4000);
+      }
+      function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+          const s = document.createElement("script");
+          s.src = src; s.onload = function () { resolve(); };
+          s.onerror = function () { reject(new Error("Could not load the file maker. Check your internet and try again.")); };
+          document.head.appendChild(s);
+        });
+      }
+      async function makeXlsx(sections) {
+        await loadSheetJs();
+        const wb = window.XLSX.utils.book_new();
+        sections.forEach(function (s) {
+          const aoa = [s.head].concat(s.rows.map(function (r) {
+            return r.map(function (v, i) { return (typeof v === "number") ? v : safeText(v); });
+          }));
+          if (s.note) aoa.push([], [s.note]);
+          const ws = window.XLSX.utils.aoa_to_sheet(aoa);
+          ws["!cols"] = s.head.map(function (h, i) { return { wch: Math.max(10, Math.min(40, String(h).length + 6)) }; });
+          window.XLSX.utils.book_append_sheet(wb, ws, s.title.slice(0, 31));
+        });
+        const buf = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        saveBlob(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "fin-app-export-" + stamp() + ".xlsx");
+      }
+      function csvCell(v) {
+        const s = (typeof v === "number") ? String(v) : safeText(v);
+        return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }
+      function makeCsv(sections) {
+        const lines = [];
+        sections.forEach(function (s) {
+          lines.push(csvCell("# " + s.title));
+          lines.push(s.head.map(csvCell).join(","));
+          s.rows.forEach(function (r) { lines.push(r.map(csvCell).join(",")); });
+          if (s.note) lines.push(csvCell(s.note));
+          lines.push("");
+        });
+        saveBlob(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }), "fin-app-export-" + stamp() + ".csv");
+      }
+      async function makePdf(sections, rg) {
+        if (!window.jspdf) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+        if (!(window.jspdf && window.jspdf.jsPDF.API.autoTable)) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js");
+        const doc = new window.jspdf.jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+        // The built-in PDF fonts cannot draw every character (for example the rupee sign): keep plain Latin text only.
+        const clean = function (v) { return String(v === null || v === undefined ? "" : v).replace(/[^\x20-\x7E\xA0-\xFF]/g, ""); };
+        doc.setFontSize(18); doc.text("Expense export", 40, 44);
+        doc.setFontSize(10); doc.setTextColor(110);
+        doc.text("Made " + stamp() + (rg.from || rg.to ? "   Period: " + (rg.from || "start") + " to " + (rg.to || "today") : "   Period: all time"), 40, 62);
+        let y = 80;
+        sections.forEach(function (s) {
+          // The PDF skips the full Payments list columns that make it too wide to read.
+          let head = s.head, rows = s.rows;
+          if (s.title === "Payments") {
+            const keep = [0, 2, 3, 4, 5, 6, 7];
+            head = keep.map(function (i) { return s.head[i]; });
+            rows = s.rows.map(function (r) { return keep.map(function (i) { return r[i]; }); });
+          }
+          doc.setFontSize(13); doc.setTextColor(20);
+          doc.text(s.title, 40, y + 14);
+          doc.autoTable({
+            startY: y + 22, head: [head.map(clean)],
+            body: rows.map(function (r) { return r.map(function (v) { return typeof v === "number" ? v.toFixed(2) : clean(v); }); }),
+            styles: { fontSize: 8, cellPadding: 3, overflow: "linebreak" }, headStyles: { fillColor: [37, 99, 235] },
+            margin: { left: 40, right: 40 }
+          });
+          y = doc.lastAutoTable.finalY + 26;
+          if (s.note) { doc.setFontSize(9); doc.setTextColor(110); doc.text(clean(s.note), 40, y - 12); }
+          if (y > 520) { doc.addPage(); y = 40; }
+        });
+        const pages = doc.getNumberOfPages();
+        for (let p = 1; p <= pages; p++) { doc.setPage(p); doc.setFontSize(8); doc.setTextColor(130); doc.text("Page " + p + " of " + pages, 40, 580); }
+        saveBlob(doc.output("blob"), "fin-app-export-" + stamp() + ".pdf");
+      }
+
+      // ---- wiring ----
+      const goBtn = document.getElementById("expGoBtn");
+      const statusEl = document.getElementById("expStatus");
+      document.getElementById("expRange").addEventListener("change", function () {
+        document.getElementById("expCustomRow").style.display = this.value === "custom" ? "block" : "none";
+      });
+      goBtn.addEventListener("click", async function () {
+        const wantTxn = document.getElementById("expSecTxn").checked;
+        const wantCash = document.getElementById("expSecCash").checked;
+        const wantDebts = document.getElementById("expSecDebts").checked;
+        if (!wantTxn && !wantCash && !wantDebts) { statusEl.textContent = "Tick at least one thing to include."; return; }
+        const rg = exportRange();
+        if (rg.from && rg.to && rg.from > rg.to) { statusEl.textContent = "The 'From' date is after the 'To' date."; return; }
+        const fmt = document.getElementById("expFormat").value;
+        goBtn.disabled = true; statusEl.textContent = "Collecting your data...";
+        try {
+          const txn = wantTxn ? await gatherTransactions(rg) : null;
+          const cash = wantCash ? await gatherCash(rg) : null;
+          const debts = wantDebts ? await gatherDebts() : null;
+          const total = (txn ? txn.length : 0) + (cash ? cash.length : 0) + (debts ? debts.length : 0);
+          if (!total) { statusEl.textContent = "Nothing found for that period, so no file was made."; return; }
+          const sections = buildSections(txn, cash, debts, rg);
+          statusEl.textContent = "Making your file (" + total + " rows)...";
+          if (fmt === "xlsx") await makeXlsx(sections);
+          else if (fmt === "csv") makeCsv(sections);
+          else await makePdf(sections, rg);
+          statusEl.textContent = "Done. " + total + " rows exported. Check your Downloads.";
+        } catch (err) {
+          statusEl.textContent = "Could not export: " + ((err && err.message) || "something went wrong") + ".";
+        } finally {
+          goBtn.disabled = false;
+        }
+      });
+    })();
 
     // Reads a spreadsheet statement (.xls / .xlsx) on the phone itself (SheetJS, open-source, loaded only when you pick such a file) and
     // hands back its first sheet as plain rows, counted from the very first row of the sheet (the server expects the bank's own row
