@@ -68,6 +68,7 @@ var TIMER_DAILY_JOBS_ = [
   { key: "debts",       hour: 9,  minute: 0  },
   { key: "cardbill",    hour: 9,  minute: 15 },     // added 2026-10-18: "card bill due in 3 days" reminder (cardCoach.js), once per bill per person
   { key: "health",      hour: 9,  minute: 30 },
+  { key: "monthly",     hour: 9,  minute: 45 },     // added 2026-10-31: "what happened last month", only does anything on the 1st (monthlySummary.js)
   { key: "cash",        hour: 21, minute: 0  }     // the evening job: since 2026-10-17 it sends the 9pm "how much you spent today" summary to everyone (dailySummary.js); the key stays "cash" so the old Apps Script 8pm check-in keeps stepping aside
 ];
 
@@ -78,6 +79,7 @@ function timerDailyRunner_(key){
   if(key === "debts") return checkDebtDueDates;
   if(key === "cardbill") return (typeof cardBillReminderRun_ === "function") ? cardBillReminderRun_ : null;
   if(key === "health") return checkAppHealth;
+  if(key === "monthly") return (typeof monthlySummaryRun_ === "function") ? function(){ return monthlySummaryRun_(); } : null;
   if(key === "cash") return dailySummaryRun_;
   return null;
 }

@@ -22,6 +22,8 @@
       // :root[data-look="new"] ..., so this attribute must always be set.
       document.documentElement.setAttribute("data-look", "new");
       try { localStorage.removeItem("lookPreview"); } catch (e) { /* ignore */ }
+      // "Hide amounts" (2026-10-31): blurs rupee amounts on screen. Local to this phone; press and hold an amount to see it.
+      try { if (localStorage.getItem("hideAmounts") === "on") document.documentElement.setAttribute("data-hide", "on"); } catch (e) { /* ignore */ }
     })();
   </script>
 
@@ -1084,6 +1086,15 @@
       background: var(--bg-warning); color: var(--text-primary);
       border-radius: var(--radius-md); padding: 10px 14px; margin: -6px 0 10px; font-size: 0.85rem;
     }
+    /* Hide amounts (2026-10-31): the known amount elements are blurred; holding one down shows it. Inputs are never blurred. */
+    :root[data-hide="on"] :is(.fin-num, .amt, .cat-amt, .pl-amt, .pc-amt, .pending-amount, .today-total-amount, .hero-amount, .planner-total-amount,
+      .person-amount, .ledger-amount, .history-amount, .hr-amount, .ht-amount, .entry-amount, .stat-value) { filter: blur(9px); transition: filter 0.15s ease; }
+    :root[data-hide="on"] :is(.fin-num, .amt, .cat-amt, .pl-amt, .pc-amt, .pending-amount, .today-total-amount, .hero-amount, .planner-total-amount,
+      .person-amount, .ledger-amount, .history-amount, .hr-amount, .ht-amount, .entry-amount, .stat-value):active { filter: none; }
+    .home-updated { margin-top: 10px; font-size: 0.72rem; color: var(--text-muted); text-align: right; }
+    .pl-rawsms { margin: 8px 0 4px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-inset); color: var(--text-secondary);
+      font-size: 0.8rem; line-height: 1.4; word-break: break-word; }
+    .pl-rawsms > span { display: block; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
     .runway-title { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.5px; margin: 4px 0 2px; line-height: 1.2; }
     .runway-bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--text-on-hero) 28%, transparent); margin: 12px 0 5px; }
     .runway-bar > i { display: block; height: 6px; border-radius: 3px; background: var(--text-on-hero); }
@@ -3669,6 +3680,10 @@
     :root[data-look="new"] .more-menu-item.tactile,
     :root[data-look="new"] .more-menu-item.tactile:active { box-shadow: var(--shadow-card); }
     :root[data-look="new"] .more-menu-icon { width: 44px; height: 44px; }
+    /* Three tiles across (2026-10-31): the two-wide tiles were tall, left an empty slot beside Investments and pushed Settings below the fold. */
+    :root[data-look="new"] .more-menu { grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
+    :root[data-look="new"] .more-menu-item { padding: var(--sp-3) var(--sp-1); gap: 6px; font-size: 0.74rem; line-height: 1.2; min-height: 92px; justify-content: center; }
+    :root[data-look="new"] .more-menu-icon { width: 38px; height: 38px; }
 
     /* ---------- Small message at the bottom (Undo / hints) ---------- */
     .fin-toast {
@@ -4733,6 +4748,7 @@
           <div class="home-card">
             <div class="stat-label">Latest</div>
             <div id="homeLatest"></div>
+            <div class="home-updated" id="homeUpdated"></div>
           </div>
 
           <!-- Kept (the new "This month" card does not show where the money went), moved to the bottom -->
@@ -4860,9 +4876,9 @@
                    payment mode) — confirmed with the user. -->
               <div class="mode-toggle" id="analysisModeToggle" role="group" aria-label="Filter by payment mode">
                 <button type="button" class="mode-toggle-btn active" data-mode="all" aria-pressed="true">All</button>
-                <button type="button" class="mode-toggle-btn" data-mode="bank" aria-pressed="false" aria-label="Bank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M4.5 10v8M9.5 10v8M14.5 10v8M19.5 10v8"/><path d="M3 20h18"/></svg></button>
-                <button type="button" class="mode-toggle-btn" data-mode="card" aria-pressed="false" aria-label="Card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></button>
-                <button type="button" class="mode-toggle-btn" data-mode="wallet" aria-pressed="false" aria-label="Wallet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.2V6.7a1.7 1.7 0 0 1 1.7-1.7h10.6A1.7 1.7 0 0 1 18 6.7V8.2"/><rect x="3" y="8.2" width="18" height="10.8" rx="2"/><circle cx="16" cy="13.6" r="1.3"/></svg></button>
+                <button type="button" class="mode-toggle-btn" data-mode="bank" aria-pressed="false" aria-label="Bank">Bank</button>
+                <button type="button" class="mode-toggle-btn" data-mode="card" aria-pressed="false" aria-label="Card">Card</button>
+                <button type="button" class="mode-toggle-btn" data-mode="wallet" aria-pressed="false" aria-label="Wallet">Wallet</button>
               </div>
             </div>
             <div class="today-total-amount" id="analysisTotalAmount">₹0</div>
@@ -5482,12 +5498,15 @@
         <div class="field">
           <label>What to include</label>
           <label style="display:block; margin:6px 0;"><input type="checkbox" id="expSecTxn" checked> Payments (all noted payments)</label>
-          <label style="display:block; margin:6px 0;"><input type="checkbox" id="expSecCash"> Cash entries (latest 60)</label>
+          <label style="display:block; margin:6px 0;"><input type="checkbox" id="expSecPending"> Payments still waiting for a note</label>
+          <label style="display:block; margin:6px 0;"><input type="checkbox" id="expSecCash"> Cash entries (all)</label>
           <label style="display:block; margin:6px 0;"><input type="checkbox" id="expSecDebts"> Open debts and splits</label>
+          <label style="display:block; margin:6px 0;"><input type="checkbox" id="expSecSavings"> Savings entries</label>
+          <label style="display:block; margin:6px 0;"><input type="checkbox" id="expSecInvest"> Investment entries</label>
         </div>
 
         <div class="field">
-          <label for="expRange">Period (for payments and cash)</label>
+          <label for="expRange">Period (for payments, cash, savings and investments)</label>
           <select id="expRange">
             <option value="thisMonth">This month</option>
             <option value="lastMonth">Last month</option>
@@ -5566,6 +5585,14 @@
               <option value="light">Light</option>
               <option value="dark">Dark</option>
             </select>
+          </div>
+          <div class="field" style="margin-bottom:0; margin-top:12px;">
+            <label>Hide amounts</label>
+            <select id="settingsHideAmounts">
+              <option value="off">Off</option>
+              <option value="on">On</option>
+            </select>
+            <div style="font-size:0.75rem; margin-top:4px; color:var(--text-muted);">Blurs the rupee amounts on screen so nobody can read them over your shoulder. Press and hold an amount to see it. Only this phone.</div>
           </div>
         </div>
 
@@ -6452,7 +6479,8 @@
     const FIN_SWITCHES = [
       { id: "settingsDailySummary", on: "on", off: "off" },
       { id: "settingsFastViews",    on: "on", off: "off" },
-      { id: "settingsCardReminder", on: "on", off: "off" }
+      { id: "settingsCardReminder", on: "on", off: "off" },
+      { id: "settingsHideAmounts",  on: "on", off: "off" }
     ];
     function finSyncSwitches() {
       if (!finLookOn()) return;
@@ -6825,8 +6853,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-10-31-02";
-    const APP_CHANGELOG = "The new look is now the only look (the preview switch in Settings is gone). Before that: More > Export data downloads your payments, cash and debts as Excel, PDF or CSV. Before that: Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-10-31-03";
+    const APP_CHANGELOG = "Home no longer says money runs out today when its balance count has drifted: it asks you to confirm your bank balance instead. Messages the app could not read now say so in plain words and show the bank’s own text. New: a Not income choice for a friend’s payback or a refund, Hide amounts (Settings), an Updated-at line on Home, a short summary on the 1st of each month, more complete Export data (waiting payments, all cash, savings, investments), a tidier Analysis header (whole rupees) and a more compact More menu. Before that: The new look is now the only look (the preview switch in Settings is gone). Before that: More > Export data downloads your payments, cash and debts as Excel, PDF or CSV. Before that: Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -8304,7 +8332,7 @@
     const NEW_SERVER_URL = "https://asia-south1-fin-app-76c40.cloudfunctions.net/api";
     const NEW_SERVER_ACTIONS = ["ping", "getMyAccess", "getPending", "getDashboard", "getTodaySummary", "getMonthlyAnalysis", "getAnalysisExtras", "getCCAdvisor",
       "getDebts", "getCash", "getInvestments", "getInvestmentInstruments", "getSavingsGoals", "getTransactionHistory", "getPlannerData", "getSettings",
-      "getPeople", "getPerson", "getIgnoredTransactions", "previewSavingsSplit", "reconcileStatement", "reconcileCreditCardStatement", "getAdminOverview", "getSmsFormats"];
+      "getPeople", "getPerson", "getIgnoredTransactions", "previewSavingsSplit", "reconcileStatement", "reconcileCreditCardStatement", "getAdminOverview", "getSmsFormats", "getExportExtras"];
     // The saving actions the new server accepts (must match WRITE_ACTIONS in functions/index.js; one it does not know just answers "fallback").
     const NEW_SERVER_WRITE_ACTIONS = ["saveNote", "markNotATransaction", "restoreIgnoredTransaction", "addDebt", "settleDebt", "recordDebtPayment",
       "saveSavingsAuto", "saveSavingsManual", "withdrawSavings", "updateSavingsEntry", "deleteSavingsEntry", "addSavingsGoal",
@@ -10259,6 +10287,7 @@
           case "removeInvestmentHolding": return demoRemoveInvestmentHolding(data.name);
           case "updateInvestment": return demoUpdateInvestment(data.row, data.instrumentName, data.amount);
           case "getCash": return { ok: true, cash: demoComputeCashData() };
+          case "getExportExtras": return { ok: true, pending: [], cash: [], savings: [], investments: [] };
           case "addCashEntry": return demoAddCashEntry(data.type, data.amount, data.note, data.category, data.needWantSaving);
           case "deleteCashEntry": return demoDeleteCashEntry(data.row);
           case "updateCashEntry": return demoUpdateCashEntry(data.row, data.type, data.amount, data.note, data.category, data.needWantSaving);
@@ -11513,6 +11542,20 @@
     let runwayEditing = false;
     let runwayLastDashboard = null;
     function inr(n) { return "₹" + Math.round(n).toLocaleString("en-IN"); }
+    // The reader marks a message it could not understand as "NEEDS REVIEW: <something>" (the backend keys on that text, so the stored value stays).
+    // People should never see that label: show plain words instead (2026-10-31).
+    // Credits only: "Not income" keeps a friend's payback, a refund or a move between your own accounts out of Income (2026-10-31).
+    function notIncomeOption(txn, selected) {
+      if (!txn || txn.type !== "credit") return "";
+      return '<option value="Not income"' + (selected === "Not income" ? " selected" : "") + '>Not income (payback / refund)</option>';
+    }
+    function isUnreadableWho(s) { return /^NEEDS REVIEW/i.test(String(s || "")); }
+    function friendlyWho(s) {
+      const m = /^NEEDS REVIEW:?\s*(.*)$/i.exec(String(s || ""));
+      if (!m) return s;
+      const rest = m[1].trim();
+      return (!rest || /^unrecognized message$/i.test(rest)) ? "Unreadable bank message" : rest + " (please check)";
+    }
     function runwayShortDate(iso) {
       const p = String(iso).split("-").map(Number);
       return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
@@ -11574,6 +11617,11 @@
       }
       if (runwayEditing) {
         askForm("Update your bank balance", "Enter what your bank shows right now.", true);
+        return;
+      }
+      if (r.balanceUnknown) {
+        // My estimate came to zero or less: that is a drifted estimate, not a fact, so no run-out claim is made (2026-10-31).
+        askForm("Confirm your bank balance", "My count of your balance has drifted, so I can't tell how long your money lasts. Enter what your bank shows now.", false);
         return;
       }
       if (r.askBalance) {
@@ -11746,9 +11794,18 @@
       document.getElementById(id).addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goToScreen("analysis"); } });
     });
 
+    // "Updated 5:29 pm": when the figures on Home were last worked out (the ready-made copy's time when there is one, otherwise now).
+    function renderHomeUpdated(d) {
+      const el = document.getElementById("homeUpdated");
+      if (!el) return;
+      const t = new Date(Number(d && d.builtAt) || Date.now());
+      const sameDay = t.toDateString() === new Date().toDateString();
+      el.textContent = "Updated " + (sameDay ? "" : t.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + ", ") + t.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+    }
     function renderHomeLatest(d) {
+      renderHomeUpdated(d);
       const el = document.getElementById("homeLatest");
-      const list = d.latest || [];
+      const list = (d.latest || []).filter(function (t) { return !isUnreadableWho(t.label); });   // unreadable messages are handled in Pending, not shown here
       if (list.length === 0) { el.innerHTML = '<div class="home-row"><span>No transactions yet.</span></div>'; return; }
       el.innerHTML = list.map(function (t) {
         const sub = t.category ? ' <span style="color:var(--text-muted); font-size:0.78rem;">· ' + escapeHtml(t.category) + '</span>' : "";
@@ -12168,7 +12225,7 @@
       const el = pendingEls.review;
       el.innerHTML = '<h3>Confirm these payments</h3><div class="pc-rv-hint">Nothing is saved until you tap the button at the bottom. Untick any you want to check yourself.</div>' +
         rows.map(function (r, i) {
-          const who = r.txn.counterparty || r.txn.bank || "Payment";
+          const who = friendlyWho(r.txn.counterparty) || r.txn.bank || "Payment";
           const bits = [r.v.note ? "“" + r.v.note + "”" : "", r.v.category, r.v.type].filter(Boolean).join(" · ");
           return '<label class="pc-rv-row"><input type="checkbox" data-i="' + i + '"' + (r.chk.ok ? ' checked' : ' disabled') + '>' +
             '<span class="pc-rv-main"><span class="pc-rv-line"><span>' + escapeHtml(who) + '</span><span>' + (r.txn.type === "credit" ? "+" : "-") + hpMoney(r.txn.amount) + '</span></span>' +
@@ -12317,7 +12374,7 @@
       const cat = credit ? "Income" : (CATEGORY_STYLES[category] ? category : "Other");
       const css = CATEGORY_STYLES[cat].css;
       const path = credit ? '<path d="M12 5v14"/><path d="M6 13l6 6 6-6"/>' : (CATEGORY_ICON_PATHS[cat] || CATEGORY_ICON_PATHS.Other);
-      const name = txn.counterparty || txn.bank || "Payment";
+      const name = friendlyWho(txn.counterparty) || txn.bank || "Payment";
       const sub = [txn.date, txn.time, txn.mode].filter(Boolean).join(" · ");
       return '<div class="pl-head">' +
         '<span class="pl-icon" style="background:var(--cat-' + css + '-bg); color:var(--cat-' + css + '-text);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + path + '</svg></span>' +
@@ -12340,9 +12397,9 @@
           const selectedAttr = (cat === suggested) ? " selected" : "";
           return `<option value="${cat}"${selectedAttr}>${cat}</option>`;
         })
-        .join("");
+        .join("") + notIncomeOption(txn, suggested);
 
-      const counterpartyText = txn.counterparty ? " · " + escapeHtml(txn.counterparty) : "";
+      const counterpartyText = txn.counterparty ? " · " + escapeHtml(friendlyWho(txn.counterparty)) : "";
 
       // See updateDebtField's comment — reads this straight off txn
       // rather than a separate parameter, simplest way to thread the
@@ -12446,10 +12503,11 @@
           <span>${escapeHtml(txn.mode)}</span>
         </div>
         <div class="pending-meta">${txn.date} ${txn.time} · ${escapeHtml(txn.bank)}${counterpartyText}</div>
+        ${txn.rawSms ? '<div class="pl-rawsms"><span>The message the bank sent</span>' + escapeHtml(txn.rawSms) + '</div>' : ""}
         ${buildHelpHtml(txn, true)}
         <div class="field">
           <label>Note</label>
-          <input type="text" class="note-input" value="${escapeHtml(txn.suggestedNote || txn.counterparty || "")}" placeholder="What was this for?">
+          <input type="text" class="note-input" value="${escapeHtml(txn.suggestedNote || (isUnreadableWho(txn.counterparty) ? "" : (txn.counterparty || "")))}" placeholder="What was this for?">
         </div>
         <div class="field category-field">
           <label>Category</label>
@@ -13095,7 +13153,7 @@
         const credit = txn.type === "credit";
         const dup = hpIsDup(txn);
         card.classList.toggle("pc-isdup", dup);
-        const name = txn.counterparty || txn.bank || "Payment";
+        const name = friendlyWho(txn.counterparty) || txn.bank || "Payment";
         const sub = [card.dataset.group === "Today" ? "" : hpShortDate(txn.date), hpTime12(txn.time), hpModeLabel(txn.mode), txn.bank].filter(Boolean).join(" · ");
         let h = '<div class="pc-r1"><span class="pc-name">' + escapeHtml(name) + '</span><span class="pc-amt' + (credit ? " in" : "") + '">' +
           (credit ? "+" : "-") + hpMoney(txn.amount) + '</span></div><div class="pc-r2">' + escapeHtml(sub) + '</div>';
@@ -13296,7 +13354,7 @@
       if (!("Notification" in window) || Notification.permission !== "granted") return;
       if (!("serviceWorker" in navigator)) return;
 
-      const counterpartyText = txn.counterparty ? " at " + txn.counterparty : " · " + txn.mode;
+      const counterpartyText = txn.counterparty ? " at " + friendlyWho(txn.counterparty) : " · " + txn.mode;
       const body = "₹" + txn.amount.toLocaleString("en-IN") + counterpartyText;
 
       navigator.serviceWorker.ready.then(function (registration) {
@@ -13911,11 +13969,9 @@
 
     // Whole rupees show without decimals; anything with paise shows exactly 2 decimals
     // (so "14,081.3" reads "14,081.30"). Also rounds away tiny floating-point leftovers.
+    // 2026-10-31: whole rupees everywhere on Analysis (the paise made the page look busier than Home and added no meaning).
     function analysisRs(n) {
-      const v = Math.round((Number(n) || 0) * 100) / 100;
-      return Number.isInteger(v)
-        ? v.toLocaleString("en-IN")
-        : v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return Math.round(Number(n) || 0).toLocaleString("en-IN");
     }
     function anNum(v) { const n = Number(v); return isFinite(n) ? n : 0; }
     // 1234 -> "1.2k", 12000 -> "12k", 150000 -> "1.5L" (lakh). Small chart labels only.
@@ -14425,8 +14481,8 @@
       if (!pace) { el.hidden = true; el.innerHTML = ""; return; }
       const chips = [];
       if (pace.vs) chips.push(anPaceVsText(pace.vs));
-      chips.push("₹" + analysisRs(pace.perDay) + " / day");
-      let html = '<div class="fe-pills">' + chips.map(function (c) { return '<span class="fe-pill">' + escapeHtml(c) + '</span>'; }).join("") + '</div>';
+      // (the "₹X / day" chip is gone: the same figure is already shown as Avg/day in the hero card above)
+      let html = chips.length ? '<div class="fe-pills">' + chips.map(function (c) { return '<span class="fe-pill">' + escapeHtml(c) + '</span>'; }).join("") + '</div>' : "";
       if (pace.projection) {
         const pr = pace.projection;
         const scale = Math.max(pr.amount, pr.ref ? pr.ref.amount : 0, pace.spent) || 1;
@@ -14745,7 +14801,7 @@
       if (!analysisLastData) return;
       const a = getAnalysisModeSlice(analysisLastData, analysisMode);
 
-      if (finLookOn()) finPutNum(analysisTotalAmountEl, a.totalDebit, "₹");
+      if (finLookOn()) finPutNum(analysisTotalAmountEl, Math.round(a.totalDebit), "₹");
       else analysisTotalAmountEl.textContent = "₹" + analysisRs(a.totalDebit);
 
       const flow = analysisFlow(a);
@@ -14764,10 +14820,9 @@
       if (a.fixedObligations) feParts.push("Fixed obligations ₹" + analysisRs(a.fixedObligations));
       if (a.invested) feParts.push("Invested ₹" + analysisRs(a.invested));
       if (flow.show) {
-        feParts.push("Saved ₹" + analysisRs(flow.saved) + (flow.goal > 0 ? " of ₹" + analysisRs(flow.goal) + " goal" : ""));
-        feParts.push(flow.notUsed >= 0
-          ? "Not yet used ₹" + analysisRs(flow.notUsed)
-          : "Used ₹" + analysisRs(Math.abs(flow.notUsed)) + " from earlier money");
+        // Minus sign in front of the rupee sign ("-₹600"). The "not used / used from earlier money" figure lives in the Money flow card
+        // below (it was a fifth chip here, which made this card too busy).
+        feParts.push("Saved " + (flow.saved < 0 ? "-" : "") + "₹" + analysisRs(Math.abs(flow.saved)) + (flow.goal > 0 ? " of ₹" + analysisRs(flow.goal) + " goal" : ""));
       }
       analysisFinancialEventsEl.innerHTML = feParts.length
         ? '<div class="fe-pills">' + feParts.map(function (p) { return '<span class="fe-pill">' + escapeHtml(p) + '</span>'; }).join("") + '</div>'
@@ -14841,7 +14896,7 @@
           <div class="category-top" style="cursor:pointer;">
             ${categoryBadgeHtml(entry.category)}
             ${chgHtml}
-            <span class="cat-amt">${finLookOn() ? finNum(entry.amount, "\u20b9") : "₹" + entry.amount.toLocaleString("en-IN")}</span>
+            <span class="cat-amt">${finLookOn() ? finNum(Math.round(entry.amount), "\u20b9") : "₹" + entry.amount.toLocaleString("en-IN")}</span>
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M6 9l6 6 6-6"/></svg>
           </div>
           <div class="category-bar-track">
@@ -20116,16 +20171,54 @@
         rows.sort(function (a, b) { return a.iso < b.iso ? -1 : (a.iso > b.iso ? 1 : (a.time < b.time ? -1 : 1)); });
         return rows;
       }
+      // Pending, every Cash entry, Savings and Investments come from one read-only call (added 2026-10-31; the Cash screen itself only returns 60).
+      let extrasPromise = null;
+      function getExtras() {
+        if (!extrasPromise) {
+          extrasPromise = callAppsScript({ action: "getExportExtras", idToken: currentUser.idToken }).then(function (d) {
+            if (!d || !d.ok) throw new Error((d && d.error) || "Could not load the rest of your data.");
+            return d;
+          });
+          extrasPromise.catch(function () { extrasPromise = null; });
+        }
+        return extrasPromise;
+      }
       async function gatherCash(rg) {
-        const d = await callAppsScript({ action: "getCash", idToken: currentUser.idToken });
-        if (!d || !d.ok) throw new Error((d && d.error) || "Could not load your cash entries.");
+        const d = await getExtras();
+        if (d.cashError) throw new Error("Could not load your cash entries.");
         const rows = [];
-        ((d.cash && d.cash.recent) || []).forEach(function (c) {
+        (d.cash || []).forEach(function (c) {
           if (!inRange(c.iso || "", rg)) return;
           rows.push({ iso: c.iso || "", kind: c.type === "credit" ? "Received" : "Spent", amount: r2(c.amount), category: c.category || "", note: c.note || "", tag: c.needWantSaving || "" });
         });
         rows.sort(function (a, b) { return a.iso < b.iso ? -1 : 1; });
         return rows;
+      }
+      async function gatherPending(rg) {
+        const d = await getExtras();
+        if (d.pendingError) throw new Error("Could not load the payments waiting for a note.");
+        const rows = [];
+        (d.pending || []).forEach(function (t) {
+          const iso = isoFromHistoryDate(t.date);
+          if (!inRange(iso, rg)) return;
+          rows.push({ iso: iso, time: t.time || "", kind: t.type === "credit" ? "Received" : "Spent", amount: r2(t.amount), payee: friendlyWho(t.counterparty) || "", mode: t.mode || "", bank: t.bank || "", reference: t.reference || "" });
+        });
+        rows.sort(function (a, b) { return a.iso < b.iso ? -1 : 1; });
+        return rows;
+      }
+      async function gatherSavings(rg) {
+        const d = await getExtras();
+        if (d.savingsError) throw new Error("Could not load your savings entries.");
+        return (d.savings || []).filter(function (e) { return inRange(e.iso || "", rg); }).map(function (e) {
+          return { iso: e.iso || "", amount: r2(e.amount), type: e.type || "", destination: e.destination || "", note: e.note || "" };
+        }).sort(function (a, b) { return a.iso < b.iso ? -1 : 1; });
+      }
+      async function gatherInvestments(rg) {
+        const d = await getExtras();
+        if (d.investmentsError) throw new Error("Could not load your investment entries.");
+        return (d.investments || []).filter(function (e) { return inRange(e.iso || "", rg); }).map(function (e) {
+          return { iso: e.iso || "", name: e.name || "", amount: r2(e.amount), kind: e.kind || "", note: e.note || "" };
+        }).sort(function (a, b) { return a.iso < b.iso ? -1 : 1; });
       }
       async function gatherDebts() {
         const d = await callAppsScript({ action: "getDebts", idToken: currentUser.idToken });
@@ -20139,7 +20232,7 @@
 
       // ---- turning rows into a table per section ----
       // Each section: { title, head:[...], rows:[[...]], moneyCols:[indexes], note }
-      function buildSections(txn, cash, debts, rg) {
+      function buildSections(txn, cash, debts, rg, pend, sav, inv) {
         const out = [];
         const label = (rg.from || rg.to) ? ((rg.from || "start") + " to " + (rg.to || "today")) : "all time";
         if (txn) {
@@ -20156,7 +20249,19 @@
         }
         if (cash) {
           out.push({ title: "Cash", head: ["Date", "Type", "Amount (Rs)", "Category", "Note", "Tag"], moneyCols: [2],
-            rows: cash.map(function (r) { return [r.iso, r.kind, r.amount, r.category, r.note, r.tag]; }), note: "Latest 60 cash entries only." });
+            rows: cash.map(function (r) { return [r.iso, r.kind, r.amount, r.category, r.note, r.tag]; }) });
+        }
+        if (pend) {
+          out.push({ title: "Waiting for a note", head: ["Date", "Time", "Type", "Amount (Rs)", "Payee", "Mode", "Bank", "Reference"], moneyCols: [3],
+            rows: pend.map(function (r) { return [r.iso, r.time, r.kind, r.amount, r.payee, r.mode, r.bank, r.reference]; }) });
+        }
+        if (sav) {
+          out.push({ title: "Savings", head: ["Date", "Amount (Rs)", "Type", "Where", "Note"], moneyCols: [1],
+            rows: sav.map(function (r) { return [r.iso, r.amount, r.type, r.destination, r.note]; }) });
+        }
+        if (inv) {
+          out.push({ title: "Investments", head: ["Date", "Name", "Amount (Rs)", "Kind", "Note"], moneyCols: [2],
+            rows: inv.map(function (r) { return [r.iso, r.name, r.amount, r.kind, r.note]; }) });
         }
         if (debts) {
           out.push({ title: "Open debts", head: ["Person", "Direction", "Amount (Rs)", "Note", "Due"], moneyCols: [2],
@@ -20257,18 +20362,25 @@
         const wantTxn = document.getElementById("expSecTxn").checked;
         const wantCash = document.getElementById("expSecCash").checked;
         const wantDebts = document.getElementById("expSecDebts").checked;
-        if (!wantTxn && !wantCash && !wantDebts) { statusEl.textContent = "Tick at least one thing to include."; return; }
+        const wantPending = document.getElementById("expSecPending").checked;
+        const wantSavings = document.getElementById("expSecSavings").checked;
+        const wantInvest = document.getElementById("expSecInvest").checked;
+        if (!wantTxn && !wantCash && !wantDebts && !wantPending && !wantSavings && !wantInvest) { statusEl.textContent = "Tick at least one thing to include."; return; }
         const rg = exportRange();
         if (rg.from && rg.to && rg.from > rg.to) { statusEl.textContent = "The 'From' date is after the 'To' date."; return; }
         const fmt = document.getElementById("expFormat").value;
         goBtn.disabled = true; statusEl.textContent = "Collecting your data...";
+        extrasPromise = null;   // always read fresh data for a new export
         try {
           const txn = wantTxn ? await gatherTransactions(rg) : null;
           const cash = wantCash ? await gatherCash(rg) : null;
           const debts = wantDebts ? await gatherDebts() : null;
-          const total = (txn ? txn.length : 0) + (cash ? cash.length : 0) + (debts ? debts.length : 0);
+          const pend = wantPending ? await gatherPending(rg) : null;
+          const sav = wantSavings ? await gatherSavings(rg) : null;
+          const inv = wantInvest ? await gatherInvestments(rg) : null;
+          const total = (txn ? txn.length : 0) + (cash ? cash.length : 0) + (debts ? debts.length : 0) + (pend ? pend.length : 0) + (sav ? sav.length : 0) + (inv ? inv.length : 0);
           if (!total) { statusEl.textContent = "Nothing found for that period, so no file was made."; return; }
-          const sections = buildSections(txn, cash, debts, rg);
+          const sections = buildSections(txn, cash, debts, rg, pend, sav, inv);
           statusEl.textContent = "Making your file (" + total + " rows)...";
           if (fmt === "xlsx") await makeXlsx(sections);
           else if (fmt === "csv") makeCsv(sections);
@@ -20821,6 +20933,15 @@
     // fields below it on the same screen. Reflects whatever the
     // early <head> script already applied (or "system" if you've never
     // picked one), so the dropdown always shows the truth.
+    // Hide amounts: instant, local to this phone, no Save.
+    const settingsHideEl = document.getElementById("settingsHideAmounts");
+    try { settingsHideEl.value = localStorage.getItem("hideAmounts") === "on" ? "on" : "off"; } catch (e) { /* default Off */ }
+    settingsHideEl.addEventListener("change", function () {
+      try {
+        if (settingsHideEl.value === "on") { localStorage.setItem("hideAmounts", "on"); document.documentElement.setAttribute("data-hide", "on"); }
+        else { localStorage.removeItem("hideAmounts"); document.documentElement.removeAttribute("data-hide"); }
+      } catch (e) { /* ignore */ }
+    });
     const settingsThemeEl = document.getElementById("settingsTheme");
     settingsThemeEl.value = localStorage.getItem("themePreference") || "system";
 
@@ -21855,7 +21976,7 @@
           const selectedAttr = (cat === txn.category) ? " selected" : "";
           return `<option value="${cat}"${selectedAttr}>${cat}</option>`;
         })
-        .join("");
+        .join("") + notIncomeOption(txn, txn.category);
 
       // See updateDebtField's comment in buildPendingItem — same reason
       // for threading it through via txn rather than a parameter.
@@ -21901,7 +22022,7 @@
       const invChipHtml = buildInvestmentChipHtml(txn);
 
       const noteValue = escapeHtml(txn.note || "");
-      const counterpartyText = txn.counterparty ? " · " + escapeHtml(txn.counterparty) : "";
+      const counterpartyText = txn.counterparty ? " · " + escapeHtml(friendlyWho(txn.counterparty)) : "";
 
       // "Split with a friend" AFTER the fact (2026-10-13): a payment you already noted (for example straight from the
       // notification) can still be split here. Same panel and same backend action as the Pending card, with its own button.
@@ -22323,7 +22444,7 @@
       wrap.appendChild(slot);
 
       function paint() {
-        const title = txn.counterparty && txn.note ? txn.counterparty + " · " + txn.note : (txn.note || txn.counterparty || "Transaction");
+        const title = txn.counterparty && txn.note ? friendlyWho(txn.counterparty) + " · " + txn.note : (txn.note || friendlyWho(txn.counterparty) || "Transaction");
         const nws = txn.suggestedType ? " · " + txn.suggestedType : "";
         let pill = "";
         if (txn.financialEvent) {

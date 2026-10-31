@@ -15,14 +15,13 @@ More > **Export data** downloads the person's own data as **Excel (.xlsx)**, **P
 - **Payments**: date, time, type, amount, **my share** (amount minus what a friend owes on a split), category, note, payee, mode, bank, reference, tag.
   Card-bill payments and wallet top-ups are listed but tagged and left out of the Summary (same rule as the Analysis screen). Rent/EMI/SIP are NOT
   left out, so Summary can differ from Analysis. The PDF shows a shorter column set.
-- **Cash**: latest 60 entries only (that is all `getCash` returns).
+- **Cash**: every entry (since 2026-10-31, via `getExportExtras`).
+- **Waiting for a note, Savings, Investments**: added 2026-10-31 (same action, `backend/exportData.js`, test `exportExtras.test.js`).
 - **Open debts**: unsettled debts and splits.
 - Text starting with `= + - @` gets a leading `'` so Excel cannot run it as a formula.
 - PDF uses plain Latin text and "Rs" (the built-in PDF fonts cannot draw the rupee sign).
 
 ## Known limits / ideas
-- Payments still waiting for a note (Pending) are not included, and neither are savings, investments or planner data (their actions only return
-  summaries). A proper `getExportData` backend action would fix this (not built).
-- Cash is capped at the latest 60 entries.
+- Planner data is still not exported (it is a plan, not records).
 - Android WebView: the file download goes through a normal browser download; if the native app blocks it, a small bridge is needed in `D:\Fin-app Application`.
 - Not tested on the real Android app yet.

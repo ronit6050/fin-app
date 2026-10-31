@@ -140,7 +140,8 @@ function computeRunway_(input){
   out.checkpointAgeDays = ageDays;
   out.askBalance = ageDays > RUNWAY_STALE_DAYS_;
 
-  var balance = Math.max(0, Math.round(input.checkpoint.amount + runwayRollForward_(input.txnData, input.checkpoint.atMs)));   // never negative, so "Yes, that's right" can always be saved
+  var rawBalance = Math.round(input.checkpoint.amount + runwayRollForward_(input.txnData, input.checkpoint.atMs));
+  var balance = Math.max(0, rawBalance);   // never negative, so "Yes, that's right" can always be saved
   out.estimatedBalance = balance;
 
   // Bills still ahead (stop at salary day, or 35 days if the salary day is unknown).
@@ -171,6 +172,14 @@ function computeRunway_(input){
       if(days < daysToSalary) out.shortByDays = daysToSalary - days;
       out.maxPerDay = daysToSalary > 0 ? Math.max(0, Math.floor(available / daysToSalary)) : null;
     }
+  }
+  // A rolled-forward balance of zero or less means the estimate drifted (a payment from another account, a missed credit, a typo),
+  // not that the person really has nothing. Saying "money runs out today" on that would be a false alarm (seen 2026-10-31), so say
+  // "I don't know" instead: ask for the real balance, and hand no run-out date / daily limit to anything else (Home, nudges).
+  if(rawBalance <= 0){
+    out.balanceUnknown = true;
+    out.askBalance = true;
+    out.runOutDate = null; out.daysLeft = null; out.shortByDays = null; out.maxPerDay = null;
   }
   return out;
 }

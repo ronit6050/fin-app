@@ -123,3 +123,15 @@ assert(ctx.saveRunwayBalance("21400").ok && ctx._saved.RUNWAY_BALANCE === "21400
     obligations: [{ label: "SIP", enoughHistory: true, alreadyThisMonth: false, daysUntil: 5, avgAmount: 1000 }] }));
   assert(c.billsAhead === 1000 && c.bills.length === 1 && c.bills[0].label === "SIP", "a SIP due before salary is still counted, the later card bill is not");
 }
+
+// 2026-10-31: a rolled-forward balance of zero or less is an unknown, not "money runs out today".
+{
+  const cpLow = { amount: 1000, atMs: new Date(2026, 9, 14, 10, 0).getTime() };
+  const tx = [header].concat(salary, [row(new Date(2026, 9, 15), "10:00", "debit", "upi", 5000)]);
+  const u = ctx.computeRunway_({ txnData: tx, today, now, checkpoint: cpLow, monthSpend: 17000, monthlyExpensesSetting: 30000, obligations: [], ccBillAhead: 0, salaryDaySetting: 0 });
+  assert(u.balanceUnknown === true && u.askBalance === true, "estimate below zero: flagged unknown and the balance is asked for");
+  assert(u.runOutDate === null && u.daysLeft === null && u.shortByDays === null && u.maxPerDay === null, "no run-out date, no shortfall and no daily limit are handed out");
+  assert(u.estimatedBalance === 0, "balance never shows negative");
+  const fine = ctx.computeRunway_({ txnData: txns, today, now, checkpoint: cp, monthSpend: 17000, monthlyExpensesSetting: 30000, obligations: [], ccBillAhead: 0, salaryDaySetting: 0 });
+  assert(!fine.balanceUnknown, "a normal positive balance is not flagged");
+}

@@ -144,7 +144,7 @@ eq(textOf(r), ["7 small payments under ₹100 added up to ₹420."], "small paym
 r = f.buildAnalysisInsights(sm(4, 420), null, "all", T);
 ok(!r.some((x) => x.kind === "small"), "4 small payments -> none");
 r = f.buildAnalysisInsights(sm(5, 123.5), null, "all", T);
-ok(textOf(r)[0] === "5 small payments under ₹100 added up to ₹123.50.", "paise show two decimals: " + textOf(r)[0]);
+ok(textOf(r)[0] === "5 small payments under ₹100 added up to ₹124.", "amounts are whole rupees (2026-10-31): " + textOf(r)[0]);
 r = f.buildAnalysisInsights(slice({ detail: { daysInMonth: 31, daily: daily(31, 0).map((_, i) => (i < 18 ? (i === 8 ? 9000 : 1000) : 0)), places: [], smallCount: 0 } }), null, "all", T);
 eq(textOf(r), ["9 Oct was your big day: ₹9,000."], "spike day wording");
 r = f.buildAnalysisInsights(slice({ detail: { daysInMonth: 31, daily: daily(31, 0).map((_, i) => (i < 18 ? (i === 8 ? 2000 : 1000) : 0)), places: [] } }), null, "all", T);
@@ -328,7 +328,7 @@ ok(f.anPlanModel(ex({ month: budgetsKey, categories: [{ category: "Food", target
 
 // ---- small formatting helpers ----
 eq([f.anCompact(0), f.anCompact(950), f.anCompact(1000), f.anCompact(1234), f.anCompact(12000), f.anCompact(99999), f.anCompact(150000), f.anCompact(NaN)], ["0", "950", "1k", "1.2k", "12k", "100k", "1.5L", "0"], "compact labels");
-eq([f.analysisRs(14081.3), f.analysisRs(1234567), f.analysisRs(null)], ["14,081.30", "12,34,567", "0"], "rupee formatting (Indian grouping, paise to 2 places)");
+eq([f.analysisRs(14081.3), f.analysisRs(1234567), f.analysisRs(null)], ["14,081", "12,34,567", "0"], "rupee formatting (Indian grouping, whole rupees)");
 
 // ---- the screen is wired up ----
 ok(/id="analysisPace"/.test(html) && /id="analysisInsights"/.test(html) && /id="analysisFlow"/.test(html) && /id="analysisDaily"/.test(html) &&

@@ -468,7 +468,7 @@ function cardCoachCompute_(input){
       isPaid: !!out.isPaid,
       isOverdue: !!out.isOverdue,
       planLines: planLines,
-      leftUntilSalary: (runway && runway.estimatedBalance !== null && runway.estimatedBalance !== undefined && runway.salaryDate)
+      leftUntilSalary: (runway && !runway.balanceUnknown && runway.estimatedBalance !== null && runway.estimatedBalance !== undefined && runway.salaryDate)
         ? Math.round(runway.estimatedBalance - (Number(runway.billsAhead) || 0)) : null
     };
   }

@@ -116,6 +116,10 @@ function pwaDispatch_(data, verified){
     return jsonResponse({ ok:true, transactions: getPendingTransactions(pendingTxnData), knownDebtPeople: getKnownDebtPeople(), noteWordModel: buildNoteTypeModel_(pendingTxnData) });
   }
 
+  if(data.action === "getExportExtras"){
+    return jsonResponse(getExportExtras_());      // More > Export data: Pending, every Cash entry, Savings and Investments (exportData.js)
+  }
+
   if(data.action === "saveNote"){
     // autoType (added 2026-10-11): a note typed straight into a notification has no
     // Need/Want choice with it, so the server fills one in ONLY when the words of the
@@ -1662,6 +1666,10 @@ function getMonthlyAnalysis(year, month, txnData, cashData, opts){
       // computed once per row, used below for both debit and credit.
       const modeBucket = modeBuckets[bucketKeyForMode(mode)];
 
+      // "Not income" (2026-10-31): a credit the person marked as a friend's payback, a refund or a transfer from their own account is
+      // not earnings, so it stays out of Income and the figures built from it. (Only a credit can carry this category.)
+      if(type === "credit" && category === "Not income") continue;
+
       if(type === "debit" && isCreditCardBillPayment(mode, counterparty, note, fullAmount, txnData)) continue; // settling spend already counted, not new spend
       if(type === "debit" && isWalletTopUp(counterparty, reference)) continue; // money moved into your own wallet, not spent yet — the real spend gets counted separately, below, as each wallet purchase happens
       // A loan/repayment isn't spending either — you expect the money back.
@@ -2236,6 +2244,9 @@ function getPendingTransactions(txnData){
       mode:              mode,
       amount:            amount,
       counterparty:      counterparty,
+      // For a message the reader could not understand ("NEEDS REVIEW: ..."), also send the bank's own text so the person can see what the
+      // payment actually was (shown small in the Pending card). Empty for every normal payment. Own data, own phone; cut to 400 characters.
+      rawSms:            /^NEEDS REVIEW/i.test(String(counterparty)) ? String(data[i][10] || "").slice(0, 400) : "",
       suggestedCategory: suggestedCategory,
       // Need/Want/Saving guess — null means "don't show a default" (credit,
       // a debt-settlement category, or an unrecognized merchant). See
@@ -2727,10 +2738,11 @@ function getSuggestedCategoryFast(counterparty, amount, mode, smartMemoryData){
     const cleanCounterparty = normalizeText(counterparty);
 
     const exactMatch = findMerchantMatch(cleanCounterparty, memData, true);
-    if(exactMatch && exactMatch.confidence >= CONFIDENCE_THRESHOLD) return exactMatch.category;
+    // (a memory that says "Not income", learned before this guard existed, is never offered as a category)
+    if(exactMatch && exactMatch.confidence >= CONFIDENCE_THRESHOLD && exactMatch.category !== "Not income") return exactMatch.category;
 
     const fuzzyMatch = findMerchantMatch(cleanCounterparty, memData, false);
-    if(fuzzyMatch && fuzzyMatch.confidence >= CONFIDENCE_THRESHOLD) return fuzzyMatch.category;
+    if(fuzzyMatch && fuzzyMatch.confidence >= CONFIDENCE_THRESHOLD && fuzzyMatch.category !== "Not income") return fuzzyMatch.category;
 
     const patternMatch = matchByPattern("", cleanCounterparty, amount, mode);
     if(patternMatch && patternMatch.confidence >= CONFIDENCE_THRESHOLD) return patternMatch.category;
@@ -2944,7 +2956,9 @@ function saveTransactionNote(row, note, category, counterparty, type, amount, fi
       sheet.getRange(row, 6).setValue(Number(amount)); // column F
     }
 
-    if(counterparty && !isRepeatSave && opts.learnCategory !== false){
+    // "Not income" is a one-off label for a credit (a payback or refund): never remembered for the person, or a later payment TO them would be
+    // suggested as "Not income" (2026-10-31).
+    if(counterparty && !isRepeatSave && opts.learnCategory !== false && category !== "Not income"){
       handleCategoryCorrection(counterparty, category, "Other");
     }
 
