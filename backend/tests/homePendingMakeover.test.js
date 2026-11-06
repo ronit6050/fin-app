@@ -162,6 +162,24 @@ console.log("\n--- C. homeExtra ---");
   assert(e2.watch.length === 0, "no Budgets sheet -> watch is []");
   assert(e2.prevSamePoint === null || typeof e2.prevSamePoint === "number", "prevSamePoint is a number or null");
 
+  console.log("\n--- E. a monthly bill (electricity) must not look like an overspent day (2026-11-06) ---");
+  {
+    const rowsE = [mk(0, 100), mk(0, 2400, { cp: "BESCOM", note: "electricity", cat: "Bills" })];
+    for(let n = 1; n <= 40; n++){
+      rowsE.push(mk(n, 100));
+      if(n === 10) rowsE.push(mk(n, 3000, { cp: "BESCOM", note: "electricity", cat: "Bills" }));   // an old bill must not lift the usual day either
+    }
+    const wE = world(rowsE);
+    const dE = wE.sheets.Transactions.rows, cE = wE.sheets.Cash.rows;
+    const todayE = wE.sb.getTodaySummary(dE, cE);
+    const monthE = wE.sb.getMonthlyAnalysis(y, m, dE, cE);
+    const exE = wE.sb.buildHomeExtra_(now, todayE, monthE, dE, cE, wE.sb.dbSs_());
+    assert(todayE.total === 2500, "the big number still counts the bill (2500)");
+    assert(exE.todayEveryday === 100, "day-to-day today leaves the bill out (got " + exE.todayEveryday + ")");
+    assert(exE.usualDay === 100, "usual day ignores past bills too (got " + exE.usualDay + ")");
+    assert(monthE.detail.dailyEveryday.length === monthE.detail.daily.length, "dailyEveryday has the same days as daily");
+  }
+
   console.log("\n--- D. failures never break the dashboard ---");
   assert(w.sb.buildHomeExtra_(now, null, month, data, cd, w.sb.dbSs_()) !== undefined, "bad input does not throw");
   const realSession = w.sb.Session;

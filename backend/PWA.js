@@ -490,14 +490,29 @@ function buildHomeExtra_(now, today, month, txnData, cashData, ss){
 
     const monthCache = {};
     monthCache[ty + "-" + tm] = (month && month.detail && month.detail.daily) ? month.detail.daily : null;
-    const dailyOf = function(y, m){
+    // Same days with Bills left out, for the "usual day" comparison only.
+    const evCache = {};
+    evCache[ty + "-" + tm] = (month && month.detail && month.detail.dailyEveryday) ? month.detail.dailyEveryday : null;
+    const detailsOf = function(y, m){
       const k = y + "-" + m;
-      if(!monthCache.hasOwnProperty(k) || monthCache[k] === null){
-        let a = null;
-        try{ a = getMonthlyAnalysis(y, m, txnData, cashData, { skipSaved: true }).detail.daily; }catch(e){ a = null; }
-        monthCache[k] = a;
+      if(!monthCache.hasOwnProperty(k) || monthCache[k] === null || !evCache[k]){
+        let det = null;
+        try{ det = getMonthlyAnalysis(y, m, txnData, cashData, { skipSaved: true }).detail; }catch(e){ det = null; }
+        monthCache[k] = det ? det.daily : null;
+        evCache[k] = det ? (det.dailyEveryday || null) : null;
       }
-      return monthCache[k];
+    };
+    const dailyOf = function(y, m){ detailsOf(y, m); return monthCache[y + "-" + m]; };
+    const dailyEverydayOf = function(y, m){ detailsOf(y, m); return evCache[y + "-" + m]; };
+    // Spend on one calendar day, Bills left out (today = today's total minus today's Bills).
+    const todayBills = (today.categories || []).reduce(function(s, c){ return s + (isLumpyBillCategory_(c.category) ? (Number(c.amount) || 0) : 0); }, 0);
+    const everydaySpendOn = function(utcMs){
+      const dt = new Date(utcMs);
+      const y = dt.getUTCFullYear(), m = dt.getUTCMonth() + 1, d = dt.getUTCDate();
+      if(y === ty && m === tm && d === td) return Math.max(0, (Number(today.total) || 0) - todayBills);
+      const arr = dailyEverydayOf(y, m);
+      if(!arr) throw new Error("no daily data");
+      return Number(arr[d - 1]) || 0;
     };
     // Spend on one calendar day (today uses getTodaySummary's own total).
     const spendOn = function(utcMs){
@@ -511,7 +526,9 @@ function buildHomeExtra_(now, today, month, txnData, cashData, ss){
     const todayMs = Date.UTC(ty, tm - 1, td);
     const DAY = 86400000;
 
-    const out = { todayCount: null, usualDay: null, last7: null, prevSamePoint: null, watch: [] };
+    const out = { todayCount: null, usualDay: null, todayEveryday: null, last7: null, prevSamePoint: null, watch: [] };
+    // Today without Bills: this, not the full total, is what gets compared with the usual day.
+    try{ out.todayEveryday = Math.round(Math.max(0, (Number(today.total) || 0) - todayBills) * 100) / 100; }catch(e){}
 
     try{ out.todayCount = (Number(today.transactionCount) || 0) + (Number(today.cashCount) || 0); }catch(e){}
 
@@ -548,7 +565,7 @@ function buildHomeExtra_(now, today, month, txnData, cashData, ss){
         const historyDays = Math.round((todayMs - Date.UTC(e[0], e[1] - 1, e[2])) / DAY);
         if(historyDays >= 7){
           let sum = 0;
-          for(let k = 1; k <= 28; k++) sum += spendOn(todayMs - k * DAY);
+          for(let k = 1; k <= 28; k++) sum += everydaySpendOn(todayMs - k * DAY);
           out.usualDay = Math.round(sum / 28 * 100) / 100;
         }
       }
@@ -1475,11 +1492,16 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
 // "All" and one per Bank/Card/Wallet bucket.
 // ---------------------------------------------------------------------
 function analysisDetailNew_(){
-  return { daily: {}, merchants: {}, smallCount: 0, smallTotal: 0, top: [] };
+  return { daily: {}, dailyEveryday: {}, merchants: {}, smallCount: 0, smallTotal: 0, top: [] };
 }
+// Bills (electricity, mobile, internet...) land as one lump a month. They are real spending and stay in the
+// totals, but they must not make a normal day look overspent, so "day-to-day" leaves them out.
+// Added 2026-11-06 after an electricity bill made Home say "over your usual day".
+function isLumpyBillCategory_(category){ return (category || "").toString().trim().toLowerCase() === "bills"; }
 var ANALYSIS_SMALL_PAYMENT_LIMIT_ = 100;   // "small things add up": payments under this
 function analysisDetailAdd_(acc, day, placeLabel, noteLabel, category, amount, dateStr){
   acc.daily[day] = (acc.daily[day] || 0) + amount;
+  if(!isLumpyBillCategory_(category)) acc.dailyEveryday[day] = (acc.dailyEveryday[day] || 0) + amount;
   const place = (placeLabel || "").toString().trim();
   if(place){
     const key = place.toLowerCase();
@@ -1498,6 +1520,8 @@ function finalizeAnalysisDetail_(acc, year, month){
   const daysInMonth = new Date(year, month, 0).getDate();
   const daily = [];
   for(let day = 1; day <= daysInMonth; day++){ daily.push(Math.round((acc.daily[day] || 0) * 100) / 100); }
+  const dailyEveryday = [];
+  for(let day = 1; day <= daysInMonth; day++){ dailyEveryday.push(Math.round((acc.dailyEveryday[day] || 0) * 100) / 100); }
   const places = Object.keys(acc.merchants).map(function(k){ return acc.merchants[k]; })
     .sort(function(a, b){ return b.amount - a.amount; }).slice(0, 8)
     .map(function(m){ return { name: m.name, amount: Math.round(m.amount * 100) / 100, count: m.count }; });
@@ -1505,6 +1529,7 @@ function finalizeAnalysisDetail_(acc, year, month){
   return {
     daysInMonth: daysInMonth,
     daily: daily,
+    dailyEveryday: dailyEveryday,   // same days, Bills left out (used for the "usual day" comparison)
     places: places,
     smallCount: acc.smallCount,
     smallTotal: Math.round(acc.smallTotal * 100) / 100,

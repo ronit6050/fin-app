@@ -39,10 +39,19 @@ function dailySummaryBuild_(nowMs){
       var dom = Number(Utilities.formatDate(now, "Asia/Kolkata", "dd"));
       if(dom >= 4){
         var year = Number(Utilities.formatDate(now, "Asia/Kolkata", "yyyy")), month = Number(Utilities.formatDate(now, "Asia/Kolkata", "MM"));
-        var monthTotal = Number(getMonthlyAnalysis(year, month, txn, cash).totalDebit) || 0;
-        var usual = (monthTotal - total) / (dom - 1);
+        var monthA = getMonthlyAnalysis(year, month, txn, cash);
+        var monthTotal = Number(monthA.totalDebit) || 0;
+        var todayCompare = total;
+        // Monthly bills (electricity...) are left out of the comparison on both sides, so one lump does not look like an overspent day.
+        var evArr = monthA.detail && monthA.detail.dailyEveryday;
+        if(evArr && evArr.length){
+          var billsToday = (today.categories || []).reduce(function(s, c){ return s + (isLumpyBillCategory_(c.category) ? (Number(c.amount) || 0) : 0); }, 0);
+          monthTotal = evArr.reduce(function(s, v){ return s + (Number(v) || 0); }, 0);
+          todayCompare = Math.max(0, total - billsToday);
+        }
+        var usual = (monthTotal - todayCompare) / (dom - 1);
         if(usual > 0){
-          var diff = total - usual;
+          var diff = todayCompare - usual;
           if(Math.abs(diff) < usual * 0.1) parts.push("About a usual day (" + dailySummaryMoney_(usual) + ").");
           else if(diff > 0) parts.push(dailySummaryMoney_(diff) + " above your usual day (" + dailySummaryMoney_(usual) + ").");
           else parts.push(dailySummaryMoney_(-diff) + " below your usual day (" + dailySummaryMoney_(usual) + ").");
