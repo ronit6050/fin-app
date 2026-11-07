@@ -227,12 +227,39 @@ function buildLatestForDashboard_(txnData){
   }catch(err){ return []; }
 }
 
+// The coming SIPs for Home's "Needs you" / the runway (2026-11-07). The old Investment guess came from the amount of the
+// last unnamed payment (it showed one Rs 2,000 "Investment" instead of the real Rs 3,000 Nifty 50 SIP, so the bills added up
+// to Rs 8,000 instead of Rs 9,000). The SIP list on the Investments tab already knows each SIP's real name, amount and day, so
+// it replaces every Investment guess. Pure: sips = getInvestmentsOverview_().sips. An unpaid SIP that is already late counts as
+// due today. A paid or paused SIP is not a bill. Rent and EMI entries are untouched.
+function runwaySwapInSips_(obligations, sips){
+  var keep = (obligations || []).filter(function(o){ return o.type !== "Investment"; });
+  (sips || []).forEach(function(s){
+    if(!s.active || s.status === "paid" || s.status === "paused" || !(Number(s.amount) > 0) || s.day === null || s.day === undefined) return;
+    keep.push({
+      label: s.name, type: "Investment", name: s.name, enoughHistory: true, alreadyThisMonth: false,
+      avgAmount: Number(s.amount), typicalDay: s.day,
+      daysUntil: s.status === "overdue" ? 0 : (typeof s.daysUntil === "number" ? s.daysUntil : 0)
+    });
+  });
+  return keep;
+}
+
+// Same, reading the real SIP list. Any problem: the list is returned as it was (never breaks Home).
+function runwayObligationsWithSips_(obligations){
+  try{
+    if(typeof getInvestmentsOverview_ !== "function") return obligations;
+    var ov = getInvestmentsOverview_();
+    return (ov && ov.sips) ? runwaySwapInSips_(obligations, ov.sips) : obligations;
+  }catch(e){ return obligations; }
+}
+
 // Called from getDashboardData. Never throws: the Home screen must load without it.
 function buildRunwayForDashboard_(txnData, month, cc){
   try{
     var today = new Date(); today.setHours(0, 0, 0, 0);
     var feSheet = dbSs_().getSheetByName("FinancialEvents");
-    var obligations = feSheet ? computeObligationStatuses_(feSheet.getDataRange().getValues(), txnData, today) : [];
+    var obligations = runwayObligationsWithSips_(feSheet ? computeObligationStatuses_(feSheet.getDataRange().getValues(), txnData, today) : []);
     var settings = getSettings();
     var ccAhead = (cc && cc.outstanding && !cc.outstanding.isPaid) ? (Number(cc.outstanding.amount) || 0) : 0;
     return computeRunway_({

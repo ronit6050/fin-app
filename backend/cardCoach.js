@@ -508,6 +508,7 @@ function cardCoachGather_(txnData, today, settings, outstanding, monthSpend){
     if(typeof computeObligationStatuses_ === "function"){
       var feSheet = dbSs_().getSheetByName("FinancialEvents");
       if(feSheet) result.obligations = computeObligationStatuses_(feSheet.getDataRange().getValues(), txnData, today) || [];
+      if(typeof runwayObligationsWithSips_ === "function") result.obligations = runwayObligationsWithSips_(result.obligations);
     }
   }catch(e1){ result.obligations = []; }
   try{
