@@ -1088,7 +1088,7 @@
     }
     /* Hide amounts (2026-10-31): the known amount elements are blurred; holding one down shows it. Inputs are never blurred. */
     :root[data-hide="on"] :is(.fin-num, .amt, .cat-amt, .pl-amt, .pc-amt, .pending-amount, .today-total-amount, .hero-amount, .planner-total-amount,
-      .person-amount, .ledger-amount, .history-amount, .hr-amount, .ht-amount, .entry-amount, .stat-value) { filter: blur(9px); transition: filter 0.15s ease; }
+      .person-amount, .ds-n, .ledger-amount, .history-amount, .hr-amount, .ht-amount, .entry-amount, .stat-value) { filter: blur(9px); transition: filter 0.15s ease; }
     :root[data-hide="on"] :is(.fin-num, .amt, .cat-amt, .pl-amt, .pc-amt, .pending-amount, .today-total-amount, .hero-amount, .planner-total-amount,
       .person-amount, .ledger-amount, .history-amount, .hr-amount, .ht-amount, .entry-amount, .stat-value):active { filter: none; }
     .home-updated { margin-top: 10px; font-size: 0.72rem; color: var(--text-muted); text-align: right; }
@@ -2929,6 +2929,23 @@
     .debt-item .settle-btn {
       margin-top: 4px;
     }
+
+    /* ---------- Debts rebuilt 2026-11-07: two numbers + one list ---------- */
+    .debts-summary { display: flex; gap: 10px; margin-bottom: 8px; }
+    .ds-card { flex: 1; background: var(--surface-card); border: 0.5px solid var(--border-hairline); border-radius: var(--radius-md); padding: 14px; box-shadow: var(--shadow-card); }
+    .ds-l { font-size: 0.8rem; color: var(--text-muted); }
+    .ds-n { font-size: 1.5rem; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .ds-card.owe .ds-n { color: var(--color-danger); }
+    .ds-card.owed .ds-n { color: var(--color-success); }
+    .debts-net { font-size: 0.85rem; color: var(--text-muted); margin: 0 2px 12px; }
+    .debts-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+    .debts-actions button { flex: 1; margin: 0 !important; }
+    .debts-group { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 2px 8px; }
+    .person-row .person-sub .status-pill { margin-left: 4px; }
+    .loan-actions { display: flex; gap: 8px; }
+    .loan-actions button { flex: 1; margin: 0 !important; }
+    .loan-pay { display: none; margin-top: 8px; gap: 8px; }
+    .loan-pay input { flex: 1; min-width: 0; }
 
     /* ---------- Splits with friends (added 2026-10-12) ----------
        Reuses the Debts card look; only the person row, avatar and a few
@@ -5123,15 +5140,17 @@
         <div id="personDetail" style="display:none"></div>
 
         <div id="debtsContent" style="display:none">
-          <div class="today-total-box owner-only">
-            <div class="today-total-label" id="debtsNetLabel">Net Position</div>
-            <div class="today-total-amount" id="debtsNetAmount">₹0</div>
-            <div class="today-split" id="debtsTotalsLine"></div>
+          <!-- Rebuilt 2026-11-07: two big numbers, one list with one row per person. -->
+          <div class="debts-summary owner-only">
+            <div class="ds-card owe"><div class="ds-l">You owe</div><div class="ds-n" id="debtsOweAmount">₹0</div></div>
+            <div class="ds-card owed"><div class="ds-l">Owed to you</div><div class="ds-n" id="debtsOwedAmount">₹0</div></div>
           </div>
+          <div class="debts-net owner-only" id="debtsNetLabel"></div>
 
-          <h3 style="font-size:0.95rem; margin:0 0 8px 0;">People you split with</h3>
-          <div id="peopleList"></div>
-          <button type="button" id="addFriendToggle" class="secondary" style="margin-bottom:6px;">+ Add friend</button>
+          <div class="debts-actions">
+            <button type="button" id="addDebtToggleButton" class="owner-only">+ Lent / borrowed</button>
+            <button type="button" id="addFriendToggle" class="secondary">+ Add friend</button>
+          </div>
           <div id="addFriendForm" style="display:none; margin:8px 0 14px;">
             <div class="field"><label>Name</label><input type="text" id="friendNameInput" placeholder="Name"></div>
             <div class="field"><label>Mobile</label><input type="tel" id="friendMobileInput" placeholder="98765 43210"></div>
@@ -5140,18 +5159,12 @@
             <div class="pending-result" id="addFriendResult"></div>
           </div>
 
-          <h3 class="owner-only" style="font-size:0.95rem; margin:14px 0 8px 0;">You owe</h3>
-          <div id="debtsYouOwe" class="owner-only"></div>
-
-          <h3 class="owner-only" style="font-size:0.95rem; margin:14px 0 8px 0;">They owe you</h3>
-          <div id="debtsTheyOwe" class="owner-only"></div>
-
-          <button type="button" id="addDebtToggleButton" class="owner-only" style="margin-top:16px;">+ Add Debt</button>
+          <div id="peopleList"></div>
 
           <div id="addDebtForm" class="owner-only" style="display:none; margin-top:12px;">
             <div class="field">
               <label>Person</label>
-              <input type="text" id="debtPersonInput" placeholder="Name">
+              <input type="text" id="debtPersonInput" placeholder="Name" list="debtPeopleList" autocomplete="off"><datalist id="debtPeopleList"></datalist>
             </div>
             <div class="field">
               <label>Amount (₹)</label>
@@ -5168,8 +5181,8 @@
               <label>Note (optional)</label>
               <input type="text" id="debtNoteInput" placeholder="e.g. dinner, rent">
             </div>
-            <div class="field">
-              <label>Due Date (optional)</label>
+            <div class="field" id="debtDueField" style="display:none">
+              <label>Pay back by (optional)</label>
               <input type="date" id="debtDueDateInput">
             </div>
             <button type="button" id="saveDebtButton">Save</button>
@@ -6060,7 +6073,7 @@
       const SUB = {
         today:       { root: "todayContent",       counts: ["#todayTotalAmount", "#todayCategories .category-top > span:last-child"], lists: ["#todayCategories"], bars: true },
         cc:          { root: "ccContent",          counts: ["#ccOutstandingAmount", "#ccCurrentAmount", "#ccTopCategories .category-top > span:last-child", "#ccCardBreakdown .category-top > span:last-child"], lists: ["#ccTopCategories", "#ccCardBreakdown"], bars: true },
-        debts:       { root: "debtsContent",       counts: ["#debtsNetAmount"], lists: ["#peopleList", "#debtsYouOwe", "#debtsTheyOwe"] },
+        debts:       { root: "debtsContent",       counts: ["#debtsOweAmount", "#debtsOwedAmount"], lists: ["#peopleList"] },
         savings:     { root: "svOverview",         lists: ["#svActivityList"], bars: true },   // New look only (FinPlay never plays with the switch off); numbers are already count-up spans
         investments: { root: "investmentsContent", counts: ["#investmentsTotalAmount", "#investmentsBreakdown .category-top > span:last-child"], lists: ["#investmentsBreakdown", "#investmentsRecent"], bars: true },
         cash:        { root: "cashContent",        counts: ["#cashBalanceAmount"], lists: ["#cashRecent"] },
@@ -6541,7 +6554,7 @@
     document.getElementById("moreSplitsTile").addEventListener("click", function () {
       setTimeout(function () {
         const list = document.getElementById("peopleList");
-        if (list && list.previousElementSibling) list.previousElementSibling.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (list) list.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 80);
     });
 
@@ -6853,8 +6866,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-11-06-02";
-    const APP_CHANGELOG = "A monthly bill like electricity no longer makes Home say you passed your usual day: it stays in the total, but the comparison uses day-to-day spending only. Home no longer says money runs out today when its balance count has drifted: it asks you to confirm your bank balance instead. Messages the app could not read now say so in plain words and show the bank’s own text. New: a Not income choice for a friend’s payback or a refund, Hide amounts (Settings), an Updated-at line on Home, a short summary on the 1st of each month, more complete Export data (waiting payments, all cash, savings, investments), a tidier Analysis header (whole rupees) and a more compact More menu. Before that: The new look is now the only look (the preview switch in Settings is gone). Before that: More > Export data downloads your payments, cash and debts as Excel, PDF or CSV. Before that: Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-11-07-01";
+    const APP_CHANGELOG = "Debts is rebuilt: two big numbers (You owe / Owed to you) and one list with one row per person, shared bills and loans added together. No more Move to a friend balance. Tap a person to see their loans and history; due dates only for money you owe. Before that: A monthly bill like electricity no longer makes Home say you passed your usual day: it stays in the total, but the comparison uses day-to-day spending only. Home no longer says money runs out today when its balance count has drifted: it asks you to confirm your bank balance instead. Messages the app could not read now say so in plain words and show the bank’s own text. New: a Not income choice for a friend’s payback or a refund, Hide amounts (Settings), an Updated-at line on Home, a short summary on the 1st of each month, more complete Export data (waiting payments, all cash, savings, investments), a tidier Analysis header (whole rupees) and a more compact More menu. Before that: The new look is now the only look (the preview switch in Settings is gone). Before that: More > Export data downloads your payments, cash and debts as Excel, PDF or CSV. Before that: Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -15419,10 +15432,9 @@
     const debtsStatusEl     = document.getElementById("debtsStatus");
     const debtsContentEl    = document.getElementById("debtsContent");
     const debtsNetLabelEl   = document.getElementById("debtsNetLabel");
-    const debtsNetAmountEl  = document.getElementById("debtsNetAmount");
-    const debtsTotalsLineEl = document.getElementById("debtsTotalsLine");
-    const debtsYouOweEl     = document.getElementById("debtsYouOwe");
-    const debtsTheyOweEl    = document.getElementById("debtsTheyOwe");
+    const debtsOweAmountEl  = document.getElementById("debtsOweAmount");
+    const debtsOwedAmountEl = document.getElementById("debtsOwedAmount");
+    let personLoansRefresh  = null;   // set while a person's page is open: redraws its loans after a background refresh
 
     const addDebtToggleButtonEl = document.getElementById("addDebtToggleButton");
     const addDebtFormEl     = document.getElementById("addDebtForm");
@@ -15506,291 +15518,160 @@
       return "No due date";
     }
 
-    function buildDebtItem(entry) {
+    // =====================================================================
+    // DEBTS, REBUILT 2026-11-07
+    // One list, one row per person. A person's number = their shared-bill
+    // balance (friends, from Firestore) + any loans typed in under the same
+    // name (Debts sheet). There is no "move to friend balance" step any more:
+    // the two are simply added together on screen. Tapping a row opens that
+    // person's page, where the loans can be part-paid or settled.
+    // =====================================================================
+    function debtKey(name) { return String(name || "").trim().toLowerCase(); }
+    function roundMoney(n) { return Math.round(n * 100) / 100; }
+
+    // Builds the merged rows from whatever has loaded so far (friends and/or loans).
+    function buildPeopleRows() {
+      const map = {}, order = [];
+      function get(name) {
+        const k = debtKey(name);
+        if (!map[k]) { map[k] = { key: k, name: String(name || "").trim(), email: null, mobile: "", friendBal: 0, entries: [] }; order.push(k); }
+        return map[k];
+      }
+      ((peopleData && peopleData.people) || []).forEach(function (f) {
+        const r = get(f.name);
+        r.name = f.name; r.email = f.email; r.mobile = f.mobile || ""; r.friendBal = f.balance || 0;
+      });
+      if (debtsData && debtsData.debts) debtsData.debts.forEach(function (e) { get(e.person).entries.push(e); });
+      return order.map(function (k) {
+        const r = map[k];
+        r.loanNet = roundMoney(r.entries.reduce(function (s, e) { return s + (e.type === "BORROWED" ? -e.amount : e.amount); }, 0));
+        r.total = roundMoney(r.friendBal + r.loanNet);
+        // The loan I have to pay back soonest (due dates only matter for money I owe)
+        r.dueEntry = null;
+        r.entries.forEach(function (e) {
+          if (e.type === "BORROWED" && e.daysUntilDue != null && (!r.dueEntry || e.daysUntilDue < r.dueEntry.daysUntilDue)) r.dueEntry = e;
+        });
+        return r;
+      });
+    }
+
+    function loanNetFor(name) {
+      if (!debtsData || !debtsData.debts) return 0;
+      const k = debtKey(name);
+      return roundMoney(debtsData.debts.reduce(function (s, e) {
+        return debtKey(e.person) === k ? s + (e.type === "BORROWED" ? -e.amount : e.amount) : s;
+      }, 0));
+    }
+
+    // The two big numbers + one plain "overall" line.
+    function updateDebtsHeader() {
+      let owe = 0, owed = 0;
+      buildPeopleRows().forEach(function (r) { if (r.total < 0) owe -= r.total; else owed += r.total; });
+      owe = roundMoney(owe); owed = roundMoney(owed);
+      finMoneyInto(debtsOweAmountEl, owe);
+      finMoneyInto(debtsOwedAmountEl, owed);
+      const net = roundMoney(owed - owe);
+      debtsNetLabelEl.textContent = net === 0 ? "You're all square." :
+        (net > 0 ? "Overall you're ahead by " : "Overall you're behind by ") + splitMoney(net) + ".";
+    }
+
+    function debtToast(msg) {
+      if (typeof FinToast !== "undefined" && FinToast.show) FinToast.show({ text: msg, ms: 4500 });
+      else alert(msg);
+    }
+
+    // One loan (an entry on the Debts sheet) inside a person's page.
+    // Optimistic like the rest of the app: the screen changes at once, and
+    // goes back with a message if the background save fails.
+    function buildLoanCard(entry, changed) {
       const card = document.createElement("div");
       card.className = "debt-item";
+      const borrowed = entry.type === "BORROWED";
+      const what = borrowed ? "You borrowed" : (entry.type === "SPLIT" ? "Shared bill" : "You lent");
+      const bits = [];
+      if (borrowed && (entry.dueDate || entry.isOverdue || entry.dueSoon)) bits.push(formatDebtDueText(entry));
+      if (entry.note) bits.push(escapeHtml(entry.note));
+      card.innerHTML =
+        '<div class="debt-top"><span>' + what + '</span><span class="debt-amount">₹' + entry.amount.toLocaleString("en-IN") + '</span></div>' +
+        '<div class="debt-meta">' + (bits.join(" · ") || "&nbsp;") + '</div>' +
+        '<div class="loan-actions"><button type="button" class="secondary loan-part">Part payment</button>' +
+        '<button type="button" class="secondary loan-settle">Fully settled</button></div>' +
+        '<div class="loan-pay"><input type="number" min="0" step="1" placeholder="Amount paid"><button type="button" class="loan-pay-go">Save</button></div>' +
+        '<div class="pending-result"></div>';
+      const partBtn = card.querySelector(".loan-part"), settleBtn = card.querySelector(".loan-settle");
+      const payBox = card.querySelector(".loan-pay"), payInput = payBox.querySelector("input"), payGo = card.querySelector(".loan-pay-go");
+      const resultEl = card.querySelector(".pending-result");
 
-      const noteText = entry.note ? " · " + escapeHtml(entry.note) : "";
+      // A just-added loan has no row number until the background save confirms.
+      if (!entry.row) { partBtn.disabled = true; settleBtn.disabled = true; resultEl.textContent = "Saving..."; }
 
-      card.innerHTML = `
-        <div class="debt-top">
-          <span>${escapeHtml(entry.person)}</span>
-          <span class="debt-amount">₹${entry.amount.toLocaleString("en-IN")}</span>
-        </div>
-        <div class="debt-meta">${formatDebtDueText(entry)}${noteText}</div>
-        <div class="field">
-          <label>Record a payment (leave blank and tap Settled if paid in full)</label>
-          <input type="number" class="debt-payment-input" min="0" step="1" placeholder="Amount paid, e.g. 500">
-        </div>
-        <button type="button" class="record-payment-btn">Record Payment</button>
-        <button type="button" class="settle-btn secondary">Mark as Settled (fully paid)</button>
-        <button type="button" class="secondary move-debt-link" style="display:none; margin-top:6px;">Move to a friend's balance…</button>
-        <div class="move-debt-panel" style="display:none; margin-top:8px;">
-          <div class="field"><label>Friend</label><select class="move-debt-friend"></select></div>
-          <button type="button" class="move-debt-go">Move it (can not be undone)</button>
-        </div>
-        <div class="pending-result"></div>
-      `;
-
-      const paymentInput       = card.querySelector(".debt-payment-input");
-      const recordPaymentBtn   = card.querySelector(".record-payment-btn");
-      const settleButton       = card.querySelector(".settle-btn");
-      const resultEl           = card.querySelector(".pending-result");
-      const amountEl           = card.querySelector(".debt-amount");
-
-      // Move this old debt into a friend's running balance (Splits, 2026-10-12): one number per
-      // person instead of two places. Shown only when you have friends and this is a saved debt.
-      const moveLink  = card.querySelector(".move-debt-link");
-      const movePanel = card.querySelector(".move-debt-panel");
-      const moveSel   = card.querySelector(".move-debt-friend");
-      if (entry.row && !friendMode && currentUser && currentUser.email.toLowerCase() === ALLOWED_EMAIL.toLowerCase()) {
-        loadPeople(false).then(function () {
-          const mine = ((peopleData && peopleData.people) || []).filter(function (f) { return !f.mirror; });
-          if (mine.length === 0) return;
-          moveSel.innerHTML = mine.map(function (f) { return '<option value="' + escapeHtml(f.email) + '">' + escapeHtml(f.name) + '</option>'; }).join("");
-          // Pre-pick the friend whose name matches this debt's person, if there is one
-          const guess = mine.find(function (f) { return String(f.name).toLowerCase() === String(entry.person).toLowerCase(); });
-          if (guess) moveSel.value = guess.email;
-          moveLink.style.display = "";
-        }).catch(function () { /* no friends list: just no Move option */ });
+      // Change the local copy now; the returned function puts everything back.
+      function optimistic(change) {
+        const snap = debtsData ? cloneDebtsData() : null;
+        if (debtsData) { change(); saveCache("debts", debtsData); }
+        changed();
+        return function undo(msg) {
+          if (snap) { debtsData = snap; saveCache("debts", debtsData); }
+          changed();
+          debtToast(msg);
+        };
       }
-      moveLink.addEventListener("click", function () {
-        movePanel.style.display = movePanel.style.display === "none" ? "block" : "none";
+      function findIdx() { return debtsData.debts.findIndex(function (e) { return e.row === entry.row; }); }
+
+      partBtn.addEventListener("click", function () {
+        payBox.style.display = payBox.style.display === "flex" ? "none" : "flex";
+        if (payBox.style.display === "flex") payInput.focus();
       });
-      // Moving can not be undone, so (like Settle) it needs a second tap.
-      const moveGo = card.querySelector(".move-debt-go");
-      bindConfirmAction(moveGo, function () {
-        const go = moveGo;
-        go.disabled = true;
-        resultEl.style.color = "";
-        resultEl.textContent = "Moving...";
-        callAppsScript({
-          action: "moveDebtToFriend", idToken: currentUser.idToken, row: entry.row, friendEmail: moveSel.value,
-          expectedPerson: entry.person, expectedType: entry.type   // the row must still be THIS debt
-        })
-          .then(function (r) {
-            go.disabled = false;
-            if (!r.ok) { resultEl.style.color = "var(--color-danger)"; resultEl.textContent = r.error; return; }
-            invalidatePeople();
-            loadPeople(true).then(renderPeopleList).catch(function () {});
-            if (r.alreadyMovedTo) {
-              // An earlier try had already moved it to someone else; it is closed now, not counted twice.
-              resultEl.textContent = "This debt had already been moved to " + r.alreadyMovedTo + " earlier, so it is closed and was not counted twice.";
-              refreshDebtsQuiet();
-              return;
-            }
-            removeCardShowingEmptyIfLast();
-            refreshDebtsQuiet();
-          })
-          .catch(function (err) {
-            go.disabled = false;
-            resultEl.style.color = "var(--color-danger)";
-            resultEl.textContent = "Couldn't move it (" + err.message + ") - check your connection and try again.";
-          });
-      });
-
-      // A just-added optimistic debt (see saveDebtButtonEl's handler)
-      // doesn't have a real row number yet, so Settle/Record Payment stay
-      // disabled for the short window until the background add confirms.
-      if (!entry.row) {
-        recordPaymentBtn.disabled = true;
-        settleButton.disabled = true;
-        resultEl.textContent = "Saving...";
-      }
-
-      // The list this card lives in ("You Owe" for BORROWED, "Owed to
-      // You" for LENT/SPLIT) — used below to put a card back if a
-      // background save fails, and to swap the empty-state placeholder
-      // in/out without a full re-render.
-      const ownListEl = entry.type === "BORROWED" ? debtsYouOweEl : debtsTheyOweEl;
-      const ownEmptyIcon = entry.type === "BORROWED" ? "✅" : "🤝";
-      const ownEmptyText = entry.type === "BORROWED" ? "None — you're clean!" : "None pending.";
-
-      function removeCardShowingEmptyIfLast() {
-        card.remove();
-        if (ownListEl.children.length === 0) {
-          ownListEl.innerHTML = `<div class="empty-state"><span class="empty-icon">${ownEmptyIcon}</span><p>${ownEmptyText}</p></div>`;
-        }
-      }
-
-      function reinsertCard(message) {
-        if (ownListEl.querySelector(".empty-state")) ownListEl.innerHTML = "";
-        ownListEl.insertBefore(card, ownListEl.firstChild);
-        resultEl.style.color = "var(--color-danger)";
-        resultEl.textContent = message;
-      }
-
-      // Added 2026-08-10 — "Mark as Settled" was previously the only
-      // option, an all-or-nothing action. This records a specific
-      // amount instead, reducing what's owed rather than closing the
-      // whole debt (shares applyDebtPayment server-side with Debts
-      // auto-linking's own repayment handling, so a partial payment
-      // behaves identically whether typed here or recognized from a
-      // transaction note).
-      //
-      // Optimistic (2026-08-12): the amount shown (and, if this pays it
-      // off, the whole card) updates the instant you tap it — the actual
-      // save happens in the background. `applyDebtPayment` on the
-      // backend settles a debt outright once the remaining amount would
-      // be zero or less (an exact payoff, or a slight overpay) — this
-      // mirrors that same rule locally so the optimistic result matches
-      // what the backend will actually decide.
-      recordPaymentBtn.addEventListener("click", function () {
-        const paid = parseFloat(paymentInput.value);
-        if (!paid || paid <= 0) {
-          resultEl.textContent = "Enter a valid amount.";
-          return;
-        }
-
-        const before = { amount: entry.amount };
-        const debtsSnapshot = debtsData ? cloneDebtsData() : null;
+      payGo.addEventListener("click", function () {
+        const paid = parseFloat(payInput.value);
+        if (!(paid > 0)) { resultEl.textContent = "Enter the amount that was paid."; return; }
         const willSettle = paid >= entry.amount;
         const remaining = Math.max(entry.amount - paid, 0);
-
-        if (debtsData) {
-          const delta = willSettle ? entry.amount : paid; // how much less is owed either way
-          if (entry.type === "BORROWED") { debtsData.totalYouOwe -= delta; debtsData.netPosition += delta; }
-          else { debtsData.totalTheyOwe -= delta; debtsData.netPosition -= delta; }
-          if (willSettle) {
-            const idx = debtsData.debts.findIndex(function (e) { return e.row === entry.row; });
-            if (idx !== -1) debtsData.debts.splice(idx, 1);
-          } else {
-            const match = debtsData.debts.find(function (e) { return e.row === entry.row; });
-            if (match) match.amount = remaining;
-          }
-          saveCache("debts", debtsData);
-          updateDebtsHeader(debtsData);
-        }
-
-        entry.amount = remaining;
-        paymentInput.value = "";
-        resultEl.style.color = "";
-        if (willSettle) {
-          removeCardShowingEmptyIfLast();
-        } else {
-          amountEl.textContent = "₹" + remaining.toLocaleString("en-IN");
-          resultEl.textContent = "Recorded — ₹" + remaining.toLocaleString("en-IN") + " still due.";
-        }
-
+        const undo = optimistic(function () {
+          const i = findIdx();
+          if (i === -1) return;
+          if (willSettle) debtsData.debts.splice(i, 1); else debtsData.debts[i].amount = remaining;
+        });
         callAppsScript({ action: "recordDebtPayment", idToken: currentUser.idToken, row: entry.row, amount: paid })
-          .then(function (data) {
-            if (!data.ok || data.settled !== willSettle || (!willSettle && data.remaining !== remaining)) {
-              // Either it failed outright, or the backend's own decision
-              // (settled vs. still-owing, or the exact remaining amount)
-              // didn't match our optimistic guess — safest is to pull
-              // the real, current numbers rather than leave a wrong one
-              // showing. This should be rare (only real disagreement is
-              // if something else changed this same debt in between).
-              if (debtsSnapshot) { debtsData = debtsSnapshot; saveCache("debts", debtsData); updateDebtsHeader(debtsData); }
-              entry.amount = before.amount;
-              if (willSettle) {
-                amountEl.textContent = "₹" + before.amount.toLocaleString("en-IN");
-                reinsertCard(data.ok ? "Recorded, but the numbers didn't quite match — refreshing." : ("Couldn't record payment (" + data.error + ") — check your connection and try again."));
-              } else {
-                amountEl.textContent = "₹" + before.amount.toLocaleString("en-IN");
-                resultEl.style.color = "var(--color-danger)";
-                resultEl.textContent = data.ok ? "Recorded, but the numbers didn't quite match — refreshing." : ("Couldn't record payment (" + data.error + ") — check your connection and try again.");
-              }
-              refreshDebtsQuiet();
-              return;
-            }
-            refreshDebtsQuiet();
-          })
-          .catch(function (err) {
-            if (debtsSnapshot) { debtsData = debtsSnapshot; saveCache("debts", debtsData); updateDebtsHeader(debtsData); }
-            entry.amount = before.amount;
-            amountEl.textContent = "₹" + before.amount.toLocaleString("en-IN");
-            if (willSettle) {
-              reinsertCard("Couldn't record payment (" + err.message + ") — check your connection and try again.");
-            } else {
-              resultEl.style.color = "var(--color-danger)";
-              resultEl.textContent = "Couldn't record payment (" + err.message + ") — check your connection and try again.";
-            }
-          });
+          .then(function (data) { if (!data.ok) undo("Couldn't record the payment (" + data.error + "). Nothing was changed."); else refreshDebtsQuiet(); })
+          .catch(function (err) { undo("Couldn't record the payment (" + err.message + "). Check your connection and try again."); });
       });
-
-      // Settling a debt can't be undone from here, so this needs a real
-      // second tap first — see bindConfirmAction above. Optimistic
-      // (2026-08-12): the card disappears the instant you confirm; if the
-      // background save fails, it comes back with a clear error, same
-      // trade-off as everywhere else in this pass.
-      bindConfirmAction(settleButton, function () {
-        const amount = entry.amount;
-        const debtsSnapshot = debtsData ? cloneDebtsData() : null;
-
-        if (debtsData) {
-          if (entry.type === "BORROWED") { debtsData.totalYouOwe -= amount; debtsData.netPosition += amount; }
-          else { debtsData.totalTheyOwe -= amount; debtsData.netPosition -= amount; }
-          const idx = debtsData.debts.findIndex(function (e) { return e.row === entry.row; });
-          if (idx !== -1) debtsData.debts.splice(idx, 1);
-          saveCache("debts", debtsData);
-          updateDebtsHeader(debtsData);
-        }
-        removeCardShowingEmptyIfLast();
-
+      // Settling can't be undone from here, so it needs a second tap.
+      bindConfirmAction(settleBtn, function () {
+        const undo = optimistic(function () { const i = findIdx(); if (i !== -1) debtsData.debts.splice(i, 1); });
         callAppsScript({ action: "settleDebt", idToken: currentUser.idToken, row: entry.row })
-          .then(function (data) {
-            if (data.ok) {
-              refreshDebtsQuiet();
-            } else {
-              if (debtsSnapshot) { debtsData = debtsSnapshot; saveCache("debts", debtsData); updateDebtsHeader(debtsData); }
-              reinsertCard("Couldn't settle (" + data.error + ") — check your connection and tap Settled again.");
-            }
-          })
-          .catch(function (err) {
-            if (debtsSnapshot) { debtsData = debtsSnapshot; saveCache("debts", debtsData); updateDebtsHeader(debtsData); }
-            reinsertCard("Couldn't settle (" + err.message + ") — check your connection and tap Settled again.");
-          });
+          .then(function (data) { if (!data.ok) undo("Couldn't settle it (" + data.error + "). Try again."); else refreshDebtsQuiet(); })
+          .catch(function (err) { undo("Couldn't settle it (" + err.message + "). Check your connection and try again."); });
       });
-
       return card;
     }
 
-    // Updates just the "You're Ahead/Behind" hero line + totals, without
-    // touching either list — used by the optimistic Settle/Record
-    // Payment/Add handlers below so a single-item change doesn't have to
-    // rebuild every other card on screen to keep the header honest.
-    function updateDebtsHeader(d) {
-      // Friends you split with (Splits, 2026-10-12) count here too, so this one
-      // number answers "am I ahead or behind overall?" - not just the old list.
-      const friendsOwe = peopleData ? peopleData.iOwe : 0;
-      const friendsOwed = peopleData ? peopleData.owedToMe : 0;
-      const youOweTotal = d.totalYouOwe + friendsOwe;
-      const theyOweTotal = d.totalTheyOwe + friendsOwed;
-      const net = theyOweTotal - youOweTotal;
-      debtsNetLabelEl.textContent = net >= 0 ? "You're Ahead" : "You're Behind";
-      finMoneyInto(debtsNetAmountEl, Math.abs(net));
-      debtsTotalsLineEl.textContent =
-        "You owe: ₹" + youOweTotal.toLocaleString("en-IN") +
-        "  ·  Owed to you: ₹" + theyOweTotal.toLocaleString("en-IN");
+    // Draws the loans for one person into `box`. afterChange runs after any change (to refresh the page's number).
+    function renderLoans(box, name, afterChange, emptyHtml) {
+      box.innerHTML = "";
+      const list = debtsData && debtsData.debts ? debtsData.debts.filter(function (e) { return debtKey(e.person) === debtKey(name); }) : [];
+      if (list.length === 0) { if (emptyHtml) box.innerHTML = emptyHtml; return; }
+      const h = document.createElement("div");
+      h.className = "debts-group";
+      h.textContent = "Loans";
+      box.appendChild(h);
+      const redraw = function () { renderLoans(box, name, afterChange, emptyHtml); afterChange(); };
+      list.forEach(function (e) { box.appendChild(buildLoanCard(e, redraw)); });
     }
 
     function renderDebts(d) {
       debtsData = d;
       debtsStatusEl.textContent = "";
-      // A friend's page may be open; a background refresh must not draw the list on top of it.
+      // A person's page may be open; a background refresh must not draw the list on top of it.
       debtsContentEl.style.display = currentPersonEmail ? "none" : "block";
-
-      updateDebtsHeader(d);
-
-      debtsYouOweEl.innerHTML = "";
-      debtsTheyOweEl.innerHTML = "";
-
-      const youOwe  = d.debts.filter(function (e) { return e.type === "BORROWED"; });
-      const theyOwe = d.debts.filter(function (e) { return e.type === "LENT" || e.type === "SPLIT"; });
-
-      if (youOwe.length === 0) {
-        debtsYouOweEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">✅</span><p>None — you're clean!</p></div>";
-      } else {
-        youOwe.forEach(function (entry) { debtsYouOweEl.appendChild(buildDebtItem(entry)); });
-      }
-
-      if (theyOwe.length === 0) {
-        debtsTheyOweEl.innerHTML = "<div class=\"empty-state\"><span class=\"empty-icon\">🤝</span><p>None pending.</p></div>";
-      } else {
-        theyOwe.forEach(function (entry) { debtsTheyOweEl.appendChild(buildDebtItem(entry)); });
-      }
+      renderPeopleList();
+      if (personLoansRefresh) personLoansRefresh();
     }
+
+    // A due date is only asked for money you borrowed (you must pay it back); nobody needs a deadline for money owed to you.
+    debtTypeInputEl.addEventListener("change", function () {
+      document.getElementById("debtDueField").style.display = debtTypeInputEl.value === "BORROWED" ? "block" : "none";
+    });
 
     // Shows/hides the "add a debt" form
     addDebtToggleButtonEl.addEventListener("click", function () {
@@ -15808,7 +15689,7 @@
       const amount  = parseFloat(debtAmountInputEl.value);
       const type    = debtTypeInputEl.value;
       const note    = debtNoteInputEl.value.trim();
-      const dueDate = debtDueDateInputEl.value;
+      const dueDate = type === "BORROWED" ? debtDueDateInputEl.value : "";   // due dates only matter for money you owe
 
       if (!person || !amount || amount <= 0) {
         addDebtResultEl.textContent = "Enter a person and a valid amount.";
@@ -15833,14 +15714,8 @@
           dueDate: dueDateDisplay, daysUntilDue: daysUntilDue, isOverdue: isOverdue, dueSoon: dueSoon
         };
         debtsData.debts.unshift(optimisticEntry);
-        if (type === "BORROWED") { debtsData.totalYouOwe += amount; debtsData.netPosition -= amount; }
-        else { debtsData.totalTheyOwe += amount; debtsData.netPosition += amount; }
         saveCache("debts", debtsData);
-        updateDebtsHeader(debtsData);
-
-        const listEl = type === "BORROWED" ? debtsYouOweEl : debtsTheyOweEl;
-        if (listEl.querySelector(".empty-state")) listEl.innerHTML = "";
-        listEl.insertBefore(buildDebtItem(optimisticEntry), listEl.firstChild);
+        renderPeopleList(true);
       }
 
       debtPersonInputEl.value = "";
@@ -15863,7 +15738,7 @@
           if (data.ok) {
             refreshDebtsQuiet(); // brings in the real row number + exact due-date formatting
           } else {
-            if (debtsSnapshot) { debtsData = debtsSnapshot; saveCache("debts", debtsData); renderDebts(debtsData); }
+            if (debtsSnapshot) { debtsData = debtsSnapshot; saveCache("debts", debtsData); renderDebts(debtsData); renderPeopleList(true); }
             addDebtFormEl.style.display = "block";
             debtPersonInputEl.value = person;
             debtAmountInputEl.value = amount;
@@ -15873,7 +15748,7 @@
           }
         })
         .catch(function (err) {
-          if (debtsSnapshot) { debtsData = debtsSnapshot; saveCache("debts", debtsData); renderDebts(debtsData); }
+          if (debtsSnapshot) { debtsData = debtsSnapshot; saveCache("debts", debtsData); renderDebts(debtsData); renderPeopleList(true); }
           addDebtFormEl.style.display = "block";
           debtPersonInputEl.value = person;
           debtAmountInputEl.value = amount;
@@ -16183,36 +16058,75 @@
       if (cached && !peopleData) { peopleData = cached; renderPeopleList(); }
       else if (peopleData) { renderPeopleList(); }
       loadPeople(true).then(renderPeopleList).catch(function () {
-        if (!peopleData) peopleListEl.innerHTML = '<div class="pending-status">Couldn\'t load your friends. They\'ll appear when you\'re back online.</div>';
+        if (!peopleData) renderPeopleList(true);   // friends could not load: still show the loans
       });
     }
 
-    function renderPeopleList() {
-      if (debtsData) updateDebtsHeader(debtsData);   // header totals include friends
+    function renderPeopleList(force) {
+      // Wait for the friends list before drawing (otherwise a friend with a loan would flash as a plain loan row).
+      // `force` is only ever the literal true (used when the friends list could not load).
+      if (!peopleData && force !== true) return;
+      updateDebtsHeader();
+      const dl = document.getElementById("debtPeopleList");
+      const rows = buildPeopleRows();
+      if (dl) dl.innerHTML = rows.map(function (r) { return '<option value="' + escapeHtml(r.name) + '">'; }).join("");
       peopleListEl.innerHTML = "";
-      const people = (peopleData && peopleData.people) || [];
-      if (people.length === 0) {
-        peopleListEl.innerHTML = '<div class="empty-state"><span class="empty-icon">🤝</span><p>No friends yet. Add one to start splitting.</p></div>';
+      if (rows.length === 0) {
+        peopleListEl.innerHTML = '<div class="empty-state"><span class="empty-icon">🤝</span><p>Nobody yet. Tap "+ Lent / borrowed", or add a friend to split bills.</p></div>';
         return;
       }
-      people.forEach(function (p) {
-        const row = document.createElement("div");
-        row.className = "person-row";
-        const state = p.balance > 0 ? "owed" : (p.balance < 0 ? "owe" : "");
-        const sub = p.balance > 0 ? "owes you" : (p.balance < 0 ? "you owe" : "all settled");
-        row.innerHTML =
-          '<div class="person-avatar">' + escapeHtml((p.name || "?").charAt(0).toUpperCase()) + '</div>' +
-          '<div class="person-main"><div class="person-name">' + escapeHtml(p.name) + '</div>' +
-          '<div class="person-sub">' + sub + '</div></div>' +
-          '<div class="person-amount ' + state + '">' + (p.balance === 0 ? "" : splitMoney(p.balance)) + '</div>';
-        row.addEventListener("click", function () { openPerson(p.email); });
-        if (finLookOn()) {   // New look: reachable with a keyboard / screen reader too
-          row.setAttribute("role", "button");
-          row.tabIndex = 0;
-          row.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); openPerson(p.email); } });
-        }
-        peopleListEl.appendChild(row);
-      });
+      const owe = rows.filter(function (r) { return r.total < 0; }).sort(function (a, b) { return a.total - b.total; });
+      const owed = rows.filter(function (r) { return r.total > 0; }).sort(function (a, b) { return b.total - a.total; });
+      const settled = rows.filter(function (r) { return r.total === 0; });
+      function group(title, list) {
+        if (!list.length) return;
+        const h = document.createElement("div");
+        h.className = "debts-group";
+        h.textContent = title;
+        peopleListEl.appendChild(h);
+        list.forEach(function (r) { peopleListEl.appendChild(buildPersonRow(r)); });
+      }
+      group("You owe", owe);
+      group("Owe you", owed);
+      if (owe.length + owed.length === 0) {
+        peopleListEl.insertAdjacentHTML("afterbegin", '<div class="empty-state"><span class="empty-icon">✅</span><p>All square. Nobody owes anything.</p></div>');
+      }
+      if (settled.length) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "secondary";
+        more.textContent = "Settled (" + settled.length + ")";
+        const box = document.createElement("div");
+        box.style.display = "none";
+        settled.forEach(function (r) { box.appendChild(buildPersonRow(r)); });
+        more.addEventListener("click", function () { box.style.display = box.style.display === "none" ? "block" : "none"; });
+        peopleListEl.appendChild(more);
+        peopleListEl.appendChild(box);
+      }
+    }
+
+    function personRowId(r) { return r.email || ("debt:" + r.key); }
+
+    function buildPersonRow(r) {
+      const row = document.createElement("div");
+      row.className = "person-row";
+      const state = r.total > 0 ? "owed" : (r.total < 0 ? "owe" : "");
+      let sub = r.total > 0 ? "owes you" : (r.total < 0 ? "you owe" : "all settled");
+      if (r.total < 0 && r.dueEntry && (r.dueEntry.dueDate || r.dueEntry.isOverdue || r.dueEntry.dueSoon)) sub += " · " + formatDebtDueText(r.dueEntry);
+      else if (!r.email && r.entries.length === 1 && r.entries[0].note) sub += " · " + escapeHtml(r.entries[0].note);
+      row.innerHTML =
+        '<div class="person-avatar">' + escapeHtml((r.name || "?").charAt(0).toUpperCase()) + '</div>' +
+        '<div class="person-main"><div class="person-name">' + escapeHtml(r.name) + '</div>' +
+        '<div class="person-sub">' + sub + '</div></div>' +
+        '<div class="person-amount ' + state + '">' + (r.total === 0 ? "" : splitMoney(r.total)) + '</div>';
+      const id = personRowId(r);
+      row.addEventListener("click", function () { openPerson(id); });
+      if (finLookOn()) {   // New look: reachable with a keyboard / screen reader too
+        row.setAttribute("role", "button");
+        row.tabIndex = 0;
+        row.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); openPerson(id); } });
+      }
+      return row;
     }
 
     // ---- Add a friend (Debts screen) ----
@@ -16255,10 +16169,34 @@
     function closePerson() {
       setDebtsChromeHidden(false);
       currentPersonEmail = null;
+      personLoansRefresh = null;
       personDetailEl.style.display = "none";
       personDetailEl.innerHTML = "";
       debtsContentEl.style.display = "block";
       refreshPeopleList();
+    }
+
+    // A loan-only person (not a friend you split with) has a simple page: their number + their loans.
+    function renderDebtOnlyPerson(id) {
+      const r = buildPeopleRows().find(function (x) { return personRowId(x) === id; });
+      if (!r) { closePerson(); return; }
+      personDetailEl.innerHTML =
+        '<button type="button" class="back-to-more person-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>People</button>' +
+        '<div class="today-total-box"><div class="today-total-label"></div><div class="today-total-amount"></div></div>' +
+        '<div class="person-loans"></div>';
+      personDetailEl.querySelector(".person-back").addEventListener("click", closePerson);
+      const box = personDetailEl.querySelector(".person-loans");
+      const labelEl = personDetailEl.querySelector(".today-total-label");
+      const amountEl = personDetailEl.querySelector(".today-total-amount");
+      function head() {
+        const t = loanNetFor(r.name);
+        labelEl.textContent = t > 0 ? r.name + " owes you" : (t < 0 ? "You owe " + r.name : "All settled");
+        amountEl.textContent = t === 0 ? "₹0" : splitMoney(t);
+      }
+      const empty = '<div class="empty-state"><p>Nothing pending with ' + escapeHtml(r.name) + '.</p></div>';
+      personLoansRefresh = function () { renderLoans(box, r.name, head, empty); head(); };
+      personLoansRefresh();
+      finPlayPerson(id, loanNetFor(r.name));
     }
 
     function openPerson(email) {
@@ -16267,6 +16205,7 @@
       currentPersonEmail = email;
       debtsContentEl.style.display = "none";
       personDetailEl.style.display = "block";
+      if (String(email).indexOf("debt:") === 0) { renderDebtOnlyPerson(email); return; }
       personDetailEl.innerHTML = '<div class="skeleton-block" style="height:88px; margin-bottom:12px;"></div><div class="skeleton-block" style="height:58px;"></div>';
       loadPerson(email, "");
     }
@@ -16291,16 +16230,17 @@
 
     function renderPerson(d, noticeText) {
       const p = d.person;
-      const bal = p.balance;
-      const label = bal > 0 ? p.name + " owes you" : (bal < 0 ? "You owe " + p.name : "All settled");
+      const bal = p.balance;                                  // shared-bill balance only
+      const combined = roundMoney(bal + loanNetFor(p.name));  // what the top of the page shows: shared bills + any loans
+      const label = combined > 0 ? p.name + " owes you" : (combined < 0 ? "You owe " + p.name : "All settled");
       personDetailEl.innerHTML =
         '<button type="button" class="back-to-more person-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>People</button>' +
         '<div class="today-total-box"><div class="today-total-label">' + escapeHtml(label) + '</div>' +
-        '<div class="today-total-amount">' + (bal === 0 ? "₹0" : splitMoney(bal)) + '</div></div>' +
+        '<div class="today-total-amount">' + (combined === 0 ? "₹0" : splitMoney(combined)) + '</div></div>' +
         '<div class="pending-status person-notice" style="min-height:1em;">' + escapeHtml(noticeText || "") + '</div>' +
         '<div style="display:flex; gap:8px; margin:6px 0 10px;">' +
           '<button type="button" class="person-pay-toggle" style="flex:1;">Record payment</button>' +
-          (bal > 0 && p.mobile ? '<button type="button" class="person-remind secondary" style="flex:1;">Remind</button>' : '') +
+          (combined > 0 && p.mobile ? '<button type="button" class="person-remind secondary" style="flex:1;">Remind</button>' : '') +
         '</div>' +
         '<div class="person-pay-form" style="display:none; margin-bottom:12px;">' +
           '<div class="field"><label>Who paid?</label><div class="type-toggle">' +
@@ -16315,8 +16255,20 @@
           '<button type="button" class="pay-save">Save payment</button>' +
           '<div class="pending-result pay-result"></div>' +
         '</div>' +
+        '<div class="person-loans"></div>' +
         '<h3 style="font-size:0.95rem; margin:14px 0 4px 0;">History</h3>' +
         '<div class="person-ledger"></div>';
+
+      // Loans typed in under this friend's name (the old Debts list) show here, added into the number on top.
+      const loansBox = personDetailEl.querySelector(".person-loans");
+      function setHead(friendBal) {
+        const t = roundMoney(friendBal + loanNetFor(p.name));
+        personDetailEl.querySelector(".today-total-amount").textContent = t === 0 ? "₹0" : splitMoney(t);
+        personDetailEl.querySelector(".today-total-label").textContent =
+          t > 0 ? p.name + " owes you" : (t < 0 ? "You owe " + p.name : "All settled");
+      }
+      personLoansRefresh = function () { renderLoans(loansBox, p.name, function () { setHead(bal); }); setHead(bal); };
+      personLoansRefresh();
 
       personDetailEl.querySelector(".person-back").addEventListener("click", closePerson);
 
@@ -16345,9 +16297,7 @@
         if (!amount || amount <= 0) { resultEl.style.color = "var(--color-danger)"; resultEl.textContent = "Enter the amount paid."; return; }
         // Feels instant: the number on top moves now; the save happens in the background.
         const newBal = Math.round((bal + (payDir === "received" ? -amount : amount)) * 100) / 100;
-        personDetailEl.querySelector(".today-total-amount").textContent = newBal === 0 ? "₹0" : splitMoney(newBal);
-        personDetailEl.querySelector(".today-total-label").textContent =
-          newBal > 0 ? p.name + " owes you" : (newBal < 0 ? "You owe " + p.name : "All settled");
+        setHead(newBal);
         resultEl.style.color = "";
         resultEl.textContent = "Saving...";
         callAppsScript({
@@ -16367,7 +16317,7 @@
       if (remindBtn) remindBtn.addEventListener("click", function () {
         let num = String(p.mobile || "").replace(/\D/g, "");
         if (num.length === 10) num = "91" + num;
-        const text = "Hi " + p.name + ", a quick reminder: you owe me " + splitMoney(bal) + " from our shared expenses. Thanks!";
+        const text = "Hi " + p.name + ", a quick reminder: you owe me " + splitMoney(combined) + ". Thanks!";
         window.open("https://wa.me/" + num + "?text=" + encodeURIComponent(text), "_blank");
       });
 
@@ -16403,7 +16353,7 @@
         });
         ledgerEl.appendChild(row);
       });
-      finPlayPerson(p.email, bal);   // New look: balance counts, history rows fade in
+      finPlayPerson(p.email, combined);   // New look: balance counts, history rows fade in
     }
 
     // ---- "Split with a friend" on a Pending card ----
