@@ -1197,7 +1197,8 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
   const dayOfMonth = today.getDate();
 
   // The most recent bill-close date (18th) that is <= today.
-  const mostRecentClose = new Date(today.getFullYear(), today.getMonth() - (dayOfMonth < 18 ? 1 : 0), 18);
+  const closeDay = (typeof getCCCloseDay_ === "function" ? getCCCloseDay_() : 18);
+  const mostRecentClose = new Date(today.getFullYear(), today.getMonth() - (dayOfMonth < closeDay ? 1 : 0), closeDay);
 
   // The bill that closed on mostRecentClose — the one that's actually
   // due soon (or already overdue), not a hypothetical future one.
@@ -1210,8 +1211,8 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
   const outstandingDueDate    = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() + 1, 9);
 
   // The cycle that's currently running, right after the one above.
-  const currentCycleStart = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth(), 19);
-  const currentCycleEnd   = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() + 1, 18);
+  const currentCycleStart = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth(), closeDay + 1);
+  const currentCycleEnd   = new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() + 1, closeDay);
 
   const data = txnData || dbSs_().getSheetByName("Transactions").getDataRange().getValues();
 
@@ -1246,6 +1247,13 @@ function getCCAdvisorData(txnData, cashData, monthTotals, ccBufferAmount){
       const amount = Number(data[i][5]) || 0;
       const cat    = (data[i][13] || "Other").toString().trim();
 
+      // Refunds put back on the card (a "credit" with a card mode) reduce the bill, exactly like on the real statement.
+      // They lower the totals only; the category list and recent list still show real purchases.
+      if(type === "credit" && mode.trim().startsWith("card") && amount > 0){
+        total -= amount;
+        cardTotals[mode.trim()] = (cardTotals[mode.trim()] || 0) - amount;
+        continue;
+      }
       if(type === "debit" && mode.startsWith("card") && amount > 0){
         total += amount;
         txnCount++;
@@ -2006,9 +2014,10 @@ function getOutstandingCCCycleWindow_(){
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const dayOfMonth = today.getDate();
-  const mostRecentClose = new Date(today.getFullYear(), today.getMonth() - (dayOfMonth < 18 ? 1 : 0), 18);
+  const closeDay = (typeof getCCCloseDay_ === "function" ? getCCCloseDay_() : 18);
+  const mostRecentClose = new Date(today.getFullYear(), today.getMonth() - (dayOfMonth < closeDay ? 1 : 0), closeDay);
   return {
-    start: new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() - 1, 19),
+    start: new Date(mostRecentClose.getFullYear(), mostRecentClose.getMonth() - 1, closeDay + 1),
     end:   mostRecentClose
   };
 }
@@ -2041,8 +2050,12 @@ function getOutstandingCCBillTotalsByCard(txnData){
     const amount = Number(data[i][5]) || 0;
     if(type === "debit" && mode.startsWith("card") && amount > 0){
       totals[mode] = (totals[mode] || 0) + amount;
+    } else if(type === "credit" && mode.startsWith("card") && amount > 0){
+      totals[mode] = (totals[mode] || 0) - amount;   // a refund on the card lowers that card's bill
     }
   }
+  // A card whose refunds cancel everything out has nothing to pay, so it must not appear as a 0 (or negative) bucket.
+  Object.keys(totals).forEach(function(k){ if(!(totals[k] > 0.005)) delete totals[k]; });
   return totals;
 }
 

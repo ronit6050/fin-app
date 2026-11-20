@@ -59,14 +59,15 @@ function cardCoachRound500_(n){
 // closed(1) the one before, and so on. Same maths as getCCAdvisorData: a bill closes on the 18th, is due on the 9th of the next month.
 function cardCoachCycles_(today){
   var dom = today.getDate();
-  var mrc = new Date(today.getFullYear(), today.getMonth() - (dom < 18 ? 1 : 0), 18);
+  var cd = (typeof getCCCloseDay_ === "function" ? getCCCloseDay_() : 18);
+  var mrc = new Date(today.getFullYear(), today.getMonth() - (dom < cd ? 1 : 0), cd);
   var y = mrc.getFullYear(), m = mrc.getMonth();
   return {
-    current: { start: new Date(y, m, 19), end: new Date(y, m + 1, 18), due: new Date(y, m + 2, 9) },
+    current: { start: new Date(y, m, cd + 1), end: new Date(y, m + 1, cd), due: new Date(y, m + 2, 9) },
     closed: function(k){
-      var end = new Date(y, m - k, 18);
+      var end = new Date(y, m - k, cd);
       return {
-        start: new Date(end.getFullYear(), end.getMonth() - 1, 19),
+        start: new Date(end.getFullYear(), end.getMonth() - 1, cd + 1),
         end: end,
         due: new Date(end.getFullYear(), end.getMonth() + 1, 9)
       };
@@ -536,6 +537,16 @@ function cardCoachOutstanding_(txnData, today){
   var w = cycles.closed(0);
   var total = 0;
   cardCoachSwipes_(txnData).forEach(function(s){ if(cardCoachInWindow_(s, w.start, w.end)) total += s.amount; });
+  // Refunds put back on the card in that cycle lower the bill (same as the statement and CC Advisor).
+  for(var i = 1; i < txnData.length; i++){
+    var r = txnData[i];
+    if(!r[0]) continue;
+    var d = new Date(r[0]);
+    if(isNaN(d.getTime()) || d < w.start || d > w.end) continue;
+    var amt = Number(r[5]) || 0;
+    if((r[3] || "").toString().toLowerCase() === "credit" && (r[4] || "").toString().toLowerCase().trim().indexOf("card") === 0 && amt > 0) total -= amt;
+  }
+  if(total < 0) total = 0;
   var paidTotal = 0;
   if(total > 0 && typeof getOutstandingCCPaidTotal_ === "function") paidTotal = getOutstandingCCPaidTotal_(txnData, w.end);
   var isPaid = total > 0 && paidTotal >= total - 1;

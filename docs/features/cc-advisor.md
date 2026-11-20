@@ -340,3 +340,6 @@ convention.
 - Per-card *individual* limits were deliberately NOT built — the user
   confirmed the combined-pool assumption already matches their real
   cards, so this wasn't the priority. Revisit if that ever changes.
+
+## 2026-11-20 - closing day is a setting, refunds lower the bill
+The card bill did not match the HDFC statement (app 7,351.27 vs statement 6,501.00). Causes: the app assumed every statement closes on the 18th (card 8132's statement is dated the 19th, billing period 20th-19th), it added two separate cards together, and it ignored refunds put back on the card. Now: Settings has "Card statement closing day" (`ccCloseDay`, Script Property `SETTING_CC_CLOSE_DAY`, 1-28, default 18) used by CC Advisor, Card Coach and the CC Buffer average (`getCCCloseDay_()` in settings.js); a card credit (refund) lowers that card's bill and the total. The cards are still shown separately in the breakdown; there is one closing day for both cards (card 1264's own day is not known). Test: `backend/tests/ccCloseDayAndRefunds.test.js`.

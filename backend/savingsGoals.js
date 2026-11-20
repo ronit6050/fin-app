@@ -345,13 +345,14 @@ function computeCCBufferTarget_(cyclesToAverage){
   const data  = txnSheet.getDataRange().getValues();
   const today = new Date();
 
-  let anchorEnd = new Date(today.getFullYear(), today.getMonth(), 18);
-  if(today.getDate() < 19) anchorEnd = new Date(today.getFullYear(), today.getMonth() - 1, 18);
+  const closeDay = (typeof getCCCloseDay_ === "function" ? getCCCloseDay_() : 18);
+  let anchorEnd = new Date(today.getFullYear(), today.getMonth(), closeDay);
+  if(today.getDate() < closeDay + 1) anchorEnd = new Date(today.getFullYear(), today.getMonth() - 1, closeDay);
 
   const cycles = [];
   for(let i = 0; i < cyclesToAverage; i++){
-    const cycleEnd   = new Date(anchorEnd.getFullYear(), anchorEnd.getMonth() - i, 18);
-    const cycleStart = new Date(cycleEnd.getFullYear(), cycleEnd.getMonth() - 1, 19);
+    const cycleEnd   = new Date(anchorEnd.getFullYear(), anchorEnd.getMonth() - i, closeDay);
+    const cycleStart = new Date(cycleEnd.getFullYear(), cycleEnd.getMonth() - 1, closeDay + 1);
     cycles.push({ start: cycleStart, end: cycleEnd, total: 0 });
   }
 

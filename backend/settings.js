@@ -18,6 +18,15 @@
    thing in PWA.js reading these settings live.
 ============================================ */
 
+// The day of the month the card statement closes (1-28). The bill cycle runs from the day AFTER it to this day of the next month.
+// Anything missing or out of range falls back to 18, which is what the app used before this was a setting.
+function getCCCloseDay_(){
+  try{
+    const v = Math.floor(Number(dbProps_().getProperty("SETTING_CC_CLOSE_DAY")));
+    return (v >= 1 && v <= 28) ? v : 18;
+  }catch(e){ return 18; }
+}
+
 function getSettings(){
   const props = dbProps_();
 
@@ -42,7 +51,9 @@ function getSettings(){
     // Added 2026-10-18 (Card Coach, cardCoach.js) - the most you want to spend on "wants" with the card in one billing cycle. 0 = not set.
     cardWantsLimit: Number(props.getProperty("SETTING_CARD_WANTS_LIMIT")) || 0,
     // Added 2026-10-18 - the "card bill is due in 3 days" notification (cardCoach.js). On unless switched off here.
-    cardReminder: String(props.getProperty("SETTING_CARD_REMINDER_OFF") || "") !== "1"
+    cardReminder: String(props.getProperty("SETTING_CARD_REMINDER_OFF") || "") !== "1",
+    // Added 2026-11-20 - the day of the month the card's statement closes (HDFC card 8132: the 19th). Default 18 = how the app always worked.
+    ccCloseDay: getCCCloseDay_()
   };
 }
 
@@ -68,6 +79,10 @@ function updateSettings(newSettings){
     if(newSettings.cardWantsLimit !== undefined && newSettings.cardWantsLimit !== null && newSettings.cardWantsLimit !== ""){
       const cw = Number(newSettings.cardWantsLimit);
       if(isFinite(cw) && cw >= 0 && cw <= 10000000) props.setProperty("SETTING_CARD_WANTS_LIMIT", String(Math.round(cw)));   // 0 clears it
+    }
+    if(newSettings.ccCloseDay !== undefined && newSettings.ccCloseDay !== null && newSettings.ccCloseDay !== ""){
+      const cd = Math.floor(Number(newSettings.ccCloseDay));
+      if(cd >= 1 && cd <= 28) props.setProperty("SETTING_CC_CLOSE_DAY", String(cd));
     }
     if(newSettings.cardReminder === true || newSettings.cardReminder === false)
       props.setProperty("SETTING_CARD_REMINDER_OFF", newSettings.cardReminder ? "" : "1");

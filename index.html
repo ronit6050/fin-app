@@ -5658,6 +5658,11 @@
             <label>CC alert threshold (% of limit)</label>
             <input type="number" id="settingsCcAlertPct" min="0" max="100" step="1">
           </div>
+          <div class="field">
+            <label>Card statement closing day (1-28)</label>
+            <input type="number" id="settingsCcCloseDay" min="1" max="28" step="1" placeholder="18">
+            <p class="pending-status" style="margin:4px 0 0;">The date your card statement is made (it is printed on the statement). The bill is counted from the day after this date. HDFC card 8132: 19.</p>
+          </div>
           <div class="field" style="margin-bottom:0;">
             <label>Card wants limit (₹)</label>
             <input type="number" id="settingsCardWantsLimit" min="0" step="1" placeholder="0 = not set">
@@ -6866,8 +6871,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && finOnbOpen) finOnbClose(); });
     document.getElementById("finOnbReplay").addEventListener("click", function () { finOnbStart(friendMode ? "friend" : "full"); });
 
-    const APP_VERSION = "2026-11-07-01";
-    const APP_CHANGELOG = "Debts is rebuilt: two big numbers (You owe / Owed to you) and one list with one row per person, shared bills and loans added together. No more Move to a friend balance. Tap a person to see their loans and history; due dates only for money you owe. Before that: A monthly bill like electricity no longer makes Home say you passed your usual day: it stays in the total, but the comparison uses day-to-day spending only. Home no longer says money runs out today when its balance count has drifted: it asks you to confirm your bank balance instead. Messages the app could not read now say so in plain words and show the bank’s own text. New: a Not income choice for a friend’s payback or a refund, Hide amounts (Settings), an Updated-at line on Home, a short summary on the 1st of each month, more complete Export data (waiting payments, all cash, savings, investments), a tidier Analysis header (whole rupees) and a more compact More menu. Before that: The new look is now the only look (the preview switch in Settings is gone). Before that: More > Export data downloads your payments, cash and debts as Excel, PDF or CSV. Before that: Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
+    const APP_VERSION = "2026-11-20-01";
+    const APP_CHANGELOG = "Card bill now matches your statement: set the statement closing day in Settings (HDFC card 8132 closes on the 19th), and refunds put back on the card now lower the bill. Before that: Debts is rebuilt: two big numbers (You owe / Owed to you) and one list with one row per person, shared bills and loans added together. No more Move to a friend balance. Tap a person to see their loans and history; due dates only for money you owe. Before that: A monthly bill like electricity no longer makes Home say you passed your usual day: it stays in the total, but the comparison uses day-to-day spending only. Home no longer says money runs out today when its balance count has drifted: it asks you to confirm your bank balance instead. Messages the app could not read now say so in plain words and show the bank’s own text. New: a Not income choice for a friend’s payback or a refund, Hide amounts (Settings), an Updated-at line on Home, a short summary on the 1st of each month, more complete Export data (waiting payments, all cash, savings, investments), a tidier Analysis header (whole rupees) and a more compact More menu. Before that: The new look is now the only look (the preview switch in Settings is gone). Before that: More > Export data downloads your payments, cash and debts as Excel, PDF or CSV. Before that: Everything now runs on our own new server only; the old Google Apps Script server is no longer used, so a Google sign-in problem there can never stop alerts or saves again. If the server is busy you will see a clear message and nothing is half-saved. Before that, the app now quietly renews your Google sign-in before it runs out, so you are no longer thrown out or shown sign-in errors after an hour. Before that, New Planner: a top card tells you how much you can still spend this month and per day (with a today-pace line), a money map shows where your income goes, one tap sets up the whole month from your own spending, and gentle nudges warn you before a category goes over. Before that, Home: Spent today is now its own card that turns green, amber or red depending on how today compares with your usual day, with today's top categories and a 7-day bar chart; Where it's going is now a colour ring with your top three categories. History now lives right under Pending: one tab shows what needs a note and every past payment (search, filters, tap a row to edit). The separate History tile in More is gone. You can now delete a cash entry (open it, then Delete entry). New Cash screen: wallet card with how many days your cash lasts, quick Spent / Received / ATM buttons, one-tap repeat of your usual spends, a month summary, entries grouped by day, and a keypad for adding. Before that, Card Coach: Home and the card screen now show how much is safe to put on your card, what is on it, and a simple plan for the next bill. You can set a limit for wants on the card. Also new: mark a payment as a Fixed bill (like a mess subscription) to keep it out of your daily average; Avg/day now divides by every day of the month so far.";
 
     // NOTE: this used to run immediately here, before sign-in even happens —
     // that was a real bug (it could pop up over the login screen, before you'd
@@ -10245,6 +10250,7 @@
       if (newSettings.monthlySaveGoal) s.monthlySaveGoal = Number(newSettings.monthlySaveGoal);
       if (newSettings.monthlyInvestmentGoal !== undefined && newSettings.monthlyInvestmentGoal !== null && newSettings.monthlyInvestmentGoal !== "") s.monthlyInvestmentGoal = Number(newSettings.monthlyInvestmentGoal);
       if (newSettings.cardWantsLimit !== undefined && newSettings.cardWantsLimit !== null && newSettings.cardWantsLimit !== "") s.cardWantsLimit = Math.max(0, Number(newSettings.cardWantsLimit) || 0);
+      if (newSettings.ccCloseDay) s.ccCloseDay = Number(newSettings.ccCloseDay);
       if (newSettings.cardReminder === true || newSettings.cardReminder === false) s.cardReminder = newSettings.cardReminder;
       return { ok: true };
     }
@@ -20875,6 +20881,7 @@
     const settingsCcWarnPctEl       = document.getElementById("settingsCcWarnPct");
     const settingsCcAlertPctEl      = document.getElementById("settingsCcAlertPct");
     const settingsCardWantsLimitEl  = document.getElementById("settingsCardWantsLimit");
+    const settingsCcCloseDayEl      = document.getElementById("settingsCcCloseDay");
     const settingsCardReminderEl    = document.getElementById("settingsCardReminder");
     const settingsCardReminderFieldEl = document.getElementById("settingsCardReminderField");
     const settingsMonthlyExpensesEl = document.getElementById("settingsMonthlyExpenses");
@@ -20973,6 +20980,7 @@
       settingsCcWarnPctEl.value       = Math.round(s.ccWarnPct * 100);
       settingsCcAlertPctEl.value      = Math.round(s.ccAlertPct * 100);
       settingsCardWantsLimitEl.value  = s.cardWantsLimit > 0 ? Math.round(s.cardWantsLimit) : "";   // empty = not set
+      settingsCcCloseDayEl.value      = s.ccCloseDay ? s.ccCloseDay : "";
       // The reminder switch only exists when the server tells us about it (an older server does not).
       const hasReminder = typeof s.cardReminder === "boolean";
       settingsCardReminderFieldEl.style.display = hasReminder ? "" : "none";
@@ -20998,6 +21006,7 @@
           ccWarnPct:       (parseFloat(settingsCcWarnPctEl.value) || 0) / 100,
           ccAlertPct:      (parseFloat(settingsCcAlertPctEl.value) || 0) / 100,
           cardWantsLimit:  Math.max(0, Math.round(parseFloat(settingsCardWantsLimitEl.value) || 0)),
+          ccCloseDay:      parseInt(settingsCcCloseDayEl.value, 10) || "",   // empty = leave as is
           monthlyExpenses: parseFloat(settingsMonthlyExpensesEl.value) || 0,
           monthlySaveGoal: parseFloat(settingsMonthlySaveGoalEl.value) || 0,
           monthlyInvestmentGoal: parseFloat(settingsMonthlyInvestmentGoalEl.value) || 0,
